@@ -14,7 +14,18 @@ A multi-tenant modular platform: each client engagement produces a **module** bu
 
 ## Current state (update this section as work progresses)
 
-- **2026-07-06:** Planning complete. Six module specs + all architecture/tech/ops decisions documented. **No code yet.** Next: M0 foundation skeleton (docs/04).
+- **2026-07-06 (evening):** M0 foundation built and verified locally. Monorepo scaffolded (Next.js 16 web app, pg-boss worker, packages/db + platform); core schema with RLS applied to local Supabase; seed script (`pnpm seed`) creates founder + two demo orgs; **RLS isolation tests 7/7 passing** (`pnpm --filter @platform/db test`); auth (password + magic link) + entitlement-driven app shell + stub module + owner console render and gate correctly; dev harness (`pnpm dev`) and CI workflow written. Local logins: owner/alice/bob `@demo.local` / `password123`.
+  **Remaining for M0:** push to GitHub + first cloud deploy (founder does docs/07 accounts first), `dev:cloud-db`/`dev:docker` script variants, Playwright e2e of the logged-in flow, Sentry/UptimeRobot wiring at deploy time.
+- **2026-07-06:** Planning complete. Six module specs + all architecture/tech/ops decisions documented.
+
+## Hard-won local-dev gotchas (Windows host)
+
+- Node module compile cache corruption makes pnpm OOM-crash at tiny heaps → delete `%TEMP%\node-compile-cache`.
+- PowerShell 5.1 `-Encoding utf8` writes a BOM; the Supabase CLI refuses BOM'd `.env` files. Write env files from Node (scripts/dev.ts) or with BOM-less UTF8.
+- After `supabase db reset`, Kong can hold a stale route to the recreated auth container (502 on `/auth/v1/*` while `rest` works) → `docker restart supabase_kong_Solutions_Platform`.
+- `import.meta.dirname` is `undefined` under tsx — use `dirname(fileURLToPath(import.meta.url))`.
+- Docker Desktop's WSL backend crashed under parallel image pulls → `C:\Users\yarmishj\.wslconfig` caps WSL at 8GB/4CPU (delete to revert); pull images sequentially if it recurs; zero-log segfaulting containers (exit 139) = corrupted image layers, `docker rmi` + re-pull.
+- Tables created in CLI migrations do NOT inherit Supabase's default API-role grants — every migration must `grant` explicitly (see 20260706120000_core.sql).
 
 ## Key standing decisions
 
@@ -23,6 +34,7 @@ A multi-tenant modular platform: each client engagement produces a **module** bu
 - **Security invariant:** every module table has `org_id` + RLS policy; web app queries as the user (RLS enforced); service-role key only in the worker.
 - **Code style:** explicit over clever — the founder codes alongside AI (Apps Script/JS background; Copilot may be used too). Fewer abstractions, standard patterns, inline docs where intent isn't obvious.
 - Module tables are prefixed (`mm_`, `cls_`, `syn_`, `vm_`, `sal_`, `sd_`); modules never import other modules; shared behavior goes through `packages/platform`.
+- **exFAT constraint:** the repo drive (D:) can't do symlinks. NO `workspace:*` dependencies — internal packages are imported via `@platform/*` tsconfig path aliases, and `.npmrc` pins `node-linker=hoisted`. Details + deferred NTFS revert: docs/01.
 
 ## Working agreements
 

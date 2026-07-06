@@ -133,6 +133,17 @@ Conventions that make this safe (all lifted from dascher.base's scripts, kept; i
 - **Resolved-config echo:** every start script prints the effective endpoints/flags with secrets masked (`HASURA_ADMIN_SECRET=****** [set]` style) before starting.
 - **Guard rails:** cloud modes refuse to start if a secret still holds a local default value, and refuse to point at production — cloud-db mode targets staging only. `--dry-run` prints what would run without running it.
 
+### exFAT accommodation (2026-07-06 — revert deferred)
+
+The repo lives on `D:`, which is **exFAT — no symlinks, no hard links, coarse timestamps**. Two accommodations are in place:
+
+1. `.npmrc` sets `node-linker=hoisted` (pnpm copies from its store instead of hard-linking; flat npm-style `node_modules`).
+2. Workspace packages are **not** declared as `workspace:*` dependencies (that would require symlinks). Instead, apps import `@platform/*` via **tsconfig path aliases** pointing directly at `packages/*/src` — which also means shared-package edits hot-reload instantly with no sync step.
+
+**Deferred change (founder decision 2026-07-06):** if/when the repo moves to an NTFS drive, optionally revert to standard pnpm workspace links — remove `node-linker=hoisted` from `.npmrc`, restore `"@platform/*": "workspace:*"` dependencies, and drop the `@platform/*` path aliases from app tsconfigs (keep `@/*`). Until then, new packages/modules must follow the path-alias pattern and **never** add `workspace:*` deps.
+
+Two machine-level gotchas hit during setup (fixes applied, recorded for recurrence): a corrupted Node module compile cache in `%TEMP%\node-compile-cache` makes pnpm crash with out-of-memory errors at tiny heap sizes — delete that folder; and pnpm 10 blocks dependency postinstall scripts unless allowlisted in `pnpm-workspace.yaml` (`onlyBuiltDependencies`).
+
 ## Batch processes (worker + pg-boss)
 
 pg-boss stores its queue in Postgres — no Redis, no extra infrastructure. Job catalog (grows per module):

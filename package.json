@@ -1,0 +1,32 @@
+{
+  "name": "solutions-platform",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Multi-tenant modular platform — see docs/",
+  "engines": {
+    "node": ">=24"
+  },
+  "packageManager": "pnpm@10.34.3",
+  "scripts": {
+    "dev": "tsx scripts/dev.ts",
+    "dev:web": "pnpm --filter web dev",
+    "dev:worker": "pnpm --filter worker dev",
+    "stop": "tsx scripts/stop.ts",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "format": "prettier --write .",
+    "db:start": "supabase start",
+    "db:stop": "supabase stop",
+    "db:reset": "supabase db reset",
+    "seed": "pnpm --filter @platform/db seed"
+  },
+  "devDependencies": {
+    "prettier": "^3.6.0",
+    "supabase": "^2.34.0",
+    "tsx": "^4.20.0",
+    "turbo": "^2.5.0",
+    "typescript": "^5.9.0"
+  }
+}

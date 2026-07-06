@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "paths": {
+      "@platform/core": ["../../packages/platform/src/index.ts"],
+      "@platform/core/*": ["../../packages/platform/src/*"],
+      "@platform/db": ["../../packages/db/src/index.ts"],
+      "@platform/db/*": ["../../packages/db/src/*"]
+    }
+  },
+  "include": ["src"]
+}

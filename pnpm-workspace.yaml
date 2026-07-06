@@ -1,0 +1,11 @@
+packages:
+  - apps/*
+  - packages/*
+  - modules/*
+
+# pnpm 10 blocks postinstall scripts by default; these packages need theirs.
+onlyBuiltDependencies:
+  - supabase
+  - esbuild
+  - sharp
+  - '@tailwindcss/oxide'
