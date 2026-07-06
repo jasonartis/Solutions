@@ -53,6 +53,18 @@ Every phase boundary is a documented decision point, not an automatic upgrade. T
 - VPS (Phase B+): Coolify manages containers; OS unattended-upgrades on; SSH by key only.
 - Audit log + Sentry review: skim weekly while small.
 
+## Outside contributors (hired help) — decided 2026-07-06
+
+Question considered: should we use dascher.base-style separate repos per module so a contractor can be given access to only part of the platform? **Decision: stay monorepo; scope contractors by permission and process, not repo boundaries.** GitHub read access is all-or-nothing per repo, so multi-repo is the only way to make code *unreadable* — but it would tax our core strategy (atomic extraction passes across modules + platform, one CI, AI-friendly single tree) on every single change.
+
+Contractor protections, in order of importance:
+
+1. **No production anything.** Secrets aren't in git; contractors get local dev (seeded data) and at most staging. Client data never reaches them.
+2. **Blast radius = their module folder** by architecture (modules can't import modules; platform changes go through `packages/platform` PRs).
+3. **CODEOWNERS + branch protection:** PR-only to main, founder review required, CI green required; their module folder can list them as co-owner, everything else requires the founder.
+4. **Confidential engagements (exception path):** develop that module in a temporary private repo against a stubbed platform interface; founder merges into the monorepo. Use per sensitive case only.
+5. **Revisit trigger:** a real team forms or a module becomes its own product → extract that module to its own repo then (easy later; costly to pre-pay).
+
 ## Support model
 
 Clients message admins in-app (conversations primitive) — that's the support channel. Each engagement's subscription includes support; track time spent per org (even roughly) to know when a module's maintenance outweighs its revenue.
