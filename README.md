@@ -23,6 +23,7 @@ Read in this order for full context:
 | [docs/04-build-plan.md](docs/04-build-plan.md) | Milestones, build order, acceptance criteria |
 | [docs/05-operations.md](docs/05-operations.md) | Environments, deploy pipeline, backups, monitoring, cost phases |
 | [docs/06-prior-art.md](docs/06-prior-art.md) | Review of founder's existing codebases — what to borrow, what they warn against |
+| [docs/07-account-setup.md](docs/07-account-setup.md) | Founder checklist: GitHub, Supabase, Vercel, and later accounts |
 | [docs/modules/](docs/modules/) | Full specification for each module (1–6) |
 
 ## Modules specified so far
