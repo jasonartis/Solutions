@@ -96,8 +96,14 @@ Every choice evaluated against: least cost, least maintenance, most expandable, 
 - **Phase C (revenue / commercial use):** Vercel Hobby is **non-commercial** — decision point when clients pay: (a) Vercel Pro $20/mo (least effort), (b) move Next.js onto the VPS behind Coolify (least cost), or (c) Cloudflare Workers via OpenNext (generous free tier, allows commercial; most fiddly). Also Supabase Pro ($25/mo) when we want daily backups/PITR and higher limits. Jitsi VPS (+~$20/mo) only when module 6 ships.
 - Rationale over alternatives recorded in docs/00 principle 5; full cost table in docs/05.
 
+## Dev scripts: cross-platform Node (tsx), not .bat/.sh
+
+- The dev-mode matrix (docs/01) is driven by TypeScript scripts run with `tsx`, so they work on Windows/Mac/Linux and are readable by the same tooling as the rest of the repo. Pattern (per-piece start/stop in each mode + named combination commands + layered env + masked config echo + guard rails + `--dry-run`) adopted from dascher.base's scripts folders — see docs/06.
+
 ## Future/parked
 
+- **User-authored formulas**: if any module outgrows its structured rule builder (gradebook combinations, schedule time rules), the known-good design is dascher.base's calc-engine — HyperFormula evaluated server-side with custom function plugins and typed errors (docs/06). Don't hand-roll an expression evaluator past that point.
+- **AI features** (natural-language querying, insight/report generation): implement behind a pluggable provider interface with an openai-compatible + mock provider, per dascher.base's insight-engine design (docs/06).
 - **SMS** (receipts, alerts): Twilio when needed — abstraction slot exists, no build now.
 - **Payments/card processing** (modules 5, 6 ticketing): Stripe when needed; bill/payment models carry `payment_method` + external-reference fields from day one so this plugs in without remodeling.
 - **Managed video streaming** (module 2 class videos): Mux/Cloudflare Stream if Google Drive embeds ever chafe.

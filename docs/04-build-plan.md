@@ -6,7 +6,9 @@ Strategy (docs/00 principle 1): build real modules first, extract the platform f
 
 Repo scaffold (pnpm+Turborepo monorepo, TypeScript, lint/format), Supabase local + cloud project, Drizzle + first migration, auth (login/signup/magic link), core tables (orgs, org_members, org_modules, module_roles), app shell (nav shows enabled modules), platform-owner console (create org, toggle entitlements), seed script, CI (typecheck/test/migrate/deploy), Vercel deployment, Sentry + UptimeRobot.
 
-**Acceptance:** founder logs into prod; creates test org; enables a stub module; a second user in another org can't see any of it (RLS verified by test); a PR runs green CI and auto-deploys.
+Includes the **dev-script harness** (docs/01 dev-mode matrix): named start/stop commands for native/Docker/cloud-staging combinations, layered env loading with committed templates, strict env validation (`${VAR:?msg}` in compose), masked resolved-config echo, cloud-mode guard rails, `--dry-run`. Patterns from the prior-art review (docs/06) — building them into M0 is cheap; retrofitting isn't.
+
+**Acceptance:** founder logs into prod; creates test org; enables a stub module; a second user in another org can't see any of it (RLS verified by test); a PR runs green CI and auto-deploys; every dev-mode command in the matrix starts and stops cleanly on the founder's Windows machine.
 
 **Explicitly excluded:** dashboard builders, ingestion frameworks, any primitive no module needs yet.
 

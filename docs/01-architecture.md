@@ -115,6 +115,24 @@ Everything runs locally with full cloud parity:
 
 Workflow: `supabase start` → `pnpm dev` → develop against local DB with seeded test orgs/users → `supabase db diff` generates migrations → commit → CI applies migrations to cloud and deploys. **Migrations are forward-only and always exercised locally first.** Seed scripts (`packages/db/seed`) create a demo org per module with realistic test data — this is also the AI-development substrate (an agent can always boot a working local world).
 
+### Dev-mode matrix (pattern borrowed from dascher.base — see docs/06)
+
+Each runnable piece can independently run **native**, **Docker**, or **cloud**, selected by named root scripts rather than manual env juggling. The dascher.base convention (per-service `scripts/` + parent scripts composing combinations) is adopted, but implemented as **cross-platform Node scripts** (`scripts/dev.ts` + pnpm scripts), not `.bat` files, and simplified by the monorepo (workspace filtering replaces parent/child repo orchestration).
+
+| Command | Web | Worker | DB/Auth/Storage | Use case |
+|---|---|---|---|---|
+| `pnpm dev` (default) | native | native | local Docker (supabase) | day-to-day development |
+| `pnpm dev:web` / `dev:worker` | one piece native | — | local Docker | focused work |
+| `pnpm dev:cloud-db` | native | native | **staging** Supabase | reproduce cloud-only issues |
+| `pnpm dev:docker` | Docker | Docker | local Docker | full-parity check before deploy |
+| `pnpm stop` | stops everything incl. compose remnants (`down --remove-orphans`) | | | |
+
+Conventions that make this safe (all lifted from dascher.base's scripts, kept; its committed secrets, dropped):
+
+- **Layered env loading:** repo `.env` → app `.env` → mode-specific `.env.<mode>` (e.g. `.env.cloud-db`), each git-ignored with a committed `.env.example`/template.
+- **Resolved-config echo:** every start script prints the effective endpoints/flags with secrets masked (`HASURA_ADMIN_SECRET=****** [set]` style) before starting.
+- **Guard rails:** cloud modes refuse to start if a secret still holds a local default value, and refuse to point at production — cloud-db mode targets staging only. `--dry-run` prints what would run without running it.
+
 ## Batch processes (worker + pg-boss)
 
 pg-boss stores its queue in Postgres — no Redis, no extra infrastructure. Job catalog (grows per module):
@@ -129,6 +147,8 @@ pg-boss stores its queue in Postgres — no Redis, no extra infrastructure. Job 
 - `backup.dump` — scheduled pg_dump to storage (docs/05)
 
 Rules: jobs are idempotent, org-scoped, and logged. Cron schedules live in code (worker startup), not in a dashboard.
+
+**Job result contract** (behavioral spec borrowed from artispy's topic/resultId pattern — docs/06): enqueueing a job returns a job/result id immediately; the job writes its result/status to a row; the UI learns of completion via Supabase Realtime on that row (no polling). Long operations (schedule renders, match rescoring, review-matrix generation) all follow this shape so every module's "working…" UX is the same component.
 
 ## Live processes
 

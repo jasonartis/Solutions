@@ -16,6 +16,16 @@ React 18 SPA (webpack, MUI, Redux/RTK Query) + legacy Apollo/Sequelize API + new
 | **Strict env validation in compose** (`${VAR:?error}`) + `.env.template` discipline | `dascher.base/docker-compose.yml` | Adopt in M0. |
 | **Fully-local compose with hot-reload watch** (local postgres + services + frontend) | `dascher.initial.env/docker-compose.yaml` (early prototype) | Same philosophy as our `supabase start` parity approach — the *current* dascher stack develops against cloud Azure DBs, which is exactly the pain our local-first rule avoids. |
 
+### The dascher.base startup-scripts pattern (examined in detail 2026-07-06 — adopted)
+
+`dascher.base` is a parent repo composing child service repos (calc-engine, hasura, insight-engine), and its `scripts/` convention is the standout infrastructure idea:
+
+- **Each child owns its lifecycle scripts:** `start-local-dev` (native `npm run dev`), `start-docker-dev`, `start-local-dev-cloud-hasura` (native code pointed at the *cloud* dependency), and a `stop`.
+- **The parent composes named combinations:** `start-hasura-docker-calc-local-dev.bat` (dependency in Docker + the service being edited running natively — the everyday mode), `start-hasura-docker-calc-docker-dev.bat`, `start-root-docker-compose.bat` (all Docker), `stop-all.bat` (compose `down --remove-orphans` + per-service stops).
+- **Mechanics worth copying** (see `calc-engine/scripts/start-local-dev-cloud-hasura.bat`): layered env loading (base `.env` → repo `.env` → mode-specific `.env.cloud`); a "Resolved configuration" echo with secrets masked; **guard rails** — the cloud mode refuses to start if the admin secret is unset *or still equals the local Docker default*; `--dry-run` on every script.
+
+**Adopted into the platform** (docs/01 dev-mode matrix, docs/04 M0): the capability (per-piece native/Docker/cloud selection via named commands, env layering, masked echo, guard rails, dry-run) — reimplemented as cross-platform Node/tsx scripts instead of Windows-only `.bat`, and simplified because our monorepo + `pnpm --filter` replaces the parent/child multi-repo orchestration. Our cloud mode additionally hard-refuses production (staging only).
+
 ### Cautionary findings (validate our decisions)
 
 - **Hasura deployed as the anti-pattern:** JWT secret configured but **zero permission rules** — everything runs as admin; empty migrations; frontend role-checks client-side only. Confirms both the no-Hasura decision and the RLS-from-day-one rule (docs/01). One permission system, enforced in the database.
