@@ -21,4 +21,11 @@ The authoritative specification lives at [docs/modules/module-3-synagogue-schedu
   4. **Title templating** from hebcal facts: parsha, Hebrew year (gematria), Mevorchim, Chazak, Chanukah, Rosh Chodesh, Shira, Arbah Parshiyos, Hagodol, Chol Hamoed, Chazon, Nachamu, Shuva.
   5. **Molad block + kiddush levana windows** (hebcal Molad, chalakim text).
   6. **Export styling per object kind** (brand colors, alternating event rows, per-column language/alignment) — template work, not engine.
+- **PARKED 2026-07-07 — myzmanim credentials rejected (resume when founder gets new/verified credentials).** Full context for pickup:
+  - Connector is DONE and integrated everywhere (`src/myzmanim.ts` → `buildWeek()` used by worker render, schedule view, public page). hebcal fallback active and correct meanwhile.
+  - Request format PROVEN correct 3 ways (GET querystring works; doc-exact POST + `Accept: application/json` works; both parse fine). Error is `ErrMsg: NotAuthorizedSeeApiDashboardForDetails` = account-side. Docs: core.myzmanim.com/site/common/apidocumentation.
+  - Credentials live in `.env.deploy`: `MYZMANIM_USER=0017599341` + `MYZMANIM_KEY` (80 chars). Note: an editor stale-buffer save merged the two lines once (fixed); re-verify both lines exist before debugging.
+  - Founder to check: (a) does the Google Sheet's `MyZmanim → Get Zmanim` still work (if yes → IP/origin restriction in their dashboard); (b) API dashboard key status/restrictions; (c) key value vs Script Properties.
+  - When creds work: run `pnpm exec tsx apps/worker/scripts/test-myzmanim.ts` (compares live API vs the founder's December dump — expects 7/7). Then add `MYZMANIM_USER`/`MYZMANIM_KEY` to Vercel env (project `prj_reUQNNvf0XcjS6YcRGEYRXBC8XYM`) and redeploy — zero code changes needed.
+  - Debug helpers: `apps/worker/scripts/debug-myzmanim{,2,3}.ts`.
 - **Still open:** myzmanim connector (waiting on founder's API key) · acceptance validation against the founder's real schedule + Sheets rules (waiting on materials) · line edit-in-place (currently delete+recreate) · Hebrew rendering polish on exports.
