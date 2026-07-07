@@ -97,10 +97,151 @@ async function main() {
     role: 'admin',
   })
 
+  // --- Demo synagogue for module 3 -----------------------------------------
+  const shul = await ensureOrg('Demo Synagogue', 'demo-shul')
+  await admin.from('org_members').upsert({ org_id: shul, user_id: aliceId, role: 'admin' })
+  await admin.from('org_modules').upsert({
+    org_id: shul,
+    module_key: 'synagogue-schedules',
+    enabled: true,
+    settings: {
+      latitude: 40.7128,
+      longitude: -74.006,
+      timezone: 'America/New_York',
+      israel: false,
+    },
+  })
+  await admin.from('module_roles').upsert({
+    org_id: shul,
+    user_id: aliceId,
+    module_key: 'synagogue-schedules',
+    role: 'maker',
+  })
+
+  // Idempotent demo config: wipe and reinsert (cascades to sections/lines).
+  await admin.from('syn_schedule_types').delete().eq('org_id', shul)
+
+  const { data: weekday } = await admin
+    .from('syn_schedule_types')
+    .insert({
+      org_id: shul,
+      name: 'Weekday Schedule',
+      trigger_condition: { dayTypes: ['weekday'] },
+      span: 'week',
+      sort: 0,
+    })
+    .select('id')
+    .single()
+  const { data: shabbat } = await admin
+    .from('syn_schedule_types')
+    .insert({
+      org_id: shul,
+      name: 'Shabbat Schedule',
+      trigger_condition: { dayTypes: ['shabbat', 'erev-shabbat'] },
+      span: 'week',
+      sort: 1,
+    })
+    .select('id')
+    .single()
+
+  const { data: wkSection } = await admin
+    .from('syn_sections')
+    .insert({ org_id: shul, schedule_type_id: weekday!.id, name: 'Tefillos', sort: 0 })
+    .select('id')
+    .single()
+  const { data: wkNotices } = await admin
+    .from('syn_sections')
+    .insert({ org_id: shul, schedule_type_id: weekday!.id, name: 'Announcements', sort: 1 })
+    .select('id')
+    .single()
+  const { data: shSection } = await admin
+    .from('syn_sections')
+    .insert({ org_id: shul, schedule_type_id: shabbat!.id, name: 'Shabbos', sort: 0 })
+    .select('id')
+    .single()
+
+  await admin.from('syn_lines').insert([
+    // The founder's three confirmed real rules:
+    {
+      org_id: shul,
+      section_id: wkSection!.id,
+      name: 'Shacharis',
+      rule: { time: { kind: 'fixed', clock: '07:00' } },
+      sort: 0,
+    },
+    {
+      org_id: shul,
+      section_id: wkSection!.id,
+      name: 'Mincha',
+      rule: { time: { kind: 'fixed', clock: '18:00' } },
+      sort: 1,
+    },
+    {
+      org_id: shul,
+      section_id: wkSection!.id,
+      name: 'Mincha (winter)',
+      rule: {
+        condition: { season: 'winter' },
+        time: { kind: 'zman', zman: 'sunrise', offsetMinutes: 60 },
+      },
+      sort: 2,
+    },
+    {
+      org_id: shul,
+      section_id: wkSection!.id,
+      name: 'Maariv',
+      rule: { time: { kind: 'zman', zman: 'sunset', offsetMinutes: -15 } },
+      sort: 3,
+    },
+    {
+      org_id: shul,
+      section_id: shSection!.id,
+      name: 'Candle Lighting',
+      rule: {
+        condition: { dayTypes: ['erev-shabbat'] },
+        time: { kind: 'zman', zman: 'sunset', offsetMinutes: -18 },
+      },
+      sort: 0,
+    },
+    {
+      org_id: shul,
+      section_id: shSection!.id,
+      name: 'Mincha & Kabbolas Shabbos',
+      rule: {
+        condition: { dayTypes: ['erev-shabbat'] },
+        time: {
+          kind: 'zman',
+          zman: 'sunset',
+          offsetMinutes: -20,
+          round: { direction: 'down', toMinutes: 5 },
+        },
+      },
+      sort: 1,
+    },
+  ])
+
+  // A weekly free-form override for the current week (Sunday start).
+  const now = new Date()
+  const sunday = new Date(now)
+  sunday.setDate(now.getDate() - now.getDay())
+  const weekStart = sunday.toISOString().slice(0, 10)
+  await admin
+    .from('syn_overrides')
+    .delete()
+    .eq('org_id', shul)
+  await admin.from('syn_overrides').insert({
+    org_id: shul,
+    section_id: wkNotices!.id,
+    week_start: weekStart,
+    text: "This week's coffee sponsored by John Doe",
+    sort: 0,
+  })
+
   console.log('Seed complete:')
   console.log('  owner@demo.local / password123  (superadmin)')
-  console.log('  alice@demo.local / password123  (admin of Demo Org A, stub module enabled)')
+  console.log('  alice@demo.local / password123  (admin of Demo Org A + Demo Synagogue)')
   console.log('  bob@demo.local   / password123  (admin of Demo Org B, no modules)')
+  console.log('  Demo Synagogue (demo-shul): synagogue-schedules enabled, alice is maker')
 }
 
 main().catch((err) => {

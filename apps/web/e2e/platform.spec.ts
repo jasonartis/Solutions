@@ -39,6 +39,20 @@ test('owner has the console; regular users do not', async ({ page }) => {
   await expect(page.getByText('Create organization')).toBeVisible()
 })
 
+test('alice sees a generated week in the synagogue schedules module', async ({ page }) => {
+  await signIn(page, 'alice@demo.local')
+  await expect(page.getByText('Demo Synagogue')).toBeVisible()
+  await page.getByRole('link', { name: 'Synagogue Schedules' }).click()
+
+  await expect(page.getByRole('heading', { name: 'Schedules' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Weekday Schedule' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Shabbat Schedule' })).toBeVisible()
+  // Fixed rule renders one uniform time; zman rule renders per-day times.
+  await expect(page.getByText('6:00 PM')).toBeVisible()
+  await expect(page.getByText('Maariv')).toBeVisible()
+  await expect(page.getByText('Candle Lighting')).toBeVisible()
+})
+
 test('unauthenticated visitors are redirected to login', async ({ page }) => {
   await page.goto('/dashboard')
   await expect(page).toHaveURL(/\/login/)
