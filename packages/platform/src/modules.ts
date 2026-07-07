@@ -21,7 +21,18 @@ export const stubModule: ModuleManifest = {
   nav: [{ label: 'Home', path: '' }],
 }
 
-export const moduleRegistry: readonly ModuleManifest[] = [stubModule]
+export const synagogueSchedulesModule: ModuleManifest = {
+  key: 'synagogue-schedules',
+  name: 'Synagogue Schedules',
+  description: 'Zmanim-driven schedule builder with rules, overrides, and multi-format export.',
+  roles: ['maker', 'viewer'],
+  nav: [
+    { label: 'Schedules', path: '' },
+    { label: 'Setup', path: 'setup' },
+  ],
+}
+
+export const moduleRegistry: readonly ModuleManifest[] = [stubModule, synagogueSchedulesModule]
 
 export function getModule(key: string): ModuleManifest | undefined {
   return moduleRegistry.find((m) => m.key === key)

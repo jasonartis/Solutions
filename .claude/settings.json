@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(pnpm *)",
+      "PowerShell(git *)",
+      "PowerShell(docker *)",
+      "PowerShell(node *)",
+      "PowerShell(npx *)",
+      "PowerShell(npm *)",
+      "PowerShell(tsx *)",
+      "PowerShell(supabase *)",
+      "Bash(pnpm *)",
+      "Bash(git *)",
+      "Bash(docker *)",
+      "Bash(node *)",
+      "Bash(npx *)",
+      "Bash(npm *)",
+      "Bash(tsx *)",
+      "Bash(supabase *)"
+    ]
+  }
+}
