@@ -147,6 +147,12 @@ export default async function SchedulesPage(props: {
           >
             Setup
           </Link>
+          <Link
+            href={`/o/${orgSlug}/m/synagogue-schedules/help`}
+            className="text-sm text-blue-600 hover:underline"
+          >
+            Help
+          </Link>
         </div>
         <div className="flex items-center gap-3 text-sm">
           <Link href={`?week=${toDateOnly(prevWeek)}`} className="text-blue-600 hover:underline">
