@@ -11,9 +11,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # No `version` input: the action reads packageManager from package.json.
+      # Specifying both makes the action fail immediately.
       - uses: pnpm/action-setup@v4
-        with:
-          version: 10
 
       - uses: actions/setup-node@v4
         with:
@@ -24,20 +24,29 @@ jobs:
 
       - run: pnpm typecheck
 
-      - run: pnpm build
-
-      # RLS isolation tests against a real local Supabase stack
+      # Supabase must be up BEFORE build: Next.js prerenders pages at build
+      # time, which executes the Supabase client setup and needs real env vars.
       - uses: supabase/setup-cli@v1
         with:
           version: latest
       - run: supabase start
-      - name: Write env for seed and tests
+
+      - name: Export Supabase env
         run: |
-          supabase status -o env | grep -E '^(API_URL|ANON_KEY|SERVICE_ROLE_KEY|DB_URL)=' > /tmp/sb.env
-          echo "SUPABASE_URL=$(grep '^API_URL=' /tmp/sb.env | cut -d= -f2- | tr -d '\"')" >> $GITHUB_ENV
-          echo "SUPABASE_ANON_KEY=$(grep '^ANON_KEY=' /tmp/sb.env | cut -d= -f2- | tr -d '\"')" >> $GITHUB_ENV
-          echo "SUPABASE_SERVICE_ROLE_KEY=$(grep '^SERVICE_ROLE_KEY=' /tmp/sb.env | cut -d= -f2- | tr -d '\"')" >> $GITHUB_ENV
+          eval "$(supabase status -o env | grep -E '^(API_URL|ANON_KEY|SERVICE_ROLE_KEY|DB_URL)=')"
+          {
+            echo "SUPABASE_URL=$API_URL"
+            echo "SUPABASE_ANON_KEY=$ANON_KEY"
+            echo "SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY"
+            echo "DATABASE_URL=$DB_URL"
+            echo "NEXT_PUBLIC_SUPABASE_URL=$API_URL"
+            echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$ANON_KEY"
+          } >> "$GITHUB_ENV"
+
+      - run: pnpm build
+
       - run: pnpm seed
+
       - run: pnpm --filter @platform/db test
 
 # Deploy jobs (migrate prod + Vercel) are added when cloud accounts exist —
