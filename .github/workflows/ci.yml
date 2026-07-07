@@ -49,5 +49,16 @@ jobs:
 
       - run: pnpm --filter @platform/db test
 
+      # Browser e2e against the production build (playwright.config.ts starts
+      # `next start` itself when CI=true; the build above produced it).
+      - run: pnpm --filter web exec playwright install --with-deps chromium
+      - run: pnpm test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report
+          retention-days: 7
+
 # Deploy jobs (migrate prod + Vercel) are added when cloud accounts exist —
 # see docs/07-account-setup.md.

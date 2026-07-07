@@ -9,6 +9,7 @@
   "packageManager": "pnpm@10.34.3",
   "scripts": {
     "dev": "tsx scripts/dev.ts",
+    "dev:cloud-db": "tsx scripts/dev-cloud-db.ts",
     "dev:web": "pnpm --filter web dev",
     "dev:worker": "pnpm --filter worker dev",
     "stop": "tsx scripts/stop.ts",
@@ -17,6 +18,7 @@
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
+    "test:e2e": "pnpm --filter web test:e2e",
     "format": "prettier --write .",
     "db:start": "supabase start",
     "db:stop": "supabase stop",
