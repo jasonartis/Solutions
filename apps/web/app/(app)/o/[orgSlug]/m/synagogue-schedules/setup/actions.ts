@@ -135,6 +135,28 @@ export async function deleteLine(orgSlug: string, id: string) {
   revalidatePath(`/o/${orgSlug}/m/synagogue-schedules/setup`)
 }
 
+export async function publishWeek(orgId: string, orgSlug: string, formData: FormData) {
+  const weekStart = String(formData.get('weekStart') ?? '')
+  if (!weekStart) throw new Error('Week start date is required')
+  const supabase = await db()
+  const { error } = await supabase
+    .from('syn_published_weeks')
+    .upsert({ org_id: orgId, week_start: weekStart, published: true })
+  fail(error, 'Publish failed')
+  revalidatePath(`/o/${orgSlug}/m/synagogue-schedules/setup`)
+}
+
+export async function unpublishWeek(orgSlug: string, orgId: string, weekStart: string) {
+  const supabase = await db()
+  const { error } = await supabase
+    .from('syn_published_weeks')
+    .delete()
+    .eq('org_id', orgId)
+    .eq('week_start', weekStart)
+  fail(error, 'Unpublish failed')
+  revalidatePath(`/o/${orgSlug}/m/synagogue-schedules/setup`)
+}
+
 export async function createOverride(
   orgId: string,
   orgSlug: string,

@@ -247,6 +247,11 @@ async function main() {
     sort: 0,
   })
 
+  // Publish the current week so the public page (/s/demo-shul) shows it.
+  await admin
+    .from('syn_published_weeks')
+    .upsert({ org_id: shul, week_start: weekStart, published: true })
+
   console.log('Seed complete:')
   console.log('  owner@demo.local / password123  (superadmin)')
   console.log('  alice@demo.local / password123  (admin of Demo Org A + Demo Synagogue)')

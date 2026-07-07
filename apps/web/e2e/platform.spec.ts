@@ -53,6 +53,16 @@ test('alice sees a generated week in the synagogue schedules module', async ({ p
   await expect(page.getByText('Candle Lighting')).toBeVisible()
 })
 
+test('public schedule page works with no login', async ({ page }) => {
+  await page.goto('/s/demo-shul')
+  await expect(page.getByRole('heading', { name: 'Demo Synagogue' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Weekday Schedule' })).toBeVisible()
+  await expect(page.getByText('6:00 PM')).toBeVisible()
+  // An unpublished/unknown org 404s.
+  await page.goto('/s/no-such-shul')
+  await expect(page.getByText('404')).toBeVisible()
+})
+
 test('unauthenticated visitors are redirected to login', async ({ page }) => {
   await page.goto('/dashboard')
   await expect(page).toHaveURL(/\/login/)

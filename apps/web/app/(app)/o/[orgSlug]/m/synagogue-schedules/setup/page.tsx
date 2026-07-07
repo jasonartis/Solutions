@@ -10,6 +10,8 @@ import {
   deleteLine,
   deleteScheduleType,
   deleteSection,
+  publishWeek,
+  unpublishWeek,
 } from './actions'
 
 const MODULE_KEY = 'synagogue-schedules'
@@ -54,7 +56,7 @@ export default async function SetupPage(props: { params: Promise<{ orgSlug: stri
     .single()
   if (!entitlement?.enabled) notFound()
 
-  const [{ data: types }, { data: sections }, { data: lines }] = await Promise.all([
+  const [{ data: types }, { data: sections }, { data: lines }, { data: publishedWeeks }] = await Promise.all([
     supabase
       .from('syn_schedule_types')
       .select('id, name, span, trigger_condition, sort')
@@ -70,6 +72,11 @@ export default async function SetupPage(props: { params: Promise<{ orgSlug: stri
       .select('id, section_id, name, rule, sort')
       .eq('org_id', org.id)
       .order('sort'),
+    supabase
+      .from('syn_published_weeks')
+      .select('week_start, published')
+      .eq('org_id', org.id)
+      .order('week_start', { ascending: false }),
   ])
 
   return (
@@ -243,6 +250,36 @@ export default async function SetupPage(props: { params: Promise<{ orgSlug: stri
           <div>
             <button className={btnCls}>Create schedule type</button>
           </div>
+        </form>
+      </section>
+
+      <section className="mt-8 rounded-lg border border-gray-200 bg-white p-5">
+        <h2 className="mb-1 text-lg font-semibold">Published weeks</h2>
+        <p className="mb-3 text-xs text-gray-400">
+          Weeks visible on the public page (no login): <code>/s/{orgSlug}</code>. Week start is
+          the Sunday date.
+        </p>
+        <ul className="mb-3 flex flex-wrap gap-2 text-sm">
+          {(publishedWeeks ?? []).map((w) => (
+            <li key={w.week_start} className="flex items-center gap-2 rounded border border-green-200 bg-green-50 px-3 py-1">
+              <span>{w.week_start}</span>
+              <form
+                action={async () => {
+                  'use server'
+                  await unpublishWeek(orgSlug, org.id, w.week_start)
+                }}
+              >
+                <button className={delCls}>unpublish</button>
+              </form>
+            </li>
+          ))}
+          {(publishedWeeks ?? []).length === 0 && (
+            <li className="text-gray-400">Nothing published yet</li>
+          )}
+        </ul>
+        <form action={publishWeek.bind(null, org.id, orgSlug)} className="flex items-center gap-2">
+          <input name="weekStart" type="date" required className={inputCls} />
+          <button className={btnCls}>Publish week</button>
         </form>
       </section>
 
