@@ -19,6 +19,33 @@ modules/<module-key>/
 └── __tests__/         # unit + Playwright e2e for the critical paths
 ```
 
+## Conventions proven by module 3 (extraction pass, 2026-07-07)
+
+`modules/synagogue-schedules` is the **canonical exemplar** — copy its structure. The
+hard-won specifics every new module must follow:
+
+1. **Migrations grant explicitly** — tables created in CLI migrations do NOT inherit
+   Supabase's API-role grants. Every migration: `grant select, insert, update, delete on
+   <tables> to authenticated, service_role;` then RLS restricts rows (see
+   `20260707030000_synagogue_schedules.sql`).
+2. **Module pages gate with `requireOrgModule(orgSlug, moduleKey)`**
+   (`apps/web/lib/module-gate.ts`) — org by slug → entitlement → 404. Never hand-roll.
+3. **Org-level module config lives in `org_modules.settings`** (jsonb), typed via a cast
+   at the read site; module-role checks use `has_module_role()` / a module-specific
+   `<prefix>_can_write()` definer function.
+4. **Public (no-login) access = security-definer functions**, never anon table policies
+   (see `syn_public_weeks` / `syn_public_week`): the function exposes exactly what a
+   visitor may see, gated on maker-published rows.
+5. **Async work = `job_requests` row** (org-scoped RLS insert by members) + a worker
+   handler registered in the poller; results land in storage/DB; UI shows status +
+   signed URLs. Never a bespoke queue.
+6. **Imports**: apps reference module code via the `@modules/<key>` tsconfig path alias
+   (web) or a relative path (worker, tsx runtime); NO `workspace:*` deps (exFAT, docs/01).
+7. **Admin-configured rules are Zod-validated JSON** parsed at every read site with
+   `safeParse` + skip-on-invalid, so one bad row never crashes a page.
+8. **Acceptance = reproduce the client's real artifact** from their real data as a test
+   (see `pozna-acceptance.test.ts`) — the module isn't done until that's green.
+
 ## Hard rules
 
 1. **Never fork a platform primitive.** If the notifications/files/workflow primitive almost fits, extend it in `packages/platform` (benefiting every module) — don't copy it into the module.
