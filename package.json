@@ -12,6 +12,7 @@
     "dev:web": "pnpm --filter web dev",
     "dev:worker": "pnpm --filter worker dev",
     "stop": "tsx scripts/stop.ts",
+    "status": "tsx scripts/status.ts",
     "build": "turbo run build",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",

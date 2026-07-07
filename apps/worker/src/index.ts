@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs'
+import { createServer } from 'node:http'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import PgBoss from 'pg-boss'
@@ -32,17 +33,33 @@ const boss = new PgBoss({ connectionString, schema: 'pgboss' })
 
 boss.on('error', (err) => console.error('[pg-boss]', err))
 
+const startedAt = new Date().toISOString()
+let lastHeartbeat: string | null = null
+
+// Health endpoint for `pnpm status` locally and UptimeRobot in the cloud (docs/05).
+const healthPort = Number(process.env.WORKER_HEALTH_PORT ?? 8901)
+createServer((req, res) => {
+  if (req.url === '/healthz') {
+    res.writeHead(200, { 'content-type': 'application/json' })
+    res.end(JSON.stringify({ ok: true, startedAt, lastHeartbeat }))
+  } else {
+    res.writeHead(404)
+    res.end()
+  }
+}).listen(healthPort)
+
 async function main() {
   await boss.start()
 
-  // Heartbeat: proves the worker is alive; later exposed for uptime checks (docs/05).
+  // Heartbeat: proves the job loop is alive.
   await boss.createQueue('platform.heartbeat')
   await boss.schedule('platform.heartbeat', '* * * * *')
   await boss.work('platform.heartbeat', async () => {
-    console.log(`[heartbeat] ${new Date().toISOString()}`)
+    lastHeartbeat = new Date().toISOString()
+    console.log(`[heartbeat] ${lastHeartbeat}`)
   })
 
-  console.log('Worker started. Registered queues: platform.heartbeat')
+  console.log(`Worker started. Health: http://localhost:${healthPort}/healthz`)
 }
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
