@@ -1,0 +1,123 @@
+import type { DayFacts } from './calendar'
+import type { Condition, LineRule, TimeSpec, ZmanName } from './rules'
+
+// Evaluates line rules into displayable wall-clock times.
+// All times are "minutes since midnight" in the synagogue's timezone — the
+// schedule is a wall-clock artifact, so we convert zmanim (Dates) to wall
+// minutes once and do all arithmetic in that space.
+
+export type DayContext = {
+  facts: DayFacts
+  /** Zmanim for this date, already resolved (myzmanim primary, hebcal fallback). */
+  zmanim: Partial<Record<ZmanName, Date>>
+}
+
+export function wallMinutes(instant: Date, timeZone: string): number {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(instant)
+  const hour = Number(parts.find((p) => p.type === 'hour')?.value ?? 0)
+  const minute = Number(parts.find((p) => p.type === 'minute')?.value ?? 0)
+  return hour * 60 + minute
+}
+
+export function formatMinutes(minutes: number): string {
+  const h24 = Math.floor(minutes / 60) % 24
+  const m = minutes % 60
+  const h12 = h24 % 12 === 0 ? 12 : h24 % 12
+  return `${h12}:${String(m).padStart(2, '0')} ${h24 < 12 ? 'AM' : 'PM'}`
+}
+
+export function roundMinutes(
+  minutes: number,
+  round: { direction: 'down' | 'up' | 'nearest'; toMinutes: number },
+): number {
+  const q = minutes / round.toMinutes
+  const rounded =
+    round.direction === 'down' ? Math.floor(q) : round.direction === 'up' ? Math.ceil(q) : Math.round(q)
+  return rounded * round.toMinutes
+}
+
+export function conditionMatches(
+  condition: Condition | undefined,
+  facts: DayFacts,
+  weekHolidays: string[],
+): boolean {
+  if (!condition) return true
+  if (condition.dayTypes && !condition.dayTypes.some((t) => facts.dayTypes.includes(t))) {
+    return false
+  }
+  if (condition.season && condition.season !== facts.season) return false
+  if (condition.holidays && !condition.holidays.some((h) => facts.holidays.includes(h))) {
+    return false
+  }
+  if (
+    condition.holidaysInWeek &&
+    !condition.holidaysInWeek.some((h) => weekHolidays.includes(h))
+  ) {
+    return false
+  }
+  if (condition.dateFrom && facts.date < condition.dateFrom) return false
+  if (condition.dateTo && facts.date > condition.dateTo) return false
+  return true
+}
+
+export function resolveTime(
+  spec: TimeSpec,
+  day: DayContext,
+  week: DayContext[],
+  timeZone: string,
+): number | null {
+  if (spec.kind === 'none') return null
+
+  if (spec.kind === 'fixed') {
+    const [h, m] = spec.clock.split(':').map(Number)
+    return (h ?? 0) * 60 + (m ?? 0)
+  }
+
+  // kind === 'zman'
+  let base: number | null = null
+  if (spec.aggregate) {
+    const candidates = week
+      .map((d) => d.zmanim[spec.zman])
+      .filter((d): d is Date => d instanceof Date)
+      .map((d) => wallMinutes(d, timeZone))
+    if (candidates.length === 0) return null
+    base = spec.aggregate === 'earliest-of-week' ? Math.min(...candidates) : Math.max(...candidates)
+  } else {
+    const instant = day.zmanim[spec.zman]
+    if (!instant) return null
+    base = wallMinutes(instant, timeZone)
+  }
+
+  let result = base + (spec.offsetMinutes ?? 0)
+  if (spec.round) result = roundMinutes(result, spec.round)
+  return result
+}
+
+export type EvaluatedLine = {
+  name: string
+  nameHebrew: string | null
+  /** null = free-form line with no time */
+  timeMinutes: number | null
+}
+
+/** Evaluate one line's rule for one day within its week. Returns null when
+ * the line's condition doesn't match (line hidden). */
+export function evaluateLine(
+  line: { name: string; nameHebrew: string | null; rule: LineRule },
+  day: DayContext,
+  week: DayContext[],
+  timeZone: string,
+): EvaluatedLine | null {
+  const weekHolidays = week.flatMap((d) => d.facts.holidays)
+  if (!conditionMatches(line.rule.condition, day.facts, weekHolidays)) return null
+  return {
+    name: line.name,
+    nameHebrew: line.nameHebrew,
+    timeMinutes: resolveTime(line.rule.time, day, week, timeZone),
+  }
+}
