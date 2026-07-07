@@ -82,6 +82,8 @@ export async function createLine(
   const condition: Record<string, unknown> = {}
   const condDayTypes = formData.getAll('condDayTypes').map(String)
   if (condDayTypes.length > 0) condition.dayTypes = condDayTypes
+  const condDaysOfWeek = formData.getAll('condDaysOfWeek').map(Number)
+  if (condDaysOfWeek.length > 0) condition.daysOfWeek = condDaysOfWeek
   const season = String(formData.get('season') ?? '')
   if (season === 'winter' || season === 'summer') condition.season = season
 
@@ -90,14 +92,18 @@ export async function createLine(
   if (timeKind === 'fixed') {
     time = { kind: 'fixed', clock: String(formData.get('clock') ?? '') }
   } else if (timeKind === 'zman') {
+    // Free-text myzmanim field name wins over the curated dropdown.
+    const zmanCustom = String(formData.get('zmanCustom') ?? '').trim()
     time = {
       kind: 'zman',
-      zman: zmanNameSchema.parse(String(formData.get('zman') ?? 'sunset')),
+      zman: zmanCustom || zmanNameSchema.parse(String(formData.get('zman') ?? 'sunset')),
       offsetMinutes: Number(formData.get('offsetMinutes') ?? 0) || 0,
     }
     const aggregate = String(formData.get('aggregate') ?? '')
     if (aggregate === 'earliest-of-week' || aggregate === 'latest-of-week') {
       time.aggregate = aggregate
+    } else if (/^day-[0-6]$/.test(aggregate)) {
+      time.aggregate = { dayOfWeek: Number(aggregate.slice(4)) }
     }
     const roundTo = Number(formData.get('roundTo') ?? 0)
     if (roundTo > 0) {
@@ -107,6 +113,10 @@ export async function createLine(
         toMinutes: roundTo,
       }
     }
+    const notBefore = String(formData.get('notBefore') ?? '').trim()
+    if (/^\d{2}:\d{2}$/.test(notBefore)) time.notBefore = notBefore
+    const notAfter = String(formData.get('notAfter') ?? '').trim()
+    if (/^\d{2}:\d{2}$/.test(notAfter)) time.notAfter = notAfter
   } else {
     time = { kind: 'none' }
   }

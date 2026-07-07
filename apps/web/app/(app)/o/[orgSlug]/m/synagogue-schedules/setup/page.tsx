@@ -172,6 +172,12 @@ export default async function SetupPage(props: { params: Promise<{ orgSlug: stri
                             <option key={z} value={z}>{z}</option>
                           ))}
                         </select>
+                        <input
+                          name="zmanCustom"
+                          placeholder="or myzmanim name (e.g. Night50fix)"
+                          className={`${inputCls} w-56`}
+                          title="Any myzmanim field name — overrides the dropdown"
+                        />
                         <label className="flex items-center gap-1">
                           offset (min): <input name="offsetMinutes" type="number" defaultValue={0} className={`${inputCls} w-20`} />
                         </label>
@@ -182,7 +188,20 @@ export default async function SetupPage(props: { params: Promise<{ orgSlug: stri
                           <option value="">this day&apos;s zman</option>
                           <option value="earliest-of-week">earliest of week</option>
                           <option value="latest-of-week">latest of week</option>
+                          <option value="day-0">Sunday&apos;s value</option>
+                          <option value="day-1">Monday&apos;s value</option>
+                          <option value="day-2">Tuesday&apos;s value</option>
+                          <option value="day-3">Wednesday&apos;s value</option>
+                          <option value="day-4">Thursday&apos;s value</option>
+                          <option value="day-5">Friday&apos;s value</option>
+                          <option value="day-6">Saturday&apos;s value</option>
                         </select>
+                        <label className="flex items-center gap-1">
+                          not before: <input name="notBefore" type="time" className={inputCls} />
+                        </label>
+                        <label className="flex items-center gap-1">
+                          not after: <input name="notAfter" type="time" className={inputCls} />
+                        </label>
                         <label className="flex items-center gap-1">
                           round to (min): <input name="roundTo" type="number" defaultValue={0} className={`${inputCls} w-16`} />
                         </label>
@@ -205,6 +224,15 @@ export default async function SetupPage(props: { params: Promise<{ orgSlug: stri
                           </label>
                         ))}
                         <span className="text-gray-400">(none checked = every day)</span>
+                      </div>
+                      <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
+                        <span className="text-gray-500">Weekdays:</span>
+                        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d, i) => (
+                          <label key={d} className="flex items-center gap-1">
+                            <input type="checkbox" name="condDaysOfWeek" value={i} /> {d}
+                          </label>
+                        ))}
+                        <span className="text-gray-400">(none checked = all weekdays)</span>
                       </div>
                       <div>
                         <button className={btnCls}>Add line</button>
