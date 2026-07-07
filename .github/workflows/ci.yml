@@ -60,5 +60,24 @@ jobs:
           path: apps/web/playwright-report
           retention-days: 7
 
-# Deploy jobs (migrate prod + Vercel) are added when cloud accounts exist —
-# see docs/07-account-setup.md.
+  deploy:
+    # Production deploy to Vercel — runs only on master pushes, after checks pass.
+    # Built on the runner (prebuilt deploy) so Vercel never builds from source.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    needs: check
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm dlx vercel@latest pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+      - run: pnpm dlx vercel@latest build --prod --token=${{ secrets.VERCEL_TOKEN }}
+      - run: pnpm dlx vercel@latest deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
+
