@@ -120,6 +120,17 @@ export const timeSpecSchema = z.discriminatedUnion('kind', [
     .strict(),
   z
     .object({
+      /** Another line's computed time ± offset (Pozna: "(3) Mincha & Kabbalos
+       * Shabbos = line (2) + 10 minutes"). References by line name within the
+       * same schedule type. */
+      kind: z.literal('line-ref'),
+      line: z.string().min(1),
+      offsetMinutes: z.number().int().default(0),
+      round: roundSchema.optional(),
+    })
+    .strict(),
+  z
+    .object({
       /** Free-form line with no time (e.g. "Coffee sponsored by John Doe"). */
       kind: z.literal('none'),
     })
@@ -131,6 +142,10 @@ export const lineRuleSchema = z
   .object({
     condition: conditionSchema.optional(),
     time: timeSpecSchema,
+    /** When the condition does NOT match, show this text instead of hiding the
+     * line (Pozna: shiur shows "Will IY\"H Resume Next Week" off-season). */
+    fallbackText: z.string().optional(),
+    fallbackTextHebrew: z.string().optional(),
   })
   .strict()
 export type LineRule = z.infer<typeof lineRuleSchema>

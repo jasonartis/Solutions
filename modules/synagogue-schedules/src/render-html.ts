@@ -37,7 +37,9 @@ export function renderScheduleHtml(
         .map((section) => {
           const linesHtml = section.lines
             .map((line) => {
-              const time = line.uniform
+              const time = line.text
+                ? `<em class="fallback">${esc(line.text)}</em>`
+                : line.uniform
                 ? line.timeMinutes !== null
                   ? esc(formatMinutes(line.timeMinutes))
                   : ''

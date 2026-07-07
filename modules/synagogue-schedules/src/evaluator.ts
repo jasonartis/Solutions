@@ -85,8 +85,19 @@ export function resolveTime(
   day: DayContext,
   week: DayContext[],
   timeZone: string,
+  /** Resolver for line-ref specs: another line's minutes on this day, or null.
+   * Supplied by the generator's second pass. */
+  resolveLineRef?: (lineName: string) => number | null,
 ): number | null {
   if (spec.kind === 'none') return null
+
+  if (spec.kind === 'line-ref') {
+    const base = resolveLineRef?.(spec.line) ?? null
+    if (base === null) return null
+    let result = base + (spec.offsetMinutes ?? 0)
+    if (spec.round) result = roundMinutes(result, spec.round)
+    return result
+  }
 
   if (spec.kind === 'fixed') {
     const [h, m] = spec.clock.split(':').map(Number)
@@ -131,23 +142,38 @@ export function resolveTime(
 export type EvaluatedLine = {
   name: string
   nameHebrew: string | null
-  /** null = free-form line with no time */
+  /** null = free-form line or a text result */
   timeMinutes: number | null
+  /** Set instead of a time when the condition failed but the rule declares
+   * fallbackText ("Will resume next week"). */
+  text: string | null
 }
 
 /** Evaluate one line's rule for one day within its week. Returns null when
- * the line's condition doesn't match (line hidden). */
+ * the line's condition doesn't match and no fallback text is declared. */
 export function evaluateLine(
   line: { name: string; nameHebrew: string | null; rule: LineRule },
   day: DayContext,
   week: DayContext[],
   timeZone: string,
+  resolveLineRef?: (lineName: string) => number | null,
 ): EvaluatedLine | null {
   const weekHolidays = week.flatMap((d) => d.facts.holidays)
-  if (!conditionMatches(line.rule.condition, day.facts, weekHolidays)) return null
+  if (!conditionMatches(line.rule.condition, day.facts, weekHolidays)) {
+    if (line.rule.fallbackText) {
+      return {
+        name: line.name,
+        nameHebrew: line.nameHebrew,
+        timeMinutes: null,
+        text: line.rule.fallbackText,
+      }
+    }
+    return null
+  }
   return {
     name: line.name,
     nameHebrew: line.nameHebrew,
-    timeMinutes: resolveTime(line.rule.time, day, week, timeZone),
+    timeMinutes: resolveTime(line.rule.time, day, week, timeZone, resolveLineRef),
+    text: null,
   }
 }

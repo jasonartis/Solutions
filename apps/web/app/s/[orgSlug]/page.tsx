@@ -151,7 +151,9 @@ export default async function PublicSchedulePage(props: {
                       <tr key={line.name}>
                         <td className="py-1 pr-4">{line.name}</td>
                         <td className="py-1 text-right font-semibold">
-                          {line.uniform ? (
+                          {line.text ? (
+                            <span className="italic font-normal text-gray-500">{line.text}</span>
+                          ) : line.uniform ? (
                             line.timeMinutes !== null ? (
                               formatMinutes(line.timeMinutes)
                             ) : (

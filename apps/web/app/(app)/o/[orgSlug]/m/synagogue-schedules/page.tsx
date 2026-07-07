@@ -189,7 +189,9 @@ export default async function SchedulesPage(props: {
                       <tr key={line.name}>
                         <td className="py-1 pr-4">{line.name}</td>
                         <td className="py-1 text-right font-medium">
-                          {line.uniform ? (
+                          {line.text ? (
+                            <span className="italic text-gray-500">{line.text}</span>
+                          ) : line.uniform ? (
                             line.timeMinutes !== null ? (
                               formatMinutes(line.timeMinutes)
                             ) : (
