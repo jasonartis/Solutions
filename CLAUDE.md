@@ -15,7 +15,8 @@ A multi-tenant modular platform: each client engagement produces a **module** bu
 ## Current state (update this section as work progresses)
 
 - **2026-07-06 (evening):** M0 foundation built and verified locally. Monorepo scaffolded (Next.js 16 web app, pg-boss worker, packages/db + platform); core schema with RLS applied to local Supabase; seed script (`pnpm seed`) creates founder + two demo orgs; **RLS isolation tests 7/7 passing** (`pnpm --filter @platform/db test`); auth (password + magic link) + entitlement-driven app shell + stub module + owner console render and gate correctly; dev harness (`pnpm dev`) and CI workflow written. Local logins: owner/alice/bob `@demo.local` / `password123`.
-  **Remaining for M0:** push to GitHub + first cloud deploy (founder does docs/07 accounts first), `dev:cloud-db`/`dev:docker` script variants, Playwright e2e of the logged-in flow, Sentry/UptimeRobot wiring at deploy time.
+  **2026-07-07 update:** pushed to GitHub (`github.com/jasonartis/Solutions`, remote pinned to the `jasonartis` credential) — CI green including RLS tests. Playwright e2e added (5 tests: entitlement chain, cross-org 404, console, redirects, sign-out) and wired into CI against the prod build. `dev:cloud-db` mode added with staging-only guard rails. `pnpm status` shows what's running; worker serves `/healthz` on :8901.
+  **Remaining for M0:** first cloud deploy (founder does docs/07 Parts 2–3: Supabase + Vercel accounts), Sentry/UptimeRobot wiring at deploy time. `dev:docker` deliberately deferred to the VPS-deploy milestone. Then M1: module 3 (synagogue schedules) — needs founder's sample schedule output + rules sheet + synagogue zip + myzmanim key.
 - **2026-07-06:** Planning complete. Six module specs + all architecture/tech/ops decisions documented.
 
 ## Hard-won local-dev gotchas (Windows host)
