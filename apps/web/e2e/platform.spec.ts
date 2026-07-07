@@ -60,6 +60,12 @@ test('classroom module: professor sees the seeded class, student view is scoped'
   await expect(page.getByText('Statistics 101 — Fall')).toBeVisible()
   await expect(page.getByText('Welcome to Statistics 101!')).toBeVisible()
   await expect(page.getByText('Homework 1 — Descriptive statistics')).toBeVisible()
+
+  // Professor-only manage console: roster with preferred/display names.
+  await page.getByRole('link', { name: 'Manage' }).click()
+  await expect(page.getByRole('heading', { name: 'Classroom — Manage' })).toBeVisible()
+  await expect(page.getByText('Roster (2)')).toBeVisible()
+  await expect(page.getByText('Charlie C')).toBeVisible()
 })
 
 test('public schedule page works with no login', async ({ page }) => {

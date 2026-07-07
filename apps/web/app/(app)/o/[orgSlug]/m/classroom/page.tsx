@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { requireOrgModule } from '@/lib/module-gate'
 
 // Module 2 (Classroom) landing: the caller's classes with announcements and
@@ -8,10 +9,13 @@ export default async function ClassroomPage(props: { params: Promise<{ orgSlug: 
   const { supabase, org } = await requireOrgModule(orgSlug, 'classroom')
 
   // RLS scopes every query: members see their classes, staff see the org's.
-  const [{ data: memberships }, { data: classes }] = await Promise.all([
+  // cls_courses is staff/GA-only — a non-empty result marks the caller as staff.
+  const [{ data: memberships }, { data: classes }, { data: staffProbe }] = await Promise.all([
     supabase.from('cls_class_members').select('class_id, role'),
     supabase.from('cls_classes').select('id, name, term').eq('org_id', org.id),
+    supabase.from('cls_courses').select('id').eq('org_id', org.id).limit(1),
   ])
+  const isStaff = (staffProbe ?? []).length > 0
   const roleByClass = new Map((memberships ?? []).map((m) => [m.class_id, m.role]))
   const visibleClasses = (classes ?? []).filter(
     (c) => roleByClass.has(c.id) || (memberships ?? []).length === 0,
@@ -40,7 +44,17 @@ export default async function ClassroomPage(props: { params: Promise<{ orgSlug: 
   return (
     <div>
       <p className="mb-1 text-sm text-gray-400">{org.name}</p>
-      <h1 className="mb-6 text-2xl font-semibold">Classes</h1>
+      <div className="mb-6 flex items-baseline gap-4">
+        <h1 className="text-2xl font-semibold">Classes</h1>
+        {isStaff && (
+          <Link
+            href={`/o/${orgSlug}/m/classroom/manage`}
+            className="text-sm text-blue-600 hover:underline"
+          >
+            Manage
+          </Link>
+        )}
+      </div>
 
       {visibleClasses.length === 0 && (
         <p className="text-gray-500">You are not enrolled in any class yet.</p>
