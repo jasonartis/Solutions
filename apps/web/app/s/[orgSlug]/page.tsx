@@ -138,7 +138,7 @@ export default async function PublicSchedulePage(props: {
         {(documents ?? []).map((doc) => (
           <section key={`${doc.scheduleTypeId}-${doc.dates[0]}`}>
             <h2 className="border-b border-gray-300 pb-1 text-lg font-semibold text-blue-800">
-              {doc.scheduleTypeName}
+              {doc.title}
             </h2>
             {doc.sections.map((section) => (
               <div key={section.name} className="mt-3">

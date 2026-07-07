@@ -81,7 +81,7 @@ export function renderScheduleHtml(
             ).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
 
       return `<div class="doc">
-  <h2 class="doc-title">${esc(doc.scheduleTypeName)}</h2>
+  <h2 class="doc-title">${esc(doc.title)}</h2>
   <p class="doc-dates">${esc(dateLabel)}</p>
   ${sectionsHtml}
 </div>`

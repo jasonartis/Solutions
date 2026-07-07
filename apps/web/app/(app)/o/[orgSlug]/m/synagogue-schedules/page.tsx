@@ -172,7 +172,7 @@ export default async function SchedulesPage(props: {
             key={`${doc.scheduleTypeId}-${doc.dates[0]}`}
             className="rounded-lg border border-gray-200 bg-white p-5"
           >
-            <h2 className="mb-1 text-lg font-semibold">{doc.scheduleTypeName}</h2>
+            <h2 className="mb-1 text-lg font-semibold">{doc.title}</h2>
             <p className="mb-4 text-xs text-gray-400">
               {doc.dates.length === 1
                 ? fmt.format(new Date(`${doc.dates[0]}T12:00:00`))

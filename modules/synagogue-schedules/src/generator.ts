@@ -1,3 +1,4 @@
+import { getWeekFacts, renderTitle } from './calendar'
 import { conditionMatches, evaluateLine, type DayContext, type EvaluatedLine } from './evaluator'
 import type { Condition, LineRule } from './rules'
 
@@ -52,6 +53,9 @@ export type GeneratedSection = {
 export type GeneratedDocument = {
   scheduleTypeId: string
   scheduleTypeName: string
+  /** scheduleTypeName with template tokens rendered ({parsha}, {shabbatTitle},
+   * {hebrewYear}, {mevorchim}, {moladText}, …) — what displays and exports show. */
+  title: string
   span: 'week' | 'day'
   /** The dates this document covers ('YYYY-MM-DD'). */
   dates: string[]
@@ -67,9 +71,14 @@ export function generateWeek(
   overrides: OverrideConfig[],
   week: DayContext[],
   timeZone: string,
+  options: { il?: boolean } = {},
 ): GeneratedDocument[] {
   const weekHolidays = week.flatMap((d) => d.facts.holidays)
   const documents: GeneratedDocument[] = []
+
+  // Week facts for title templating: computed from any date in the week.
+  const anyDate = week[0] ? new Date(`${week[0].facts.date}T12:00:00`) : new Date(0)
+  const weekFacts = getWeekFacts(anyDate, options.il ?? false)
 
   for (const type of scheduleTypes) {
     const matchingDays = week.filter(
@@ -128,6 +137,7 @@ export function generateWeek(
         documents.push({
           scheduleTypeId: type.id,
           scheduleTypeName: type.name,
+          title: renderTitle(type.name, weekFacts),
           span: type.span,
           dates: days.map((d) => d.facts.date),
           sections,

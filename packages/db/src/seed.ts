@@ -136,7 +136,7 @@ async function main() {
     .from('syn_schedule_types')
     .insert({
       org_id: shul,
-      name: 'Shabbat Schedule',
+      name: 'Shabbat Schedule — {shabbatTitle}',
       trigger_condition: { dayTypes: ['shabbat', 'erev-shabbat'] },
       span: 'week',
       sort: 1,
