@@ -18,6 +18,8 @@ Why first: smallest scope, live demand (replaces founder's current Sheets soluti
 
 **Acceptance:** one real synagogue configured end-to-end; a maker generates a week's schedules; "Export" produces all enabled presets correctly; the public page serves congregants with no login; results match the founder's existing Sheets output for the same week.
 
+**Status 2026-07-07:** core loop built and green (engine, maker UI, exports, public page — see module SPEC.md). Remaining for M1 sign-off: myzmanim connector (founder's key) and the match-the-Sheets acceptance validation (founder's sample).
+
 ## M2 — Module 2: Classroom (second real module)
 
 Why second: the founder's most mature existing solution, and it forces files/storage, workflow state machines, visibility windows + retention, approval-adjacent flows, the gradebook, code rendering with line comments, the Google connector (roster sync, Drive video embeds), notifications, and surveys.
