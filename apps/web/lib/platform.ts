@@ -15,9 +15,17 @@ export type OrgWithModules = {
 export async function getOrgsWithModules(): Promise<OrgWithModules[]> {
   const supabase = await createClient()
 
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return []
+
+  // RLS lets members see ALL rows of their orgs (needed elsewhere) — the
+  // dashboard wants only the caller's own memberships, one per org.
   const { data: memberships } = await supabase
     .from('org_members')
     .select('role, orgs(id, name, slug)')
+    .eq('user_id', user.id)
   if (!memberships || memberships.length === 0) return []
 
   const { data: entitlements } = await supabase

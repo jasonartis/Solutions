@@ -254,6 +254,55 @@ async function main() {
     .from('syn_published_weeks')
     .upsert({ org_id: shul, week_start: weekStart, published: true })
 
+  // --- Demo classroom for module 2 -----------------------------------------
+  const charlieId = await ensureUser('charlie@demo.local', 'password123', 'Charlie C')
+  await admin.from('org_members').upsert({ org_id: orgA, user_id: charlieId, role: 'member' })
+  await admin.from('org_modules').upsert({ org_id: orgA, module_key: 'classroom', enabled: true })
+  await admin.from('module_roles').upsert([
+    { org_id: orgA, user_id: aliceId, module_key: 'classroom', role: 'professor' },
+    { org_id: orgA, user_id: charlieId, module_key: 'classroom', role: 'student' },
+  ])
+
+  await admin.from('cls_courses').delete().eq('org_id', orgA)
+  const { data: course, error: courseErr } = await admin
+    .from('cls_courses')
+    .insert({ org_id: orgA, name: 'Statistics 101', description: 'Intro statistics with R' })
+    .select('id')
+    .single()
+  if (courseErr) throw new Error(`Course seed failed: ${courseErr.message}`)
+
+  const { data: klass, error: classErr } = await admin
+    .from('cls_classes')
+    .insert({ org_id: orgA, course_id: course!.id, name: 'Statistics 101 — Fall', term: 'Fall 2026' })
+    .select('id')
+    .single()
+  if (classErr) throw new Error(`Class seed failed: ${classErr.message}`)
+
+  const { error: memberErr } = await admin.from('cls_class_members').insert([
+    { org_id: orgA, class_id: klass!.id, user_id: aliceId, role: 'professor' },
+    { org_id: orgA, class_id: klass!.id, user_id: charlieId, role: 'student' },
+  ])
+  if (memberErr) throw new Error(`Class members seed failed: ${memberErr.message}`)
+
+  const nextWeek = new Date()
+  nextWeek.setDate(nextWeek.getDate() + 7)
+  const { error: hwErr } = await admin.from('cls_homeworks').insert({
+    org_id: orgA,
+    class_id: klass!.id,
+    title: 'Homework 1 — Descriptive statistics',
+    due_at: nextWeek.toISOString(),
+    sort: 0,
+  })
+  if (hwErr) throw new Error(`Homework seed failed: ${hwErr.message}`)
+
+  const { error: annErr } = await admin.from('cls_announcements').insert({
+    org_id: orgA,
+    class_id: klass!.id,
+    author_id: aliceId,
+    body: 'Welcome to Statistics 101! First lecture posted under Materials.',
+  })
+  if (annErr) throw new Error(`Announcement seed failed: ${annErr.message}`)
+
   console.log('Seed complete:')
   console.log('  owner@demo.local / password123  (superadmin)')
   console.log('  alice@demo.local / password123  (admin of Demo Org A + Demo Synagogue)')

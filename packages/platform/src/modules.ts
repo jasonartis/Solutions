@@ -32,7 +32,23 @@ export const synagogueSchedulesModule: ModuleManifest = {
   ],
 }
 
-export const moduleRegistry: readonly ModuleManifest[] = [stubModule, synagogueSchedulesModule]
+export const classroomModule: ModuleManifest = {
+  key: 'classroom',
+  name: 'Classroom',
+  description:
+    'Course management: materials with timed visibility, homework submissions, peer review, structured gradebook.',
+  roles: ['student', 'ga', 'professor'],
+  nav: [
+    { label: 'Classes', path: '' },
+    { label: 'Manage', path: 'manage' },
+  ],
+}
+
+export const moduleRegistry: readonly ModuleManifest[] = [
+  stubModule,
+  synagogueSchedulesModule,
+  classroomModule,
+]
 
 export function getModule(key: string): ModuleManifest | undefined {
   return moduleRegistry.find((m) => m.key === key)

@@ -53,6 +53,15 @@ test('alice sees a generated week in the synagogue schedules module', async ({ p
   await expect(page.getByText('Candle Lighting')).toBeVisible()
 })
 
+test('classroom module: professor sees the seeded class, student view is scoped', async ({ page }) => {
+  await signIn(page, 'alice@demo.local')
+  await page.getByRole('link', { name: 'Classroom' }).click()
+  await expect(page.getByRole('heading', { name: 'Classes' })).toBeVisible()
+  await expect(page.getByText('Statistics 101 — Fall')).toBeVisible()
+  await expect(page.getByText('Welcome to Statistics 101!')).toBeVisible()
+  await expect(page.getByText('Homework 1 — Descriptive statistics')).toBeVisible()
+})
+
 test('public schedule page works with no login', async ({ page }) => {
   await page.goto('/s/demo-shul')
   await expect(page.getByRole('heading', { name: 'Demo Synagogue' })).toBeVisible()
