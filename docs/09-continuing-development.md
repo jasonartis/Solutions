@@ -39,6 +39,25 @@ current as a working agreement) and picks up the build plan.
 | Parked issues with pickup context | the relevant SPEC.md (e.g. myzmanim in module 3's) |
 | Your own prompt history | D:\Jason_prompts\sessions\ (via /log-session) |
 
+## What is NOT in the repo (complete inventory — audit 2026-07-07)
+
+Everything conceptual is in the repo. These are the only things a totally fresh
+machine/AI/account cannot recover from git, and where each lives:
+
+| Item | Where it lives | Recovery if lost |
+|---|---|---|
+| **Secrets** (`.env.deploy`: Supabase tokens/keys/db password, Vercel token, myzmanim creds) | This PC only, git-ignored | Regenerate in each dashboard per docs/07; myzmanim key from Apps Script Script Properties. **Keep a copy in your password manager** |
+| **Client source materials** (`client-materials/`: Pozna sheets/scripts/dump) | This PC only, git-ignored (client data never in git) | Also preserved verbatim in your prompt archive (below) and summarized in the module SPEC; originals in your Google account. **Consider backing the folder up to your Drive** |
+| **Your prompt archive** (session logs via /log-session) | `D:\Jason_prompts\` | Your personal archive — back up like any document folder |
+| **Claude's session memory** (working preferences) | Claude account/machine | Mirrored into CLAUDE.md "Founder profile & working style" — nothing unique there anymore |
+| **The /log-session skill** | `C:\Users\yarmishj\.claude\skills\log-session` | Rebuildable from its companion doc: `D:\Jason_prompts\skill-docs\log-session-skill.md` |
+| Machine tweaks (`.wslconfig` 8GB cap, pnpm hoisted linker, compile-cache fix) | This PC | All documented in CLAUDE.md gotchas + docs/01 |
+| Cloud-side config (GitHub Actions secrets, Vercel project/env, Supabase auth settings) | The respective dashboards | All enumerated in docs/05 "Production — live state" |
+
+**The one irreplaceable-without-effort item is `.env.deploy`** — five minutes of dashboard
+clicking to regenerate, zero minutes if it's in your password manager. Everything else is
+either in git, in your own accounts, or documented well enough to rebuild.
+
 ## Adding module 7, 8, … the designed way
 
 **docs/03-adding-a-module.md is the instruction set** — anatomy, hard rules, the
