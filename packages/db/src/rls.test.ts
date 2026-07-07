@@ -24,9 +24,10 @@ beforeAll(async () => {
 })
 
 describe('tenancy isolation', () => {
-  it('alice sees only her own org', async () => {
+  it('alice sees only her own orgs', async () => {
     const { data } = await alice.from('orgs').select('slug')
-    expect(data?.map((o) => o.slug)).toEqual(['demo-a'])
+    // Demo Org A plus the Demo Synagogue (module 3 seed) — and nothing else.
+    expect(data?.map((o) => o.slug).sort()).toEqual(['demo-a', 'demo-shul'])
   })
 
   it('bob sees only his own org', async () => {
