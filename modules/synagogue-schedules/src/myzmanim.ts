@@ -22,7 +22,9 @@ export async function fetchMyzmanimDay(
   const cached = memo.get(memoKey)
   if (cached) return cached
 
-  const body = new URLSearchParams({
+  // GET with querystring — the POST form variant trips the WCF backend
+  // (verified 2026-07-07: GET returns clean JSON, form-POST returns an HTML error).
+  const qs = new URLSearchParams({
     user: creds.user,
     key: creds.key,
     coding: 'JS',
@@ -30,7 +32,7 @@ export async function fetchMyzmanimDay(
     inputdate: dateISO,
     locationid: locationId,
   })
-  const res = await fetch(API_URL, { method: 'POST', body })
+  const res = await fetch(`${API_URL}?${qs}`)
   if (!res.ok) throw new Error(`myzmanim HTTP ${res.status}`)
   const data = (await res.json()) as { ErrMsg?: string; Zman?: Record<string, unknown> }
   if (data.ErrMsg) throw new Error(`myzmanim: ${data.ErrMsg}`)
