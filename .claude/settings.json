@@ -1,4 +1,7 @@
 {
+  "sandbox": {
+    "autoAllowBashIfSandboxed": true
+  },
   "permissions": {
     "allow": [
       "PowerShell(pnpm *)",
