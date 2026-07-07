@@ -3,6 +3,8 @@ import { createServer } from 'node:http'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import PgBoss from 'pg-boss'
+import { createClient as createSupabaseClient, type SupabaseClient } from '@supabase/supabase-js'
+import { RENDER_KIND, runSynagogueRender } from './jobs/synagogue-render'
 
 // import.meta.dirname is undefined under tsx — derive it from the module URL.
 const here = dirname(fileURLToPath(import.meta.url))
@@ -48,6 +50,61 @@ createServer((req, res) => {
   }
 }).listen(healthPort)
 
+// --- job_requests poller (docs/01 job-result contract) ----------------------
+// Web inserts rows as the user (RLS-checked); we process them with the
+// service role and write status/result back.
+const jobHandlers: Record<string, (admin: SupabaseClient, job: JobRow) => Promise<unknown>> = {
+  [RENDER_KIND]: runSynagogueRender,
+}
+
+type JobRow = { id: string; org_id: string; kind: string; payload: Record<string, never> }
+
+function makeAdminClient(): SupabaseClient | null {
+  const url = process.env.SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !key) return null
+  return createSupabaseClient(url, key, { auth: { persistSession: false } })
+}
+
+async function pollJobRequests(admin: SupabaseClient) {
+  const { data: jobs } = await admin
+    .from('job_requests')
+    .select('id, org_id, kind, payload')
+    .eq('status', 'pending')
+    .order('created_at')
+    .limit(3)
+
+  for (const job of jobs ?? []) {
+    const handler = jobHandlers[job.kind]
+    if (!handler) {
+      await admin
+        .from('job_requests')
+        .update({ status: 'error', error: `Unknown job kind: ${job.kind}` })
+        .eq('id', job.id)
+      continue
+    }
+    // Claim: only proceed if we flipped it from pending (guards double-run).
+    const { data: claimed } = await admin
+      .from('job_requests')
+      .update({ status: 'running' })
+      .eq('id', job.id)
+      .eq('status', 'pending')
+      .select('id')
+    if (!claimed || claimed.length === 0) continue
+
+    console.log(`[job ${job.id}] ${job.kind} starting`)
+    try {
+      const result = await handler(admin, job as never)
+      await admin.from('job_requests').update({ status: 'done', result }).eq('id', job.id)
+      console.log(`[job ${job.id}] done`)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      await admin.from('job_requests').update({ status: 'error', error: message }).eq('id', job.id)
+      console.error(`[job ${job.id}] failed: ${message}`)
+    }
+  }
+}
+
 async function main() {
   await boss.start()
 
@@ -58,6 +115,25 @@ async function main() {
     lastHeartbeat = new Date().toISOString()
     console.log(`[heartbeat] ${lastHeartbeat}`)
   })
+
+  const admin = makeAdminClient()
+  if (admin) {
+    let polling = false
+    setInterval(async () => {
+      if (polling) return
+      polling = true
+      try {
+        await pollJobRequests(admin)
+      } catch (err) {
+        console.error('[job poller]', err)
+      } finally {
+        polling = false
+      }
+    }, 5000)
+    console.log('Job-request poller active (every 5s).')
+  } else {
+    console.warn('SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY not set — job poller disabled.')
+  }
 
   console.log(`Worker started. Health: http://localhost:${healthPort}/healthz`)
 }

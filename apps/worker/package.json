@@ -10,7 +10,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "pg-boss": "^10.3.0"
+    "@supabase/supabase-js": "^2.60.0",
+    "pg-boss": "^10.3.0",
+    "playwright": "^1.56.0"
   },
   "devDependencies": {
     "@types/node": "^24",

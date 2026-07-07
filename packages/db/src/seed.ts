@@ -220,6 +220,16 @@ async function main() {
     },
   ])
 
+  // Default export profiles (docs/modules/module-3): same layout, different
+  // render settings per destination.
+  await admin.from('syn_export_profiles').delete().eq('org_id', shul)
+  const { error: profilesError } = await admin.from('syn_export_profiles').insert([
+    { org_id: shul, name: 'Print', format: 'pdf', margins_mm: 15, grayscale: true, sort: 0 },
+    { org_id: shul, name: 'Lobby Screen', format: 'jpg', width_px: 1600, grayscale: false, sort: 1 },
+    { org_id: shul, name: 'WhatsApp', format: 'jpg', width_px: 800, grayscale: false, sort: 2 },
+  ])
+  if (profilesError) throw new Error(`Export profiles seed failed: ${profilesError.message}`)
+
   // A weekly free-form override for the current week (Sunday start).
   const now = new Date()
   const sunday = new Date(now)

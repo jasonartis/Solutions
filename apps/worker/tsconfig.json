@@ -6,7 +6,8 @@
       "@platform/core": ["../../packages/platform/src/index.ts"],
       "@platform/core/*": ["../../packages/platform/src/*"],
       "@platform/db": ["../../packages/db/src/index.ts"],
-      "@platform/db/*": ["../../packages/db/src/*"]
+      "@platform/db/*": ["../../packages/db/src/*"],
+      "@modules/synagogue-schedules": ["../../modules/synagogue-schedules/src/index.ts"]
     }
   },
   "include": ["src"]

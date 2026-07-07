@@ -56,6 +56,8 @@ if (status) {
     })
     writeEnvFile(resolve(repoRoot, 'apps/worker/.env'), {
       DATABASE_URL: dbUrl,
+      SUPABASE_URL: apiUrl,
+      SUPABASE_SERVICE_ROLE_KEY: serviceKey,
     })
   }
 }

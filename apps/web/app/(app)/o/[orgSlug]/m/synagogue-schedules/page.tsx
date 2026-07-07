@@ -10,6 +10,7 @@ import {
   type ScheduleTypeConfig,
 } from '@modules/synagogue-schedules'
 import { createClient } from '@/lib/supabase/server'
+import { requestExport } from './export-actions'
 
 const MODULE_KEY = 'synagogue-schedules'
 
@@ -224,10 +225,96 @@ export default async function SchedulesPage(props: {
         ))}
       </div>
 
+      <ExportPanel orgId={org.id} orgSlug={orgSlug} weekStart={weekStart} />
+
       <p className="mt-6 text-xs text-gray-400">
         Times computed locally (hebcal) — myzmanim becomes the primary source when the connector
         lands.
       </p>
     </div>
+  )
+}
+
+// Export section: request a render, show job status and finished files.
+async function ExportPanel(props: { orgId: string; orgSlug: string; weekStart: string }) {
+  const supabase = await createClient()
+
+  const [{ data: lastJob }, { data: files }] = await Promise.all([
+    supabase
+      .from('job_requests')
+      .select('status, error, created_at')
+      .eq('org_id', props.orgId)
+      .eq('kind', 'synagogue-schedules.render')
+      .contains('payload', { weekStart: props.weekStart })
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase.storage.from('syn-exports').list(`${props.orgId}/${props.weekStart}`),
+  ])
+
+  const fileLinks: { name: string; url: string }[] = []
+  for (const f of files ?? []) {
+    const { data } = await supabase.storage
+      .from('syn-exports')
+      .createSignedUrl(`${props.orgId}/${props.weekStart}/${f.name}`, 3600)
+    if (data?.signedUrl) fileLinks.push({ name: f.name, url: data.signedUrl })
+  }
+
+  return (
+    <section className="mt-8 rounded-lg border border-gray-200 bg-white p-5">
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-lg font-semibold">Exports</h2>
+        <form
+          action={async () => {
+            'use server'
+            await requestExport(props.orgId, props.orgSlug, props.weekStart)
+          }}
+        >
+          <button className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
+            Export this week
+          </button>
+        </form>
+      </div>
+
+      {lastJob && (
+        <p className="mb-3 text-sm text-gray-500">
+          Last export request:{' '}
+          <span
+            className={
+              lastJob.status === 'done'
+                ? 'text-green-600'
+                : lastJob.status === 'error'
+                  ? 'text-red-600'
+                  : 'text-amber-600'
+            }
+          >
+            {lastJob.status}
+          </span>
+          {lastJob.error ? ` — ${lastJob.error}` : ''}
+          {lastJob.status === 'pending' || lastJob.status === 'running'
+            ? ' (refresh in a few seconds)'
+            : ''}
+        </p>
+      )}
+
+      {fileLinks.length === 0 ? (
+        <p className="text-sm text-gray-400">No files yet for this week.</p>
+      ) : (
+        <ul className="flex flex-wrap gap-3 text-sm">
+          {fileLinks.map((f) => (
+            <li key={f.name}>
+              <a
+                href={f.url}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-block rounded border border-blue-200 bg-blue-50 px-3 py-1 text-blue-700 hover:bg-blue-100"
+              >
+                {f.name}
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   )
 }
