@@ -1,12 +1,11 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import {
+  buildWeek,
   formatMinutes,
   generateWeek,
-  getDayFacts,
-  getZmanimFallback,
   lineRuleSchema,
-  type DayContext,
+  myzmanimCredsFromEnv,
   type ScheduleTypeConfig,
 } from '@modules/synagogue-schedules'
 import { createClient } from '@/lib/supabase/server'
@@ -42,6 +41,7 @@ export default async function SchedulesPage(props: {
     longitude?: number
     timezone?: string
     israel?: boolean
+    myzmanimLocationId?: string
   }
   const timeZone = settings.timezone ?? 'America/New_York'
 
@@ -50,21 +50,17 @@ export default async function SchedulesPage(props: {
   const sunday = new Date(anchor)
   sunday.setDate(anchor.getDate() - anchor.getDay())
   sunday.setHours(12, 0, 0, 0)
-
-  const weekDays: DayContext[] = []
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(sunday)
-    d.setDate(sunday.getDate() + i)
-    weekDays.push({
-      facts: getDayFacts(d, settings.israel ?? false),
-      // hebcal fallback until the myzmanim connector lands (SPEC.md).
-      zmanim:
-        settings.latitude != null && settings.longitude != null
-          ? getZmanimFallback(d, settings.latitude, settings.longitude, timeZone)
-          : {},
-    })
-  }
   const weekStart = toDateOnly(sunday)
+
+  // myzmanim primary, hebcal fallback (spec).
+  const weekDays = await buildWeek(weekStart, {
+    latitude: settings.latitude,
+    longitude: settings.longitude,
+    timeZone,
+    israel: settings.israel,
+    myzmanimLocationId: settings.myzmanimLocationId,
+    credentials: myzmanimCredsFromEnv(),
+  })
 
   // Load config (RLS scopes everything to this member's org).
   const [{ data: types }, { data: sections }, { data: lines }, { data: overrides }] =

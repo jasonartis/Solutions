@@ -4,8 +4,20 @@
 // Pattern adopted from dascher.base's startup scripts (docs/06): resolved-config
 // echo with masked secrets, env layering, guard rails.
 import { execSync } from 'node:child_process'
+import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { mask, repoRoot, run, supabaseStatus, writeEnvFile } from './lib'
+
+// Optional myzmanim credentials pass-through from .env.deploy (git-ignored).
+function myzmanimEnv(): Record<string, string> {
+  const deployPath = resolve(repoRoot, '.env.deploy')
+  if (!existsSync(deployPath)) return {}
+  const content = readFileSync(deployPath, 'utf8')
+  const get = (k: string) => new RegExp(`^${k}=(.*)$`, 'm').exec(content)?.[1]?.trim() ?? ''
+  const user = get('MYZMANIM_USER')
+  const key = get('MYZMANIM_KEY')
+  return user && key ? { MYZMANIM_USER: user, MYZMANIM_KEY: key } : {}
+}
 
 const dryRun = process.argv.includes('--dry-run')
 
@@ -50,14 +62,17 @@ if (status) {
       SUPABASE_SERVICE_ROLE_KEY: serviceKey,
       DATABASE_URL: dbUrl,
     })
+    const myzmanim = myzmanimEnv()
     writeEnvFile(resolve(repoRoot, 'apps/web/.env.local'), {
       NEXT_PUBLIC_SUPABASE_URL: apiUrl,
       NEXT_PUBLIC_SUPABASE_ANON_KEY: anonKey,
+      ...myzmanim,
     })
     writeEnvFile(resolve(repoRoot, 'apps/worker/.env'), {
       DATABASE_URL: dbUrl,
       SUPABASE_URL: apiUrl,
       SUPABASE_SERVICE_ROLE_KEY: serviceKey,
+      ...myzmanim,
     })
   }
 }

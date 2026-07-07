@@ -1,13 +1,12 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import {
+  buildWeek,
   formatMinutes,
   generateWeek,
-  getDayFacts,
-  getZmanimFallback,
   lineRuleSchema,
+  myzmanimCredsFromEnv,
   type Condition,
-  type DayContext,
   type ScheduleTypeConfig,
 } from '@modules/synagogue-schedules'
 import { createClient } from '@/lib/supabase/server'
@@ -17,7 +16,13 @@ import { createClient } from '@/lib/supabase/server'
 
 type PublicWeekData = {
   org: { name: string }
-  settings: { latitude?: number; longitude?: number; timezone?: string; israel?: boolean }
+  settings: {
+    latitude?: number
+    longitude?: number
+    timezone?: string
+    israel?: boolean
+    myzmanimLocationId?: string
+  }
   types: { id: string; name: string; name_hebrew: string | null; trigger_condition: Condition; span: 'week' | 'day' }[]
   sections: { id: string; schedule_type_id: string; name: string; name_hebrew: string | null; visibility_condition: Condition }[]
   lines: { id: string; section_id: string; name: string; name_hebrew: string | null; rule: unknown }[]
@@ -49,19 +54,14 @@ export default async function PublicSchedulePage(props: {
     const week = data as PublicWeekData | null
     if (week) {
       timeZone = week.settings.timezone ?? timeZone
-      const sunday = new Date(`${selectedWeek}T12:00:00`)
-      const days: DayContext[] = []
-      for (let i = 0; i < 7; i++) {
-        const d = new Date(sunday)
-        d.setDate(sunday.getDate() + i)
-        days.push({
-          facts: getDayFacts(d, week.settings.israel ?? false),
-          zmanim:
-            week.settings.latitude != null && week.settings.longitude != null
-              ? getZmanimFallback(d, week.settings.latitude, week.settings.longitude, timeZone)
-              : {},
-        })
-      }
+      const days = await buildWeek(selectedWeek, {
+        latitude: week.settings.latitude,
+        longitude: week.settings.longitude,
+        timeZone,
+        israel: week.settings.israel,
+        myzmanimLocationId: week.settings.myzmanimLocationId,
+        credentials: myzmanimCredsFromEnv(),
+      })
       const config: ScheduleTypeConfig[] = week.types.map((t) => ({
         id: t.id,
         name: t.name,

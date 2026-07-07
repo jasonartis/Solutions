@@ -109,6 +109,8 @@ async function main() {
       longitude: -74.006,
       timezone: 'America/New_York',
       israel: false,
+      // Brooklyn 11210 — same location the founder's sheet pulls (US11210).
+      myzmanimLocationId: 'US11210',
     },
   })
   await admin.from('module_roles').upsert({

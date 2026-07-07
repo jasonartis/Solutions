@@ -1,12 +1,11 @@
 import { chromium } from 'playwright'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import {
+  buildWeek,
   generateWeek,
-  getDayFacts,
-  getZmanimFallback,
   lineRuleSchema,
+  myzmanimCredsFromEnv,
   renderScheduleHtml,
-  type DayContext,
   type ScheduleTypeConfig,
 } from '../../../../modules/synagogue-schedules/src/index'
 
@@ -42,23 +41,20 @@ export async function runSynagogueRender(admin: SupabaseClient, job: Job) {
     israel?: boolean
     accentColor?: string
     logoUrl?: string
+    myzmanimLocationId?: string
   }
   const timeZone = settings.timezone ?? 'America/New_York'
 
-  // Build the week (hebcal fallback zmanim until the myzmanim connector).
+  // myzmanim primary, hebcal fallback (spec).
+  const week = await buildWeek(weekStart, {
+    latitude: settings.latitude,
+    longitude: settings.longitude,
+    timeZone,
+    israel: settings.israel,
+    myzmanimLocationId: settings.myzmanimLocationId,
+    credentials: myzmanimCredsFromEnv(),
+  })
   const sunday = new Date(`${weekStart}T12:00:00`)
-  const week: DayContext[] = []
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(sunday)
-    d.setDate(sunday.getDate() + i)
-    week.push({
-      facts: getDayFacts(d, settings.israel ?? false),
-      zmanim:
-        settings.latitude != null && settings.longitude != null
-          ? getZmanimFallback(d, settings.latitude, settings.longitude, timeZone)
-          : {},
-    })
-  }
 
   const [{ data: types }, { data: sections }, { data: lines }, { data: overrides }, { data: profiles }] =
     await Promise.all([
