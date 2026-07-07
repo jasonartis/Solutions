@@ -1,5 +1,36 @@
 # Operations
 
+## Production — live state (2026-07-07)
+
+**App: https://solutions-platform.vercel.app** · Superadmin: `jasonartisenergy@gmail.com`.
+
+The full chain, end to end:
+
+```
+git push master (local)
+   → GitHub repo: github.com/jasonartis/Solutions
+   → GitHub Actions "check" job: typecheck → build → local Supabase in CI
+        → seed → 7 RLS isolation tests → 7 Playwright browser e2e tests
+   → (only if green) "deploy" job: vercel pull → build on the Linux runner
+        → prebuilt upload to Vercel production
+   → https://solutions-platform.vercel.app (Vercel project solutions-platform,
+        root directory apps/web)
+   → production Supabase project jbjqrkxdoiolwlglvoki (Postgres + Auth +
+        Storage + Realtime), all migrations applied, RLS enforcing tenancy
+```
+
+| Piece | Where / value |
+|---|---|
+| Web hosting | Vercel project `solutions-platform` (`prj_reUQNNvf0XcjS6YcRGEYRXBC8XYM`), Hobby tier — upgrade or migrate at Phase C (commercial use) |
+| Database/auth/storage | Supabase `jbjqrkxdoiolwlglvoki` (free tier); auth `site_url` = production domain, localhost allowed for dev |
+| Migrations to prod | From the dev machine: `supabase db push` using `.env.deploy` (CLI linked). Deliberately founder-triggered, not in CI, while the platform is young |
+| Deploy secrets | GitHub Actions secrets `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` (installed encrypted via API) |
+| Local credentials | `.env.deploy` (git-ignored): Supabase access token, db password, anon + service-role keys, Vercel token. If lost, regenerate in both dashboards |
+| Vercel env vars | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` (production + preview) |
+| Superadmin tool | `pnpm exec tsx scripts/prod-promote-superadmin.ts <email>` (after the person signs up) |
+| Auth email delivery | Supabase built-in sender (fine for onboarding; Resend at real volume) |
+| **Not yet deployed** | The **worker** (exports, job queue) runs only on the dev machine — production "Export" requests stay pending until the worker deploys to the VPS (Phase B). Viewing/setup/public pages work fully without it |
+
 ## Environments
 
 | Env | Purpose | Infra |

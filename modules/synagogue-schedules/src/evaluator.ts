@@ -1,5 +1,5 @@
 import type { DayFacts } from './calendar'
-import type { Condition, LineRule, TimeSpec, ZmanName } from './rules'
+import { ZMAN_ALIASES, type Condition, type LineRule, type TimeSpec } from './rules'
 
 // Evaluates line rules into displayable wall-clock times.
 // All times are "minutes since midnight" in the synagogue's timezone — the
@@ -8,8 +8,22 @@ import type { Condition, LineRule, TimeSpec, ZmanName } from './rules'
 
 export type DayContext = {
   facts: DayFacts
-  /** Zmanim for this date, already resolved (myzmanim primary, hebcal fallback). */
-  zmanim: Partial<Record<ZmanName, Date>>
+  /** Zmanim for this date, keyed by myzmanim field name and/or friendly alias
+   * (myzmanim primary, hebcal fallback). */
+  zmanim: Partial<Record<string, Date>>
+}
+
+const ALIAS_REVERSED: Record<string, string> = Object.fromEntries(
+  Object.entries(ZMAN_ALIASES).map(([friendly, field]) => [field, friendly]),
+)
+
+/** Look a zman up by either vocabulary — rule names and source keys may mix
+ * friendly aliases and myzmanim field names. */
+export function lookupZman(
+  zmanim: Partial<Record<string, Date>>,
+  name: string,
+): Date | undefined {
+  return zmanim[name] ?? zmanim[ZMAN_ALIASES[name] ?? ''] ?? zmanim[ALIAS_REVERSED[name] ?? '']
 }
 
 export function wallMinutes(instant: Date, timeZone: string): number {
@@ -50,6 +64,7 @@ export function conditionMatches(
   if (condition.dayTypes && !condition.dayTypes.some((t) => facts.dayTypes.includes(t))) {
     return false
   }
+  if (condition.daysOfWeek && !condition.daysOfWeek.includes(facts.dayOfWeek)) return false
   if (condition.season && condition.season !== facts.season) return false
   if (condition.holidays && !condition.holidays.some((h) => facts.holidays.includes(h))) {
     return false
@@ -80,21 +95,36 @@ export function resolveTime(
 
   // kind === 'zman'
   let base: number | null = null
-  if (spec.aggregate) {
+  if (typeof spec.aggregate === 'object') {
+    // Day-anchored: this weekday's value, held for the whole week
+    // (Pozna: "8 minutes before Sunday's Plag", "Friday's Candles").
+    const wanted = spec.aggregate.dayOfWeek
+    const anchorDay = week.find((d) => d.facts.dayOfWeek === wanted)
+    const instant = anchorDay ? lookupZman(anchorDay.zmanim, spec.zman) : undefined
+    if (!instant) return null
+    base = wallMinutes(instant, timeZone)
+  } else if (spec.aggregate) {
     const candidates = week
-      .map((d) => d.zmanim[spec.zman])
+      .map((d) => lookupZman(d.zmanim, spec.zman))
       .filter((d): d is Date => d instanceof Date)
       .map((d) => wallMinutes(d, timeZone))
     if (candidates.length === 0) return null
     base = spec.aggregate === 'earliest-of-week' ? Math.min(...candidates) : Math.max(...candidates)
   } else {
-    const instant = day.zmanim[spec.zman]
+    const instant = lookupZman(day.zmanim, spec.zman)
     if (!instant) return null
     base = wallMinutes(instant, timeZone)
   }
 
   let result = base + (spec.offsetMinutes ?? 0)
   if (spec.round) result = roundMinutes(result, spec.round)
+
+  const clockToMinutes = (clock: string) => {
+    const [h, m] = clock.split(':').map(Number)
+    return (h ?? 0) * 60 + (m ?? 0)
+  }
+  if (spec.notBefore) result = Math.max(result, clockToMinutes(spec.notBefore))
+  if (spec.notAfter) result = Math.min(result, clockToMinutes(spec.notAfter))
   return result
 }
 

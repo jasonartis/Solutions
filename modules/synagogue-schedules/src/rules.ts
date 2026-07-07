@@ -29,6 +29,8 @@ export const conditionSchema = z
   .object({
     /** Line shows only on these day types (any match). Empty/absent = all. */
     dayTypes: z.array(dayTypeSchema).optional(),
+    /** Specific weekdays, 0=Sunday…6=Saturday (Pozna: "Shachris Sun–Fri 6:10 / Mon–Fri 6:50"). */
+    daysOfWeek: z.array(z.number().int().min(0).max(6)).optional(),
     /** 'winter' / 'summer' per the halachic year halves (calendar.ts decides). */
     season: z.enum(['winter', 'summer']).optional(),
     /** Only when one of these holidays occurs on the day (hebcal holiday keys). */
@@ -42,7 +44,10 @@ export const conditionSchema = z
   .strict()
 export type Condition = z.infer<typeof conditionSchema>
 
-// Named times the zmanim source provides per (location, date).
+// Curated zman suggestions for UI dropdowns. Rules accept ANY string —
+// myzmanim field names (SunsetDefault, MinchaGra, Night50fix, Candles, …)
+// are the canonical vocabulary (founder's sheet uses ~90 of them); these
+// friendly names are aliases resolved by the evaluator.
 export const zmanNameSchema = z.enum([
   'sunrise',
   'sunset',
@@ -59,6 +64,23 @@ export const zmanNameSchema = z.enum([
   'tzeis',
 ])
 export type ZmanName = z.infer<typeof zmanNameSchema>
+
+/** friendly alias -> myzmanim field name (both directions resolved at lookup) */
+export const ZMAN_ALIASES: Record<string, string> = {
+  sunrise: 'SunriseDefault',
+  sunset: 'SunsetDefault',
+  'candle-lighting': 'Candles',
+  havdalah: 'Night72fix',
+  alos: 'Dawn72',
+  misheyakir: 'YakirDefault',
+  'sof-zman-shma': 'ShemaGra',
+  'sof-zman-tefilla': 'ShachrisGra',
+  chatzos: 'Midday',
+  'mincha-gedola': 'MinchaGra',
+  'mincha-ketana': 'KetanaGra',
+  'plag-hamincha': 'PlagGra',
+  tzeis: 'NightShabbos',
+}
 
 export const roundSchema = z
   .object({
@@ -78,11 +100,22 @@ export const timeSpecSchema = z.discriminatedUnion('kind', [
   z
     .object({
       kind: z.literal('zman'),
-      zman: zmanNameSchema,
-      /** Take the zman from a single day (default) or aggregate across the week. */
-      aggregate: z.enum(['earliest-of-week', 'latest-of-week']).optional(),
+      /** myzmanim field name or a friendly alias (ZMAN_ALIASES). */
+      zman: z.string().min(1),
+      /** Take the zman from this day (default), a specific weekday's value held
+       * for the whole week (Pozna: "8 min before Sunday's Plag", "Friday's
+       * Candles"), or a week aggregate. */
+      aggregate: z
+        .union([
+          z.enum(['earliest-of-week', 'latest-of-week']),
+          z.object({ dayOfWeek: z.number().int().min(0).max(6) }).strict(),
+        ])
+        .optional(),
       offsetMinutes: z.number().int().default(0),
       round: roundSchema.optional(),
+      /** Clamp the final time (Pozna: Mincha Gedolah = max(EarliestMincha, 1:30 PM)). */
+      notBefore: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+      notAfter: z.string().regex(/^\d{2}:\d{2}$/).optional(),
     })
     .strict(),
   z
