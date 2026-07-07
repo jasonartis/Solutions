@@ -35,12 +35,23 @@ Read in this order for full context:
 5. **Nail Salon** — booking, appointment workflow, billing, light bookkeeping
 6. **Speed Dating** — live video events with timed round-robin rotation (Jitsi)
 
-## Quickstart (once M0 exists)
+## Running locally
 
-```
-pnpm install
-supabase start        # local Postgres/auth/storage/realtime in Docker
-pnpm dev              # Next.js app + worker
-```
+Prerequisites (already installed on the dev machine): Node 24+, pnpm, Docker Desktop, git.
 
-Prerequisites on Windows: Node LTS, pnpm, Docker Desktop (WSL2 backend), Supabase CLI, git.
+1. **Start Docker Desktop** (whale icon in system tray must be running).
+2. Open a terminal in this folder and run **`pnpm dev`** — or double-click **`scripts\start-dev.bat`**.
+   It starts local Supabase in Docker if needed, writes the `.env` files, and launches the web app + worker. First output shows the resolved config; wait for Next.js to print `Ready`.
+3. Open **http://localhost:3000** → you land on the **login page**.
+
+Demo logins (created by `pnpm seed`; all password `password123`):
+
+| Email | What you'll see after login |
+|---|---|
+| `owner@demo.local` | Dashboard (no orgs) + **Owner Console** link in the header — create orgs, toggle modules, add members |
+| `alice@demo.local` | Dashboard showing **Demo Org A** with the **Demo Module** button — click it to see the entitlement-gated module page |
+| `bob@demo.local` | Dashboard showing **Demo Org B** with no modules — proving entitlements are per-org |
+
+Other local URLs: Supabase Studio (database GUI) at http://127.0.0.1:54323 · Mailpit (catches all auth emails, e.g. magic links) at http://127.0.0.1:54324.
+
+**Stopping:** `Ctrl+C` in the terminal stops web+worker; `pnpm stop` (or `scripts\stop-dev.bat`) stops the Supabase containers. If the database is ever in a weird state: `pnpm db:reset` re-applies migrations, then `pnpm seed` restores the demo data.
