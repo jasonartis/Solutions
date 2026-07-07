@@ -25,7 +25,8 @@ const delCls = 'text-xs text-red-500 hover:underline'
 function describeRule(rule: unknown): string {
   const r = rule as {
     condition?: { dayTypes?: string[]; season?: string }
-    time?: { kind?: string; clock?: string; zman?: string; offsetMinutes?: number; aggregate?: string; round?: { direction: string; toMinutes: number } }
+    time?: { kind?: string; clock?: string; zman?: string; line?: string; offsetMinutes?: number; aggregate?: string; round?: { direction: string; toMinutes: number } }
+    fallbackText?: string
   }
   const parts: string[] = []
   if (r.time?.kind === 'fixed') parts.push(`fixed ${r.time.clock}`)
@@ -36,9 +37,16 @@ function describeRule(rule: unknown): string {
     if (r.time.round) s += `, round ${r.time.round.direction} to ${r.time.round.toMinutes}m`
     parts.push(s)
   }
+  if (r.time?.kind === 'line-ref') {
+    let s = `= ${r.time.line}`
+    const off = r.time.offsetMinutes ?? 0
+    if (off !== 0) s += ` ${off > 0 ? '+' : ''}${off}m`
+    parts.push(s)
+  }
   if (r.time?.kind === 'none') parts.push('no time (free-form)')
   if (r.condition?.dayTypes?.length) parts.push(`on: ${r.condition.dayTypes.join(', ')}`)
   if (r.condition?.season) parts.push(`${r.condition.season} only`)
+  if (r.fallbackText) parts.push(`else: "${r.fallbackText}"`)
   return parts.join(' · ')
 }
 
@@ -165,6 +173,7 @@ export default async function SetupPage(props: { params: Promise<{ orgSlug: stri
                         <select name="timeKind" className={inputCls} defaultValue="zman">
                           <option value="zman">Zman-based time</option>
                           <option value="fixed">Fixed clock time</option>
+                          <option value="line-ref">After another line (+ offset)</option>
                           <option value="none">No time (free-form)</option>
                         </select>
                         <select name="zman" className={inputCls} defaultValue="sunset">
@@ -177,6 +186,12 @@ export default async function SetupPage(props: { params: Promise<{ orgSlug: stri
                           placeholder="or myzmanim name (e.g. Night50fix)"
                           className={`${inputCls} w-56`}
                           title="Any myzmanim field name — overrides the dropdown"
+                        />
+                        <input
+                          name="refLine"
+                          placeholder="other line's exact name"
+                          className={`${inputCls} w-56`}
+                          title="Used when kind = after another line — this line's time = that line's time + offset"
                         />
                         <label className="flex items-center gap-1">
                           offset (min): <input name="offsetMinutes" type="number" defaultValue={0} className={`${inputCls} w-20`} />
@@ -215,6 +230,12 @@ export default async function SetupPage(props: { params: Promise<{ orgSlug: stri
                           <option value="winter">winter only</option>
                           <option value="summer">summer only</option>
                         </select>
+                        <input
+                          name="fallbackText"
+                          placeholder="text when condition doesn't apply (optional)"
+                          className={`${inputCls} w-72`}
+                          title="Shown instead of a time when the condition does not match (e.g. Will resume next week)"
+                        />
                       </div>
                       <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
                         <span className="text-gray-500">Show only on:</span>

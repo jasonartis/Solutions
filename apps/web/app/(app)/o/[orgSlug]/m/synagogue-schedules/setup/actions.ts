@@ -117,13 +117,27 @@ export async function createLine(
     if (/^\d{2}:\d{2}$/.test(notBefore)) time.notBefore = notBefore
     const notAfter = String(formData.get('notAfter') ?? '').trim()
     if (/^\d{2}:\d{2}$/.test(notAfter)) time.notAfter = notAfter
+  } else if (timeKind === 'line-ref') {
+    // "This line's time = that line's time + N minutes" — referenced by name.
+    const refLine = String(formData.get('refLine') ?? '').trim()
+    if (!refLine) throw new Error('Referenced line name is required when time kind is "after another line"')
+    time = {
+      kind: 'line-ref',
+      line: refLine,
+      offsetMinutes: Number(formData.get('offsetMinutes') ?? 0) || 0,
+    }
   } else {
     time = { kind: 'none' }
   }
 
+  // Text shown instead of a time when the condition does NOT match
+  // (e.g. a shiur line showing "Will resume next week" off-season).
+  const fallbackText = String(formData.get('fallbackText') ?? '').trim()
+
   const rule = lineRuleSchema.parse({
     ...(Object.keys(condition).length > 0 ? { condition } : {}),
     time,
+    ...(fallbackText ? { fallbackText } : {}),
   })
 
   const supabase = await db()
