@@ -1,7 +1,6 @@
 import Link from 'next/link'
-import { notFound } from 'next/navigation'
 import { dayTypeSchema, zmanNameSchema } from '@modules/synagogue-schedules'
-import { createClient } from '@/lib/supabase/server'
+import { requireOrgModule } from '@/lib/module-gate'
 import {
   createLine,
   createOverride,
@@ -52,17 +51,7 @@ function describeRule(rule: unknown): string {
 
 export default async function SetupPage(props: { params: Promise<{ orgSlug: string }> }) {
   const { orgSlug } = await props.params
-  const supabase = await createClient()
-
-  const { data: org } = await supabase.from('orgs').select('id, name').eq('slug', orgSlug).single()
-  if (!org) notFound()
-  const { data: entitlement } = await supabase
-    .from('org_modules')
-    .select('enabled')
-    .eq('org_id', org.id)
-    .eq('module_key', MODULE_KEY)
-    .single()
-  if (!entitlement?.enabled) notFound()
+  const { supabase, org } = await requireOrgModule(orgSlug, MODULE_KEY)
 
   const [{ data: types }, { data: sections }, { data: lines }, { data: publishedWeeks }] = await Promise.all([
     supabase

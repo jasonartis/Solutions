@@ -1,5 +1,4 @@
 import Link from 'next/link'
-import { notFound } from 'next/navigation'
 import {
   buildWeek,
   formatMinutes,
@@ -9,6 +8,7 @@ import {
   type ScheduleTypeConfig,
 } from '@modules/synagogue-schedules'
 import { createClient } from '@/lib/supabase/server'
+import { requireOrgModule } from '@/lib/module-gate'
 import { requestExport } from './export-actions'
 
 const MODULE_KEY = 'synagogue-schedules'
@@ -23,20 +23,9 @@ export default async function SchedulesPage(props: {
 }) {
   const { orgSlug } = await props.params
   const { week: weekParam } = await props.searchParams
-  const supabase = await createClient()
+  const { supabase, org, settings: rawSettings } = await requireOrgModule(orgSlug, MODULE_KEY)
 
-  const { data: org } = await supabase.from('orgs').select('id, name').eq('slug', orgSlug).single()
-  if (!org) notFound()
-
-  const { data: entitlement } = await supabase
-    .from('org_modules')
-    .select('enabled, settings')
-    .eq('org_id', org.id)
-    .eq('module_key', MODULE_KEY)
-    .single()
-  if (!entitlement?.enabled) notFound()
-
-  const settings = entitlement.settings as {
+  const settings = rawSettings as {
     latitude?: number
     longitude?: number
     timezone?: string

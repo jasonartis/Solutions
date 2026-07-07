@@ -1,14 +1,11 @@
 import Link from 'next/link'
-import { notFound } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { requireOrgModule } from '@/lib/module-gate'
 
 // In-app setup guide for schedule makers (founder request 2026-07-07).
 
 export default async function HelpPage(props: { params: Promise<{ orgSlug: string }> }) {
   const { orgSlug } = await props.params
-  const supabase = await createClient()
-  const { data: org } = await supabase.from('orgs').select('id, name').eq('slug', orgSlug).single()
-  if (!org) notFound()
+  const { org } = await requireOrgModule(orgSlug, 'synagogue-schedules')
 
   const step = 'mb-6 rounded-lg border border-gray-200 bg-white p-5'
   const h = 'mb-2 text-lg font-semibold'
