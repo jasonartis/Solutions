@@ -91,7 +91,7 @@ describe("gender mechanic (spec: locked care −10 + dealbreaker on a 2-option q
   it("male + male pair is excluded", () => {
     const result = pairScore(male, maleToo, questions);
     expect(result.excluded).toBe(true);
-    expect(result.percent).toBeNull();
+    expect(result.percent).toBe(0);
   });
 
   it("male + female pair is NOT excluded and scores perfectly on this question", () => {
@@ -101,7 +101,11 @@ describe("gender mechanic (spec: locked care −10 + dealbreaker on a 2-option q
   });
 
   it("directional view: the dealbreaker fails immediately for same-position pairs", () => {
-    expect(directionalScore(male, maleToo, questions)).toEqual({ score: null, dealbreakerFailed: true });
+    expect(directionalScore(male, maleToo, questions)).toEqual({
+      weightedCloseness: 0,
+      weight: 0,
+      dealbreakerFailed: true,
+    });
     expect(directionalScore(male, female, questions).dealbreakerFailed).toBe(false);
   });
 });
@@ -123,11 +127,12 @@ describe("care = 0 / auto-answers", () => {
     expect(autoAnswer(question("t", ["a", "b", "c", "d"])).position).toBe(1); // floor((4−1)/2)
   });
 
-  it("care 0 contributes nothing in the auto-answerer's direction", () => {
+  it("care 0 contributes zero weight in the auto-answerer's direction", () => {
     const autoSide = [autoAnswer(q)];
     const caringSide = [answer("exercise", 4, 8)];
     expect(directionalScore(autoSide, caringSide, questions)).toEqual({
-      score: null,
+      weightedCloseness: 0,
+      weight: 0,
       dealbreakerFailed: false,
     });
   });
@@ -136,23 +141,27 @@ describe("care = 0 / auto-answers", () => {
     const autoSide = [autoAnswer(q)]; // position 2, care 0
     const caringSide = [answer("exercise", 4, 8)]; // wants same as 4
     const result = directionalScore(caringSide, autoSide, questions);
-    // closeness = 1 − |2 − 4| / 4 = 0.5
-    expect(result.score).toBeCloseTo(0.5);
+    // closeness = 1 − |2 − 4| / 4 = 0.5; weight 8
+    expect(result.weightedCloseness / result.weight).toBeCloseTo(0.5);
     expect(result.dealbreakerFailed).toBe(false);
-    // Pair percent uses only the one present direction.
+    // Pooled percent: only the caring direction carries weight.
     expect(pairScore(autoSide, caringSide, questions)).toEqual({ percent: 50, excluded: false });
   });
 
   it("a dealbreaker flag with care 0 is inert (no exclusion, no weight)", () => {
     const oddball = [answer("exercise", 0, 0, { dealbreaker: true })];
     const other = [answer("exercise", 4, 0)];
-    expect(directionalScore(oddball, other, questions)).toEqual({ score: null, dealbreakerFailed: false });
-    expect(pairScore(oddball, other, questions)).toEqual({ percent: null, excluded: false });
+    expect(directionalScore(oddball, other, questions)).toEqual({
+      weightedCloseness: 0,
+      weight: 0,
+      dealbreakerFailed: false,
+    });
+    expect(pairScore(oddball, other, questions)).toEqual({ percent: 0, excluded: false });
   });
 
-  it("two all-auto users have a null percent, not a zero", () => {
+  it("two all-auto users score 0 ('no signal yet') — never null (founder decision 2026-07-07)", () => {
     expect(pairScore([autoAnswer(q)], [autoAnswer(q)], questions)).toEqual({
-      percent: null,
+      percent: 0,
       excluded: false,
     });
   });
@@ -189,7 +198,7 @@ describe("perfect and worst matches", () => {
     ];
     const b = [answer("q1", 0, 0), answer("q2", 4, 0)];
     const result = directionalScore(a, b, qs);
-    expect(result.score).toBeCloseTo(10 / 11);
+    expect(result.weightedCloseness / result.weight).toBeCloseTo(10 / 11);
   });
 });
 
@@ -206,16 +215,23 @@ describe("asymmetric overlap", () => {
       answer("q3", 2, 10), // B never answered
     ];
     const b = [answer("q1", 0, 5)];
-    expect(directionalScore(a, b, questions).score).toBe(1);
-    expect(directionalScore(b, a, questions).score).toBe(1);
+    const aToB = directionalScore(a, b, questions);
+    const bToA = directionalScore(b, a, questions);
+    expect(aToB.weightedCloseness / aToB.weight).toBe(1);
+    expect(bToA.weightedCloseness / bToA.weight).toBe(1);
     expect(pairScore(a, b, questions)).toEqual({ percent: 100, excluded: false });
   });
 
   it("an unanswered dealbreaker question cannot fail (no answer from them yet)", () => {
     const a = [answer("q2", 2, 10, { dealbreaker: true })];
     const b = [answer("q1", 0, 5)];
-    expect(directionalScore(a, b, questions)).toEqual({ score: null, dealbreakerFailed: false });
-    expect(pairScore(a, b, questions)).toEqual({ percent: null, excluded: false });
+    expect(directionalScore(a, b, questions)).toEqual({
+      weightedCloseness: 0,
+      weight: 0,
+      dealbreakerFailed: false,
+    });
+    // b→a still has no overlap either (a never answered q1) — zero pooled weight → 0%.
+    expect(pairScore(a, b, questions)).toEqual({ percent: 0, excluded: false });
   });
 });
 
@@ -229,8 +245,8 @@ describe("dealbreaker in one direction excludes the pair both ways", () => {
   it("A→B fails, B→A would score fine, pair excluded regardless of argument order", () => {
     expect(directionalScore(a, b, questions).dealbreakerFailed).toBe(true);
     expect(directionalScore(b, a, questions).dealbreakerFailed).toBe(false);
-    expect(pairScore(a, b, questions)).toEqual({ percent: null, excluded: true });
-    expect(pairScore(b, a, questions)).toEqual({ percent: null, excluded: true });
+    expect(pairScore(a, b, questions)).toEqual({ percent: 0, excluded: true });
+    expect(pairScore(b, a, questions)).toEqual({ percent: 0, excluded: true });
   });
 
   it("a dealbreaker that is satisfied does not exclude and still carries weight", () => {
@@ -244,7 +260,7 @@ describe("topMatches", () => {
     { a: "me", b: "u1", percent: 82, excluded: false },
     { a: "u2", b: "me", percent: 97, excluded: false }, // me on the b side
     { a: "me", b: "u3", percent: 97, excluded: true }, // excluded: filtered out
-    { a: "me", b: "u4", percent: null, excluded: false }, // null: filtered out
+    { a: "me", b: "u4", percent: 0, excluded: false }, // 0% = "no signal yet": still listed, last
     { a: "me", b: "u5", percent: 40, excluded: false },
     { a: "u6", b: "u7", percent: 99, excluded: false }, // not my pair
   ];
@@ -254,6 +270,7 @@ describe("topMatches", () => {
       { otherId: "u2", percent: 97 },
       { otherId: "u1", percent: 82 },
       { otherId: "u5", percent: 40 },
+      { otherId: "u4", percent: 0 },
     ]);
   });
 
@@ -264,10 +281,10 @@ describe("topMatches", () => {
     ]);
   });
 
-  it("filters excluded pairs and null percents", () => {
+  it("filters excluded pairs; zero-percent pairs remain listed", () => {
     const ids = topMatches("me", scores, 10).map((m) => m.otherId);
     expect(ids).not.toContain("u3");
-    expect(ids).not.toContain("u4");
+    expect(ids).toContain("u4");
   });
 
   it("returns empty for a user with no pairs", () => {

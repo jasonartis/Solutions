@@ -56,23 +56,24 @@ export function expectedPosition(myPosition: number, care: number, scaleSize: nu
 }
 
 /**
- * Score in one direction: how well "their" answers satisfy "my" preferences.
+ * One direction's raw terms: how well "their" answers satisfy "my" preferences.
  * Only questions both sides answered participate. care = 0 answers on my side
- * contribute nothing (so auto-answers demand nothing of others, per spec).
- * Returns score in 0..1, or null when there is no cared-about overlap.
+ * carry weight 0 and therefore contribute nothing (founder decision 2026-07-07:
+ * "care zero mathematically becomes zero since it is a weight of zero" — so
+ * auto-answers demand nothing of others).
  * dealbreakerFailed short-circuits: their position missed one of my dealbreakers.
  */
 export function directionalScore(
   myAnswers: Answer[],
   theirAnswers: Answer[],
   questions: Map<string, Question>
-): { score: number | null; dealbreakerFailed: boolean } {
+): { weightedCloseness: number; weight: number; dealbreakerFailed: boolean } {
   const theirsByQuestion = new Map<string, Answer>();
   for (const answer of theirAnswers) {
     theirsByQuestion.set(answer.questionId, answer);
   }
 
-  let weightSum = 0;
+  let weight = 0;
   let weightedCloseness = 0;
 
   for (const mine of myAnswers) {
@@ -82,55 +83,52 @@ export function directionalScore(
     const question = questions.get(mine.questionId);
     if (!question) continue; // unknown question — skip defensively
 
-    if (mine.care === 0) continue; // don't care: contributes nothing (dealbreaker inert too, see SPEC.md)
+    if (mine.care === 0) continue; // weight 0: contributes nothing (dealbreaker inert too, see SPEC.md)
 
     const scaleSize = question.scaleLabels.length;
     const expected = expectedPosition(mine.position, mine.care, scaleSize);
 
     if (mine.dealbreaker && theirs.position !== expected) {
-      return { score: null, dealbreakerFailed: true };
+      return { weightedCloseness: 0, weight: 0, dealbreakerFailed: true };
     }
 
-    const weight = Math.abs(mine.care);
+    const w = Math.abs(mine.care);
     const closeness = 1 - Math.abs(theirs.position - expected) / (scaleSize - 1);
-    weightedCloseness += weight * closeness;
-    weightSum += weight;
+    weightedCloseness += w * closeness;
+    weight += w;
   }
 
-  if (weightSum === 0) {
-    return { score: null, dealbreakerFailed: false };
-  }
-  return { score: weightedCloseness / weightSum, dealbreakerFailed: false };
+  return { weightedCloseness, weight, dealbreakerFailed: false };
 }
 
 /**
- * Combine the two directional scores into the pair's match percentage.
+ * The pair's match percentage: ALL cared-about terms from BOTH directions are
+ * pooled into one weighted average (founder decisions 2026-07-07: two
+ * measurements per answer — position and care-about-their-answer; care-0 terms
+ * are weight zero; there are NO nulls, because every user holds a numeric
+ * default answer on every question). Zero pooled weight (two brand-new users)
+ * scores 0 — "no signal yet", not undefined.
  * A failed dealbreaker in either direction excludes the pair entirely.
- * A null direction (no cared-about overlap) is simply absent from the average;
- * if both directions are null, percent is null.
  */
 export function pairScore(
   aAnswers: Answer[],
   bAnswers: Answer[],
   questions: Map<string, Question>
-): { percent: number | null; excluded: boolean } {
+): { percent: number; excluded: boolean } {
   const aToB = directionalScore(aAnswers, bAnswers, questions);
   const bToA = directionalScore(bAnswers, aAnswers, questions);
 
   if (aToB.dealbreakerFailed || bToA.dealbreakerFailed) {
-    return { percent: null, excluded: true };
+    return { percent: 0, excluded: true };
   }
 
-  const present: number[] = [];
-  if (aToB.score !== null) present.push(aToB.score);
-  if (bToA.score !== null) present.push(bToA.score);
-
-  if (present.length === 0) {
-    return { percent: null, excluded: false };
+  const totalWeight = aToB.weight + bToA.weight;
+  if (totalWeight === 0) {
+    return { percent: 0, excluded: false };
   }
 
-  const average = present.reduce((sum, s) => sum + s, 0) / present.length;
-  return { percent: Math.round(100 * average), excluded: false };
+  const pooled = (aToB.weightedCloseness + bToA.weightedCloseness) / totalWeight;
+  return { percent: Math.round(100 * pooled), excluded: false };
 }
 
 /**
@@ -151,17 +149,17 @@ export function autoAnswer(question: Question): Answer {
 
 /**
  * A user's top matches from a precomputed pair-score list, highest percent
- * first, capped at `limit`. Excluded pairs and null percents are filtered out.
+ * first, capped at `limit`. Excluded pairs are filtered out.
  */
 export function topMatches(
   userId: string,
-  allScores: { a: string; b: string; percent: number | null; excluded: boolean }[],
+  allScores: { a: string; b: string; percent: number; excluded: boolean }[],
   limit: number
 ): { otherId: string; percent: number }[] {
   const mine: { otherId: string; percent: number }[] = [];
 
   for (const score of allScores) {
-    if (score.excluded || score.percent === null) continue;
+    if (score.excluded) continue;
     if (score.a === userId) {
       mine.push({ otherId: score.b, percent: score.percent });
     } else if (score.b === userId) {

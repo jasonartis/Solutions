@@ -36,6 +36,21 @@ Matchmaking platform for dating. WhatsApp-style app (mobile-first PWA). Platform
 - Per-answer **"share with potential match"** checkbox controls what a match sees pre-introduction.
 - Mutual agreement → introduction: via a matchmaker, or by sharing whatever contact info the single opted to share in settings. One-sided interest reveals nothing.
 
+## Scoring decisions (founder, 2026-07-07 — answers to build-time questions)
+
+1. Two measurements per answer: the user's own position, and how much they care that the
+   other person's answer matches theirs.
+2. care = 0 contributes exactly zero weight (auto-answers are mathematically inert on the
+   answerer's side).
+3. **No nulls anywhere**: every user has a numeric default answer on every question, and the
+   pair score pools all cared-about (weight × closeness) terms from BOTH directions into one
+   weighted average. Zero pooled weight (two untouched users) = 0%, displayed, never null.
+4. Admin-locked question values (e.g. gender's care −10 + dealbreaker) need a materialization
+   mechanism at answer-save time — the user supplies only the position; locks fill the rest.
+   Build at module integration.
+5. Answers referencing unknown/deleted questions are skipped defensively during scoring.
+6. Top-matches list: plain descending sort by percent; no secondary tiebreak.
+
 ## Messaging
 
 - v1: users → admins only (platform feedback / issues), via the generic conversations primitive.
