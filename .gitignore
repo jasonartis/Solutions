@@ -27,3 +27,9 @@ Thumbs.db
 coverage/
 playwright-report/
 test-results/
+
+# Vercel local link
+.vercel/
+
+# Client-provided source materials (never commit)
+client-materials/
