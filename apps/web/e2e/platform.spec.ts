@@ -177,6 +177,33 @@ test('classroom module: grading workflow — GA grade, peer review, finalize, pu
   await expect(gradesList).toContainText('90')
 })
 
+test('matchmaking module: single sees seeded matches and can answer; admin recomputes', async ({ page }) => {
+  // Charlie's top match is Dana (91%) from the seeded answers; same-gender
+  // pairs are excluded by the gender dealbreaker and never appear.
+  await signIn(page, 'charlie@demo.local')
+  await page.goto('/o/demo-match/m/matchmaking')
+  await expect(page.getByRole('heading', { name: 'Make-a-Match' })).toBeVisible()
+
+  const matches = page.locator('h2', { hasText: 'Your matches' }).locator('xpath=following-sibling::ul[1]')
+  await expect(matches).toContainText('Dana D')
+  await expect(matches).toContainText('91%')
+  await expect(matches).not.toContainText('Frank F') // same gender → excluded
+
+  // Answer the open exercise question (radio + save).
+  const exercise = page.locator('form').filter({ hasText: 'I exercise' })
+  await exercise.getByRole('radio').first().check() // "Never"
+  await exercise.getByRole('button', { name: 'Save' }).click()
+
+  // Admin can recompute from the Manage console.
+  await signIn(page, 'alice@demo.local')
+  await page.goto('/o/demo-match/m/matchmaking/manage')
+  await expect(page.getByRole('heading', { name: 'Make-a-Match — Manage' })).toBeVisible()
+  await expect(page.getByText('Approved questions (3)')).toBeVisible()
+  await page.getByRole('button', { name: 'Recompute all matches' }).click()
+  // Page reloads with the recompute done (no error surfaced).
+  await expect(page.getByRole('heading', { name: 'Make-a-Match — Manage' })).toBeVisible()
+})
+
 test('public schedule page works with no login', async ({ page }) => {
   await page.goto('/s/demo-shul')
   await expect(page.getByRole('heading', { name: 'Demo Synagogue' })).toBeVisible()

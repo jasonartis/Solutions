@@ -2,6 +2,11 @@ import { readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createClient } from '@supabase/supabase-js'
+import {
+  pairScore,
+  type Answer as MmAnswer,
+  type Question as MmQuestion,
+} from '../../../modules/matchmaking/src/scoring'
 
 // import.meta.dirname is undefined under tsx — derive it from the module URL.
 const here = dirname(fileURLToPath(import.meta.url))
@@ -346,11 +351,177 @@ async function main() {
   })
   if (pubErr) throw new Error(`Publication seed failed: ${pubErr.message}`)
 
+  // --- Demo matchmaking for module 1 ---------------------------------------
+  // A separate org so the matchmaking role vocabulary (single/matchmaker/admin)
+  // doesn't collide with orgA's classroom roles. alice administers; four
+  // singles with contrasting answers produce a clear match ranking; one
+  // matchmaker is assigned to two of them. Pair scores are precomputed here
+  // with the real scoring engine (no worker runs during seed).
+  const match = await ensureOrg('Demo Match', 'demo-match')
+  const eveId = await ensureUser('eve@demo.local', 'password123', 'Eve E')
+  const frankId = await ensureUser('frank@demo.local', 'password123', 'Frank F')
+  const melId = await ensureUser('mel@demo.local', 'password123', 'Mel M')
+
+  await admin.from('org_members').upsert([
+    { org_id: match, user_id: aliceId, role: 'admin' },
+    { org_id: match, user_id: charlieId, role: 'member' },
+    { org_id: match, user_id: danaId, role: 'member' },
+    { org_id: match, user_id: eveId, role: 'member' },
+    { org_id: match, user_id: frankId, role: 'member' },
+    { org_id: match, user_id: melId, role: 'member' },
+  ])
+  await admin.from('org_modules').upsert({
+    org_id: match,
+    module_key: 'matchmaking',
+    enabled: true,
+    settings: { topX: 5 },
+  })
+  await admin.from('module_roles').upsert([
+    { org_id: match, user_id: aliceId, module_key: 'matchmaking', role: 'admin' },
+    { org_id: match, user_id: charlieId, module_key: 'matchmaking', role: 'single' },
+    { org_id: match, user_id: danaId, module_key: 'matchmaking', role: 'single' },
+    { org_id: match, user_id: eveId, module_key: 'matchmaking', role: 'single' },
+    { org_id: match, user_id: frankId, module_key: 'matchmaking', role: 'single' },
+    { org_id: match, user_id: melId, module_key: 'matchmaking', role: 'matchmaker' },
+  ])
+
+  // Idempotent: wipe module data for this org and rebuild.
+  await admin.from('mm_pair_scores').delete().eq('org_id', match)
+  await admin.from('mm_answers').delete().eq('org_id', match)
+  await admin.from('mm_questions').delete().eq('org_id', match)
+
+  // Gender question is a hard filter: admin-locked care −10 (want opposite) +
+  // dealbreaker, so only male↔female pairs survive. Exercise/kids are open.
+  const questionSpecs = [
+    { text: 'I am', labels: ['Male', 'Female'], locks: { care: -10, dealbreaker: true } },
+    { text: 'I exercise', labels: ['Never', 'Sometimes', 'Often', 'Daily'], locks: {} },
+    { text: 'I want children', labels: ['No', 'Maybe', 'Yes'], locks: {} },
+  ]
+  const questionIds: string[] = []
+  for (const spec of questionSpecs) {
+    const { data: q, error: qErr } = await admin
+      .from('mm_questions')
+      .insert({
+        org_id: match,
+        text: spec.text,
+        scale_labels: spec.labels,
+        admin_locks: spec.locks,
+        status: 'approved',
+        submitted_by: aliceId,
+        approved_by: aliceId,
+        approved_at: new Date().toISOString(),
+      })
+      .select('id')
+      .single()
+    if (qErr) throw new Error(`Matchmaking question seed failed: ${qErr.message}`)
+    questionIds.push(q!.id)
+  }
+  const [genderQ, exerciseQ, kidsQ] = questionIds as [string, string, string]
+
+  // [gender, exercise(care), kids(care)] per single. Positions are 0-indexed
+  // into the label arrays above. The gender lock forces care/dealbreaker, so
+  // only position matters there.
+  const singleAnswers: Record<string, { gender: number; exercise: [number, number]; kids: [number, number] }> = {
+    [charlieId]: { gender: 0, exercise: [3, 8], kids: [2, 9] }, // Male, Daily, wants kids
+    [danaId]: { gender: 1, exercise: [2, 6], kids: [2, 10] }, // Female, Often, wants kids
+    [eveId]: { gender: 1, exercise: [0, 3], kids: [0, 8] }, // Female, Never, no kids
+    [frankId]: { gender: 0, exercise: [3, 5], kids: [1, 4] }, // Male, Daily, maybe kids
+  }
+  for (const [userId, a] of Object.entries(singleAnswers)) {
+    const rows = [
+      { org_id: match, question_id: genderQ, user_id: userId, position: a.gender, care: 0, auto: false },
+      { org_id: match, question_id: exerciseQ, user_id: userId, position: a.exercise[0], care: a.exercise[1], auto: false },
+      { org_id: match, question_id: kidsQ, user_id: userId, position: a.kids[0], care: a.kids[1], auto: false },
+    ]
+    const { error: aErr } = await admin.from('mm_answers').insert(rows)
+    if (aErr) throw new Error(`Matchmaking answer seed failed: ${aErr.message}`)
+  }
+
+  // Matchmaker Mel serves Charlie and Dana individually.
+  await admin.from('mm_matchmaker_assignments').insert([
+    { org_id: match, matchmaker_id: melId, target_type: 'individual', target_user_id: charlieId },
+    { org_id: match, matchmaker_id: melId, target_type: 'individual', target_user_id: danaId },
+  ])
+
+  // Precompute pair scores with the real engine (the worker would normally do
+  // this; none runs during seed). Read back the materialized answers so locked
+  // fields (gender care/dealbreaker) reflect what the trigger actually wrote.
+  await seedMatchmakingScores(match, questionIds)
+
   console.log('Seed complete:')
   console.log('  owner@demo.local / password123  (superadmin)')
-  console.log('  alice@demo.local / password123  (admin of Demo Org A + Demo Synagogue)')
+  console.log('  alice@demo.local / password123  (admin of Demo Org A + Demo Synagogue + Demo Match)')
   console.log('  bob@demo.local   / password123  (admin of Demo Org B, no modules)')
   console.log('  Demo Synagogue (demo-shul): synagogue-schedules enabled, alice is maker')
+  console.log('  Demo Match (demo-match): matchmaking enabled — singles charlie/dana/eve/frank, matchmaker mel')
+}
+
+// Recompute-and-persist all pair scores for a matchmaking org, mirroring what
+// the matchmaking.rescore worker will eventually do. Shared shape with the
+// in-app recompute server action; kept here so the demo has matches on seed.
+async function seedMatchmakingScores(orgId: string, questionIds: string[]) {
+  const { data: qRows } = await admin
+    .from('mm_questions')
+    .select('id, text, scale_labels, admin_locks')
+    .in('id', questionIds)
+  const questions = new Map<string, MmQuestion>()
+  for (const q of qRows ?? []) {
+    questions.set(q.id, {
+      id: q.id,
+      text: q.text,
+      scaleLabels: q.scale_labels,
+      adminLocks: q.admin_locks ?? {},
+    })
+  }
+
+  const { data: aRows } = await admin
+    .from('mm_answers')
+    .select('user_id, question_id, position, care, dealbreaker, auto, share_with_match')
+    .eq('org_id', orgId)
+  const byUser = new Map<string, MmAnswer[]>()
+  for (const r of aRows ?? []) {
+    const list = byUser.get(r.user_id) ?? []
+    list.push({
+      questionId: r.question_id,
+      position: r.position,
+      care: r.care,
+      dealbreaker: r.dealbreaker,
+      auto: r.auto,
+      shareWithMatch: r.share_with_match,
+    })
+    byUser.set(r.user_id, list)
+  }
+
+  const userIds = [...byUser.keys()].sort()
+  const rows: {
+    org_id: string
+    user_a: string
+    user_b: string
+    percent: number
+    excluded: boolean
+    stale: boolean
+    computed_at: string
+  }[] = []
+  for (let i = 0; i < userIds.length; i++) {
+    for (let j = i + 1; j < userIds.length; j++) {
+      const a = userIds[i]!
+      const b = userIds[j]! // a < b already (sorted) — canonical order
+      const { percent, excluded } = pairScore(byUser.get(a)!, byUser.get(b)!, questions)
+      rows.push({
+        org_id: orgId,
+        user_a: a,
+        user_b: b,
+        percent,
+        excluded,
+        stale: false,
+        computed_at: new Date().toISOString(),
+      })
+    }
+  }
+  if (rows.length > 0) {
+    const { error } = await admin.from('mm_pair_scores').insert(rows)
+    if (error) throw new Error(`Matchmaking pair-score seed failed: ${error.message}`)
+  }
 }
 
 main().catch((err) => {
