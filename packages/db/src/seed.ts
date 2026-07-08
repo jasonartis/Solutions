@@ -256,11 +256,18 @@ async function main() {
 
   // --- Demo classroom for module 2 -----------------------------------------
   const charlieId = await ensureUser('charlie@demo.local', 'password123', 'Charlie C')
-  await admin.from('org_members').upsert({ org_id: orgA, user_id: charlieId, role: 'member' })
+  const danaId = await ensureUser('dana@demo.local', 'password123', 'Dana D')
+  await admin
+    .from('org_members')
+    .upsert([
+      { org_id: orgA, user_id: charlieId, role: 'member' },
+      { org_id: orgA, user_id: danaId, role: 'member' },
+    ])
   await admin.from('org_modules').upsert({ org_id: orgA, module_key: 'classroom', enabled: true })
   await admin.from('module_roles').upsert([
     { org_id: orgA, user_id: aliceId, module_key: 'classroom', role: 'professor' },
     { org_id: orgA, user_id: charlieId, module_key: 'classroom', role: 'student' },
+    { org_id: orgA, user_id: danaId, module_key: 'classroom', role: 'student' },
   ])
 
   await admin.from('cls_courses').delete().eq('org_id', orgA)
@@ -281,19 +288,33 @@ async function main() {
   const { error: memberErr } = await admin.from('cls_class_members').insert([
     { org_id: orgA, class_id: klass!.id, user_id: aliceId, role: 'professor' },
     { org_id: orgA, class_id: klass!.id, user_id: charlieId, role: 'student' },
+    { org_id: orgA, class_id: klass!.id, user_id: danaId, role: 'student' },
   ])
   if (memberErr) throw new Error(`Class members seed failed: ${memberErr.message}`)
 
   const nextWeek = new Date()
   nextWeek.setDate(nextWeek.getDate() + 7)
-  const { error: hwErr } = await admin.from('cls_homeworks').insert({
-    org_id: orgA,
-    class_id: klass!.id,
-    title: 'Homework 1 — Descriptive statistics',
-    due_at: nextWeek.toISOString(),
-    sort: 0,
-  })
+  const { data: homework, error: hwErr } = await admin
+    .from('cls_homeworks')
+    .insert({
+      org_id: orgA,
+      class_id: klass!.id,
+      title: 'Homework 1 — Descriptive statistics',
+      due_at: nextWeek.toISOString(),
+      sort: 0,
+    })
+    .select('id')
+    .single()
   if (hwErr) throw new Error(`Homework seed failed: ${hwErr.message}`)
+
+  // Both students already submitted, so grading/peer-review workflow e2e
+  // coverage has real rows to move through the states without needing the
+  // upload UI (that flow is covered separately by the submission-upload test).
+  const { error: submissionErr } = await admin.from('cls_submissions').insert([
+    { org_id: orgA, class_id: klass!.id, homework_id: homework!.id, student_id: charlieId },
+    { org_id: orgA, class_id: klass!.id, homework_id: homework!.id, student_id: danaId },
+  ])
+  if (submissionErr) throw new Error(`Submission seed failed: ${submissionErr.message}`)
 
   const { error: annErr } = await admin.from('cls_announcements').insert({
     org_id: orgA,

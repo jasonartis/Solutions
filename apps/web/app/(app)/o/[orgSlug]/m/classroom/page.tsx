@@ -48,22 +48,47 @@ export default async function ClassroomPage(props: { params: Promise<{ orgSlug: 
     }
   }
 
-  const [{ data: announcements }, { data: homeworks }] = await Promise.all([
-    classIds.length
-      ? supabase
-          .from('cls_announcements')
-          .select('class_id, body, posted_at')
-          .in('class_id', classIds)
-          .order('posted_at', { ascending: false })
-      : Promise.resolve({ data: [] as { class_id: string; body: string; posted_at: string }[] }),
-    classIds.length
-      ? supabase
-          .from('cls_homeworks')
-          .select('id, class_id, title, due_at')
-          .in('class_id', classIds)
-          .order('due_at')
-      : Promise.resolve({ data: [] as { id: string; class_id: string; title: string; due_at: string | null }[] }),
-  ])
+  const [{ data: announcements }, { data: homeworks }, { data: myReviews }, { data: myGrades }] =
+    await Promise.all([
+      classIds.length
+        ? supabase
+            .from('cls_announcements')
+            .select('class_id, body, posted_at')
+            .in('class_id', classIds)
+            .order('posted_at', { ascending: false })
+        : Promise.resolve({ data: [] as { class_id: string; body: string; posted_at: string }[] }),
+      classIds.length
+        ? supabase
+            .from('cls_homeworks')
+            .select('id, class_id, title, due_at')
+            .in('class_id', classIds)
+            .order('due_at')
+        : Promise.resolve({ data: [] as { id: string; class_id: string; title: string; due_at: string | null }[] }),
+      // Assigned as a peer reviewer (own rows only per RLS) — reviewee identity
+      // is never fetched, preserving anonymity end to end.
+      supabase
+        .from('cls_review_assignments')
+        .select('id, class_id, grade, homework:cls_homeworks(title)'),
+      // Final + visible grades only (RLS enforces this for non-staff regardless).
+      supabase
+        .from('cls_grades')
+        .select('class_id, score, homework:cls_homeworks(title)')
+        .eq('is_final', true)
+        .eq('visible', true),
+    ])
+
+  type HomeworkRef = { title: string } | null
+  const reviews = (myReviews ?? []) as unknown as {
+    id: string
+    class_id: string
+    grade: number | null
+    homework: HomeworkRef
+  }[]
+  const grades = (myGrades ?? []) as unknown as {
+    class_id: string
+    score: number | null
+    homework: HomeworkRef
+  }[]
 
   const fmt = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' })
 
@@ -157,6 +182,47 @@ export default async function ClassroomPage(props: { params: Promise<{ orgSlug: 
                   </li>
                 ))}
             </ul>
+
+            {reviews.filter((r) => r.class_id === klass.id).length > 0 && (
+              <>
+                <h3 className="mb-1 mt-4 text-sm font-medium uppercase tracking-wide text-gray-500">
+                  Peer reviews assigned to you
+                </h3>
+                <ul className="space-y-1 text-sm text-gray-700">
+                  {reviews
+                    .filter((r) => r.class_id === klass.id)
+                    .map((r) => (
+                      <li key={r.id} className="flex justify-between">
+                        <Link
+                          href={`/o/${orgSlug}/m/classroom/review/${r.id}`}
+                          className="text-blue-600 hover:underline"
+                        >
+                          {r.homework?.title ?? 'Homework'}
+                        </Link>
+                        <span className="text-gray-400">{r.grade !== null ? 'graded' : 'pending'}</span>
+                      </li>
+                    ))}
+                </ul>
+              </>
+            )}
+
+            {grades.filter((g) => g.class_id === klass.id).length > 0 && (
+              <>
+                <h3 className="mb-1 mt-4 text-sm font-medium uppercase tracking-wide text-gray-500">
+                  Your grades
+                </h3>
+                <ul className="space-y-1 text-sm text-gray-700">
+                  {grades
+                    .filter((g) => g.class_id === klass.id)
+                    .map((g, i) => (
+                      <li key={i} className="flex justify-between">
+                        <span>{g.homework?.title ?? 'Homework'}</span>
+                        <span className="font-medium">{g.score}</span>
+                      </li>
+                    ))}
+                </ul>
+              </>
+            )}
           </section>
         ))}
       </div>

@@ -64,7 +64,7 @@ test('classroom module: professor sees the seeded class, student view is scoped'
   // Professor-only manage console: roster with preferred/display names.
   await page.getByRole('link', { name: 'Manage' }).click()
   await expect(page.getByRole('heading', { name: 'Classroom — Manage' })).toBeVisible()
-  await expect(page.getByText('Roster (2)')).toBeVisible()
+  await expect(page.getByText('Roster (3)')).toBeVisible()
   await expect(page.getByText('Charlie C')).toBeVisible()
 })
 
@@ -109,6 +109,72 @@ test('classroom module: professor publishes a material with a visibility window'
   await signIn(page, 'charlie@demo.local')
   await page.getByRole('link', { name: 'Classroom' }).click()
   await expect(page.getByText('Lecture 2 slides')).not.toBeVisible()
+})
+
+test('classroom module: grading workflow — GA grade, peer review, finalize, publish', async ({ page }) => {
+  await signIn(page, 'alice@demo.local')
+  await page.goto('/o/demo-a/m/classroom/manage')
+  await page.getByRole('link', { name: 'Homework 1 — Descriptive statistics' }).click()
+  await expect(page.getByRole('heading', { name: /^Grading —/ })).toBeVisible()
+
+  await page.getByRole('button', { name: 'Move submitted → GA grading' }).click()
+
+  // Row-scope by the exact student-name cell — a `hasText` row filter would
+  // also match the OTHER student's row once the peer-review column mentions
+  // this name (e.g. "Dana D" appears inside Charlie's row as "Dana D: pending").
+  const rowFor = (name: string) =>
+    page.locator('tbody tr').filter({ has: page.getByRole('cell', { name, exact: true }) })
+
+  await rowFor('Charlie C').locator('input[name="score"]').fill('85')
+  await rowFor('Charlie C').getByRole('button', { name: 'Save' }).click()
+  await expect(page.locator('input[name="score"]').first()).toHaveValue('85')
+
+  await page.locator('input[name="reviewsPerStudent"]').fill('1')
+  await page.getByRole('button', { name: 'Move GA-graded → peer review' }).click()
+
+  // With exactly 2 students and 1 review each, the algorithm assigns them to
+  // review each other — Dana reviews Charlie's submission and vice versa.
+  await expect(rowFor('Charlie C')).toContainText('Dana D: pending')
+  await expect(rowFor('Dana D')).toContainText('Charlie C: pending')
+
+  await signIn(page, 'charlie@demo.local')
+  await page.getByRole('link', { name: 'Classroom' }).click()
+  await expect(page.getByText('Peer reviews assigned to you')).toBeVisible()
+  // The homework title also links to the (different) submission-upload page —
+  // scope to the review-route href to avoid the ambiguous duplicate link text.
+  await page.locator('a[href*="/classroom/review/"]').click()
+  await expect(page.getByRole('heading', { name: 'Peer review' })).toBeVisible()
+
+  await page.getByPlaceholder('Add a comment…').fill('Nice work!')
+  await page.getByRole('button', { name: 'Add' }).click()
+  await expect(page.getByText('Nice work!')).toBeVisible()
+
+  await page.locator('input[name="grade"]').fill('90')
+  await page.getByRole('button', { name: 'Submit grade' }).click()
+  await expect(page.getByRole('button', { name: 'Update grade' })).toBeVisible()
+
+  await signIn(page, 'alice@demo.local')
+  await page.goto('/o/demo-a/m/classroom/manage')
+  await page.getByRole('link', { name: 'Homework 1 — Descriptive statistics' }).click()
+  await expect(rowFor('Dana D')).toContainText('Charlie C: 90')
+
+  await page.getByRole('button', { name: 'Finalize peer review → done' }).click()
+
+  await rowFor('Dana D').locator('input[name="finalScore"]').fill('90')
+  await rowFor('Dana D').getByRole('button', { name: 'Publish' }).click()
+  // Wait for the page to reflect the mutation before navigating away — signIn's
+  // page.goto() would otherwise race the in-flight form POST and can abort it
+  // before the server finishes writing.
+  await expect(rowFor('Dana D').getByRole('button', { name: 'Update' })).toBeVisible()
+
+  await signIn(page, 'dana@demo.local')
+  await page.getByRole('link', { name: 'Classroom' }).click()
+  await expect(page.getByText('Your grades')).toBeVisible()
+  // The homework title also appears in the homework list and Dana's own
+  // (unrelated) pending peer-review entry — scope to the grades list itself.
+  const gradesList = page.locator('h3', { hasText: 'Your grades' }).locator('xpath=following-sibling::ul[1]')
+  await expect(gradesList).toContainText('Homework 1 — Descriptive statistics')
+  await expect(gradesList).toContainText('90')
 })
 
 test('public schedule page works with no login', async ({ page }) => {

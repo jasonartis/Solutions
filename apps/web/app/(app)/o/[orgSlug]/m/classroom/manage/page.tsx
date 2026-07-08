@@ -66,7 +66,12 @@ export default async function ManagePage(props: { params: Promise<{ orgSlug: str
               <ul className="mb-3 space-y-1 text-sm text-gray-700">
                 {classHomeworks.map((h) => (
                   <li key={h.id} className="flex justify-between">
-                    <span>{h.title}</span>
+                    <Link
+                      href={`/o/${orgSlug}/m/classroom/manage/grading/${h.id}`}
+                      className="text-blue-600 hover:underline"
+                    >
+                      {h.title}
+                    </Link>
                     <span className="text-gray-400">
                       {h.due_at ? `due ${fmt.format(new Date(h.due_at))}` : 'no deadline'}
                     </span>
