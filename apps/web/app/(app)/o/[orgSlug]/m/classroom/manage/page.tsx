@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { requireOrgModule } from '@/lib/module-gate'
-import { createHomework, postAnnouncement } from './actions'
+import { createHomework, createSurvey, postAnnouncement, setSurveyResultsVisible } from './actions'
 
 const inputCls = 'rounded border border-gray-300 px-2 py-1 text-sm'
 const btnCls = 'rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700'
@@ -16,7 +16,7 @@ export default async function ManagePage(props: { params: Promise<{ orgSlug: str
   const { data: courses } = await supabase.from('cls_courses').select('id, name').eq('org_id', org.id)
   if (!courses || courses.length === 0) notFound()
 
-  const [{ data: classes }, { data: members }, { data: homeworks }, { data: profiles }] =
+  const [{ data: classes }, { data: members }, { data: homeworks }, { data: profiles }, { data: surveys }] =
     await Promise.all([
       supabase.from('cls_classes').select('id, course_id, name, term').eq('org_id', org.id),
       supabase
@@ -24,6 +24,7 @@ export default async function ManagePage(props: { params: Promise<{ orgSlug: str
         .select('class_id, user_id, role, preferred_first_name, preferred_last_name'),
       supabase.from('cls_homeworks').select('id, class_id, title, due_at').order('due_at'),
       supabase.from('profiles').select('user_id, email, display_name'),
+      supabase.from('cls_surveys').select('id, class_id, question, results_visible').order('sort'),
     ])
   const profileById = new Map((profiles ?? []).map((p) => [p.user_id, p]))
   const fmt = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
@@ -42,6 +43,7 @@ export default async function ManagePage(props: { params: Promise<{ orgSlug: str
         {(classes ?? []).map((klass) => {
           const roster = (members ?? []).filter((m) => m.class_id === klass.id)
           const classHomeworks = (homeworks ?? []).filter((h) => h.class_id === klass.id)
+          const classSurveys = (surveys ?? []).filter((s) => s.class_id === klass.id)
           return (
             <section key={klass.id} className="rounded-lg border border-gray-200 bg-white p-5">
               <div className="mb-4 flex items-baseline justify-between">
@@ -85,6 +87,29 @@ export default async function ManagePage(props: { params: Promise<{ orgSlug: str
                 <input name="title" required placeholder="New homework title" className={`${inputCls} min-w-64`} />
                 <input name="dueAt" type="datetime-local" className={inputCls} />
                 <button className={btnCls}>Add homework</button>
+              </form>
+
+              <h3 className="mb-2 text-sm font-medium uppercase tracking-wide text-gray-500">
+                Surveys ({classSurveys.length})
+              </h3>
+              <ul className="mb-3 space-y-1 text-sm text-gray-700">
+                {classSurveys.map((s) => (
+                  <li key={s.id} className="flex items-center justify-between">
+                    <span>{s.question}</span>
+                    <form action={setSurveyResultsVisible.bind(null, orgSlug, s.id, !s.results_visible)}>
+                      <button className="text-xs text-blue-600 hover:underline">
+                        {s.results_visible ? 'Hide results' : 'Show results to class'}
+                      </button>
+                    </form>
+                  </li>
+                ))}
+              </ul>
+              <form
+                action={createSurvey.bind(null, orgSlug, klass.id)}
+                className="mb-5 flex flex-wrap items-center gap-2"
+              >
+                <input name="question" required placeholder="New survey question" className={`${inputCls} min-w-64 flex-1`} />
+                <button className={btnCls}>Add survey</button>
               </form>
 
               <h3 className="mb-2 text-sm font-medium uppercase tracking-wide text-gray-500">

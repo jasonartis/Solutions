@@ -351,6 +351,14 @@ async function main() {
   })
   if (pubErr) throw new Error(`Publication seed failed: ${pubErr.message}`)
 
+  const { error: surveyErr } = await admin.from('cls_surveys').insert({
+    org_id: orgA,
+    class_id: klass!.id,
+    question: 'Which lab time do you prefer?',
+    results_visible: false,
+  })
+  if (surveyErr) throw new Error(`Survey seed failed: ${surveyErr.message}`)
+
   // --- Demo matchmaking for module 1 ---------------------------------------
   // A separate org so the matchmaking role vocabulary (single/matchmaker/admin)
   // doesn't collide with orgA's classroom roles. alice administers; four

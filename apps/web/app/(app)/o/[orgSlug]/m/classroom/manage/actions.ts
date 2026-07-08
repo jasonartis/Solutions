@@ -47,3 +47,29 @@ export async function createHomework(orgSlug: string, classId: string, formData:
   revalidatePath(`/o/${orgSlug}/m/classroom/manage`)
   revalidatePath(`/o/${orgSlug}/m/classroom`)
 }
+
+export async function createSurvey(orgSlug: string, classId: string, formData: FormData) {
+  const question = String(formData.get('question') ?? '').trim()
+  if (!question) throw new Error('Survey question is required')
+
+  const supabase = await createClient()
+  const { error } = await supabase.from('cls_surveys').insert({
+    org_id: '00000000-0000-0000-0000-000000000000', // derived by trigger
+    class_id: classId,
+    question,
+  })
+  fail(error, 'Create survey failed')
+  revalidatePath(`/o/${orgSlug}/m/classroom/manage`)
+  revalidatePath(`/o/${orgSlug}/m/classroom`)
+}
+
+export async function setSurveyResultsVisible(orgSlug: string, surveyId: string, visible: boolean) {
+  const supabase = await createClient()
+  const { error } = await supabase
+    .from('cls_surveys')
+    .update({ results_visible: visible })
+    .eq('id', surveyId)
+  fail(error, 'Update survey failed')
+  revalidatePath(`/o/${orgSlug}/m/classroom/manage`)
+  revalidatePath(`/o/${orgSlug}/m/classroom`)
+}

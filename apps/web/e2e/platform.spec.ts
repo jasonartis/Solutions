@@ -177,6 +177,31 @@ test('classroom module: grading workflow — GA grade, peer review, finalize, pu
   await expect(gradesList).toContainText('90')
 })
 
+test('classroom module: student answers a survey, professor reveals aggregate results', async ({ page }) => {
+  // Seeded survey "Which lab time do you prefer?" starts with results hidden.
+  await signIn(page, 'charlie@demo.local')
+  await page.getByRole('link', { name: 'Classroom' }).click()
+  const survey = page.locator('div').filter({ hasText: 'Which lab time do you prefer?' }).last()
+  await survey.getByPlaceholder('Your answer…').fill('Mornings')
+  await survey.getByRole('button', { name: 'Submit' }).click()
+  // Re-render shows the saved answer with an Update button.
+  await expect(
+    page.locator('div').filter({ hasText: 'Which lab time do you prefer?' }).last().getByRole('button', { name: 'Update' }),
+  ).toBeVisible()
+
+  // Professor flips results visible.
+  await signIn(page, 'alice@demo.local')
+  await page.goto('/o/demo-a/m/classroom/manage')
+  await page.getByRole('button', { name: 'Show results to class' }).click()
+  await expect(page.getByRole('button', { name: 'Hide results' })).toBeVisible()
+
+  // Student now sees the aggregated count for their answer.
+  await signIn(page, 'charlie@demo.local')
+  await page.getByRole('link', { name: 'Classroom' }).click()
+  const surveyAfter = page.locator('div').filter({ hasText: 'Which lab time do you prefer?' }).last()
+  await expect(surveyAfter).toContainText('Mornings')
+})
+
 test('matchmaking module: single sees seeded matches and can answer; admin recomputes', async ({ page }) => {
   // Charlie's top match is Dana (91%) from the seeded answers; same-gender
   // pairs are excluded by the gender dealbreaker and never appear.

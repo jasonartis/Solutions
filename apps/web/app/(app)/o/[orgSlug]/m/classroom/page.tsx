@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { requireOrgModule } from '@/lib/module-gate'
+import { answerSurvey } from './actions'
 
 // Module 2 (Classroom) landing: the caller's classes with announcements and
 // open homework. First slice of the module UI — submissions/materials/grades
@@ -76,6 +77,28 @@ export default async function ClassroomPage(props: { params: Promise<{ orgSlug: 
         .eq('is_final', true)
         .eq('visible', true),
     ])
+
+  // Surveys for the caller's classes + the caller's own answers.
+  const [{ data: surveys }, { data: myAnswers }] = await Promise.all([
+    classIds.length
+      ? supabase
+          .from('cls_surveys')
+          .select('id, class_id, question, results_visible')
+          .in('class_id', classIds)
+          .order('sort')
+      : Promise.resolve({ data: [] as { id: string; class_id: string; question: string; results_visible: boolean }[] }),
+    supabase.from('cls_survey_answers').select('survey_id, answer'),
+  ])
+  const answerBySurvey = new Map((myAnswers ?? []).map((a) => [a.survey_id, a.answer]))
+
+  // Aggregated results (definer function; returns rows only when the survey's
+  // results are flipped visible and the caller is a class member/staff).
+  const surveyResults = new Map<string, { answer: string; votes: number }[]>()
+  for (const s of surveys ?? []) {
+    if (!s.results_visible) continue
+    const { data: results } = await supabase.rpc('cls_survey_results', { check_survey_id: s.id })
+    surveyResults.set(s.id, (results ?? []) as { answer: string; votes: number }[])
+  }
 
   type HomeworkRef = { title: string } | null
   const reviews = (myReviews ?? []) as unknown as {
@@ -221,6 +244,51 @@ export default async function ClassroomPage(props: { params: Promise<{ orgSlug: 
                       </li>
                     ))}
                 </ul>
+              </>
+            )}
+
+            {(surveys ?? []).filter((s) => s.class_id === klass.id).length > 0 && (
+              <>
+                <h3 className="mb-1 mt-4 text-sm font-medium uppercase tracking-wide text-gray-500">
+                  Surveys
+                </h3>
+                <div className="space-y-3">
+                  {(surveys ?? [])
+                    .filter((s) => s.class_id === klass.id)
+                    .map((s) => {
+                      const results = surveyResults.get(s.id)
+                      return (
+                        <div key={s.id} className="rounded border border-gray-100 p-3 text-sm">
+                          <p className="mb-2 font-medium">{s.question}</p>
+                          <form
+                            action={answerSurvey.bind(null, orgSlug, s.id, klass.id)}
+                            className="flex flex-wrap items-center gap-2"
+                          >
+                            <input
+                              name="answer"
+                              required
+                              defaultValue={answerBySurvey.get(s.id) ?? ''}
+                              placeholder="Your answer…"
+                              className="flex-1 rounded border border-gray-300 px-2 py-1 text-sm"
+                            />
+                            <button className="rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700">
+                              {answerBySurvey.has(s.id) ? 'Update' : 'Submit'}
+                            </button>
+                          </form>
+                          {results && results.length > 0 && (
+                            <ul className="mt-2 space-y-0.5 text-xs text-gray-600">
+                              {results.map((r, i) => (
+                                <li key={i} className="flex justify-between">
+                                  <span>{r.answer}</span>
+                                  <span className="text-gray-400">{r.votes}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      )
+                    })}
+                </div>
               </>
             )}
           </section>
