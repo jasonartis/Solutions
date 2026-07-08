@@ -28,6 +28,63 @@ types.
   ARM adds occasional tooling friction. Fine as a sandbox; not what client
   exports should depend on.
 
+## The Hetzner switch — complete runbook (decided in advance, 2026-07-09)
+
+The plan of record: run `pnpm worker:prod` on the dev PC for free until
+always-on matters (a client depending on weekly exports, or the first live
+speed-dating event), then execute this runbook. Total time ≈ 30 minutes.
+Nothing needs to be re-decided at switch time — just follow the steps.
+
+### Part 1 — Hetzner account + server (~10 min, in the browser)
+
+1. Go to **accounts.hetzner.com** → Register. Email + password; verify the
+   email. New accounts sometimes get an identity check (ID or small card
+   verification) — normal, usually instant.
+2. Open **console.hetzner.com** (Cloud console) → default project appears →
+   **Add Server**:
+   - **Location:** Ashburn, VA (us-east; closest to users, fine with the
+     us-west-2 Supabase — the worker is not latency-sensitive).
+   - **Image:** Ubuntu 24.04.
+   - **Type:** Shared vCPU → **CPX11** (2 vCPU AMD, 2GB) ≈ €4.35/mo. If the
+     price list shows **CX22** (2 vCPU, 4GB) in Ashburn, prefer it — more
+     headroom for Chromium at a similar price.
+   - **SSH key:** paste a public key. On the dev PC PowerShell:
+     `ssh-keygen -t ed25519` (accept defaults), then paste the contents of
+     `C:\Users\<you>\.ssh\id_ed25519.pub`.
+   - Leave volumes/networks/firewall/backups default (backups can be enabled
+     later for ~20% of server price). **Create & Buy now.**
+3. Copy the server's **public IP** from the console.
+
+### Part 2 — install (~15 min, one terminal)
+
+From the dev PC: `ssh root@<server-ip>` — then follow **"One-time server
+setup"** below, steps 2–7 (Docker, clone, secrets, build, verify). All values
+for `worker.env` already exist in the dev PC's `.env.deploy`; the session
+pooler host is `aws-1-us-west-2.pooler.supabase.com` (verified 2026-07-09),
+so the DATABASE_URL line is:
+
+```
+postgresql://postgres.jbjqrkxdoiolwlglvoki:<SUPABASE_DB_PASSWORD>@aws-1-us-west-2.pooler.supabase.com:5432/postgres
+```
+
+### Part 3 — cutover (~2 min)
+
+1. Stop the local stopgap (Ctrl+C in the `pnpm worker:prod` window). Order
+   doesn't matter and overlap is SAFE: `job_requests` claims are atomic (the
+   pending→running flip), so two live workers never double-process a job.
+2. Verify the VPS worker end-to-end: production site → synagogue schedules →
+   **Export this week** → files appear in ~30s.
+3. Add the UptimeRobot monitor on `http://<server-ip>:8901/healthz` (docs/05).
+4. Done. From then on, "deploying worker changes" = the two-line update
+   command in **"Updating to a new version"** below.
+
+### Rollback
+
+If the VPS misbehaves, the old stopgap is still the fallback: stop the VPS
+container (`docker compose -f deploy/worker/docker-compose.yml down`) and run
+`pnpm worker:prod` on the dev PC again. Queued jobs pick up wherever a worker
+next runs.
+
 ## One-time server setup (~15 minutes)
 
 1. **Create the server.** Ubuntu 24.04 LTS, smallest 2-vCPU shape, SSH key
