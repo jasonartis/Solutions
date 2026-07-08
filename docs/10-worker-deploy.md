@@ -1,5 +1,11 @@
 # Deploying the Worker to a VPS (Phase B)
 
+> **Free stopgap available now:** `pnpm worker:prod` runs the worker on the dev
+> PC against production (credentials from `.env.deploy`, session-pooler DB).
+> Production exports/jobs process while it runs; while it's off, `job_requests`
+> queue harmlessly. Verified 2026-07-09: rendered Pozna's real week to the prod
+> `syn-exports` bucket (pdf + 2 jpg). The VPS below makes this always-on.
+
 The worker is the always-on background process that runs jobs the website
 can't: module 3's schedule exports (it drives a real Chromium browser to
 render PDFs/JPGs), and later roster sync, matchmaking rescoring, and the
