@@ -456,12 +456,79 @@ async function main() {
   // fields (gender care/dealbreaker) reflect what the trigger actually wrote.
   await seedMatchmakingScores(match, questionIds)
 
+  // --- Demo nail salon for module 5 ----------------------------------------
+  // alice = manager, eve = cashier, dana = worker, charlie = customer.
+  // One location, two services, a worker profile, a customer, and a booked
+  // appointment for today so the day-board has something to show.
+  const salon = await ensureOrg('Demo Salon', 'demo-salon')
+  await admin.from('org_members').upsert([
+    { org_id: salon, user_id: aliceId, role: 'admin' },
+    { org_id: salon, user_id: eveId, role: 'member' },
+    { org_id: salon, user_id: danaId, role: 'member' },
+    { org_id: salon, user_id: charlieId, role: 'member' },
+  ])
+  await admin.from('org_modules').upsert({ org_id: salon, module_key: 'nail-salon', enabled: true })
+  await admin.from('module_roles').upsert([
+    { org_id: salon, user_id: aliceId, module_key: 'nail-salon', role: 'manager' },
+    { org_id: salon, user_id: eveId, module_key: 'nail-salon', role: 'cashier' },
+    { org_id: salon, user_id: danaId, module_key: 'nail-salon', role: 'worker' },
+    { org_id: salon, user_id: charlieId, module_key: 'nail-salon', role: 'customer' },
+  ])
+
+  // Idempotent rebuild (locations cascade to services/appointments/etc).
+  await admin.from('sal_locations').delete().eq('org_id', salon)
+  const { data: loc, error: locErr } = await admin
+    .from('sal_locations')
+    .insert({ org_id: salon, name: 'Downtown', timezone: 'America/New_York' })
+    .select('id')
+    .single()
+  if (locErr) throw new Error(`Salon location seed failed: ${locErr.message}`)
+
+  const { data: svcRows, error: svcErr } = await admin
+    .from('sal_services')
+    .insert([
+      { org_id: salon, location_id: loc!.id, name: 'Manicure', price: 40, approx_duration_minutes: 30, sort: 0 },
+      { org_id: salon, location_id: loc!.id, name: 'Pedicure', price: 60, approx_duration_minutes: 45, sort: 1 },
+    ])
+    .select('id, name')
+  if (svcErr) throw new Error(`Salon service seed failed: ${svcErr.message}`)
+  const manicure = svcRows!.find((s) => s.name === 'Manicure')!
+
+  const { error: wpErr } = await admin
+    .from('sal_worker_profiles')
+    .insert({ org_id: salon, location_id: loc!.id, user_id: danaId, display_name: 'Dana D' })
+  if (wpErr) throw new Error(`Salon worker profile seed failed: ${wpErr.message}`)
+
+  const { data: cust, error: custErr } = await admin
+    .from('sal_customers')
+    .insert({ org_id: salon, location_id: loc!.id, user_id: charlieId, full_name: 'Charlie C', phone: '555-0101' })
+    .select('id')
+    .single()
+  if (custErr) throw new Error(`Salon customer seed failed: ${custErr.message}`)
+
+  // A booked appointment at noon today (drives the day board on first load).
+  const today = new Date()
+  const apptStart = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 12, 0, 0)
+  const apptEnd = new Date(apptStart.getTime() + 30 * 60000)
+  const { error: apptErr } = await admin.from('sal_appointments').insert({
+    org_id: salon,
+    location_id: loc!.id,
+    customer_id: cust!.id,
+    service_id: manicure.id,
+    worker_id: danaId,
+    scheduled_start: apptStart.toISOString(),
+    scheduled_end: apptEnd.toISOString(),
+    state: 'booked',
+  })
+  if (apptErr) throw new Error(`Salon appointment seed failed: ${apptErr.message}`)
+
   console.log('Seed complete:')
   console.log('  owner@demo.local / password123  (superadmin)')
-  console.log('  alice@demo.local / password123  (admin of Demo Org A + Demo Synagogue + Demo Match)')
+  console.log('  alice@demo.local / password123  (admin of Demo Org A + Demo Synagogue + Demo Match + Demo Salon)')
   console.log('  bob@demo.local   / password123  (admin of Demo Org B, no modules)')
   console.log('  Demo Synagogue (demo-shul): synagogue-schedules enabled, alice is maker')
   console.log('  Demo Match (demo-match): matchmaking enabled — singles charlie/dana/eve/frank, matchmaker mel')
+  console.log('  Demo Salon (demo-salon): nail-salon — manager alice, cashier eve, worker dana, customer charlie')
 }
 
 // Recompute-and-persist all pair scores for a matchmaking org, mirroring what

@@ -229,6 +229,38 @@ test('matchmaking module: single sees seeded matches and can answer; admin recom
   await expect(page.getByRole('heading', { name: 'Make-a-Match — Manage' })).toBeVisible()
 })
 
+test('nail-salon module: operator runs an appointment from booked to paid', async ({ page }) => {
+  // alice is the salon manager; the seed has one booked appointment for Charlie.
+  await signIn(page, 'alice@demo.local')
+  await page.goto('/o/demo-salon/m/nail-salon')
+  await expect(page.getByRole('heading', { name: /^Nail Salon/ })).toBeVisible()
+
+  const row = page.locator('tbody tr').filter({ hasText: 'Charlie C' })
+  await expect(row).toContainText('booked')
+
+  // Walk the lifecycle: check in → start → complete → bill → pay.
+  await row.getByRole('button', { name: 'Check in' }).click()
+  await page.locator('tbody tr').filter({ hasText: 'Charlie C' }).getByRole('button', { name: 'Start' }).click()
+  await page.locator('tbody tr').filter({ hasText: 'Charlie C' }).getByRole('button', { name: 'Complete' }).click()
+  await page.locator('tbody tr').filter({ hasText: 'Charlie C' }).getByRole('button', { name: 'Bill' }).click()
+  await page
+    .locator('tbody tr')
+    .filter({ hasText: 'Charlie C' })
+    .getByRole('button', { name: /Mark paid/ })
+    .click()
+  await expect(page.locator('tbody tr').filter({ hasText: 'Charlie C' })).toContainText('paid')
+})
+
+test('nail-salon module: worker sees only their assigned chairs', async ({ page }) => {
+  // dana is the salon worker; the seeded appointment is assigned to her.
+  await signIn(page, 'dana@demo.local')
+  await page.goto('/o/demo-salon/m/nail-salon')
+  await expect(page.getByRole('heading', { name: 'Your chairs today' })).toBeVisible()
+  await expect(page.getByText('Charlie C')).toBeVisible()
+  // No operator-only booking form for a pure worker.
+  await expect(page.getByRole('heading', { name: 'Book appointment' })).not.toBeVisible()
+})
+
 test('public schedule page works with no login', async ({ page }) => {
   await page.goto('/s/demo-shul')
   await expect(page.getByRole('heading', { name: 'Demo Synagogue' })).toBeVisible()
