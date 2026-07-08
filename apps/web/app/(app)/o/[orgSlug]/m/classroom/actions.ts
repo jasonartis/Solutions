@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { DERIVED_SCOPE_PLACEHOLDER } from '@platform/core'
 import { createClient } from '@/lib/supabase/server'
 
 // Student-facing classroom actions (the landing page).
@@ -26,7 +27,7 @@ export async function answerSurvey(orgSlug: string, surveyId: string, classId: s
   const { error } = existing
     ? await supabase.from('cls_survey_answers').update({ answer }).eq('id', existing.id)
     : await supabase.from('cls_survey_answers').insert({
-        org_id: '00000000-0000-0000-0000-000000000000', // derived by trigger
+        org_id: DERIVED_SCOPE_PLACEHOLDER, // derived by trigger
         class_id: classId,
         survey_id: surveyId,
         user_id: user.id,

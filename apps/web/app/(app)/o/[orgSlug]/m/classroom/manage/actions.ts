@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { DERIVED_SCOPE_PLACEHOLDER } from '@platform/core'
 import { createClient } from '@/lib/supabase/server'
 
 // Professor/staff actions. RLS (cls_can_manage) is the enforcement layer;
@@ -21,7 +22,7 @@ export async function postAnnouncement(orgSlug: string, classId: string, formDat
 
   const { error } = await supabase.from('cls_announcements').insert({
     // org_id is derived by the scope-sync trigger; a placeholder satisfies NOT NULL pre-trigger.
-    org_id: '00000000-0000-0000-0000-000000000000',
+    org_id: DERIVED_SCOPE_PLACEHOLDER,
     class_id: classId,
     author_id: user?.id ?? null,
     body,
@@ -38,7 +39,7 @@ export async function createHomework(orgSlug: string, classId: string, formData:
 
   const supabase = await createClient()
   const { error } = await supabase.from('cls_homeworks').insert({
-    org_id: '00000000-0000-0000-0000-000000000000', // derived by trigger
+    org_id: DERIVED_SCOPE_PLACEHOLDER, // derived by trigger
     class_id: classId,
     title,
     due_at: dueAt ? new Date(dueAt).toISOString() : null,
@@ -54,7 +55,7 @@ export async function createSurvey(orgSlug: string, classId: string, formData: F
 
   const supabase = await createClient()
   const { error } = await supabase.from('cls_surveys').insert({
-    org_id: '00000000-0000-0000-0000-000000000000', // derived by trigger
+    org_id: DERIVED_SCOPE_PLACEHOLDER, // derived by trigger
     class_id: classId,
     question,
   })

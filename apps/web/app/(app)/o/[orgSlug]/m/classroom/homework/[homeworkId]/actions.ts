@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { DERIVED_SCOPE_PLACEHOLDER } from '@platform/core'
 import { createClient } from '@/lib/supabase/server'
 
 // Student actions. RLS (cls_submissions_insert_own / cls_submission_open)
@@ -29,7 +30,7 @@ export async function getOrCreateSubmission(homeworkId: string, classId: string)
   const { data: created, error } = await supabase
     .from('cls_submissions')
     .insert({
-      org_id: '00000000-0000-0000-0000-000000000000', // derived by trigger
+      org_id: DERIVED_SCOPE_PLACEHOLDER, // derived by trigger
       homework_id: homeworkId,
       class_id: classId,
       student_id: user.id,
@@ -57,8 +58,8 @@ export async function uploadSubmissionFile(
   fail(upErr, 'Upload failed')
 
   const { error } = await supabase.from('cls_submission_files').insert({
-    org_id: '00000000-0000-0000-0000-000000000000', // derived by trigger
-    class_id: '00000000-0000-0000-0000-000000000000', // derived by trigger
+    org_id: DERIVED_SCOPE_PLACEHOLDER, // derived by trigger
+    class_id: DERIVED_SCOPE_PLACEHOLDER, // derived by trigger
     submission_id: submissionId,
     file_name: file.name,
     storage_path: path,

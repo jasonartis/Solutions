@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { DERIVED_SCOPE_PLACEHOLDER } from '@platform/core'
 import { assignPeerReviews } from '@modules/classroom'
 import { createClient } from '@/lib/supabase/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -51,7 +52,7 @@ async function upsertGrade(
   }
 
   const { error } = await supabase.from('cls_grades').insert({
-    org_id: '00000000-0000-0000-0000-000000000000', // derived by trigger
+    org_id: DERIVED_SCOPE_PLACEHOLDER, // derived by trigger
     class_id: row.classId,
     homework_id: row.homeworkId,
     student_id: row.studentId,
@@ -136,7 +137,7 @@ export async function moveToPeerReview(
   if (assignments.length > 0) {
     const rows = assignments
       .map((a) => ({
-        org_id: '00000000-0000-0000-0000-000000000000', // derived by trigger
+        org_id: DERIVED_SCOPE_PLACEHOLDER, // derived by trigger
         homework_id: homeworkId,
         reviewer_id: a.reviewerId,
         submission_id: submissionByStudent.get(a.submissionStudentId),

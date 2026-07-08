@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { DERIVED_SCOPE_PLACEHOLDER } from '@platform/core'
 import { createClient } from '@/lib/supabase/server'
 
 // Reviewer actions. RLS enforces that only the assigned reviewer may write
@@ -37,8 +38,8 @@ export async function addReviewComment(
     data: { user },
   } = await supabase.auth.getUser()
   const { error } = await supabase.from('cls_review_comments').insert({
-    org_id: '00000000-0000-0000-0000-000000000000', // derived by trigger
-    class_id: '00000000-0000-0000-0000-000000000000', // derived by trigger
+    org_id: DERIVED_SCOPE_PLACEHOLDER, // derived by trigger
+    class_id: DERIVED_SCOPE_PLACEHOLDER, // derived by trigger
     submission_id: submissionId,
     author_id: user?.id,
     file_path: 'submission',

@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { DERIVED_SCOPE_PLACEHOLDER as PLACEHOLDER } from '@platform/core'
 import { createClient } from '@/lib/supabase/server'
 
 // Nail-salon operational actions. RLS (sal_can_operate / sal_is_worker) plus
@@ -11,7 +12,6 @@ import { createClient } from '@/lib/supabase/server'
 function fail(error: { message: string } | null, what: string) {
   if (error) throw new Error(`${what}: ${error.message}`)
 }
-const PLACEHOLDER = '00000000-0000-0000-0000-000000000000'
 
 async function resolveOrgId(supabase: Awaited<ReturnType<typeof createClient>>, orgSlug: string) {
   const { data: org } = await supabase.from('orgs').select('id').eq('slug', orgSlug).single()

@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { DERIVED_SCOPE_PLACEHOLDER } from '@platform/core'
 import { createClient } from '@/lib/supabase/server'
 
 // Professor/staff actions. RLS (cls_can_manage) enforces write access; the
@@ -27,7 +28,7 @@ export async function createMaterial(orgSlug: string, courseId: string, formData
   const { data: material, error } = await supabase
     .from('cls_materials')
     .insert({
-      org_id: '00000000-0000-0000-0000-000000000000', // derived by trigger
+      org_id: DERIVED_SCOPE_PLACEHOLDER, // derived by trigger
       course_id: courseId,
       kind,
       title,
@@ -70,7 +71,7 @@ export async function publishMaterial(
   const supabase = await createClient()
   const { error } = await supabase.from('cls_publications').upsert(
     {
-      org_id: '00000000-0000-0000-0000-000000000000', // derived by trigger
+      org_id: DERIVED_SCOPE_PLACEHOLDER, // derived by trigger
       class_id: classId,
       material_id: materialId,
       visible_from: toTimestamp(formData.get('visibleFrom')),

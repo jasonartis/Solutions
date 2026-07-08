@@ -46,6 +46,49 @@ hard-won specifics every new module must follow:
 8. **Acceptance = reproduce the client's real artifact** from their real data as a test
    (see `pozna-acceptance.test.ts`) — the module isn't done until that's green.
 
+## Conventions proven by modules 1/2/5 (second extraction pass, 2026-07-09)
+
+Four modules now run on these; they are load-bearing, not suggestions:
+
+9. **Staff checks delegate to `is_org_admin()`** — every module defines
+   `<prefix>_can_manage(check_org_id)` as `is_org_admin(check_org_id) OR
+   has_module_role(org, '<key>', <staff-role>...)`. The superadmin/org-owner tail
+   lives ONLY in `public.is_org_admin()` (`20260709040000_platform_extraction.sql`);
+   never restate it in a module function. Additional tiers compose downward the same
+   way (e.g. `sal_can_operate = sal_can_manage OR cashier`).
+10. **Scope-sync triggers derive tenancy server-side** — child tables get a BEFORE
+    INSERT/UPDATE trigger deriving `org_id` (and any parent scope like `class_id`/
+    `location_id`) from the FK chain, raising on an unknown parent. Root tables
+    (no parent) rely on the RLS write gate tying client-supplied `org_id` to an org
+    the caller manages. Server actions insert `DERIVED_SCOPE_PLACEHOLDER` (from
+    `@platform/core`) to satisfy NOT NULL pre-trigger — never a hand-typed UUID.
+11. **RLS is row-level; column/lifecycle rules are BEFORE-UPDATE guard triggers** —
+    pin protected columns back to `OLD` for non-staff and validate state-machine
+    transitions (see `cls_pin_submission_columns`, `mm_pin_answer_identity`,
+    `sal_pin_appointment`, `sal_guard_bill`). **Trigger-order gotcha:** same-event
+    triggers fire alphabetically; a pin trigger must sort BEFORE the scope-sync
+    trigger so a reverted parent-FK can't leak into scope derivation.
+12. **Agent-draft → security-review → integrate** is the module-schema process:
+    a background agent drafts `modules/<key>/schema-draft.sql` from the spec +
+    exemplars; a human review produces `schema-fixes.sql` (the guards above are the
+    usual findings — definer functions bypassing role gates, unpinned identity
+    columns); the two concatenate into the real migration. Every security fix is
+    verified LIVE against Postgres (signed-in anon clients attempting the bypass)
+    before the migration ships.
+13. **SECURITY DEFINER functions re-check role gates internally** — a definer RPC
+    bypasses RLS entirely, so any role restriction the table's policies enforce must
+    be restated inside the function (the `mm_ensure_answer` finding).
+14. **Server actions never use the service-role key** — admin-triggered heavy work
+    (e.g. matchmaking recompute) runs as the admin under RLS; the service-role key
+    exists only in the worker. If a user-triggered job genuinely needs it, it goes
+    through `job_requests`.
+
+**New-module acceptance checklist (the docs/04 extraction-pass criterion):** a new
+module must need no code outside (a) `modules/<key>/`, (b) its migration, (c) its
+pages under `apps/web/app/(app)/o/[orgSlug]/m/<key>/`, (d) a manifest entry in
+`packages/platform/src/modules.ts`, and (e) a seed block. If building one forces an
+edit anywhere else, that's a missing platform primitive — extract it, don't fork it.
+
 ## Hard rules
 
 1. **Never fork a platform primitive.** If the notifications/files/workflow primitive almost fits, extend it in `packages/platform` (benefiting every module) — don't copy it into the module.
