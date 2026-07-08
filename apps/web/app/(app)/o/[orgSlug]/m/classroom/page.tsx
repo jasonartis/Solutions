@@ -73,7 +73,7 @@ export default async function ClassroomPage(props: { params: Promise<{ orgSlug: 
       // Final + visible grades only (RLS enforces this for non-staff regardless).
       supabase
         .from('cls_grades')
-        .select('class_id, score, homework:cls_homeworks(title)')
+        .select('class_id, score, homework:cls_homeworks(title), exam:cls_exams(title)')
         .eq('is_final', true)
         .eq('visible', true),
     ])
@@ -111,6 +111,7 @@ export default async function ClassroomPage(props: { params: Promise<{ orgSlug: 
     class_id: string
     score: number | null
     homework: HomeworkRef
+    exam: HomeworkRef
   }[]
 
   const fmt = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' })
@@ -239,7 +240,7 @@ export default async function ClassroomPage(props: { params: Promise<{ orgSlug: 
                     .filter((g) => g.class_id === klass.id)
                     .map((g, i) => (
                       <li key={i} className="flex justify-between">
-                        <span>{g.homework?.title ?? 'Homework'}</span>
+                        <span>{g.homework?.title ?? g.exam?.title ?? 'Assessment'}</span>
                         <span className="font-medium">{g.score}</span>
                       </li>
                     ))}

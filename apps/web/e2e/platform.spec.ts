@@ -202,6 +202,42 @@ test('classroom module: student answers a survey, professor reveals aggregate re
   await expect(surveyAfter).toContainText('Mornings')
 })
 
+test('classroom module: professor creates an exam, grades by subproblem, publishes final', async ({ page }) => {
+  await signIn(page, 'alice@demo.local')
+  await page.goto('/o/demo-a/m/classroom/manage')
+
+  await page.getByPlaceholder('New exam title').fill('Midterm')
+  await page.getByPlaceholder('Problems, e.g. 1a:10, 1b:5, 2:20').fill('1a:10, 1b:5, 2:20')
+  await page.getByRole('button', { name: 'Add exam' }).click()
+  await page.getByRole('link', { name: 'Midterm' }).click()
+  await expect(page.getByRole('heading', { name: 'Exam — Midterm' })).toBeVisible()
+  await expect(page.getByText('1a (10) · 1b (5) · 2 (20) — max 35')).toBeVisible()
+
+  // Grade Dana by subproblem: 8 + 4 + 15 = 27.
+  const danaCard = page.locator('section').filter({ hasText: 'Dana D' })
+  await danaCard.locator('input[name="problem_1a"]').fill('8')
+  await danaCard.locator('input[name="problem_1b"]').fill('4')
+  await danaCard.locator('input[name="problem_2"]').fill('15')
+  await danaCard.getByRole('button', { name: 'Save scores' }).click()
+  await expect(page.locator('section').filter({ hasText: 'Dana D' })).toContainText('graded: 27/35')
+
+  // Publish final (defaults to the GA total).
+  await page
+    .locator('section')
+    .filter({ hasText: 'Dana D' })
+    .getByRole('button', { name: 'Publish final' })
+    .click()
+  await expect(page.locator('section').filter({ hasText: 'Dana D' })).toContainText('final: 27')
+
+  // Dana sees the exam final in her grades.
+  await signIn(page, 'dana@demo.local')
+  await page.getByRole('link', { name: 'Classroom' }).click()
+  await expect(page.getByText('Your grades')).toBeVisible()
+  const gradesList2 = page.locator('h3', { hasText: 'Your grades' }).locator('xpath=following-sibling::ul[1]')
+  await expect(gradesList2).toContainText('Midterm')
+  await expect(gradesList2).toContainText('27')
+})
+
 test('matchmaking module: single sees seeded matches and can answer; admin recomputes', async ({ page }) => {
   // Charlie's top match is Dana (91%) from the seeded answers; same-gender
   // pairs are excluded by the gender dealbreaker and never appear.

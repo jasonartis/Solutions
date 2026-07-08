@@ -49,6 +49,36 @@ export async function createHomework(orgSlug: string, classId: string, formData:
   revalidatePath(`/o/${orgSlug}/m/classroom`)
 }
 
+// Structure syntax: "1a:10, 1b:5, 2:20" -> [{label:'1a',points:10}, ...].
+// The label:points list defines the grading granularity (spec: exams graded
+// by problem/subproblem).
+export async function createExam(orgSlug: string, classId: string, formData: FormData) {
+  const title = String(formData.get('title') ?? '').trim()
+  const structureRaw = String(formData.get('structure') ?? '').trim()
+  if (!title) throw new Error('Title is required')
+
+  const structure = structureRaw
+    ? structureRaw.split(',').map((part) => {
+        const [label, points] = part.split(':').map((s) => s.trim())
+        const pts = Number(points)
+        if (!label || Number.isNaN(pts) || pts <= 0) {
+          throw new Error(`Invalid problem "${part}" — use label:points, e.g. 1a:10`)
+        }
+        return { label, points: pts }
+      })
+    : []
+
+  const supabase = await createClient()
+  const { error } = await supabase.from('cls_exams').insert({
+    org_id: DERIVED_SCOPE_PLACEHOLDER, // derived by trigger
+    class_id: classId,
+    title,
+    structure,
+  })
+  fail(error, 'Create exam failed')
+  revalidatePath(`/o/${orgSlug}/m/classroom/manage`)
+}
+
 export async function createSurvey(orgSlug: string, classId: string, formData: FormData) {
   const question = String(formData.get('question') ?? '').trim()
   if (!question) throw new Error('Survey question is required')

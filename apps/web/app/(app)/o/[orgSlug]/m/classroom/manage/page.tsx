@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { requireOrgModule } from '@/lib/module-gate'
-import { createHomework, createSurvey, postAnnouncement, setSurveyResultsVisible } from './actions'
+import { createExam, createHomework, createSurvey, postAnnouncement, setSurveyResultsVisible } from './actions'
 
 const inputCls = 'rounded border border-gray-300 px-2 py-1 text-sm'
 const btnCls = 'rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700'
@@ -26,6 +26,10 @@ export default async function ManagePage(props: { params: Promise<{ orgSlug: str
       supabase.from('profiles').select('user_id, email, display_name'),
       supabase.from('cls_surveys').select('id, class_id, question, results_visible').order('sort'),
     ])
+  const { data: exams } = await supabase
+    .from('cls_exams')
+    .select('id, class_id, title')
+    .order('sort')
   const profileById = new Map((profiles ?? []).map((p) => [p.user_id, p]))
   const fmt = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
 
@@ -44,6 +48,7 @@ export default async function ManagePage(props: { params: Promise<{ orgSlug: str
           const roster = (members ?? []).filter((m) => m.class_id === klass.id)
           const classHomeworks = (homeworks ?? []).filter((h) => h.class_id === klass.id)
           const classSurveys = (surveys ?? []).filter((s) => s.class_id === klass.id)
+          const classExams = (exams ?? []).filter((e) => e.class_id === klass.id)
           return (
             <section key={klass.id} className="rounded-lg border border-gray-200 bg-white p-5">
               <div className="mb-4 flex items-baseline justify-between">
@@ -87,6 +92,34 @@ export default async function ManagePage(props: { params: Promise<{ orgSlug: str
                 <input name="title" required placeholder="New homework title" className={`${inputCls} min-w-64`} />
                 <input name="dueAt" type="datetime-local" className={inputCls} />
                 <button className={btnCls}>Add homework</button>
+              </form>
+
+              <h3 className="mb-2 text-sm font-medium uppercase tracking-wide text-gray-500">
+                Exams ({classExams.length})
+              </h3>
+              <ul className="mb-3 space-y-1 text-sm text-gray-700">
+                {classExams.map((e) => (
+                  <li key={e.id}>
+                    <Link
+                      href={`/o/${orgSlug}/m/classroom/manage/exams/${e.id}`}
+                      className="text-blue-600 hover:underline"
+                    >
+                      {e.title}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+              <form
+                action={createExam.bind(null, orgSlug, klass.id)}
+                className="mb-5 flex flex-wrap items-center gap-2"
+              >
+                <input name="title" required placeholder="New exam title" className={`${inputCls} min-w-48`} />
+                <input
+                  name="structure"
+                  placeholder="Problems, e.g. 1a:10, 1b:5, 2:20"
+                  className={`${inputCls} min-w-64`}
+                />
+                <button className={btnCls}>Add exam</button>
               </form>
 
               <h3 className="mb-2 text-sm font-medium uppercase tracking-wide text-gray-500">
