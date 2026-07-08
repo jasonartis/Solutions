@@ -62,12 +62,22 @@ export const nailSalonModule: ModuleManifest = {
   nav: [{ label: 'Salon', path: '' }],
 }
 
+export const speedDatingModule: ModuleManifest = {
+  key: 'speed-dating',
+  name: 'Speed Dating',
+  description:
+    'Live speed-dating events: timed video rounds with rotation, directional interest with privacy-preserving mutual reveal, safety reports, personal blocks.',
+  roles: ['admin', 'organizer', 'host', 'participant'],
+  nav: [{ label: 'Events', path: '' }],
+}
+
 export const moduleRegistry: readonly ModuleManifest[] = [
   stubModule,
   synagogueSchedulesModule,
   classroomModule,
   matchmakingModule,
   nailSalonModule,
+  speedDatingModule,
 ]
 
 export function getModule(key: string): ModuleManifest | undefined {

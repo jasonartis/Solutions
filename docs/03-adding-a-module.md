@@ -82,6 +82,25 @@ Four modules now run on these; they are load-bearing, not suggestions:
     (e.g. matchmaking recompute) runs as the admin under RLS; the service-role key
     exists only in the worker. If a user-triggered job genuinely needs it, it goes
     through `job_requests`.
+15. **A table's own policies use direct column checks, never self-referential
+    lookups** — an ownership check like `<prefix>_owns_row(id)` that queries the
+    same table breaks `INSERT … RETURNING`: the definer function's snapshot does
+    not include the row being inserted, so the RETURNING select fails even though
+    the insert succeeded (found live in module 6). Compare columns directly
+    (`user_id = auth.uid()`); reserve ownership helper functions for policies on
+    OTHER tables, whose referenced rows already exist.
+
+### Control hierarchy (founder question, 2026-07-09 — formalized)
+
+Three levels, uniform across modules: **superadmin** (platform-wide) → **org
+owner/admin** (`is_org_admin()`, everything in their org) → **module role ladders**
+(tiers compose downward via the `_can_*` helpers — each tier includes all higher
+tiers, so higher always controls lower). Two things deliberately NOT built until a
+real client needs them (extract-don't-speculate): **delegated role-granting** (only
+org owner/admin assigns module_roles today — e.g. a salon manager cannot appoint
+cashiers) and **location-scoped staff** (the franchise-owner layer; salon data is
+org→location-ready but staff RLS is org-wide). When the first client needs either,
+build it as a platform primitive, not per-module.
 
 **New-module acceptance checklist (the docs/04 extraction-pass criterion):** a new
 module must need no code outside (a) `modules/<key>/`, (b) its migration, (c) its
