@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { requireOrgModule } from '@/lib/module-gate'
 import {
   bookAppointment,
@@ -29,9 +30,10 @@ export default async function NailSalonPage(props: { params: Promise<{ orgSlug: 
   const { orgSlug } = await props.params
   const { supabase, org } = await requireOrgModule(orgSlug, 'nail-salon')
 
-  const [{ data: canOperate }, { data: isWorker }] = await Promise.all([
+  const [{ data: canOperate }, { data: isWorker }, { data: canManage }] = await Promise.all([
     supabase.rpc('sal_can_operate', { check_org_id: org.id }),
     supabase.rpc('sal_is_worker', { check_org_id: org.id }),
+    supabase.rpc('sal_can_manage', { check_org_id: org.id }),
   ])
 
   // One location in v1; the day board is scoped to it.
@@ -48,7 +50,14 @@ export default async function NailSalonPage(props: { params: Promise<{ orgSlug: 
   return (
     <div>
       <p className="mb-1 text-sm text-gray-400">{org.name}</p>
-      <h1 className="mb-6 text-2xl font-semibold">Nail Salon{location ? ` — ${location.name}` : ''}</h1>
+      <div className="mb-6 flex items-baseline gap-4">
+        <h1 className="text-2xl font-semibold">Nail Salon{location ? ` — ${location.name}` : ''}</h1>
+        {canManage && (
+          <Link href={`/o/${orgSlug}/m/nail-salon/manage`} className="text-sm text-blue-600 hover:underline">
+            Manage
+          </Link>
+        )}
+      </div>
 
       {!location && <p className="text-gray-500">No location configured yet.</p>}
 

@@ -251,6 +251,32 @@ test('nail-salon module: operator runs an appointment from booked to paid', asyn
   await expect(page.locator('tbody tr').filter({ hasText: 'Charlie C' })).toContainText('paid')
 })
 
+test('nail-salon module: manager runs the back-office (catalog, expenses, shopping→expense)', async ({ page }) => {
+  await signIn(page, 'alice@demo.local')
+  await page.goto('/o/demo-salon/m/nail-salon/manage')
+  await expect(page.getByRole('heading', { name: 'Salon — Manage' })).toBeVisible()
+
+  // Catalog: add a service. `.first()` keeps the assertion stable if a prior
+  // retry of this test already inserted one (rows accumulate across attempts).
+  await page.getByPlaceholder('Service name').fill('Gel polish')
+  await page.getByPlaceholder('Price').fill('25')
+  await page.getByPlaceholder('Minutes').fill('20')
+  await page.getByRole('button', { name: 'Add service' }).click()
+  await expect(page.getByText('Gel polish · $25.00 · 20 min').first()).toBeVisible()
+
+  // Shopping list: add an item, mark purchased with the actual cost -> expense.
+  // The "×1" suffix only exists on the shopping-list row, disambiguating it
+  // from the expense row that will also mention the item name after purchase.
+  await page.getByPlaceholder('Item to buy').fill('Acetone (1L)')
+  await page.getByRole('button', { name: 'Add item' }).click()
+  const shoppingRow = page.locator('li').filter({ hasText: 'Acetone (1L) ×1' }).first()
+  await shoppingRow.getByPlaceholder('Paid').fill('12.50')
+  await shoppingRow.getByRole('button', { name: 'Purchased' }).click()
+  await expect(page.locator('li').filter({ hasText: 'Acetone (1L) ×1' }).first()).toContainText('purchased')
+  // The linked expense appears in the expenses section (category "supplies").
+  await expect(page.locator('li').filter({ hasText: 'supplies' }).filter({ hasText: '$12.50' }).first()).toBeVisible()
+})
+
 test('nail-salon module: worker sees only their assigned chairs', async ({ page }) => {
   // dana is the salon worker; the seeded appointment is assigned to her.
   await signIn(page, 'dana@demo.local')
