@@ -323,6 +323,56 @@ test('nail-salon module: worker sees only their assigned chairs', async ({ page 
   await expect(page.getByRole('heading', { name: 'Book appointment' })).not.toBeVisible()
 })
 
+test('speed-dating module: register → round → mutual interest → reveal', async ({ page }) => {
+  // Charlie and Dana register for the seeded open event.
+  for (const who of ['charlie@demo.local', 'dana@demo.local']) {
+    await signIn(page, who)
+    await page.goto('/o/demo-dating/m/speed-dating')
+    await page.getByRole('link', { name: 'Friday Night Mixer' }).click()
+    await page.getByRole('button', { name: 'Register for this event' }).click()
+    await expect(page.getByText('You are registered')).toBeVisible()
+  }
+
+  // Organizer starts the event and runs a round (orchestrator stand-in).
+  await signIn(page, 'alice@demo.local')
+  await page.goto('/o/demo-dating/m/speed-dating')
+  await page.getByRole('link', { name: 'Friday Night Mixer' }).click()
+  await expect(page.getByText('Roster (2 registered)')).toBeVisible()
+  await page.getByRole('button', { name: 'Start event' }).click()
+  await page.getByRole('button', { name: 'Run next round (pair everyone)' }).click()
+
+  // Charlie marks interested in Dana; Dana sees NO match yet (one-sided).
+  await signIn(page, 'charlie@demo.local')
+  await page.goto('/o/demo-dating/m/speed-dating')
+  await page.getByRole('link', { name: 'Friday Night Mixer' }).click()
+  await expect(page.getByText('People you met')).toBeVisible()
+  await expect(page.getByText('Dana D')).toBeVisible()
+  await page.getByRole('button', { name: 'interested', exact: true }).click()
+
+  await signIn(page, 'dana@demo.local')
+  await page.goto('/o/demo-dating/m/speed-dating')
+  await page.getByRole('link', { name: 'Friday Night Mixer' }).click()
+  await expect(page.getByText("It's a match!")).not.toBeVisible()
+  // Dana reciprocates.
+  await page.getByRole('button', { name: 'interested', exact: true }).click()
+  // Still unrevealed — mutual interest alone shows nothing until the organizer reveals.
+  await expect(page.getByText("It's a match!")).not.toBeVisible()
+
+  // Organizer completes the event and reveals.
+  await signIn(page, 'alice@demo.local')
+  await page.goto('/o/demo-dating/m/speed-dating')
+  await page.getByRole('link', { name: 'Friday Night Mixer' }).click()
+  await page.getByRole('button', { name: 'Complete event' }).click()
+  await page.getByRole('button', { name: 'Reveal mutual matches' }).click()
+
+  // Both sides now see the match.
+  await signIn(page, 'dana@demo.local')
+  await page.goto('/o/demo-dating/m/speed-dating')
+  await page.getByRole('link', { name: 'Friday Night Mixer' }).click()
+  await expect(page.getByText("It's a match!")).toBeVisible()
+  await expect(page.getByText('Charlie C is interested too.')).toBeVisible()
+})
+
 test('public schedule page works with no login', async ({ page }) => {
   await page.goto('/s/demo-shul')
   await expect(page.getByRole('heading', { name: 'Demo Synagogue' })).toBeVisible()

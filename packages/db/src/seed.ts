@@ -522,13 +522,48 @@ async function main() {
   })
   if (apptErr) throw new Error(`Salon appointment seed failed: ${apptErr.message}`)
 
+  // --- Demo speed dating for module 6 --------------------------------------
+  // alice organizes; charlie/dana/eve/frank are participants. One event with
+  // registration open so the e2e flow (register → rounds → interest → reveal)
+  // starts from a clean, meaningful state.
+  const dating = await ensureOrg('Demo Dating', 'demo-dating')
+  await admin.from('org_members').upsert([
+    { org_id: dating, user_id: aliceId, role: 'admin' },
+    { org_id: dating, user_id: charlieId, role: 'member' },
+    { org_id: dating, user_id: danaId, role: 'member' },
+    { org_id: dating, user_id: eveId, role: 'member' },
+    { org_id: dating, user_id: frankId, role: 'member' },
+  ])
+  await admin.from('org_modules').upsert({ org_id: dating, module_key: 'speed-dating', enabled: true })
+  await admin.from('module_roles').upsert([
+    { org_id: dating, user_id: aliceId, module_key: 'speed-dating', role: 'organizer' },
+    { org_id: dating, user_id: charlieId, module_key: 'speed-dating', role: 'participant' },
+    { org_id: dating, user_id: danaId, module_key: 'speed-dating', role: 'participant' },
+    { org_id: dating, user_id: eveId, module_key: 'speed-dating', role: 'participant' },
+    { org_id: dating, user_id: frankId, module_key: 'speed-dating', role: 'participant' },
+  ])
+
+  await admin.from('sd_events').delete().eq('org_id', dating)
+  const nextFriday = new Date()
+  nextFriday.setDate(nextFriday.getDate() + ((5 - nextFriday.getDay() + 7) % 7 || 7))
+  nextFriday.setHours(19, 0, 0, 0)
+  const { error: eventErr } = await admin.from('sd_events').insert({
+    org_id: dating,
+    name: 'Friday Night Mixer',
+    scheduled_at: nextFriday.toISOString(),
+    state: 'open',
+    created_by: aliceId,
+  })
+  if (eventErr) throw new Error(`Speed-dating event seed failed: ${eventErr.message}`)
+
   console.log('Seed complete:')
   console.log('  owner@demo.local / password123  (superadmin)')
-  console.log('  alice@demo.local / password123  (admin of Demo Org A + Demo Synagogue + Demo Match + Demo Salon)')
+  console.log('  alice@demo.local / password123  (admin of Demo Org A + Demo Synagogue + Demo Match + Demo Salon + Demo Dating)')
   console.log('  bob@demo.local   / password123  (admin of Demo Org B, no modules)')
   console.log('  Demo Synagogue (demo-shul): synagogue-schedules enabled, alice is maker')
   console.log('  Demo Match (demo-match): matchmaking enabled — singles charlie/dana/eve/frank, matchmaker mel')
   console.log('  Demo Salon (demo-salon): nail-salon — manager alice, cashier eve, worker dana, customer charlie')
+  console.log('  Demo Dating (demo-dating): speed-dating — organizer alice, participants charlie/dana/eve/frank')
 }
 
 // Recompute-and-persist all pair scores for a matchmaking org, mirroring what

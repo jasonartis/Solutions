@@ -27,9 +27,10 @@ describe('tenancy isolation', () => {
   it('alice sees only her own orgs', async () => {
     const { data } = await alice.from('orgs').select('slug')
     // The orgs alice administers across the module seeds (classroom, synagogue,
-    // matchmaking, nail salon) — and nothing else (still excludes demo-b).
+    // matchmaking, nail salon, speed dating) — and nothing else (excludes demo-b).
     expect(data?.map((o) => o.slug).sort()).toEqual([
       'demo-a',
+      'demo-dating',
       'demo-match',
       'demo-salon',
       'demo-shul',
