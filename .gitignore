@@ -33,3 +33,6 @@ test-results/
 
 # Client-provided source materials (never commit)
 client-materials/
+
+# VPS worker env (holds the service-role key)
+deploy/worker/worker.env

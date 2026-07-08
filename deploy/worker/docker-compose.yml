@@ -1,0 +1,28 @@
+# Production worker on the VPS (docs/10-worker-deploy.md has the walkthrough).
+# From the repo root on the server:
+#   docker compose -f deploy/worker/docker-compose.yml up -d --build
+services:
+  worker:
+    build:
+      context: ../..
+      dockerfile: apps/worker/Dockerfile
+    restart: unless-stopped
+    env_file:
+      # Written by hand on the server, NEVER committed (see the deploy doc).
+      - ./worker.env
+    ports:
+      # /healthz for UptimeRobot (docs/05). Bind loopback-only if you put a
+      # reverse proxy in front; open (as here) if UptimeRobot polls directly.
+      - '8901:8901'
+    healthcheck:
+      test: ['CMD', 'node', '-e', "fetch('http://localhost:8901/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    # Chromium in a container wants a bigger /dev/shm than Docker's 64MB default.
+    shm_size: 1gb
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
