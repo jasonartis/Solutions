@@ -68,6 +68,49 @@ test('classroom module: professor sees the seeded class, student view is scoped'
   await expect(page.getByText('Charlie C')).toBeVisible()
 })
 
+test('classroom module: student sees published materials and can submit homework files', async ({ page }) => {
+  await signIn(page, 'charlie@demo.local')
+  await page.getByRole('link', { name: 'Classroom' }).click()
+
+  // Seeded, always-visible (no window) URL material.
+  await expect(page.getByRole('link', { name: 'Syllabus' })).toBeVisible()
+
+  await page.getByRole('link', { name: 'Homework 1 — Descriptive statistics' }).click()
+  await expect(page.getByRole('heading', { name: 'Homework 1 — Descriptive statistics' })).toBeVisible()
+  await expect(page.getByText('No files uploaded yet.')).toBeVisible()
+
+  await page.setInputFiles('input[name="file"]', {
+    name: 'homework1-answer.txt',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('my answer'),
+  })
+  await page.getByRole('button', { name: 'Upload' }).click()
+  await expect(page.getByText('homework1-answer.txt')).toBeVisible()
+})
+
+test('classroom module: professor publishes a material with a visibility window', async ({ page }) => {
+  await signIn(page, 'alice@demo.local')
+  await page.goto('/o/demo-a/m/classroom/manage/materials')
+  await expect(page.getByRole('heading', { name: 'Classroom — Materials' })).toBeVisible()
+
+  await page.getByPlaceholder('Title').fill('Lecture 2 slides')
+  await page.getByPlaceholder('URL (optional)').fill('https://example.com/lecture2.pdf')
+  await page.getByRole('button', { name: 'Add' }).click()
+  await expect(page.getByText('Lecture 2 slides')).toBeVisible()
+
+  // Publish it into the future — should NOT be visible to the student yet.
+  // Scope to the material-row class combo (not a generic 'div' filter) so we
+  // don't match the ancestor section/title divs that also contain this text.
+  const row = page.locator('div.rounded.border.border-gray-100').filter({ hasText: 'Lecture 2 slides' })
+  await row.getByLabel('From').fill('2099-01-01T00:00')
+  await row.getByRole('button', { name: 'Publish' }).click()
+  await expect(row.getByRole('button', { name: 'Update' })).toBeVisible()
+
+  await signIn(page, 'charlie@demo.local')
+  await page.getByRole('link', { name: 'Classroom' }).click()
+  await expect(page.getByText('Lecture 2 slides')).not.toBeVisible()
+})
+
 test('public schedule page works with no login', async ({ page }) => {
   await page.goto('/s/demo-shul')
   await expect(page.getByRole('heading', { name: 'Demo Synagogue' })).toBeVisible()

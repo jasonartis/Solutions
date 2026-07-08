@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { requireOrgModule } from '@/lib/module-gate'
 import { createHomework, postAnnouncement } from './actions'
@@ -30,7 +31,12 @@ export default async function ManagePage(props: { params: Promise<{ orgSlug: str
   return (
     <div>
       <p className="mb-1 text-sm text-gray-400">{org.name}</p>
-      <h1 className="mb-6 text-2xl font-semibold">Classroom — Manage</h1>
+      <div className="mb-6 flex items-baseline gap-4">
+        <h1 className="text-2xl font-semibold">Classroom — Manage</h1>
+        <Link href={`/o/${orgSlug}/m/classroom/manage/materials`} className="text-sm text-blue-600 hover:underline">
+          Materials
+        </Link>
+      </div>
 
       <div className="space-y-8">
         {(classes ?? []).map((klass) => {

@@ -303,6 +303,28 @@ async function main() {
   })
   if (annErr) throw new Error(`Announcement seed failed: ${annErr.message}`)
 
+  const { data: material, error: materialErr } = await admin
+    .from('cls_materials')
+    .insert({
+      org_id: orgA,
+      course_id: course!.id,
+      kind: 'document',
+      title: 'Syllabus',
+      url: 'https://example.com/syllabus.pdf',
+    })
+    .select('id')
+    .single()
+  if (materialErr) throw new Error(`Material seed failed: ${materialErr.message}`)
+
+  const { error: pubErr } = await admin.from('cls_publications').insert({
+    org_id: orgA,
+    class_id: klass!.id,
+    material_id: material!.id,
+    visible_from: null,
+    visible_until: null,
+  })
+  if (pubErr) throw new Error(`Publication seed failed: ${pubErr.message}`)
+
   console.log('Seed complete:')
   console.log('  owner@demo.local / password123  (superadmin)')
   console.log('  alice@demo.local / password123  (admin of Demo Org A + Demo Synagogue)')

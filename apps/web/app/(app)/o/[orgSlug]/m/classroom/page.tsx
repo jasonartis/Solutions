@@ -21,7 +21,33 @@ export default async function ClassroomPage(props: { params: Promise<{ orgSlug: 
     (c) => roleByClass.has(c.id) || (memberships ?? []).length === 0,
   )
 
+  type Material = { id: string; title: string; kind: string; url: string | null; storage_path: string | null }
+  type Publication = { class_id: string; material: Material | null }
+
   const classIds = visibleClasses.map((c) => c.id)
+  const publicationsResult = classIds.length
+    ? await supabase
+        .from('cls_publications')
+        .select('class_id, material:cls_materials(id, title, kind, url, storage_path)')
+        .in('class_id', classIds)
+    : { data: [] }
+  const publications = (publicationsResult.data ?? []) as unknown as Publication[]
+
+  // RLS hides materials outside their visibility window — the nested embed
+  // comes back null for those, so filter them out rather than showing a blank row.
+  const visibleMaterials = publications.filter(
+    (p): p is Publication & { material: Material } => p.material !== null,
+  )
+  const materialLinks = new Map<string, string>()
+  for (const p of visibleMaterials) {
+    if (p.material.storage_path) {
+      const { data } = await supabase.storage
+        .from('cls-materials')
+        .createSignedUrl(p.material.storage_path, 3600)
+      if (data?.signedUrl) materialLinks.set(p.material.id, data.signedUrl)
+    }
+  }
+
   const [{ data: announcements }, { data: homeworks }] = await Promise.all([
     classIds.length
       ? supabase
@@ -33,10 +59,10 @@ export default async function ClassroomPage(props: { params: Promise<{ orgSlug: 
     classIds.length
       ? supabase
           .from('cls_homeworks')
-          .select('class_id, title, due_at')
+          .select('id, class_id, title, due_at')
           .in('class_id', classIds)
           .order('due_at')
-      : Promise.resolve({ data: [] as { class_id: string; title: string; due_at: string | null }[] }),
+      : Promise.resolve({ data: [] as { id: string; class_id: string; title: string; due_at: string | null }[] }),
   ])
 
   const fmt = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' })
@@ -71,6 +97,32 @@ export default async function ClassroomPage(props: { params: Promise<{ orgSlug: 
             </div>
 
             <h3 className="mb-1 text-sm font-medium uppercase tracking-wide text-gray-500">
+              Materials
+            </h3>
+            <ul className="mb-4 space-y-1 text-sm text-gray-700">
+              {visibleMaterials
+                .filter((p) => p.class_id === klass.id)
+                .map((p) => {
+                  const link = p.material.url ?? materialLinks.get(p.material.id)
+                  return (
+                    <li key={p.material.id}>
+                      <span className="text-xs uppercase text-gray-400">{p.material.kind}</span>{' '}
+                      {link ? (
+                        <a href={link} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">
+                          {p.material.title}
+                        </a>
+                      ) : (
+                        p.material.title
+                      )}
+                    </li>
+                  )
+                })}
+              {visibleMaterials.filter((p) => p.class_id === klass.id).length === 0 && (
+                <li className="text-gray-400">Nothing published yet.</li>
+              )}
+            </ul>
+
+            <h3 className="mb-1 text-sm font-medium uppercase tracking-wide text-gray-500">
               Announcements
             </h3>
             <ul className="mb-4 space-y-1 text-sm text-gray-700">
@@ -91,9 +143,14 @@ export default async function ClassroomPage(props: { params: Promise<{ orgSlug: 
             <ul className="space-y-1 text-sm text-gray-700">
               {(homeworks ?? [])
                 .filter((h) => h.class_id === klass.id)
-                .map((h, i) => (
-                  <li key={i} className="flex justify-between">
-                    <span>{h.title}</span>
+                .map((h) => (
+                  <li key={h.id} className="flex justify-between">
+                    <Link
+                      href={`/o/${orgSlug}/m/classroom/homework/${h.id}`}
+                      className="text-blue-600 hover:underline"
+                    >
+                      {h.title}
+                    </Link>
                     <span className="text-gray-400">
                       {h.due_at ? `due ${fmt.format(new Date(h.due_at))}` : 'no deadline'}
                     </span>
