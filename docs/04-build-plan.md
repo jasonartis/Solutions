@@ -26,6 +26,8 @@ Why second: the founder's most mature existing solution, and it forces files/sto
 
 **Acceptance:** a full simulated course cycle in staging with seeded students: publish materials on a schedule → students submit multi-file homework → GA grades by subproblem → peer review round-trips with the assignment matrix → gradebook computes `0.2*peer+0.8*GA`-style combination → student sees only Final when flipped visible → retention sweep hides submissions.
 
+**Status 2026-07-09:** core assessment loop built and green (e2e 11/11): materials publish with visibility windows, multi-file homework submission, GA grading, peer-review assignment via the pure `assignPeerReviews` engine with real roster/history data, finalize (peer average), professor-published Final gated `is_final`+`visible`. **Remaining for M2 sign-off:** GA grading is a single score per submission, not broken out by subproblem; the gradebook has no *automatic* weighted combination (professor manually types a final "override" score rather than the system computing `0.2*peer+0.8*GA`-style blends); the `cls_publications.retention` field exists but no sweep job hides/purges expired submissions yet; exam grading and survey UI are unbuilt (schema exists). GA-specific dedicated views also don't exist yet — the current grading console serves both roles but isn't tailored to a GA-only workflow.
+
 ## Extraction pass (after M2)
 
 The platform-defining milestone: factor everything modules 2 and 3 share into `packages/platform`, refactor both modules onto the shared primitives, write/finalize docs/03 conventions against reality, designate `modules/synagogue-schedules` the canonical exemplar, and update CLAUDE.md. **Acceptance:** both modules pass their e2e suites on shared primitives; a written checklist proves a new module needs no code outside its own folder + platform extensions.
@@ -33,6 +35,8 @@ The platform-defining milestone: factor everything modules 2 and 3 share into `p
 ## M3 — Module 1: Make-a-Match
 
 First module built "the fast way" against stable conventions — this validates the whole model. Forces: question engine, pair scoring with the stale-row worker pattern, approval queues, conversations, dealbreaker/lock settings. **Acceptance:** built in days-not-weeks (if not, fix the conventions, that's the real deliverable); full flow singles→questions→scores→mutual agreement→introduction works with seeded data.
+
+**Status 2026-07-09:** scoring engine done (26 unit tests) and schema integrated (`mm_questions`/`mm_answers`/`mm_pair_scores`/`mm_groups`/`mm_group_members`/`mm_matchmaker_assignments`, security-reviewed, live local+prod) — manifest registered but not enabled for any org. **Remaining:** all UI (question answering, admin approval queue, matches list, group/assignment management), the `matchmaking.rescore` worker job, and the conversations primitive this module needs for users→admin messaging (deferred — doesn't exist anywhere in the platform yet).
 
 ## M4 — Module 5: Nail Salon
 
