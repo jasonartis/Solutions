@@ -53,11 +53,21 @@ export const matchmakingModule: ModuleManifest = {
   nav: [{ label: 'Questions', path: '' }],
 }
 
+export const nailSalonModule: ModuleManifest = {
+  key: 'nail-salon',
+  name: 'Nail Salon',
+  description:
+    'Salon management: booking, in-appointment workflow, billing/receipts (record-keeping), promotions, and light bookkeeping (earnings, expenses, shopping lists). Org → locations from day one.',
+  roles: ['admin', 'manager', 'cashier', 'worker', 'customer'],
+  nav: [{ label: 'Salon', path: '' }],
+}
+
 export const moduleRegistry: readonly ModuleManifest[] = [
   stubModule,
   synagogueSchedulesModule,
   classroomModule,
   matchmakingModule,
+  nailSalonModule,
 ]
 
 export function getModule(key: string): ModuleManifest | undefined {
