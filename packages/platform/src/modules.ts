@@ -44,10 +44,20 @@ export const classroomModule: ModuleManifest = {
   ],
 }
 
+export const matchmakingModule: ModuleManifest = {
+  key: 'matchmaking',
+  name: 'Make-a-Match',
+  description:
+    'Matchmaking via admin-defined weighted questions: care-weighted pair scoring, matchmaker-assisted introductions, and an approval workflow for new questions.',
+  roles: ['single', 'matchmaker', 'admin'],
+  nav: [{ label: 'Questions', path: '' }],
+}
+
 export const moduleRegistry: readonly ModuleManifest[] = [
   stubModule,
   synagogueSchedulesModule,
   classroomModule,
+  matchmakingModule,
 ]
 
 export function getModule(key: string): ModuleManifest | undefined {

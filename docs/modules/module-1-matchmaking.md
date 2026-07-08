@@ -67,3 +67,18 @@ Question engine (owner), approval queues, conversations, notifications, settings
 ## Future enhancements
 
 Peer chat; feeding module 6 (shared question primitives; compatibility scores could seed speed-dating rotations; mutual results feed back as signal).
+
+## Schema integrated (2026-07-09)
+
+`mm_` tables live (`supabase/migrations/20260709020000_matchmaking.sql`, local + prod): `mm_questions`, `mm_answers`, `mm_pair_scores`, `mm_groups`, `mm_group_members`, `mm_matchmaker_assignments`. Manifest registered (`packages/platform/src/modules.ts`) but **not enabled for any org yet** — no UI exists beyond the schema, so it stays dark until the question/answer/matches pages are built.
+
+Design choices worth recording:
+- **Lazy materialization, no flag**: a missing `mm_answers` row *is* the not-yet-seen state (matches `directionalScore()`'s skip-if-absent). `mm_ensure_answer(question_id)` RPC creates the vanilla auto-answer (locks applied) on first view.
+- **Admin locks enforced by trigger** (`mm_answers_before_write`): overwrites any locked field from `mm_questions.admin_locks` on every insert/update — a single cannot bypass a lock by writing directly.
+- **Canonical pair ordering**: `mm_pair_scores` rejects `user_a >= user_b` via CHECK; the writer (worker) is responsible for sorting before upsert.
+- **No user write path to `mm_pair_scores`** at all — worker/service-role and admin only, matching "the worker computes it." An on-demand "recompute me now" button, if ever wanted, would need a `job_requests`-style request row a user CAN insert, not a direct write here.
+- **Messaging deferred**: no conversations/messages primitive exists yet anywhere in the platform; building one for this module alone would violate "never build primitives speculatively." Revisit when a second module needs it.
+
+Security-review fixes (`modules/matchmaking/schema-fixes.sql`, folded into the migration), both verified live against Postgres before merging:
+1. `mm_ensure_answer()` is `SECURITY DEFINER` and bypasses RLS — the draft let *any* authenticated caller create an answer row, skipping the "only singles answer" role gate the INSERT policy enforces for direct writes. Added an explicit `mm_is_single(org_id)` check inside the function.
+2. The UPDATE policy let a single repoint their own answer's `question_id`/`user_id` via UPDATE (only `user_id = auth.uid()` was checked), corrupting the one-row-per-(question,user) invariant. Added a pin-to-old-value trigger, named to fire alphabetically *before* the lock-enforcement trigger so it reverts the pointer before locks/org_id get derived from the wrong question.
