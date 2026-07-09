@@ -71,14 +71,43 @@ export const speedDatingModule: ModuleManifest = {
   nav: [{ label: 'Events', path: '' }],
 }
 
-export const moduleRegistry: readonly ModuleManifest[] = [
+// Module 0 — the living template (docs/03, modules/sample/SPEC.md). Kept in
+// the registry so its e2e proves the copy-me path stays green.
+export const sampleModule: ModuleManifest = {
+  key: 'sample',
+  name: 'Sample Module',
+  description: 'The living template for new modules — copy modules/sample to start module 7+.',
+  roles: ['manager', 'member'],
+  nav: [{ label: 'Sample', path: '' }],
+}
+
+const allModules: readonly ModuleManifest[] = [
   stubModule,
   synagogueSchedulesModule,
   classroomModule,
   matchmakingModule,
   nailSalonModule,
   speedDatingModule,
+  sampleModule,
 ]
+
+// Plug-and-play composition (founder decision, docs/03): the MODULES env var
+// (comma-separated keys) filters which modules a deployment contains — for a
+// future isolated white-label instance ("an app with only module 3") without
+// forking the codebase. Unset = all modules (the normal platform deployment).
+// Unknown keys fail loudly: a typo must not silently ship an empty app.
+function filterByEnv(modules: readonly ModuleManifest[]): readonly ModuleManifest[] {
+  const raw = process.env.MODULES ?? process.env.NEXT_PUBLIC_MODULES
+  if (!raw || raw.trim() === '') return modules
+  const wanted = raw.split(',').map((s) => s.trim()).filter(Boolean)
+  const known = new Set(modules.map((m) => m.key))
+  for (const key of wanted) {
+    if (!known.has(key)) throw new Error(`MODULES lists unknown module key: ${key}`)
+  }
+  return modules.filter((m) => wanted.includes(m.key))
+}
+
+export const moduleRegistry: readonly ModuleManifest[] = filterByEnv(allModules)
 
 export function getModule(key: string): ModuleManifest | undefined {
   return moduleRegistry.find((m) => m.key === key)

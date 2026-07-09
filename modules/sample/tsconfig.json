@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "preserve",
+    "types": [],
+    "paths": {
+      "@platform/core": ["../../packages/platform/src/index.ts"],
+      "@platform/core/*": ["../../packages/platform/src/*"],
+      // Module UI runs inside apps/web's request context; these two app
+      // imports (module gate + supabase server client) are the one allowed
+      // coupling (see SPEC.md).
+      "@/*": ["../../apps/web/*"]
+    }
+  },
+  "include": ["ui", "src"]
+}

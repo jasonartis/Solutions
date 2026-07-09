@@ -380,6 +380,35 @@ test('speed-dating module: register → round → mutual interest → reveal', a
   await expect(page.getByText('Charlie C is interested too.')).toBeVisible()
 })
 
+test('sample module (module 0 template): staff creates, member contributes', async ({ page }) => {
+  // Proves the living template stays green: module UI physically inside
+  // modules/sample/ui, mounted by a thin wrapper (docs/03 composition).
+  await signIn(page, 'alice@demo.local')
+  await page.goto('/o/demo-a/m/sample')
+  await expect(page.getByRole('heading', { name: 'Sample Module' })).toBeVisible()
+  await page.getByPlaceholder('New project name').fill('Rollout plan')
+  await page.getByRole('button', { name: 'Create project' }).click()
+  await expect(page.getByText('Rollout plan')).toBeVisible()
+
+  // Member (no manager role): no create-project form, but can add + toggle items.
+  await signIn(page, 'charlie@demo.local')
+  await page.goto('/o/demo-a/m/sample')
+  await expect(page.getByPlaceholder('New project name')).not.toBeVisible()
+  const section = page.locator('section').filter({ hasText: 'Template Project' })
+  await section.getByPlaceholder('Add an item…').fill('Write the docs')
+  await section.getByRole('button', { name: 'Add' }).click()
+  const item = page
+    .locator('section')
+    .filter({ hasText: 'Template Project' })
+    .locator('li')
+    .filter({ hasText: 'Write the docs' })
+  await expect(item).toBeVisible()
+  await item.getByRole('button', { name: 'Done' }).click()
+  await expect(
+    page.locator('section').filter({ hasText: 'Template Project' }).locator('li').filter({ hasText: 'Write the docs' }),
+  ).toContainText('Reopen')
+})
+
 test('public schedule page works with no login', async ({ page }) => {
   await page.goto('/s/demo-shul')
   await expect(page.getByRole('heading', { name: 'Demo Synagogue' })).toBeVisible()

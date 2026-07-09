@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation'
+import { getModule } from '@platform/core'
 import { createClient } from '@/lib/supabase/server'
 
 // The standard module-page gate (extraction pass, docs/04): resolve the org by
@@ -9,6 +10,11 @@ import { createClient } from '@/lib/supabase/server'
 // Usage (every module page):
 //   const { supabase, org, settings } = await requireOrgModule(orgSlug, 'my-module')
 export async function requireOrgModule(orgSlug: string, moduleKey: string) {
+  // Deployment-level gate first: a module excluded from this build via the
+  // MODULES env filter (docs/03 composition decision) doesn't exist here,
+  // even if the route file physically does.
+  if (!getModule(moduleKey)) notFound()
+
   const supabase = await createClient()
 
   const { data: org } = await supabase

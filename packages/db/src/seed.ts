@@ -556,6 +556,20 @@ async function main() {
   })
   if (eventErr) throw new Error(`Speed-dating event seed failed: ${eventErr.message}`)
 
+  // --- Sample module (module 0 — the living template) -----------------------
+  // Enabled for orgA so the template's e2e can prove the copy-me path works:
+  // alice manages, charlie is a member, one seeded project.
+  await admin.from('org_modules').upsert({ org_id: orgA, module_key: 'sample', enabled: true })
+  await admin.from('module_roles').upsert([
+    { org_id: orgA, user_id: aliceId, module_key: 'sample', role: 'manager' },
+    { org_id: orgA, user_id: charlieId, module_key: 'sample', role: 'member' },
+  ])
+  await admin.from('smp_projects').delete().eq('org_id', orgA)
+  const { error: smpErr } = await admin
+    .from('smp_projects')
+    .insert({ org_id: orgA, name: 'Template Project' })
+  if (smpErr) throw new Error(`Sample project seed failed: ${smpErr.message}`)
+
   console.log('Seed complete:')
   console.log('  owner@demo.local / password123  (superadmin)')
   console.log('  alice@demo.local / password123  (admin of Demo Org A + Demo Synagogue + Demo Match + Demo Salon + Demo Dating)')

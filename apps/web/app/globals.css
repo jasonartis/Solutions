@@ -1,4 +1,8 @@
 @import "tailwindcss";
+/* Module UI lives inside each module's folder (docs/03 composition decision);
+   Tailwind v4's auto-detection doesn't scan outside apps/web, so point it at
+   the module UI sources explicitly. */
+@source "../../../modules/*/ui";
 
 :root {
   --background: #ffffff;

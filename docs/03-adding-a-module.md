@@ -90,6 +90,26 @@ Four modules now run on these; they are load-bearing, not suggestions:
     (`user_id = auth.uid()`); reserve ownership helper functions for policies on
     OTHER tables, whose referenced rows already exist.
 
+### Composition & template (founder decision, 2026-07-09)
+
+Founder-proposed, adopted with one adjustment:
+
+- **A module aims to be 100% self-contained in `modules/<key>/`** — logic, schema,
+  AND UI (pages under `modules/<key>/ui`, mounted by one-line route wrappers in
+  `apps/web`). New modules are built this way; older modules migrate
+  opportunistically.
+- **Plug-and-play composition stays within ONE codebase** (docs/00's one-deployment
+  principle is not weakened): entitlements already hide modules per org; for the
+  future case of an isolated white-label instance, the `MODULES` env var filters
+  the module registry at build time — "an app with only module 3" is a config
+  line on a second deployment of the SAME repo, never a fork.
+- **`modules/sample` (module 0) is the living template**: a minimal module
+  exercising every convention in this doc (prefixed parent+child tables,
+  scope-sync + pin triggers, RLS tiers, gated page + server actions, seed,
+  e2e). Copy it to start module 7+. **Rule: whenever a capability is extracted
+  into `packages/platform`, the sample module is updated in the same pass** —
+  the template must never rot behind the conventions.
+
 ### Control hierarchy (founder question, 2026-07-09 — formalized)
 
 Three levels, uniform across modules: **superadmin** (platform-wide) → **org
