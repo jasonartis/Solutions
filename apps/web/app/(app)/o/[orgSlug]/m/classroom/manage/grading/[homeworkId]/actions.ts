@@ -24,7 +24,7 @@ async function upsertGrade(
     classId: string
     homeworkId: string
     studentId: string
-    source: 'ga' | 'peer' | 'override'
+    source: 'ga' | 'peer' | 'combination' | 'override'
     score: number
     isFinal?: boolean
     visible?: boolean
@@ -195,6 +195,74 @@ export async function finalizePeerReview(orgSlug: string, homeworkId: string, cl
   revalidatePath(`/o/${orgSlug}/m/classroom/manage/grading/${homeworkId}`)
 }
 
+// Exactly one row per (student, homework) may carry is_final — step any
+// previous final down before flagging a new one (combination and override
+// rows coexist in the table; only the flag is exclusive).
+async function unsetPriorFinals(supabase: SupabaseClient, homeworkId: string, studentId: string) {
+  const { error } = await supabase
+    .from('cls_grades')
+    .update({ is_final: false })
+    .eq('homework_id', homeworkId)
+    .eq('student_id', studentId)
+    .eq('is_final', true)
+  if (error) throw new Error(`Unset prior finals failed: ${error.message}`)
+}
+
+// The spec's "0.2*peer + 0.8*GA"-style gradebook combination: for every
+// student with any component grade, final = Σ(score×weight) / Σ(weights of
+// the components that exist) — a student graded only by peers (or only by
+// the GA) still gets a sensible final instead of a zero for the missing part.
+// Writes source='combination' rows flagged final+visible; students with a
+// manual 'override' final keep it (override wins, per the spec's column order).
+export async function computeCombinationFinals(
+  orgSlug: string,
+  homeworkId: string,
+  classId: string,
+  formData: FormData,
+) {
+  const gaWeight = Number(formData.get('gaWeight'))
+  const peerWeight = Number(formData.get('peerWeight'))
+  if (Number.isNaN(gaWeight) || Number.isNaN(peerWeight) || gaWeight < 0 || peerWeight < 0 || gaWeight + peerWeight <= 0) {
+    throw new Error('Weights must be non-negative and not both zero')
+  }
+
+  const supabase = await createClient()
+  const [{ data: submissions }, { data: grades }] = await Promise.all([
+    supabase.from('cls_submissions').select('student_id').eq('homework_id', homeworkId),
+    supabase.from('cls_grades').select('id, student_id, source, score, is_final').eq('homework_id', homeworkId),
+  ])
+
+  for (const s of submissions ?? []) {
+    const mine = (grades ?? []).filter((g) => g.student_id === s.student_id)
+    if (mine.some((g) => g.source === 'override' && g.is_final)) continue // manual override wins
+
+    const parts: { score: number; weight: number }[] = []
+    const ga = mine.find((g) => g.source === 'ga')
+    const peer = mine.find((g) => g.source === 'peer')
+    if (ga?.score !== null && ga?.score !== undefined && gaWeight > 0) parts.push({ score: Number(ga.score), weight: gaWeight })
+    if (peer?.score !== null && peer?.score !== undefined && peerWeight > 0) parts.push({ score: Number(peer.score), weight: peerWeight })
+    if (parts.length === 0) continue
+
+    const totalWeight = parts.reduce((sum, p) => sum + p.weight, 0)
+    const combined = parts.reduce((sum, p) => sum + p.score * p.weight, 0) / totalWeight
+
+    await unsetPriorFinals(supabase, homeworkId, s.student_id)
+
+    const error = await upsertGrade(supabase, {
+      classId,
+      homeworkId,
+      studentId: s.student_id,
+      source: 'combination',
+      score: Math.round(combined * 10) / 10,
+      isFinal: true,
+      visible: true,
+    })
+    fail(error, 'Write combination final failed')
+  }
+
+  revalidatePath(`/o/${orgSlug}/m/classroom/manage/grading/${homeworkId}`)
+}
+
 export async function publishFinalGrade(orgSlug: string, homeworkId: string, formData: FormData) {
   const studentId = String(formData.get('studentId') ?? '')
   const classId = String(formData.get('classId') ?? '')
@@ -202,6 +270,7 @@ export async function publishFinalGrade(orgSlug: string, homeworkId: string, for
   if (!studentId || !classId || Number.isNaN(score)) throw new Error('Final score is required')
 
   const supabase = await createClient()
+  await unsetPriorFinals(supabase, homeworkId, studentId)
   const error = await upsertGrade(supabase, {
     classId,
     homeworkId,

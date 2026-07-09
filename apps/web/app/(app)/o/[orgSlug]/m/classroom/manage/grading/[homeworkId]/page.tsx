@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { requireOrgModule } from '@/lib/module-gate'
 import {
+  computeCombinationFinals,
   finalizePeerReview,
   moveToGaGrading,
   moveToPeerReview,
@@ -107,6 +108,20 @@ export default async function GradingPage(props: {
               <button className={btnCls}>Finalize peer review → done</button>
             </form>
           )}
+          <form
+            action={computeCombinationFinals.bind(null, orgSlug, homeworkId, homework.class_id)}
+            className="flex items-center gap-2"
+          >
+            <label className="text-sm text-gray-500">
+              GA ×{' '}
+              <input name="gaWeight" type="number" step="0.05" min="0" defaultValue={0.8} className={`${inputCls} w-20`} />
+            </label>
+            <label className="text-sm text-gray-500">
+              Peer ×{' '}
+              <input name="peerWeight" type="number" step="0.05" min="0" defaultValue={0.2} className={`${inputCls} w-20`} />
+            </label>
+            <button className={btnCls}>Compute finals</button>
+          </form>
         </div>
       )}
 

@@ -160,12 +160,19 @@ test('classroom module: grading workflow — GA grade, peer review, finalize, pu
 
   await page.getByRole('button', { name: 'Finalize peer review → done' }).click()
 
-  await rowFor('Dana D').locator('input[name="finalScore"]').fill('90')
-  await rowFor('Dana D').getByRole('button', { name: 'Publish' }).click()
-  // Wait for the page to reflect the mutation before navigating away — signIn's
-  // page.goto() would otherwise race the in-flight form POST and can abort it
-  // before the server finishes writing.
-  await expect(rowFor('Dana D').getByRole('button', { name: 'Update' })).toBeVisible()
+  // Automatic gradebook combination (defaults GA×0.8 + Peer×0.2, renormalized
+  // over the components each student actually has): Charlie has only GA 85,
+  // Dana only peer 90 — so their finals land at exactly those values.
+  await page.getByRole('button', { name: 'Compute finals' }).click()
+  await expect(rowFor('Charlie C').locator('input[name="finalScore"]')).toHaveValue('85')
+  await expect(rowFor('Dana D').locator('input[name="finalScore"]')).toHaveValue('90')
+
+  // Manual override still wins: bump Charlie to 88, recompute, 88 survives.
+  await rowFor('Charlie C').locator('input[name="finalScore"]').fill('88')
+  await rowFor('Charlie C').getByRole('button', { name: 'Update' }).click()
+  await expect(rowFor('Charlie C').locator('input[name="finalScore"]')).toHaveValue('88')
+  await page.getByRole('button', { name: 'Compute finals' }).click()
+  await expect(rowFor('Charlie C').locator('input[name="finalScore"]')).toHaveValue('88')
 
   await signIn(page, 'dana@demo.local')
   await page.getByRole('link', { name: 'Classroom' }).click()
