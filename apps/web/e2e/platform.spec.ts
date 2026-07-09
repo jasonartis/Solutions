@@ -450,19 +450,22 @@ test('data export: student downloads their classroom zip; hats are enforced', as
   await signIn(page, 'alice@demo.local')
   await page.goto('/o/demo-a/export')
   await expect(page.getByRole('link', { name: 'Professor (full class data)' })).toBeVisible()
-  await page.getByRole('link', { name: 'Student (my own data)' }).click()
+  await page.getByRole('link', { name: 'Student (what I entered)' }).click()
   // Scope to the download form — the staff controls panel repeats set labels.
   const dlForm = page.locator('section').filter({ hasText: 'Classroom' }).locator('form[action="/api/export"]')
   await expect(dlForm.getByText('My homework submissions')).toBeVisible()
-  await expect(dlForm.getByText('Full gradebook + rosters')).not.toBeVisible()
+  await expect(dlForm.getByText('Full gradebook')).not.toBeVisible()
 
   // Export controls: professor shuts off the student hat entirely.
   const controls = page.locator('section').filter({ hasText: 'Classroom' }).locator('details')
   await controls.locator('summary').click()
   await controls.locator('input[name="allowedHats"][value="student"]').uncheck()
   await controls.getByRole('button', { name: 'Save controls' }).click()
+  // Wait for the re-render to prove the save landed (goto-after-POST race).
+  await controls.locator('summary').click()
+  await expect(controls.locator('input[name="allowedHats"][value="student"]')).not.toBeChecked()
   // Staff bypass their own switches — alice still sees the student hat link.
-  await expect(page.getByRole('link', { name: 'Student (my own data)' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Student (what I entered)' })).toBeVisible()
 
   // Charlie (plain student) is now fully shut off.
   await signIn(page, 'charlie@demo.local')
@@ -481,14 +484,16 @@ test('data export: student downloads their classroom zip; hats are enforced', as
   await controls2.locator('summary').click()
   await controls2.locator('input[name="allowedHats"][value="student"]').check()
   await controls2.getByRole('button', { name: 'Save controls' }).click()
-  await expect(page.getByRole('heading', { name: 'Export your data' })).toBeVisible()
+  await controls2.locator('summary').click()
+  await expect(controls2.locator('input[name="allowedHats"][value="student"]')).toBeChecked()
 
   await signIn(page, 'charlie@demo.local')
   await page.goto('/o/demo-a/export')
   await expect(page.getByText('My homework submissions')).toBeVisible()
-  // The new materials data set is offered to students by default (professor
-  // can disable it via the same controls).
-  await expect(page.getByText('Class materials published to me')).toBeVisible()
+  // Authorship principle (founder correction): what the professor published
+  // for students to SEE is not theirs to export — no materials set offered.
+  await expect(page.getByText('Class materials published to me')).not.toBeVisible()
+  await expect(page.getByText('My survey answers')).toBeVisible()
 })
 
 test('public schedule page works with no login', async ({ page }) => {

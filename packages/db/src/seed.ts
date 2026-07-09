@@ -268,7 +268,7 @@ async function main() {
       { org_id: orgA, user_id: charlieId, role: 'member' },
       { org_id: orgA, user_id: danaId, role: 'member' },
     ])
-  await admin.from('org_modules').upsert({ org_id: orgA, module_key: 'classroom', enabled: true })
+  await admin.from('org_modules').upsert({ org_id: orgA, module_key: 'classroom', enabled: true, settings: {} })
   await admin.from('module_roles').upsert([
     { org_id: orgA, user_id: aliceId, module_key: 'classroom', role: 'professor' },
     { org_id: orgA, user_id: charlieId, module_key: 'classroom', role: 'student' },

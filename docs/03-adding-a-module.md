@@ -187,17 +187,27 @@ Budget a deliberate pass (see docs/00 risks): move client-specific constants int
 
 Disable entitlements → export the org's data on request → mark the module deprecated in its manifest (hidden from new orgs) → remove code only after all orgs are off it and a final DB backup exists.
 
-### Data export (founder decision, 2026-07-09)
+### Data export (founder decisions, 2026-07-09 — twice revised same day)
 
-Every user can export "their data and below" — trust and freedom-to-leave are
-explicit goals. Design: **an export contains exactly what the user can already
-see** — queries run AS the user under RLS (the access hierarchy IS the export
-hierarchy; no parallel permission model to drift). Each module declares an
-**export manifest** (human-named data sets, each tagged with the "hats" that
-include it); the generic engine (`/o/<slug>/export`) shows the user's hats,
-lets them **pick a hat** (an org admin can export everything they can see, or
-deliberately choose a lower hat), then checkbox-select data sets. Output: one
-zip with CSV + JSON per data set (CSV for Sheets-humans, JSON for machines).
-v1 is data-only (uploaded files listed by name, not bundled) and instant
-download; big exports move to `job_requests` + the worker when needed.
-The manifest is part of module anatomy — the sample module carries one.
+Every user can export their data — trust and freedom-to-leave are explicit
+goals. **The export slice is defined by AUTHORSHIP, not visibility** (founder
+correction): you export **what you entered into the platform** (uploads,
+answers, submissions, comments — so entering data never risks losing it),
+plus minimal context metadata (e.g. the class name) to keep it legible.
+What someone else let you SEE is not yours to export — the canonical
+illustration (founder's): a salesperson may see a client's history to do
+their job, but that visibility does not make them eligible to export
+client details. RLS remains the hard CEILING (fetches run AS the user, so an
+export can never exceed what they can read) but is not the definition.
+
+**Staff hats** export the data of the domain they operate (the professor's
+gradebook, the manager's books) — "their data and the data of those under
+them" — because operating the domain is their authorship. Visibility-only
+relationships (cashier↔customer, student↔materials) confer NO export sets.
+
+Mechanics: each module declares an export manifest (hats + named data sets);
+the generic page (`/o/<slug>/export`) lets the user pick a hat they hold (a
+higher role may deliberately choose a lower hat); output is one zip of
+CSV+JSON per set. **Export controls:** module staff can shut off any hat or
+data set for the levels below (`set_export_settings` / `module_can_manage`);
+staff bypass their own switches. v1 data-only, instant download.

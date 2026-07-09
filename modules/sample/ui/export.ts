@@ -1,4 +1,7 @@
-// TEMPLATE (module 0): the export manifest is part of module anatomy
+// TEMPLATE (module 0): the export manifest is part of module anatomy.
+// PRINCIPLE (docs/03): the export slice is AUTHORSHIP, not visibility —
+// members export what they entered (my-items filters author_id = me);
+// staff export the domain they operate. RLS is the ceiling, not the slice.
 // (docs/03 data-export decision). Two hats mirroring the module's tiers;
 // fetches run AS the caller under RLS, each shaping its hat's slice.
 import type { ExportDb, ExportContext, ModuleExport } from '@platform/core'

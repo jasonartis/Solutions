@@ -1,7 +1,13 @@
-// Classroom export manifest (data-export primitive, docs/03). Every fetch
-// runs AS the caller under RLS — RLS is the ceiling; each fetch defines the
-// hat's intended slice (e.g. "my submissions" filters to the caller even for
-// a professor deliberately exporting with the student hat).
+// Classroom export manifest (data-export primitive, docs/03).
+//
+// PRINCIPLE (founder correction, 2026-07-09): the export slice is defined by
+// AUTHORSHIP, not visibility — you export what YOU entered (so entering data
+// never risks losing it), plus minimal context metadata (class/homework
+// names). What the professor/GA let a student SEE (published materials,
+// revealed grades) is NOT the student's to export. Staff hats export the
+// domain they operate — the professor's gradebook is the professor's work.
+// RLS remains the hard ceiling (fetches run AS the caller) but is not the
+// definition of the slice.
 import type { ExportDb, ExportContext, ModuleExport } from '@platform/core'
 
 async function rows(query: any): Promise<Record<string, unknown>[]> {
@@ -14,8 +20,8 @@ export const classroomExport: ModuleExport = {
   moduleKey: 'classroom',
   hats: [
     { key: 'professor', label: 'Professor (full class data)' },
-    { key: 'ga', label: 'GA (grading data)' },
-    { key: 'student', label: 'Student (my own data)' },
+    { key: 'ga', label: 'GA (my grading work)' },
+    { key: 'student', label: 'Student (what I entered)' },
   ],
   async myHats(db: ExportDb, ctx: ExportContext) {
     const hats: string[] = []
@@ -23,10 +29,11 @@ export const classroomExport: ModuleExport = {
     const { data: ga } = await db.rpc('cls_is_ga', { check_org_id: ctx.orgId })
     if (manage) hats.push('professor')
     if (manage || ga) hats.push('ga')
-    hats.push('student') // everyone can export their own slice
+    hats.push('student') // everyone may export their own contributions
     return hats
   },
   dataSets: [
+    // --- Student hat: only what the student authored (+ name metadata) -----
     {
       key: 'my-submissions',
       label: 'My homework submissions',
@@ -41,40 +48,71 @@ export const classroomExport: ModuleExport = {
         ),
     },
     {
-      key: 'my-grades',
-      label: 'My grades (final, visible)',
+      key: 'my-submission-files',
+      label: 'My uploaded files (names)',
+      description: 'file list; the files themselves are a later option',
       hats: ['student'],
       fetch: (db, ctx) =>
         rows(
           db
-            .from('cls_grades')
-            .select('score, source, homework:cls_homeworks(title), exam:cls_exams(title), class:cls_classes(name)')
+            .from('cls_submission_files')
+            .select('file_name, created_at, submission:cls_submissions!inner(student_id, homework:cls_homeworks(title))')
             .eq('org_id', ctx.orgId)
-            .eq('student_id', ctx.userId)
-            .eq('is_final', true)
-            .eq('visible', true),
+            .eq('submission.student_id', ctx.userId),
         ),
     },
     {
-      // Founder Q (2026-07-09): a student's export MAY include class materials
-      // published to them — it's what they can see — governed by the
-      // professor's export controls (disable this set or the whole hat).
-      // RLS already limits rows to open-window publications for students.
-      key: 'class-materials',
-      label: 'Class materials published to me',
-      hats: ['student', 'ga'],
+      key: 'my-review-comments',
+      label: 'Peer-review comments I wrote',
+      hats: ['student'],
       fetch: (db, ctx) =>
         rows(
           db
-            .from('cls_materials')
-            .select('title, kind, url, course:cls_courses(name)')
-            .eq('org_id', ctx.orgId),
+            .from('cls_review_comments')
+            .select('body, file_path, created_at')
+            .eq('org_id', ctx.orgId)
+            .eq('author_id', ctx.userId),
         ),
     },
     {
-      key: 'grading-queue',
-      label: 'Submissions & grades (grading view)',
-      hats: ['professor', 'ga'],
+      key: 'my-survey-answers',
+      label: 'My survey answers',
+      hats: ['student'],
+      fetch: (db, ctx) =>
+        rows(
+          db
+            .from('cls_survey_answers')
+            .select('answer, created_at, survey:cls_surveys(question), class:cls_classes(name)')
+            .eq('org_id', ctx.orgId)
+            .eq('user_id', ctx.userId),
+        ),
+    },
+    // NOTE (deliberate omissions per the authorship principle): grades are
+    // professor/GA-entered — ABOUT the student, not BY them — so they are not
+    // in the student hat; likewise published materials are the professor's
+    // content. Flagged with the founder in case grades-about-me should be an
+    // exception later.
+
+    // --- GA hat: the grading work THEY entered ------------------------------
+    {
+      key: 'my-ga-grades',
+      label: 'GA grades I entered',
+      hats: ['ga'],
+      fetch: (db, ctx) =>
+        rows(
+          db
+            .from('cls_grades')
+            .select('student_id, score, detail, homework:cls_homeworks(title), exam:cls_exams(title)')
+            .eq('org_id', ctx.orgId)
+            .eq('source', 'ga'),
+        ),
+    },
+
+    // --- Professor hat: the domain they operate -----------------------------
+    {
+      key: 'full-gradebook',
+      label: 'Full gradebook',
+      hats: ['professor'],
       fetch: (db, ctx) =>
         rows(
           db
@@ -84,18 +122,16 @@ export const classroomExport: ModuleExport = {
         ),
     },
     {
-      key: 'full-gradebook',
-      label: 'Full gradebook + rosters',
+      key: 'rosters',
+      label: 'Class rosters',
       hats: ['professor'],
-      fetch: async (db, ctx) => {
-        const members = await rows(
+      fetch: (db, ctx) =>
+        rows(
           db
             .from('cls_class_members')
             .select('user_id, role, preferred_first_name, preferred_last_name, class:cls_classes(name)')
             .eq('org_id', ctx.orgId),
-        )
-        return members
-      },
+        ),
     },
     {
       key: 'course-materials',
