@@ -6,6 +6,7 @@ import PgBoss from 'pg-boss'
 import { createClient as createSupabaseClient, type SupabaseClient } from '@supabase/supabase-js'
 import { RENDER_KIND, runSynagogueRender } from './jobs/synagogue-render'
 import { runRetentionSweep } from './jobs/classroom-retention'
+import { runOrchestratorTick } from './jobs/speed-dating-orchestrator'
 
 // import.meta.dirname is undefined under tsx — derive it from the module URL.
 const here = dirname(fileURLToPath(import.meta.url))
@@ -132,6 +133,21 @@ async function main() {
 
   const admin = makeAdminClient()
   if (admin) {
+    // Speed-dating round clock (module 6): advance running events every 10s.
+    let ticking = false
+    setInterval(async () => {
+      if (ticking) return
+      ticking = true
+      try {
+        await runOrchestratorTick(admin)
+      } catch (err) {
+        console.error('[orchestrator]', err)
+      } finally {
+        ticking = false
+      }
+    }, 10_000)
+    console.log('Speed-dating orchestrator active (every 10s).')
+
     let polling = false
     setInterval(async () => {
       if (polling) return

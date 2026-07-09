@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { DERIVED_SCOPE_PLACEHOLDER } from '@platform/core'
+import { buildNextRound } from '@modules/speed-dating'
 import { createClient } from '@/lib/supabase/server'
 
 // Speed-dating actions. RLS + the sd_ guard triggers are the enforcement
@@ -77,24 +78,53 @@ export async function withdrawFromEvent(orgSlug: string, participantId: string, 
   revalidatePath(`/o/${orgSlug}/m/speed-dating/events/${eventId}`)
 }
 
-// ORCHESTRATOR STAND-IN: create the next round and pair every unpaired
-// registered participant sequentially (one meeting each). The real rotation
-// engine (worker) honors pool sides, blocks, and repeat settings; the guard
-// triggers still enforce the hard invariants here (single active round,
-// no double-booking within a round).
+// Manual "run next round" (organizer override / demo path). Uses the REAL
+// rotation engine (@modules/speed-dating): pool sides, event history, and the
+// allow-repeats setting are honored. CAVEAT: sd_blocks rows are only visible
+// to the blocker and the manage tier under RLS — a mere organizer's manual
+// round may not see them; the WORKER orchestrator (service role) is the
+// authoritative path and always honors blocks. Guard triggers enforce the
+// hard invariants regardless (single active round, no double-booking).
 export async function runPairingRound(orgSlug: string, eventId: string) {
   const supabase = await createClient()
 
-  const [{ data: rounds }, { data: participants }] = await Promise.all([
-    supabase.from('sd_rounds').select('id, round_number, state').eq('event_id', eventId),
-    supabase
-      .from('sd_participants')
-      .select('id')
-      .eq('event_id', eventId)
-      .eq('status', 'registered')
-      .eq('seat_type', 'participant')
-      .order('created_at'),
-  ])
+  const [{ data: event }, { data: rounds }, { data: participants }, { data: pairings }] =
+    await Promise.all([
+      supabase.from('sd_events').select('org_id, allow_repeat_pairings').eq('id', eventId).single(),
+      supabase.from('sd_rounds').select('id, round_number, state').eq('event_id', eventId),
+      supabase
+        .from('sd_participants')
+        .select('id, user_id, pool_side')
+        .eq('event_id', eventId)
+        .eq('status', 'registered')
+        .eq('seat_type', 'participant')
+        .order('created_at'),
+      supabase
+        .from('sd_pairings')
+        .select('participant_a_id, participant_b_id')
+        .eq('event_id', eventId),
+    ])
+  if (!event) throw new Error('Event not found')
+
+  const seatUsers = (participants ?? []).map((p) => p.user_id)
+  const { data: blocks } = seatUsers.length
+    ? await supabase
+        .from('sd_blocks')
+        .select('blocker_user_id, blocked_user_id')
+        .eq('org_id', event.org_id)
+        .in('blocker_user_id', seatUsers)
+    : { data: [] }
+
+  const plan = buildNextRound({
+    seats: (participants ?? []).map((p) => ({ id: p.id, userId: p.user_id, poolSide: p.pool_side })),
+    history: (pairings ?? [])
+      .filter((p) => p.participant_b_id !== null)
+      .map((p) => ({ a: p.participant_a_id, b: p.participant_b_id! })),
+    blockedUserPairs: (blocks ?? []).map((b) => ({ a: b.blocker_user_id, b: b.blocked_user_id })),
+    allowRepeats: event.allow_repeat_pairings,
+    roundNumber: (rounds ?? []).length,
+  })
+  if (!plan) throw new Error('Rotation complete — everyone has met. Complete the event.')
 
   // Close any active round first (active -> complete is a legal transition).
   for (const r of rounds ?? []) {
@@ -118,28 +148,14 @@ export async function runPairingRound(orgSlug: string, eventId: string) {
     .single()
   fail(roundErr, 'Create round failed')
 
-  const seats = (participants ?? []).map((p) => p.id)
-  const rows = []
-  for (let i = 0; i + 1 < seats.length; i += 2) {
-    rows.push({
+  for (const p of plan.pairs) {
+    const { error } = await supabase.from('sd_pairings').insert({
       org_id: DERIVED_SCOPE_PLACEHOLDER, // derived by trigger
       event_id: eventId,
       round_id: round!.id,
-      participant_a_id: seats[i]!,
-      participant_b_id: seats[i + 1]!,
+      participant_a_id: p.a,
+      participant_b_id: p.b,
     })
-  }
-  if (seats.length % 2 === 1) {
-    rows.push({
-      org_id: DERIVED_SCOPE_PLACEHOLDER,
-      event_id: eventId,
-      round_id: round!.id,
-      participant_a_id: seats[seats.length - 1]!,
-      participant_b_id: null, // bye
-    })
-  }
-  for (const row of rows) {
-    const { error } = await supabase.from('sd_pairings').insert(row)
     fail(error, 'Create pairing failed')
   }
 

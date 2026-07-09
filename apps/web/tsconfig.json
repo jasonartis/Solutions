@@ -31,6 +31,7 @@
       "@modules/matchmaking": ["../../modules/matchmaking/src/index.ts"],
       "@modules/matchmaking/*": ["../../modules/matchmaking/*"],
       "@modules/nail-salon/*": ["../../modules/nail-salon/*"],
+      "@modules/speed-dating": ["../../modules/speed-dating/src/index.ts"],
       "@modules/speed-dating/*": ["../../modules/speed-dating/*"],
       "@modules/sample/*": ["../../modules/sample/*"]
     }
