@@ -79,3 +79,18 @@ semester-end date, which `cls_classes` doesn't carry, plus a decision on
 hide-vs-purge for submission files. When you want this: (1) does a class get
 an `ends_on` date, (2) should swept submissions be hidden (recoverable) or
 purged (files deleted), (3) per-class override or one org-wide default?
+
+## Submission retention decided (founder, 2026-07-09)
+
+Answers to the open question above:
+- **Never deleted** unless explicitly requested — no purge path for submissions.
+- After the class's retention window, submissions are **hidden from students AND
+  GAs** (professor/org-admin retain access).
+- The professor may **manually re-reveal one item at a time**, each reveal with
+  its own expiration.
+- Policy is **per class**.
+
+Implementation implication (next slice): `cls_classes` gains an end/hide date,
+`cls_submissions` gains a per-item `visible_override_until`, and the visibility
+becomes an RLS-time computation — no destructive sweep involved at all, fully
+reversible, which matches "never deleted" exactly.

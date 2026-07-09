@@ -25,8 +25,13 @@
       "@platform/db": ["../../packages/db/src/index.ts"],
       "@platform/db/*": ["../../packages/db/src/*"],
       "@modules/synagogue-schedules": ["../../modules/synagogue-schedules/src/index.ts"],
+      "@modules/synagogue-schedules/*": ["../../modules/synagogue-schedules/*"],
       "@modules/classroom": ["../../modules/classroom/src/index.ts"],
+      "@modules/classroom/*": ["../../modules/classroom/*"],
       "@modules/matchmaking": ["../../modules/matchmaking/src/index.ts"],
+      "@modules/matchmaking/*": ["../../modules/matchmaking/*"],
+      "@modules/nail-salon/*": ["../../modules/nail-salon/*"],
+      "@modules/speed-dating/*": ["../../modules/speed-dating/*"],
       "@modules/sample/*": ["../../modules/sample/*"]
     }
   },
