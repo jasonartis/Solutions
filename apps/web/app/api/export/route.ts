@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { getModule } from '@platform/core'
 import { createClient } from '@/lib/supabase/server'
 import { exportRegistry } from '@/lib/export-registry'
+import { readExportSettings } from '@/lib/export-settings'
 import { toCsv } from '@/lib/csv'
 
 // Data-export endpoint (docs/03 primitive). POST form fields: orgSlug,
@@ -44,11 +45,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'You do not hold that hat' }, { status: 403 })
   }
 
+  // Export controls: staff bypass their own switches; everyone else is bound.
+  const [settings, { data: isStaff }] = await Promise.all([
+    readExportSettings(supabase, org.id, moduleKey),
+    supabase.rpc('module_can_manage', { check_org_id: org.id, check_module_key: moduleKey }),
+  ])
+  if (!isStaff && settings.disabledHats.includes(hat)) {
+    return NextResponse.json({ error: 'Exporting is turned off for this role' }, { status: 403 })
+  }
+
   const zip = new JSZip()
   const included: string[] = []
   for (const set of def.dataSets) {
     if (!setKeys.includes(set.key)) continue
     if (!set.hats.includes(hat)) continue // hat filter is server-side too
+    if (!isStaff && settings.disabledSets.includes(set.key)) continue // controls too
     const rows = await set.fetch(supabase, ctx)
     zip.file(`${set.key}.csv`, toCsv(rows))
     zip.file(`${set.key}.json`, JSON.stringify(rows, null, 2))

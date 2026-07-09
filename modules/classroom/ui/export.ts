@@ -56,6 +56,22 @@ export const classroomExport: ModuleExport = {
         ),
     },
     {
+      // Founder Q (2026-07-09): a student's export MAY include class materials
+      // published to them — it's what they can see — governed by the
+      // professor's export controls (disable this set or the whole hat).
+      // RLS already limits rows to open-window publications for students.
+      key: 'class-materials',
+      label: 'Class materials published to me',
+      hats: ['student', 'ga'],
+      fetch: (db, ctx) =>
+        rows(
+          db
+            .from('cls_materials')
+            .select('title, kind, url, course:cls_courses(name)')
+            .eq('org_id', ctx.orgId),
+        ),
+    },
+    {
       key: 'grading-queue',
       label: 'Submissions & grades (grading view)',
       hats: ['professor', 'ga'],

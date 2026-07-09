@@ -421,7 +421,7 @@ test('data export: student downloads their classroom zip; hats are enforced', as
   await page.goto('/o/demo-a/export')
   await expect(page.getByRole('heading', { name: 'Export your data' })).toBeVisible()
   // Charlie is a plain student: no professor hat offered for classroom.
-  await expect(page.getByText('Professor (full class data)')).not.toBeVisible()
+  await expect(page.getByRole('link', { name: 'Professor (full class data)' })).not.toBeVisible()
   await expect(page.getByText('My homework submissions')).toBeVisible()
 
   const downloadPromise = page.waitForEvent('download')
@@ -449,10 +449,46 @@ test('data export: student downloads their classroom zip; hats are enforced', as
   // Professor sees the hat picker and can deliberately choose the student hat.
   await signIn(page, 'alice@demo.local')
   await page.goto('/o/demo-a/export')
-  await expect(page.getByText('Professor (full class data)')).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Professor (full class data)' })).toBeVisible()
   await page.getByRole('link', { name: 'Student (my own data)' }).click()
+  // Scope to the download form — the staff controls panel repeats set labels.
+  const dlForm = page.locator('section').filter({ hasText: 'Classroom' }).locator('form[action="/api/export"]')
+  await expect(dlForm.getByText('My homework submissions')).toBeVisible()
+  await expect(dlForm.getByText('Full gradebook + rosters')).not.toBeVisible()
+
+  // Export controls: professor shuts off the student hat entirely.
+  const controls = page.locator('section').filter({ hasText: 'Classroom' }).locator('details')
+  await controls.locator('summary').click()
+  await controls.locator('input[name="allowedHats"][value="student"]').uncheck()
+  await controls.getByRole('button', { name: 'Save controls' }).click()
+  // Staff bypass their own switches — alice still sees the student hat link.
+  await expect(page.getByRole('link', { name: 'Student (my own data)' })).toBeVisible()
+
+  // Charlie (plain student) is now fully shut off.
+  await signIn(page, 'charlie@demo.local')
+  await page.goto('/o/demo-a/export')
+  await expect(
+    page.locator('section').filter({ hasText: 'Classroom' }).getByText('turned off for your role'),
+  ).toBeVisible()
+  await expect(
+    page.locator('section').filter({ hasText: 'Classroom' }).getByRole('button', { name: 'Download zip' }),
+  ).not.toBeVisible()
+
+  // Professor re-enables; charlie can export again.
+  await signIn(page, 'alice@demo.local')
+  await page.goto('/o/demo-a/export')
+  const controls2 = page.locator('section').filter({ hasText: 'Classroom' }).locator('details')
+  await controls2.locator('summary').click()
+  await controls2.locator('input[name="allowedHats"][value="student"]').check()
+  await controls2.getByRole('button', { name: 'Save controls' }).click()
+  await expect(page.getByRole('heading', { name: 'Export your data' })).toBeVisible()
+
+  await signIn(page, 'charlie@demo.local')
+  await page.goto('/o/demo-a/export')
   await expect(page.getByText('My homework submissions')).toBeVisible()
-  await expect(page.getByText('Full gradebook + rosters')).not.toBeVisible()
+  // The new materials data set is offered to students by default (professor
+  // can disable it via the same controls).
+  await expect(page.getByText('Class materials published to me')).toBeVisible()
 })
 
 test('public schedule page works with no login', async ({ page }) => {
