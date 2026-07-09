@@ -30,6 +30,9 @@ smallest possible surface, verified by its own e2e test like any real module.
   module folder.
 - `ui/actions.ts` — server actions with `DERIVED_SCOPE_PLACEHOLDER` (#10), no
   service-role key ever (#14).
+- `ui/export.ts` — the export manifest (docs/03 data-export decision): hats +
+  data sets whose fetches run AS the caller under RLS; registered in
+  `apps/web/lib/export-registry.ts`.
 
 ## Maintenance rule
 

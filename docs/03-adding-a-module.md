@@ -186,3 +186,18 @@ Budget a deliberate pass (see docs/00 risks): move client-specific constants int
 ## Deprecating a module
 
 Disable entitlements → export the org's data on request → mark the module deprecated in its manifest (hidden from new orgs) → remove code only after all orgs are off it and a final DB backup exists.
+
+### Data export (founder decision, 2026-07-09)
+
+Every user can export "their data and below" — trust and freedom-to-leave are
+explicit goals. Design: **an export contains exactly what the user can already
+see** — queries run AS the user under RLS (the access hierarchy IS the export
+hierarchy; no parallel permission model to drift). Each module declares an
+**export manifest** (human-named data sets, each tagged with the "hats" that
+include it); the generic engine (`/o/<slug>/export`) shows the user's hats,
+lets them **pick a hat** (an org admin can export everything they can see, or
+deliberately choose a lower hat), then checkbox-select data sets. Output: one
+zip with CSV + JSON per data set (CSV for Sheets-humans, JSON for machines).
+v1 is data-only (uploaded files listed by name, not bundled) and instant
+download; big exports move to `job_requests` + the worker when needed.
+The manifest is part of module anatomy — the sample module carries one.

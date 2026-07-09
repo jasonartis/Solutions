@@ -416,6 +416,45 @@ test('sample module (module 0 template): staff creates, member contributes', asy
   ).toContainText('Reopen')
 })
 
+test('data export: student downloads their classroom zip; hats are enforced', async ({ page }) => {
+  await signIn(page, 'charlie@demo.local')
+  await page.goto('/o/demo-a/export')
+  await expect(page.getByRole('heading', { name: 'Export your data' })).toBeVisible()
+  // Charlie is a plain student: no professor hat offered for classroom.
+  await expect(page.getByText('Professor (full class data)')).not.toBeVisible()
+  await expect(page.getByText('My homework submissions')).toBeVisible()
+
+  const downloadPromise = page.waitForEvent('download')
+  await page
+    .locator('section')
+    .filter({ hasText: 'Classroom' })
+    .getByRole('button', { name: 'Download zip' })
+    .click()
+  const download = await downloadPromise
+  expect(download.suggestedFilename()).toMatch(/^demo-a-classroom-.*\.zip$/)
+
+  // Verify the zip's actual contents.
+  const path = await download.path()
+  const JSZip = (await import('jszip')).default
+  const fs = await import('node:fs')
+  const zip = await JSZip.loadAsync(fs.readFileSync(path!))
+  const names = Object.keys(zip.files)
+  expect(names).toContain('my-submissions.csv')
+  expect(names).toContain('my-submissions.json')
+  expect(names).toContain('README.txt')
+  const submissions = JSON.parse(await zip.files['my-submissions.json']!.async('string'))
+  expect(submissions.length).toBeGreaterThan(0)
+  expect(submissions[0].homework.title).toBe('Homework 1 — Descriptive statistics')
+
+  // Professor sees the hat picker and can deliberately choose the student hat.
+  await signIn(page, 'alice@demo.local')
+  await page.goto('/o/demo-a/export')
+  await expect(page.getByText('Professor (full class data)')).toBeVisible()
+  await page.getByRole('link', { name: 'Student (my own data)' }).click()
+  await expect(page.getByText('My homework submissions')).toBeVisible()
+  await expect(page.getByText('Full gradebook + rosters')).not.toBeVisible()
+})
+
 test('public schedule page works with no login', async ({ page }) => {
   await page.goto('/s/demo-shul')
   await expect(page.getByRole('heading', { name: 'Demo Synagogue' })).toBeVisible()

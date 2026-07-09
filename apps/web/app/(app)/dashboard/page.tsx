@@ -19,7 +19,12 @@ export default async function DashboardPage() {
           <section key={org.id} className="rounded-lg border border-gray-200 bg-white p-5">
             <div className="mb-3 flex items-baseline justify-between">
               <h2 className="text-lg font-medium">{org.name}</h2>
-              <span className="text-xs uppercase tracking-wide text-gray-400">{org.role}</span>
+              <span className="flex items-baseline gap-3">
+                <Link href={`/o/${org.slug}/export`} className="text-xs text-blue-600 hover:underline">
+                  Export data
+                </Link>
+                <span className="text-xs uppercase tracking-wide text-gray-400">{org.role}</span>
+              </span>
             </div>
             {org.modules.length === 0 ? (
               <p className="text-sm text-gray-500">No modules enabled for this organization.</p>
