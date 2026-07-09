@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 import PgBoss from 'pg-boss'
 import { createClient as createSupabaseClient, type SupabaseClient } from '@supabase/supabase-js'
 import { RENDER_KIND, runSynagogueRender } from './jobs/synagogue-render'
+import { runRetentionSweep } from './jobs/classroom-retention'
 
 // import.meta.dirname is undefined under tsx — derive it from the module URL.
 const here = dirname(fileURLToPath(import.meta.url))
@@ -114,6 +115,19 @@ async function main() {
   await boss.work('platform.heartbeat', async () => {
     lastHeartbeat = new Date().toISOString()
     console.log(`[heartbeat] ${lastHeartbeat}`)
+  })
+
+  // Module 2 retention sweep (spec: hide is RLS-enforced; purge is ours).
+  // Daily at 04:00 server time — content deletions are not latency-sensitive.
+  await boss.createQueue('classroom.retention-sweep')
+  await boss.schedule('classroom.retention-sweep', '0 4 * * *')
+  await boss.work('classroom.retention-sweep', async () => {
+    const admin = makeAdminClient()
+    if (!admin) {
+      console.warn('[retention-sweep] skipped — no service-role credentials')
+      return
+    }
+    await runRetentionSweep(admin)
   })
 
   const admin = makeAdminClient()

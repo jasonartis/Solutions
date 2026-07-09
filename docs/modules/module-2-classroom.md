@@ -62,3 +62,20 @@ Files/storage (owner), workflow state machines (owner), visibility windows (owne
 ## Future enhancements
 
 Managed video streaming; general Sheets data importer; in-app exam-taking (explicitly not planned, just not foreclosed).
+
+## Retention sweep built (2026-07-09) + open question
+
+The `classroom.retention-sweep` worker job runs daily (04:00): publications
+with `retention='purge'` whose window has closed are deleted, and the
+underlying file is removed from storage once no other publication references
+the material — the material's library row stays in the course so the professor
+retains the record. 'hide' needs no sweep (RLS already hides expired
+publications from students while the professor keeps access). Verified live:
+expired-purge file deleted, still-referenced file survived.
+
+**OPEN QUESTION (founder = the module 2 client):** the spec's example policy
+— "homework submissions hide 2 weeks after semester end" — needs a
+semester-end date, which `cls_classes` doesn't carry, plus a decision on
+hide-vs-purge for submission files. When you want this: (1) does a class get
+an `ends_on` date, (2) should swept submissions be hidden (recoverable) or
+purged (files deleted), (3) per-class override or one org-wide default?
