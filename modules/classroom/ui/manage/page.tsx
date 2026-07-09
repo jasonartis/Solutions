@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { requireOrgModule } from '@/lib/module-gate'
-import { createExam, createHomework, createSurvey, postAnnouncement, setSurveyResultsVisible } from './actions'
+import { createExam, createHomework, createSurvey, postAnnouncement, setSubmissionsHiddenFrom, setSurveyResultsVisible } from './actions'
 
 const inputCls = 'rounded border border-gray-300 px-2 py-1 text-sm'
 const btnCls = 'rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700'
@@ -18,7 +18,7 @@ export default async function ManagePage(props: { params: Promise<{ orgSlug: str
 
   const [{ data: classes }, { data: members }, { data: homeworks }, { data: profiles }, { data: surveys }] =
     await Promise.all([
-      supabase.from('cls_classes').select('id, course_id, name, term').eq('org_id', org.id),
+      supabase.from('cls_classes').select('id, course_id, name, term, submissions_hidden_from').eq('org_id', org.id),
       supabase
         .from('cls_class_members')
         .select('class_id, user_id, role, preferred_first_name, preferred_last_name'),
@@ -55,6 +55,25 @@ export default async function ManagePage(props: { params: Promise<{ orgSlug: str
                 <h2 className="text-lg font-medium">{klass.name}</h2>
                 <span className="text-xs text-gray-400">{klass.term}</span>
               </div>
+
+              <form
+                action={setSubmissionsHiddenFrom.bind(null, orgSlug, klass.id)}
+                className="mb-5 flex flex-wrap items-center gap-2 text-sm text-gray-500"
+              >
+                <label>
+                  Hide submissions from{' '}
+                  <input
+                    name="hiddenFrom"
+                    type="date"
+                    defaultValue={klass.submissions_hidden_from ?? ''}
+                    className={inputCls}
+                  />
+                </label>
+                <button className={btnCls}>Save retention</button>
+                <span className="text-xs text-gray-400">
+                  (never deleted — hidden from students &amp; GAs; blank = never)
+                </span>
+              </form>
 
               <h3 className="mb-2 text-sm font-medium uppercase tracking-wide text-gray-500">
                 Post announcement

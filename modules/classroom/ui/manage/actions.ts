@@ -94,6 +94,20 @@ export async function createSurvey(orgSlug: string, classId: string, formData: F
   revalidatePath(`/o/${orgSlug}/m/classroom`)
 }
 
+// Per-class retention (founder decision 2026-07-09): from this date,
+// submissions hide from students AND GAs; the professor keeps access and can
+// re-reveal single items with an expiration (grading console). Empty = never.
+export async function setSubmissionsHiddenFrom(orgSlug: string, classId: string, formData: FormData) {
+  const raw = String(formData.get('hiddenFrom') ?? '').trim()
+  const supabase = await createClient()
+  const { error } = await supabase
+    .from('cls_classes')
+    .update({ submissions_hidden_from: raw || null })
+    .eq('id', classId)
+  fail(error, 'Set retention date failed')
+  revalidatePath(`/o/${orgSlug}/m/classroom/manage`)
+}
+
 export async function setSurveyResultsVisible(orgSlug: string, surveyId: string, visible: boolean) {
   const supabase = await createClient()
   const { error } = await supabase

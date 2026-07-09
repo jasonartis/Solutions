@@ -283,3 +283,18 @@ export async function publishFinalGrade(orgSlug: string, homeworkId: string, for
   fail(error, 'Publish final grade failed')
   revalidatePath(`/o/${orgSlug}/m/classroom/manage/grading/${homeworkId}`)
 }
+
+// Per-item reveal (founder decision 2026-07-09): while a class's submissions
+// are hidden by retention, the professor may re-reveal ONE submission with
+// its own expiration. RLS's cls_can_manage write arm + the pin trigger keep
+// this professor-only.
+export async function setRevealUntil(orgSlug: string, homeworkId: string, submissionId: string, formData: FormData) {
+  const raw = String(formData.get('revealUntil') ?? '').trim()
+  const supabase = await createClient()
+  const { error } = await supabase
+    .from('cls_submissions')
+    .update({ visible_override_until: raw ? new Date(raw).toISOString() : null })
+    .eq('id', submissionId)
+  fail(error, 'Set reveal failed')
+  revalidatePath(`/o/${orgSlug}/m/classroom/manage/grading/${homeworkId}`)
+}

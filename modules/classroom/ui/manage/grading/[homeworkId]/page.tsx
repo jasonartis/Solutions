@@ -7,6 +7,7 @@ import {
   moveToGaGrading,
   moveToPeerReview,
   publishFinalGrade,
+  setRevealUntil,
   submitGaGrade,
 } from './actions'
 
@@ -42,7 +43,7 @@ export default async function GradingPage(props: {
     await Promise.all([
       supabase
         .from('cls_submissions')
-        .select('id, student_id, state')
+        .select('id, student_id, state, visible_override_until')
         .eq('homework_id', homeworkId),
       supabase.from('profiles').select('user_id, email, display_name'),
       supabase
@@ -144,7 +145,23 @@ export default async function GradingPage(props: {
             return (
               <tr key={s.id} className="border-b border-gray-100">
                 <td className="py-2 pr-3">{nameOf(s.student_id)}</td>
-                <td className="py-2 pr-3 text-xs uppercase text-gray-400">{s.state}</td>
+                <td className="py-2 pr-3 text-xs text-gray-400">
+                  <span className="uppercase">{s.state}</span>
+                  {isProfessor && (
+                    <form action={setRevealUntil.bind(null, orgSlug, homeworkId, s.id)} className="mt-1 flex items-center gap-1 normal-case">
+                      <label className="text-[10px] text-gray-400">
+                        reveal until{' '}
+                        <input
+                          name="revealUntil"
+                          type="datetime-local"
+                          defaultValue={s.visible_override_until ? s.visible_override_until.slice(0, 16) : ''}
+                          className="rounded border border-gray-200 px-1 py-0.5 text-[10px]"
+                        />
+                      </label>
+                      <button className="text-[10px] text-blue-600 hover:underline">Set</button>
+                    </form>
+                  )}
+                </td>
                 <td className="py-2 pr-3">
                   {s.state === 'ga_grading' || gaGrade ? (
                     <form action={submitGaGrade.bind(null, orgSlug, homeworkId)} className="flex items-center gap-1">

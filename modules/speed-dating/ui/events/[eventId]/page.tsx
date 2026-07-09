@@ -109,6 +109,9 @@ export default async function EventPage(props: {
               </form>
             )}
           </div>
+          <p className="mb-3 text-xs text-gray-400">
+            Matches: {(matches ?? []).filter((m) => m.revealed).length} revealed / {(matches ?? []).length} total
+          </p>
           <h3 className="mb-1 text-xs uppercase tracking-wide text-gray-400">
             Roster ({(participants ?? []).filter((p) => p.status === 'registered').length} registered)
           </h3>

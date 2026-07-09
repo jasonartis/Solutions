@@ -349,12 +349,16 @@ test('speed-dating module: register → round → mutual interest → reveal', a
   await page.getByRole('button', { name: 'Run next round (pair everyone)' }).click()
 
   // Charlie marks interested in Dana; Dana sees NO match yet (one-sided).
+  // After each mutating click, wait for the re-render to confirm the mark
+  // landed (the chosen button turns solid) BEFORE navigating — a goto() right
+  // after a form POST can abort the in-flight server action (see CLAUDE.md).
   await signIn(page, 'charlie@demo.local')
   await page.goto('/o/demo-dating/m/speed-dating')
   await page.getByRole('link', { name: 'Friday Night Mixer' }).click()
   await expect(page.getByText('People you met')).toBeVisible()
   await expect(page.getByText('Dana D')).toBeVisible()
   await page.getByRole('button', { name: 'interested', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'interested', exact: true })).toHaveClass(/bg-blue-600/)
 
   await signIn(page, 'dana@demo.local')
   await page.goto('/o/demo-dating/m/speed-dating')
@@ -362,15 +366,18 @@ test('speed-dating module: register → round → mutual interest → reveal', a
   await expect(page.getByText("It's a match!")).not.toBeVisible()
   // Dana reciprocates.
   await page.getByRole('button', { name: 'interested', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'interested', exact: true })).toHaveClass(/bg-blue-600/)
   // Still unrevealed — mutual interest alone shows nothing until the organizer reveals.
   await expect(page.getByText("It's a match!")).not.toBeVisible()
 
-  // Organizer completes the event and reveals.
+  // Organizer completes the event and reveals (each step confirmed on-page).
   await signIn(page, 'alice@demo.local')
   await page.goto('/o/demo-dating/m/speed-dating')
   await page.getByRole('link', { name: 'Friday Night Mixer' }).click()
+  await expect(page.getByText('Matches: 0 revealed / 1 total')).toBeVisible()
   await page.getByRole('button', { name: 'Complete event' }).click()
   await page.getByRole('button', { name: 'Reveal mutual matches' }).click()
+  await expect(page.getByText('Matches: 1 revealed / 1 total')).toBeVisible()
 
   // Both sides now see the match.
   await signIn(page, 'dana@demo.local')
