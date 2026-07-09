@@ -346,7 +346,10 @@ test('speed-dating module: register → round → mutual interest → reveal', a
   await page.getByRole('link', { name: 'Friday Night Mixer' }).click()
   await expect(page.getByText('Roster (2 registered)')).toBeVisible()
   await page.getByRole('button', { name: 'Start event' }).click()
+  await expect(page.getByText('running', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Run next round (pair everyone)' }).click()
+  // Confirm the round landed before navigating (goto-after-POST race).
+  await expect(page.getByText(/Rounds run: 1/)).toBeVisible()
 
   // Charlie marks interested in Dana; Dana sees NO match yet (one-sided).
   // After each mutating click, wait for the re-render to confirm the mark
@@ -460,10 +463,11 @@ test('data export: student downloads their classroom zip; hats are enforced', as
   const controls = page.locator('section').filter({ hasText: 'Classroom' }).locator('details')
   await controls.locator('summary').click()
   await controls.locator('input[name="allowedHats"][value="student"]').uncheck()
+  // Wait for the server-action POST to complete before navigating —
+  // client-side signals (checkbox/details state) can false-positive.
+  const saved1 = page.waitForResponse((r) => r.request().method() === 'POST' && r.url().includes('/export'))
   await controls.getByRole('button', { name: 'Save controls' }).click()
-  // Wait for the re-render to prove the save landed (goto-after-POST race).
-  await controls.locator('summary').click()
-  await expect(controls.locator('input[name="allowedHats"][value="student"]')).not.toBeChecked()
+  await saved1
   // Staff bypass their own switches — alice still sees the student hat link.
   await expect(page.getByRole('link', { name: 'Student (what I entered)' })).toBeVisible()
 
@@ -483,9 +487,9 @@ test('data export: student downloads their classroom zip; hats are enforced', as
   const controls2 = page.locator('section').filter({ hasText: 'Classroom' }).locator('details')
   await controls2.locator('summary').click()
   await controls2.locator('input[name="allowedHats"][value="student"]').check()
+  const saved2 = page.waitForResponse((r) => r.request().method() === 'POST' && r.url().includes('/export'))
   await controls2.getByRole('button', { name: 'Save controls' }).click()
-  await controls2.locator('summary').click()
-  await expect(controls2.locator('input[name="allowedHats"][value="student"]')).toBeChecked()
+  await saved2
 
   await signIn(page, 'charlie@demo.local')
   await page.goto('/o/demo-a/export')
@@ -494,6 +498,22 @@ test('data export: student downloads their classroom zip; hats are enforced', as
   // for students to SEE is not theirs to export — no materials set offered.
   await expect(page.getByText('Class materials published to me')).not.toBeVisible()
   await expect(page.getByText('My survey answers')).toBeVisible()
+})
+
+test('data export: salon hats follow authorship — customer exports visits, cashier gets no client data', async ({ page }) => {
+  // charlie is a salon CUSTOMER: his hat exports his own record + visits.
+  await signIn(page, 'charlie@demo.local')
+  await page.goto('/o/demo-salon/export')
+  await expect(page.getByText('My appointments & visit history')).toBeVisible()
+
+  // eve is the CASHIER: she sees customers all day, but her export offers
+  // only the bills SHE processed — no customer data sets (founder's
+  // salesperson rule, docs/03).
+  await signIn(page, 'eve@demo.local')
+  await page.goto('/o/demo-salon/export')
+  await expect(page.getByText('Bills I created')).toBeVisible()
+  await expect(page.getByText('My customer record')).not.toBeVisible()
+  await expect(page.getByText('Full appointment book')).not.toBeVisible()
 })
 
 test('public schedule page works with no login', async ({ page }) => {

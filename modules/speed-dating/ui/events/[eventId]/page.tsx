@@ -36,13 +36,14 @@ export default async function EventPage(props: {
 
   // RLS scopes each of these to what the caller may see: an organizer gets the
   // full roster/pairings; a participant gets their own seat + scheduled partners.
-  const [{ data: participants }, { data: pairings }, { data: interests }, { data: matches }, { data: profiles }] =
+  const [{ data: participants }, { data: pairings }, { data: interests }, { data: matches }, { data: profiles }, { data: rounds }] =
     await Promise.all([
       supabase.from('sd_participants').select('id, user_id, status, seat_type, checked_in').eq('event_id', eventId),
       supabase.from('sd_pairings').select('id, round_id, participant_a_id, participant_b_id').eq('event_id', eventId),
       supabase.from('sd_interest').select('rater_participant_id, target_participant_id, verdict').eq('event_id', eventId),
       supabase.from('sd_matches').select('participant_a_id, participant_b_id, revealed').eq('event_id', eventId),
       supabase.from('profiles').select('user_id, display_name, email'),
+      supabase.from('sd_rounds').select('id, state').eq('event_id', eventId),
     ])
 
   const mySeat = (participants ?? []).find((p) => p.user_id === me?.id)
@@ -110,7 +111,7 @@ export default async function EventPage(props: {
             )}
           </div>
           <p className="mb-3 text-xs text-gray-400">
-            Matches: {(matches ?? []).filter((m) => m.revealed).length} revealed / {(matches ?? []).length} total
+            Rounds run: {(rounds ?? []).length} · Matches: {(matches ?? []).filter((m) => m.revealed).length} revealed / {(matches ?? []).length} total
           </p>
           <h3 className="mb-1 text-xs uppercase tracking-wide text-gray-400">
             Roster ({(participants ?? []).filter((p) => p.status === 'registered').length} registered)
