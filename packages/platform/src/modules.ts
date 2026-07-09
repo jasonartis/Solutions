@@ -81,6 +81,15 @@ export const sampleModule: ModuleManifest = {
   nav: [{ label: 'Sample', path: '' }],
 }
 
+export const visualMessagingModule: ModuleManifest = {
+  key: 'visual-messaging',
+  name: 'Visual Messaging',
+  description:
+    'Visual conversations: a thread starts with a picture; every reply is a drawn layer on the layer it answers. Tree navigation, moderation with tombstones, org or ad-hoc groups.',
+  roles: ['admin', 'moderator', 'member'],
+  nav: [{ label: 'Conversations', path: '' }],
+}
+
 const allModules: readonly ModuleManifest[] = [
   stubModule,
   synagogueSchedulesModule,
@@ -89,6 +98,7 @@ const allModules: readonly ModuleManifest[] = [
   nailSalonModule,
   speedDatingModule,
   sampleModule,
+  visualMessagingModule,
 ]
 
 // Plug-and-play composition (founder decision, docs/03): the MODULES env var

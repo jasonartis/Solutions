@@ -52,3 +52,13 @@ Orgs/membership, files, notifications, audit log, moderation/approval patterns, 
 ## Future enhancements
 
 Paid org workspaces (firms annotating drawings); animated layers (explicitly out of v1); export a flattened composite as an image.
+
+## Schema integrated (2026-07-09)
+
+`vm_` tables live (`supabase/migrations/20260709100000_visual_messaging.sql`, local + prod): `vm_conversations`, `vm_layers` (the materialized-path tree), `vm_conversation_members`, `vm_reactions`, `vm_flags`, `vm_moderation_log` (append-only — no user update/delete GRANTs at all). Manifest registered but **not enabled for any org** — schema only, no UI, dark. Agent-drafted (`modules/visual-messaging/schema-draft.sql`), hand security-reviewed (`schema-fixes.sql`), **16/16 live guard assertions**.
+
+Key design (agent decisions A1–A10, reviewer-confirmed): the root image IS a layer (path `1`, one-root partial unique); `child_count` is a direct column so childless/immutable checks never self-reference the table (docs/03 #15); branch freeze is stored at the freeze point and computed for descendants by path prefix; ad-hoc person-to-person groups = auto-created lightweight orgs (**pending founder confirmation**); audit rows survive deletion of what they describe (SET NULL, not cascade); org module roles are `admin`/`moderator`/`member` while per-conversation seats are the spec's participant/viewer/moderator/admin.
+
+Security-review pass (T1–T8 built; T9 public deep-link definer fns ship with the UI; T10 decided — flags/reactions stay possible under freeze since flagging frozen content is a safety need): **atomic reply-path assignment** (parent row lock serializes concurrent siblings — client-supplied path/child_count ignored; replies to tombstoned/frozen parents rejected); child-count maintenance on delete; the layer pin (author edits content only while childless — "immutable once replied-on" — structure pinned below org manage, tombstone stamps forced server-side); **audited moderation RPCs** `vm_tombstone_layer` (original content preserved into the mod log, then blanked) / `vm_restore_layer` (restores from the log) / `vm_set_branch_frozen`; `vm_join_conversation` (settings-gated, refuses banned); member pins (no self-promotion/self-unban, **last-admin-standing guard**); flag-triage pins with server-side review stamps; the `vm-images` bucket with conversation-membership storage policies (not plain org membership — the module-2 finding class).
+
+**Remaining for module 4:** the entire gesture-driven canvas frontend (Konva + perfect-freehand — the effort center), conversation list/membership UI, moderation queue UI, thumbnail rasterization worker job, deep-link definer functions, org-per-group auto-creation flow.
