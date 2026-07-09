@@ -94,3 +94,6 @@ Implementation implication (next slice): `cls_classes` gains an end/hide date,
 `cls_submissions` gains a per-item `visible_override_until`, and the visibility
 becomes an RLS-time computation — no destructive sweep involved at all, fully
 reversible, which matches "never deleted" exactly.
+
+**Grades-export decision (founder, 2026-07-09):** the authorship rule stands with
+no exception — students cannot export grades about them (professor/GA-entered).
