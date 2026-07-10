@@ -7,10 +7,12 @@ import LayerGrid from '../../layer-grid'
 import {
   addMember,
   flagLayer,
+  joinConversation,
   replyWithDrawing,
   restoreLayer,
   reviewFlag,
   setBranchFrozen,
+  setJoinPolicy,
   toggleReaction,
   tombstoneLayer,
 } from '../../actions'
@@ -42,23 +44,63 @@ export default async function ConversationPage(props: {
 
   const { data: conversation } = await supabase
     .from('vm_conversations')
-    .select('id, title, frozen')
+    .select('id, title, frozen, settings')
     .eq('id', conversationId)
     .maybeSingle()
-  if (!conversation) notFound()
 
-  const [{ data: layers }, { data: reactions }, { data: profiles }, { data: canModerate }, { data: me }] =
-    await Promise.all([
-      supabase
-        .from('vm_layers')
-        .select('id, parent_layer_id, path, author_id, content, tombstoned, frozen, created_at, child_count')
-        .eq('conversation_id', conversationId)
-        .order('path'),
-      supabase.from('vm_reactions').select('layer_id, kind').eq('conversation_id', conversationId),
-      supabase.from('profiles').select('user_id, display_name, email'),
-      supabase.rpc('vm_can_moderate', { check_conversation_id: conversationId }),
-      supabase.auth.getUser().then(({ data }) => ({ data: data.user })),
-    ])
+  // A null row here means the caller is past requireOrgModule (so they're an
+  // org-module member) but is NOT a member of THIS conversation — RLS hid it.
+  // Offer a deep-link join: vm_join_conversation grants a viewer seat only if
+  // the conversation's joinPolicy is 'open' (invite-only / banned / unknown
+  // all refuse server-side). We can't reveal the title — no read access yet.
+  if (!conversation) {
+    return (
+      <div className="mx-auto max-w-md py-12 text-center">
+        <p className="mb-1 text-sm text-gray-400">{org.name}</p>
+        <h1 className="mb-3 text-xl font-semibold">Join this conversation?</h1>
+        <p className="mb-6 text-sm text-gray-500">
+          You reached a shared link to a conversation you haven&apos;t joined. If its owner has
+          opened it up, you can join as a read-only viewer.
+        </p>
+        <form action={joinConversation.bind(null, orgSlug, conversationId)}>
+          <button className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
+            Join conversation
+          </button>
+        </form>
+        <Link
+          href={`/o/${orgSlug}/m/visual-messaging`}
+          className="mt-4 inline-block text-sm text-blue-600 hover:underline"
+        >
+          ← Back to conversations
+        </Link>
+      </div>
+    )
+  }
+  const joinOpen = (conversation.settings as { joinPolicy?: string } | null)?.joinPolicy === 'open'
+
+  const [
+    { data: layers },
+    { data: reactions },
+    { data: profiles },
+    { data: canModerate },
+    { data: canAdmin },
+    { data: me },
+  ] = await Promise.all([
+    supabase
+      .from('vm_layers')
+      .select('id, parent_layer_id, path, author_id, content, tombstoned, frozen, created_at, child_count')
+      .eq('conversation_id', conversationId)
+      .order('path'),
+    supabase.from('vm_reactions').select('layer_id, kind').eq('conversation_id', conversationId),
+    supabase.from('profiles').select('user_id, display_name, email'),
+    // vm_can_moderate: tombstone/restore/flag-triage. vm_is_conv_admin:
+    // add-member, freeze branch, join policy — those RLS paths require the
+    // admin tier, so the UI must gate on it too or a plain moderator would
+    // see buttons that error.
+    supabase.rpc('vm_can_moderate', { check_conversation_id: conversationId }),
+    supabase.rpc('vm_is_conv_admin', { check_conversation_id: conversationId }),
+    supabase.auth.getUser().then(({ data }) => ({ data: data.user })),
+  ])
   const rows = (layers ?? []) as LayerRow[]
   const root = rows.find((l) => l.parent_layer_id === null)
   if (!root) notFound()
@@ -275,11 +317,14 @@ export default async function ConversationPage(props: {
                 </button>
               </form>
             )}
-            <form action={setBranchFrozen.bind(null, orgSlug, conversationId, current.id, !current.frozen)}>
-              <button className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50">
-                {current.frozen ? 'Unfreeze this branch' : 'Freeze this branch'}
-              </button>
-            </form>
+            {/* Freeze requires the conversation-admin tier (vm_set_branch_frozen). */}
+            {canAdmin && (
+              <form action={setBranchFrozen.bind(null, orgSlug, conversationId, current.id, !current.frozen)}>
+                <button className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50">
+                  {current.frozen ? 'Unfreeze this branch' : 'Freeze this branch'}
+                </button>
+              </form>
+            )}
           </div>
 
           <h3 className="mb-1 text-xs font-medium uppercase tracking-wide text-gray-400">
@@ -327,21 +372,42 @@ export default async function ConversationPage(props: {
             {(flags ?? []).length === 0 && <li className="text-gray-400">No flags in this conversation.</li>}
           </ul>
 
-          <h2 className="mb-2 text-sm font-medium uppercase tracking-wide text-gray-500">
-            Members (admin)
-          </h2>
-          <form action={addMember.bind(null, orgSlug, conversationId)} className="flex items-center gap-2">
-            <input
-              name="email"
-              type="email"
-              required
-              placeholder="member@email"
-              className="rounded border border-gray-300 px-2 py-1 text-sm"
-            />
-            <button className="rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700">
-              Add member
-            </button>
-          </form>
+          {/* Membership + join policy require the conversation-admin tier
+              (vm_members_insert / vm_conversations_update_admin) — a plain
+              moderator sees the moderation controls above but not these. */}
+          {canAdmin && (
+            <>
+              <h2 className="mb-2 text-sm font-medium uppercase tracking-wide text-gray-500">
+                Members (admin)
+              </h2>
+
+              {/* Deep-link join policy: whether an org member with the link can
+                  join as a viewer without an explicit invite (spec setting). */}
+              <div className="mb-3 flex items-center gap-2 text-sm">
+                <span className="text-gray-500">
+                  Link joining: <span className="font-medium">{joinOpen ? 'open' : 'invite-only'}</span>
+                </span>
+                <form action={setJoinPolicy.bind(null, orgSlug, conversationId, !joinOpen)}>
+                  <button className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50">
+                    {joinOpen ? 'Make invite-only' : 'Open to anyone with the link'}
+                  </button>
+                </form>
+              </div>
+
+              <form action={addMember.bind(null, orgSlug, conversationId)} className="flex items-center gap-2">
+                <input
+                  name="email"
+                  type="email"
+                  required
+                  placeholder="member@email"
+                  className="rounded border border-gray-300 px-2 py-1 text-sm"
+                />
+                <button className="rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700">
+                  Add member
+                </button>
+              </form>
+            </>
+          )}
         </section>
       )}
     </div>

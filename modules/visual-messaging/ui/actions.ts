@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 
 // Visual-messaging actions. RLS + the vm_ guard triggers are the enforcement
@@ -61,6 +62,41 @@ export async function createConversation(orgSlug: string, formData: FormData) {
   fail(rootErr, 'Create root layer failed')
 
   revalidatePath(`/o/${orgSlug}/m/visual-messaging`)
+}
+
+// Deep-link join (spec: a read-only viewer is what a deep-link visitor gets
+// "before joining"). A logged-in org-module member who is NOT yet a
+// conversation member lands on the conversation URL; if the conversation's
+// joinPolicy is 'open' they can take a viewer seat. vm_join_conversation
+// re-checks EVERYTHING server-side (open policy, org-module membership, ban)
+// — the app never trusts a client claim. Invite-only conversations refuse,
+// which is exactly the per-conversation "deep links work for non-members?"
+// setting the spec calls for.
+export async function joinConversation(orgSlug: string, conversationId: string) {
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('vm_join_conversation', { check_conversation_id: conversationId })
+  fail(error, 'Join failed')
+  redirect(`/o/${orgSlug}/m/visual-messaging/conversations/${conversationId}`)
+}
+
+// A conversation admin opens or closes deep-link joining. Writes
+// settings.joinPolicy; the vm_conversations_update_admin policy gates who,
+// and vm_pin_conversation leaves settings free to change (it only pins
+// org_id/created_by). Reads the current settings first so other keys survive.
+export async function setJoinPolicy(orgSlug: string, conversationId: string, open: boolean) {
+  const supabase = await createClient()
+  const { data: conv } = await supabase
+    .from('vm_conversations')
+    .select('settings')
+    .eq('id', conversationId)
+    .single()
+  const settings = {
+    ...((conv?.settings as Record<string, unknown>) ?? {}),
+    joinPolicy: open ? 'open' : 'invite',
+  }
+  const { error } = await supabase.from('vm_conversations').update({ settings }).eq('id', conversationId)
+  fail(error, 'Update join policy failed')
+  revalidatePath(`/o/${orgSlug}/m/visual-messaging/conversations/${conversationId}`)
 }
 
 export async function addMember(orgSlug: string, conversationId: string, formData: FormData) {

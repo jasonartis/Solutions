@@ -105,8 +105,42 @@ mode split (view is default; "Draw a reply" enters draw mode):
   2026-07-09 security review — no new migration, this was UI + three server
   actions.
 
-Both walkthroughs updated same commit (docs/03 update rule). **Still not
-built:** image stamps/text/emoji tools, deep links for non-members, and
-org-per-group auto-creation for ad-hoc person-to-person groups — the last one
-is still awaiting the founder's confirmation (raised 2026-07-09 in the
-design-decisions note above: ad-hoc groups = auto-created lightweight orgs).
+Both walkthroughs updated same commit (docs/03 update rule).
+
+## Deep-link join + admin-tier UI gating (2026-07-10)
+
+Deep-link joining for logged-in org members shipped, and it needed **no
+migration** — everything was already in the schema. A conversation admin
+toggles `settings.joinPolicy` between **open** and **invite-only** (via the
+existing `vm_conversations_update_admin` policy; `vm_pin_conversation` leaves
+settings free). An org-module member who isn't a conversation member and hits
+the conversation URL gets a **Join this conversation?** prompt (the title is
+never revealed — no read access pre-join); **Join** calls the existing
+`vm_join_conversation` RPC, which grants a read-only **viewer** seat only when
+the policy is open (invite-only / banned / non-org-member all refuse
+server-side). A viewer can watch + react but not draw (`vm_can_post` excludes
+viewers; the canvas `drawable` prop now checks the caller's actual role, not
+just membership — a fix made the same day).
+
+Also fixed a pre-existing UI/permission mismatch: add-member, freeze-branch,
+and the new join-policy toggle all require the conversation-**admin** tier
+(`vm_is_conv_admin`) at the RLS layer, but the page had gated them on the
+looser `vm_can_moderate` — a plain moderator would have seen buttons that
+error. The page now computes `vm_is_conv_admin` and gates those three on it,
+leaving tombstone/restore/flag-triage on `vm_can_moderate`.
+
+**OPEN — founder decision needed (anonymous public deep links):** the spec's
+"whether deep links work for non-members" is implemented for *logged-in* org
+members. **Truly anonymous, no-login public viewing** (the `syn_public_*`
+definer-function pattern, T10 in the schema notes) is deliberately NOT built:
+it's the only variant that needs a migration, and exposing private
+family/professional conversations to unauthenticated visitors is a one-way
+privacy door. **Question for the founder:** do you want anonymous public
+view-only links at all for this module? If yes, it's a migration slice
+(public definer fns + a public route + a per-conversation "public link"
+setting) to be done under Opus with the full security-review rhythm.
+
+**Still not built:** image stamps / styled text / emoji tools; the
+org-per-group auto-creation for ad-hoc person-to-person groups (awaiting
+founder confirmation, raised 2026-07-09: ad-hoc groups = auto-created
+lightweight orgs); anonymous public links (the decision above).

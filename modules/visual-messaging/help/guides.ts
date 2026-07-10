@@ -19,7 +19,15 @@ walk through.
 1. From the Dashboard, click **Visual Messaging** on your organization's card.
 2. Under **Start a conversation**, type a title, choose a picture, click
    **Create**. You're its admin; add people with **Add member** (bottom of
-   the conversation page).
+   the conversation page), or open it to link-joining (see the moderator
+   guide) and share its link.
+
+## Join by a shared link
+
+If someone sends you a link to a conversation you're not in yet and its owner
+has opened it up, the page offers **Join conversation** — click it to join as
+a read-only viewer (you can watch and react, but not draw until an admin gives
+you a drawing seat). Invite-only conversations can't be joined this way.
 
 ## Read a thread
 
@@ -67,7 +75,14 @@ walk through.
    content, kept in the moderation log even though it's gone from the
    thread).
 4. **Freeze this branch** locks that layer and everything drawn under it
-   (view-only, no new replies); **Unfreeze** reopens it.
+   (view-only, no new replies); **Unfreeze** reopens it. (Freezing and
+   membership below are conversation-admin actions — a moderator who isn't an
+   admin sees the flag tools above but not these.)
+5. **Members (admin):** **Link joining** controls whether someone in your
+   organization who has the conversation's link can join themselves as a
+   read-only viewer. Click **Open to anyone with the link** to allow it (share
+   the page URL), or **Make invite-only** to require an explicit **Add
+   member**. Invite-only is the default.
 `,
     },
   ],

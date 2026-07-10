@@ -686,6 +686,41 @@ test('visual messaging: create from a picture, draw a reply, membership gates ac
   await expect(page.getByText('removed', { exact: true })).toBeVisible()
 })
 
+test('visual messaging: deep-link join of an open conversation (viewer seat)', async ({ page }) => {
+  // Alice creates a conversation. Dana is an org + module member but NOT a
+  // member of this conversation — the deep-link join case.
+  const title = 'Shared album ' + Date.now()
+  await signIn(page, 'alice@demo.local')
+  await page.goto('/o/demo-visual/m/visual-messaging')
+  await page.getByPlaceholder('Title').fill(title)
+  await page.setInputFiles('input[name="image"]', {
+    name: 'photo.svg',
+    mimeType: 'image/svg+xml',
+    buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300"><rect width="400" height="300" fill="#e2e8f0"/></svg>'),
+  })
+  await page.getByRole('button', { name: 'Create' }).click()
+  await page.getByRole('link', { name: title }).click()
+  await expect(page.getByRole('heading', { name: title })).toBeVisible()
+  const conversationUrl = page.url()
+
+  // Default is invite-only; the admin opens the conversation to link-joining.
+  await expect(page.getByText('Link joining: invite-only')).toBeVisible()
+  const opened = page.waitForResponse((r) => r.request().method() === 'POST')
+  await page.getByRole('button', { name: 'Open to anyone with the link' }).click()
+  await opened
+  await expect(page.getByText('Link joining: open')).toBeVisible()
+
+  // Dana follows the deep link, is offered a join, and takes a viewer seat.
+  await signIn(page, 'dana@demo.local')
+  await page.goto(conversationUrl)
+  await expect(page.getByRole('heading', { name: 'Join this conversation?' })).toBeVisible()
+  await page.getByRole('button', { name: 'Join conversation' }).click()
+  await expect(page.getByRole('heading', { name: title })).toBeVisible() // redirected in as a member
+  await expect(page.getByText('Replies to this layer (0)')).toBeVisible()
+  // A viewer may watch but not draw — no draw affordance.
+  await expect(page.getByRole('button', { name: 'Draw a reply' })).not.toBeVisible()
+})
+
 test('public schedule page works with no login', async ({ page }) => {
   await page.goto('/s/demo-shul')
   await expect(page.getByRole('heading', { name: 'Demo Synagogue' })).toBeVisible()
