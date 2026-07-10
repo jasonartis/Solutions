@@ -618,6 +618,15 @@ test('visual messaging: create from a picture, draw a reply, membership gates ac
   await page.mouse.up()
   await expect(page.getByText('Replies to this layer (0)')).toBeVisible() // in the leaf again
 
+  // Tree view: every layer as a clickable thumbnail, grouped by level.
+  await page.getByRole('link', { name: 'Tree view' }).click()
+  await expect(page.getByTestId('layer-grid')).toBeVisible()
+  await expect(page.getByText('Level 1', { exact: true })).toBeVisible()
+  await expect(page.getByText('Level 2', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'open layer 1.1' }).click()
+  await expect(page.getByText('Replies to this layer (0)')).toBeVisible() // jumped to the leaf
+  await expect(page.getByRole('link', { name: 'Tree view' })).toBeVisible() // back in layer view
+
   // Charlie is NOT a member: the conversation is invisible to him.
   await signIn(page, 'charlie@demo.local')
   await page.goto('/o/demo-visual/m/visual-messaging')

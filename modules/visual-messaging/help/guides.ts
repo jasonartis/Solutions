@@ -30,7 +30,9 @@ walk through.
    dot to jump). The **Layer** breadcrumb (e.g. 1 · 1.2 · 1.2.1) also shows
    where you are — click any part to jump up the chain.
 4. **Replies to this layer** lists what was drawn in answer to it — click one
-   to descend into it.
+   to descend into it. For the bird's-eye view, click **Tree view**: every
+   layer appears as a small thumbnail grouped by level — click any thumbnail
+   to jump straight to it, then **Back to layer** returns to normal viewing.
 5. **Hold to X-ray** fades the drawings so you can see the original picture
    underneath.
 6. React without drawing: the ❤️ and 😂 buttons under the picture.

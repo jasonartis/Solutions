@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { requireOrgModule } from '@/lib/module-gate'
 import LayerCanvas, { type Stroke } from '../../layer-canvas'
+import LayerGrid from '../../layer-grid'
 import { addMember, replyWithDrawing, toggleReaction } from '../../actions'
 
 type LayerRow = {
@@ -23,10 +24,11 @@ type LayerRow = {
 // the swipe/gesture PWA shell comes later.
 export default async function ConversationPage(props: {
   params: Promise<{ orgSlug: string; conversationId: string }>
-  searchParams: Promise<{ layer?: string }>
+  searchParams: Promise<{ layer?: string; view?: string }>
 }) {
   const { orgSlug, conversationId } = await props.params
-  const { layer: layerParam } = await props.searchParams
+  const { layer: layerParam, view } = await props.searchParams
+  const treeView = view === 'tree'
   const { supabase, org } = await requireOrgModule(orgSlug, 'visual-messaging')
 
   const { data: conversation } = await supabase
@@ -105,6 +107,12 @@ export default async function ConversationPage(props: {
 
       {/* Breadcrumb: the layer address, each segment linking up the chain. */}
       <p className="mb-4 text-sm text-gray-500">
+        <Link
+          href={treeView ? `?layer=${current.id}` : `?layer=${current.id}&view=tree`}
+          className="mr-3 rounded border border-gray-300 px-2 py-0.5 text-xs text-gray-600 hover:bg-gray-50"
+        >
+          {treeView ? 'Back to layer' : 'Tree view'}
+        </Link>
         Layer{' '}
         {chain.map((l, i) => (
           <span key={l.id}>
@@ -121,7 +129,22 @@ export default async function ConversationPage(props: {
         </span>
       </p>
 
-      {signed?.signedUrl ? (
+      {!signed?.signedUrl ? (
+        <p className="text-sm text-gray-500">The root image is unavailable.</p>
+      ) : treeView ? (
+        <LayerGrid
+          imageUrl={signed.signedUrl}
+          currentId={current.id}
+          layers={rows.map((l) => ({
+            id: l.id,
+            path: l.path,
+            parentId: l.parent_layer_id,
+            strokes: l.tombstoned ? [] : (l.content.strokes ?? []),
+            tombstoned: l.tombstoned,
+            author: nameOf(l.author_id),
+          }))}
+        />
+      ) : (
         <LayerCanvas
           imageUrl={signed.signedUrl}
           baseLayers={chain.slice(0, -1).map((l) => l.content.strokes ?? [])}
@@ -130,8 +153,6 @@ export default async function ConversationPage(props: {
           nav={nav}
           onSend={sendReply}
         />
-      ) : (
-        <p className="text-sm text-gray-500">The root image is unavailable.</p>
       )}
 
       <div className="mt-3 flex items-center gap-3 text-sm">
