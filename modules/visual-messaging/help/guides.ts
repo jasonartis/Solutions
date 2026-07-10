@@ -24,8 +24,11 @@ walk through.
 ## Read a thread
 
 3. Open a conversation. You see the current layer drawn on top of everything
-   under it. The **Layer** breadcrumb (e.g. 1 · 1.2 · 1.2.1) shows where you
-   are — click any part to jump up the chain.
+   under it. **Swipe on the picture to move around**: swipe **left** to dive
+   into its first reply, **right** to go back up, **up/down** to flip between
+   sibling replies (the dots under the picture show where you are — click a
+   dot to jump). The **Layer** breadcrumb (e.g. 1 · 1.2 · 1.2.1) also shows
+   where you are — click any part to jump up the chain.
 4. **Replies to this layer** lists what was drawn in answer to it — click one
    to descend into it.
 5. **Hold to X-ray** fades the drawings so you can see the original picture
@@ -34,7 +37,9 @@ walk through.
 
 ## Reply by drawing
 
-7. Pick a pen color and size, then draw directly on the picture.
+7. Click **Draw a reply** to switch the picture into drawing mode, pick a
+   pen color and size, then draw directly on the picture. (**Cancel** returns
+   to viewing without saving anything.)
 8. **Clear draft** starts over — nothing is saved until you send.
 9. Click **Send reply**. Your drawing becomes a new layer under the one you
    were viewing. Once someone replies on top of yours, it can't be edited —

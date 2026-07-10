@@ -583,7 +583,8 @@ test('visual messaging: create from a picture, draw a reply, membership gates ac
   await expect(page.getByRole('heading', { name: title })).toBeVisible()
   await expect(page.getByText('No replies yet — draw one above.')).toBeVisible()
 
-  // Draw a stroke on the canvas and send it as a reply layer.
+  // Enter draw mode, ink a stroke, send it as a reply layer.
+  await page.getByRole('button', { name: 'Draw a reply' }).click()
   const stage = page.locator('canvas').first()
   await expect(stage).toBeVisible()
   const box = (await stage.boundingBox())!
@@ -595,9 +596,27 @@ test('visual messaging: create from a picture, draw a reply, membership gates ac
   await page.getByRole('button', { name: 'Send reply' }).click()
   await expect(page.getByText('Replies to this layer (1)')).toBeVisible()
 
-  // Descend into the reply — the breadcrumb shows the address.
+  // Descend into the reply. Wait for a LEAF-unique signal before swiping —
+  // 'by Alice A' matches the root too, and swiping against the old page's
+  // nav props makes 'up' a no-op (the root has no parent).
   await page.getByRole('link', { name: 'Layer 1.1' }).click()
+  await expect(page.getByText('Replies to this layer (0)')).toBeVisible()
   await expect(page.getByText(/by Alice A ·/).first()).toBeVisible()
+
+  // Swipe navigation (view mode): swipe RIGHT on the canvas → back up to the
+  // root; swipe LEFT → descend into the first reply again.
+  const b2 = (await page.locator('canvas').first().boundingBox())!
+  await page.mouse.move(b2.x + 80, b2.y + 120)
+  await page.mouse.down()
+  await page.mouse.move(b2.x + 260, b2.y + 124, { steps: 6 })
+  await page.mouse.up()
+  await expect(page.getByText('Replies to this layer (1)')).toBeVisible() // back at the root
+  const b3 = (await page.locator('canvas').first().boundingBox())!
+  await page.mouse.move(b3.x + 260, b3.y + 120)
+  await page.mouse.down()
+  await page.mouse.move(b3.x + 80, b3.y + 124, { steps: 6 })
+  await page.mouse.up()
+  await expect(page.getByText('Replies to this layer (0)')).toBeVisible() // in the leaf again
 
   // Charlie is NOT a member: the conversation is invisible to him.
   await signIn(page, 'charlie@demo.local')

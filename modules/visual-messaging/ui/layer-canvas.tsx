@@ -1,18 +1,35 @@
 'use client'
 
-// The drawing surface (docs/02: Konva + perfect-freehand). Renders the root
-// image with every ancestor layer's strokes composited on top ("viewing layer
-// L renders L on its ancestors only"), and optionally captures a new drawing.
-// Stroke points are stored in IMAGE pixel space, so layers stay registered at
-// any display scale (the plans/zoom use case).
+// The drawing/navigation surface (docs/02: Konva + perfect-freehand). Renders
+// the root image with every ancestor layer's strokes composited on top, and
+// runs in one of two modes (spec: gesture-driven, mobile-first):
+//   VIEW — the default. Swipes navigate the layer tree: left = descend into
+//          the first reply, right = peel back up to the parent, up/down =
+//          cycle siblings. Sibling dots show where you are.
+//   DRAW — entered via "Draw a reply". The pointer inks; Send creates the
+//          reply layer; Cancel returns to view mode. Drafts never leave the
+//          browser until Send.
+// Stroke points are stored in IMAGE pixel space, so layers stay registered
+// at any display scale (the plans/zoom use case).
 
 import { useMemo, useRef, useState, useTransition } from 'react'
+import { useRouter, usePathname } from 'next/navigation'
 import { Stage, Layer, Line, Image as KonvaImage } from 'react-konva'
 import { getStroke } from 'perfect-freehand'
 
 export type Stroke = { points: number[][]; color: string; size: number }
 
+export type LayerNav = {
+  parentId: string | null
+  firstChildId: string | null
+  prevSiblingId: string | null
+  nextSiblingId: string | null
+  /** this layer + its siblings, in path order (for the dots) */
+  siblings: { id: string; current: boolean }[]
+}
+
 const COLORS = ['#e11d48', '#2563eb', '#16a34a', '#f59e0b', '#111111', '#ffffff']
+const SWIPE_MIN = 60 // px of drag before a gesture counts as a swipe
 
 function strokeToPolygon(stroke: Stroke): number[] {
   const outline = getStroke(stroke.points, { size: stroke.size, thinning: 0.6, smoothing: 0.5 })
@@ -21,14 +38,16 @@ function strokeToPolygon(stroke: Stroke): number[] {
 
 export default function LayerCanvas(props: {
   imageUrl: string
-  /** ancestor strokes, root-first; faded when xray is on */
   baseLayers: Stroke[][]
-  /** the layer being viewed (rendered full-strength) */
   currentStrokes: Stroke[]
   drawable: boolean
+  nav: LayerNav
   onSend?: (strokesJson: string) => Promise<void>
 }) {
+  const router = useRouter()
+  const pathname = usePathname()
   const [img, setImg] = useState<HTMLImageElement | null>(null)
+  const [mode, setMode] = useState<'view' | 'draw'>('view')
   const [drawing, setDrawing] = useState(false)
   const [draft, setDraft] = useState<Stroke[]>([])
   const [color, setColor] = useState(COLORS[0]!)
@@ -36,8 +55,8 @@ export default function LayerCanvas(props: {
   const [xray, setXray] = useState(false)
   const [pending, startTransition] = useTransition()
   const activeStroke = useRef<number[][] | null>(null)
+  const swipeStart = useRef<{ x: number; y: number } | null>(null)
 
-  // Load the image once (no extra dependency; Konva takes a DOM image).
   useMemo(() => {
     if (typeof window === 'undefined') return
     const el = new window.Image()
@@ -51,6 +70,10 @@ export default function LayerCanvas(props: {
   const scale = displayW / natural.w
   const displayH = natural.h * scale
 
+  const goTo = (layerId: string | null) => {
+    if (layerId) router.push(`${pathname}?layer=${layerId}`)
+  }
+
   const toImageSpace = (stage: any): number[] | null => {
     const pos = stage?.getPointerPosition()
     if (!pos) return null
@@ -58,27 +81,50 @@ export default function LayerCanvas(props: {
   }
 
   const handleDown = (e: any) => {
-    if (!props.drawable) return
-    const pt = toImageSpace(e.target.getStage())
-    if (!pt) return
-    activeStroke.current = [pt]
-    setDrawing(true)
+    const stage = e.target.getStage()
+    if (mode === 'draw' && props.drawable) {
+      const pt = toImageSpace(stage)
+      if (!pt) return
+      activeStroke.current = [pt]
+      setDrawing(true)
+    } else {
+      const pos = stage?.getPointerPosition()
+      if (pos) swipeStart.current = { x: pos.x, y: pos.y }
+    }
   }
   const handleMove = (e: any) => {
-    if (!drawing || !activeStroke.current) return
+    if (mode !== 'draw' || !drawing || !activeStroke.current) return
     const pt = toImageSpace(e.target.getStage())
     if (!pt) return
     activeStroke.current.push(pt)
-    // re-render with the live stroke
     setDraft((d) => [...d.filter((s) => s !== LIVE), { ...LIVE, points: [...activeStroke.current!], color, size }])
   }
   const LIVE = useMemo(() => ({ points: [] as number[][], color: '', size: 0 }), [])
-  const handleUp = () => {
-    if (!drawing || !activeStroke.current) return
-    const pts = activeStroke.current
-    activeStroke.current = null
-    setDrawing(false)
-    setDraft((d) => [...d.filter((s) => s !== LIVE && s.points.length > 0), { points: pts, color, size }])
+  const handleUp = (e: any) => {
+    if (mode === 'draw') {
+      if (!drawing || !activeStroke.current) return
+      const pts = activeStroke.current
+      activeStroke.current = null
+      setDrawing(false)
+      setDraft((d) => [...d.filter((s) => s !== LIVE && s.points.length > 0), { points: pts, color, size }])
+      return
+    }
+    // VIEW mode: resolve the swipe (spec: left = descend, right = back up,
+    // up/down = cycle siblings).
+    const start = swipeStart.current
+    swipeStart.current = null
+    const pos = e.target.getStage()?.getPointerPosition()
+    if (!start || !pos) return
+    const dx = pos.x - start.x
+    const dy = pos.y - start.y
+    if (Math.abs(dx) < SWIPE_MIN && Math.abs(dy) < SWIPE_MIN) return // a tap, not a swipe
+    if (Math.abs(dx) >= Math.abs(dy)) {
+      if (dx < 0) goTo(props.nav.firstChildId)
+      else goTo(props.nav.parentId)
+    } else {
+      if (dy < 0) goTo(props.nav.nextSiblingId)
+      else goTo(props.nav.prevSiblingId)
+    }
   }
 
   const send = () => {
@@ -87,6 +133,7 @@ export default function LayerCanvas(props: {
     startTransition(async () => {
       await props.onSend!(payload)
       setDraft([])
+      setMode('view')
     })
   }
 
@@ -94,7 +141,8 @@ export default function LayerCanvas(props: {
     <div>
       <div
         className="inline-block overflow-hidden rounded border border-gray-300 bg-white"
-        style={{ touchAction: props.drawable ? 'none' : 'auto' }}
+        style={{ touchAction: 'none' }}
+        data-canvas-mode={mode}
       >
         <Stage
           width={displayW}
@@ -130,6 +178,26 @@ export default function LayerCanvas(props: {
         </Stage>
       </div>
 
+      {/* Sibling dots: this layer among its siblings (carousel position). */}
+      {props.nav.siblings.length > 1 && (
+        <div className="mt-1 flex items-center gap-1" aria-label="sibling layers">
+          {props.nav.siblings.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              onClick={() => goTo(s.id)}
+              className={
+                s.current
+                  ? 'h-2.5 w-2.5 rounded-full bg-blue-600'
+                  : 'h-2 w-2 rounded-full bg-gray-300 hover:bg-gray-400'
+              }
+              aria-label={s.current ? 'current sibling' : 'go to sibling'}
+            />
+          ))}
+          <span className="ml-1 text-[10px] text-gray-400">swipe ↑/↓ to cycle</span>
+        </div>
+      )}
+
       <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
         <button
           type="button"
@@ -141,7 +209,25 @@ export default function LayerCanvas(props: {
         >
           Hold to X-ray
         </button>
-        {props.drawable && (
+
+        {mode === 'view' && (
+          <>
+            <span className="text-[11px] text-gray-400">
+              swipe ← dive into replies · swipe → back up
+            </span>
+            {props.drawable && (
+              <button
+                type="button"
+                onClick={() => setMode('draw')}
+                className="rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700"
+              >
+                Draw a reply
+              </button>
+            )}
+          </>
+        )}
+
+        {mode === 'draw' && props.drawable && (
           <>
             {COLORS.map((c) => (
               <button
@@ -168,6 +254,16 @@ export default function LayerCanvas(props: {
               className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-600"
             >
               Clear draft
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setDraft([])
+                setMode('view')
+              }}
+              className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-600"
+            >
+              Cancel
             </button>
             <button
               type="button"

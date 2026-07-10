@@ -77,6 +77,20 @@ export default async function ConversationPage(props: {
   const fmt = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
   const locked = conversation.frozen || chain.some((l) => l.frozen)
 
+  // Swipe-navigation targets (spec: left = descend, right = up, up/down =
+  // cycle siblings). rows are path-ordered, so sibling order is stable.
+  const siblings = current.parent_layer_id
+    ? rows.filter((l) => l.parent_layer_id === current.parent_layer_id)
+    : [current]
+  const sibIndex = siblings.findIndex((l) => l.id === current.id)
+  const nav = {
+    parentId: current.parent_layer_id,
+    firstChildId: children[0]?.id ?? null,
+    prevSiblingId: sibIndex > 0 ? siblings[sibIndex - 1]!.id : null,
+    nextSiblingId: sibIndex >= 0 && sibIndex < siblings.length - 1 ? siblings[sibIndex + 1]!.id : null,
+    siblings: siblings.map((l) => ({ id: l.id, current: l.id === current.id })),
+  }
+
   const sendReply = replyWithDrawing.bind(null, orgSlug, conversationId, current.id)
 
   return (
@@ -113,6 +127,7 @@ export default async function ConversationPage(props: {
           baseLayers={chain.slice(0, -1).map((l) => l.content.strokes ?? [])}
           currentStrokes={current.content.strokes ?? []}
           drawable={!locked && !current.tombstoned && Boolean(me)}
+          nav={nav}
           onSend={sendReply}
         />
       ) : (
