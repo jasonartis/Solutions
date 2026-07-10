@@ -100,3 +100,26 @@ Found in a deliberate "what haven't we thought of" pass; ordered by urgency.
 7. **Auth email sender.** Supabase's built-in sender is rate-limited and
    spam-prone; before real user onboarding, configure custom SMTP (their
    dashboard supports it) so magic links and confirmations actually arrive.
+
+## Low-context assistant protections (2026-07-10)
+
+Guards against well-meaning but confused sessions (any AI, any tool):
+
+- **No standing prod link.** The repo is deliberately NOT linked to the prod
+  Supabase project, so `supabase db reset --linked` cannot wipe production.
+  Prod operations go through explicit scripts only: `pnpm migrate:prod`
+  (apply migrations), `pnpm backup:prod` (dump), `pnpm worker:prod` (run the
+  worker). Never re-link (`supabase link`) — if a session does, unlink after.
+- **Migrations are append-only (CI-enforced).** Editing or deleting an
+  existing file under `supabase/migrations/` fails CI — fix forward with a
+  new migration.
+- **Test-count ratchet (CI-enforced).** If the e2e or RLS test count drops
+  below `tests-floor.json`, CI fails. Deleting or weakening a test to get a
+  green build is never the fix; the founder approves any deliberate lowering.
+  When ADDING tests, raise the floor in the same commit.
+- **When a guard blocks you, the guard is right.** Stop, report, and ask —
+  do not work around CI, markers, or protections.
+- **Edit sources, not derivatives:** module UI lives in `modules/<key>/ui`
+  (the `apps/web/.../m/<key>` files are one-line wrappers); assembled
+  migrations come from `schema-draft.sql` + `schema-fixes.sql`; never commit
+  `.env*` or anything from `backups/`.

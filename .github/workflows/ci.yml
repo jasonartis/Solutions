@@ -34,6 +34,34 @@ jobs:
             exit 1
           fi
 
+      # Safeguard (docs/12): applied migrations are history — append a new
+      # file, never edit an old one (silent local/prod divergence otherwise).
+      - name: Block edits to existing migrations
+        if: github.event_name == 'push' && github.event.before != '0000000000000000000000000000000000000000'
+        run: |
+          git fetch --depth=2 origin ${{ github.event.before }} || true
+          modified=$(git diff --diff-filter=MD --name-only ${{ github.event.before }} ${{ github.sha }} -- supabase/migrations/ || true)
+          if [ -n "$modified" ]; then
+            echo "Existing migrations were modified or deleted (append-only!):"
+            echo "$modified"
+            exit 1
+          fi
+
+      # Safeguard (docs/12): the test-count ratchet. A session that deletes
+      # tests to get green trips this; raising the floor is a deliberate act.
+      - name: Test-count ratchet
+        run: |
+          e2e=$(grep -c "^test(" apps/web/e2e/platform.spec.ts)
+          rls=$(grep -c "it(" packages/db/src/rls.test.ts)
+          floor_e2e=$(node -p "require('./tests-floor.json').e2e")
+          floor_rls=$(node -p "require('./tests-floor.json').rls")
+          echo "e2e $e2e (floor $floor_e2e) · rls $rls (floor $floor_rls)"
+          if [ "$e2e" -lt "$floor_e2e" ] || [ "$rls" -lt "$floor_rls" ]; then
+            echo "Test count fell below the recorded floor (tests-floor.json)."
+            echo "Deleting tests to get green is never the fix. If a removal is truly intended, the founder approves lowering the floor."
+            exit 1
+          fi
+
       - run: pnpm typecheck
 
       # Supabase must be up BEFORE build: Next.js prerenders pages at build

@@ -25,7 +25,8 @@
     "db:reset": "supabase db reset",
     "seed": "pnpm --filter @platform/db seed",
     "worker:prod": "tsx scripts/worker-prod.ts",
-    "backup:prod": "tsx scripts/prod-backup.ts"
+    "backup:prod": "tsx scripts/prod-backup.ts",
+    "migrate:prod": "tsx scripts/prod-migrate.ts"
   },
   "devDependencies": {
     "prettier": "^3.6.0",

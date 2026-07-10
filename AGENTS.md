@@ -19,6 +19,11 @@ Non-negotiables, regardless of tool:
 5. Run `pnpm backup:prod` before anything risky touches production.
 6. If your capabilities are light for security-sensitive work, say so and
    recommend a stronger model — do not push through quietly.
+7. Migrations are APPEND-ONLY (CI enforces it) — never edit an applied one.
+8. Never delete or weaken a test to get a green build (CI ratchets the test
+   count) — when a guard blocks you, the guard is right: stop and report.
+9. Prod DB access only via pnpm migrate:prod / backup:prod / worker:prod —
+   never supabase link, never ad-hoc connections.
 
 The full safeguards, never-do list, and recovery playbook:
 [docs/12-safeguards.md](docs/12-safeguards.md).
