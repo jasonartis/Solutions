@@ -62,3 +62,20 @@ Key design (agent decisions A1–A10, reviewer-confirmed): the root image IS a l
 Security-review pass (T1–T8 built; T9 public deep-link definer fns ship with the UI; T10 decided — flags/reactions stay possible under freeze since flagging frozen content is a safety need): **atomic reply-path assignment** (parent row lock serializes concurrent siblings — client-supplied path/child_count ignored; replies to tombstoned/frozen parents rejected); child-count maintenance on delete; the layer pin (author edits content only while childless — "immutable once replied-on" — structure pinned below org manage, tombstone stamps forced server-side); **audited moderation RPCs** `vm_tombstone_layer` (original content preserved into the mod log, then blanked) / `vm_restore_layer` (restores from the log) / `vm_set_branch_frozen`; `vm_join_conversation` (settings-gated, refuses banned); member pins (no self-promotion/self-unban, **last-admin-standing guard**); flag-triage pins with server-side review stamps; the `vm-images` bucket with conversation-membership storage policies (not plain org membership — the module-2 finding class).
 
 **Remaining for module 4:** the entire gesture-driven canvas frontend (Konva + perfect-freehand — the effort center), conversation list/membership UI, moderation queue UI, thumbnail rasterization worker job, deep-link definer functions, org-per-group auto-creation flow.
+
+## UI v1 shipped (2026-07-10)
+
+The core loop is live: conversations list + create-from-picture (root image
+to the `vm-images` bucket; the root IS layer `1`), the conversation page
+rendering the viewed layer composited on its ancestors (Konva; strokes stored
+in image pixel space so zoom stays registered), click navigation (breadcrumb
+up the chain, replies list down), press-and-hold X-ray, pen palette + size +
+draft/clear/send (drafts never leave the browser until Send), heart/laugh
+reactions, and admin add-member by email. Walkthroughs (member + moderator)
+and the export manifest (authorship: my layers / my reactions; admin:
+moderation log) ship alongside.
+
+**Not yet built (the gesture/PWA layer):** swipe navigation, sibling
+carousel + dots, zoomed-out thumbnail grids (needs the worker rasterizer),
+image stamps/text/emoji tools, moderation queue UI, deep links for
+non-members, org-per-group auto-creation (pending founder confirmation).

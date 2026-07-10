@@ -570,6 +570,23 @@ async function main() {
     .insert({ org_id: orgA, name: 'Template Project' })
   if (smpErr) throw new Error(`Sample project seed failed: ${smpErr.message}`)
 
+  // --- Demo visual messaging for module 4 ----------------------------------
+  // alice admin; charlie + dana members. Conversations are created through
+  // the UI (the e2e uploads a real image), so no content is seeded.
+  const visual = await ensureOrg('Demo Visual', 'demo-visual')
+  await admin.from('org_members').upsert([
+    { org_id: visual, user_id: aliceId, role: 'admin' },
+    { org_id: visual, user_id: charlieId, role: 'member' },
+    { org_id: visual, user_id: danaId, role: 'member' },
+  ])
+  await admin.from('org_modules').upsert({ org_id: visual, module_key: 'visual-messaging', enabled: true })
+  await admin.from('module_roles').upsert([
+    { org_id: visual, user_id: aliceId, module_key: 'visual-messaging', role: 'admin' },
+    { org_id: visual, user_id: charlieId, module_key: 'visual-messaging', role: 'member' },
+    { org_id: visual, user_id: danaId, module_key: 'visual-messaging', role: 'member' },
+  ])
+  await admin.from('vm_conversations').delete().eq('org_id', visual)
+
   console.log('Seed complete:')
   console.log('  owner@demo.local / password123  (superadmin)')
   console.log('  alice@demo.local / password123  (admin of Demo Org A + Demo Synagogue + Demo Match + Demo Salon + Demo Dating)')
@@ -577,6 +594,7 @@ async function main() {
   console.log('  Demo Synagogue (demo-shul): synagogue-schedules enabled, alice is maker')
   console.log('  Demo Match (demo-match): matchmaking enabled — singles charlie/dana/eve/frank, matchmaker mel')
   console.log('  Demo Salon (demo-salon): nail-salon — manager alice, cashier eve, worker dana, customer charlie')
+  console.log('  Demo Visual (demo-visual): visual-messaging — admin alice, members charlie/dana')
   console.log('  Demo Dating (demo-dating): speed-dating — organizer alice, participants charlie/dana/eve/frank')
 }
 

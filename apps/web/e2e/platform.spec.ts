@@ -567,6 +567,57 @@ test('help walkthroughs: role-aware — student sees their guide, professor sees
   await expect(page.getByRole('heading', { name: 'Run the homework grading workflow' })).toBeVisible()
 })
 
+test('visual messaging: create from a picture, draw a reply, membership gates access', async ({ page }) => {
+  // Alice starts a conversation from an image.
+  await signIn(page, 'alice@demo.local')
+  await page.goto('/o/demo-visual/m/visual-messaging')
+  await page.getByPlaceholder('Title').fill('Family sketch')
+  await page.setInputFiles('input[name="image"]', {
+    name: 'photo.svg',
+    mimeType: 'image/svg+xml',
+    buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300"><rect width="400" height="300" fill="#cbd5e1"/></svg>'),
+  })
+  await page.getByRole('button', { name: 'Create' }).click()
+  await page.getByRole('link', { name: 'Family sketch' }).click()
+  await expect(page.getByRole('heading', { name: 'Family sketch' })).toBeVisible()
+  await expect(page.getByText('No replies yet — draw one above.')).toBeVisible()
+
+  // Draw a stroke on the canvas and send it as a reply layer.
+  const stage = page.locator('canvas').first()
+  await expect(stage).toBeVisible()
+  const box = (await stage.boundingBox())!
+  await page.mouse.move(box.x + 60, box.y + 60)
+  await page.mouse.down()
+  await page.mouse.move(box.x + 180, box.y + 120, { steps: 8 })
+  await page.mouse.move(box.x + 240, box.y + 200, { steps: 8 })
+  await page.mouse.up()
+  await page.getByRole('button', { name: 'Send reply' }).click()
+  await expect(page.getByText('Replies to this layer (1)')).toBeVisible()
+
+  // Descend into the reply — the breadcrumb shows the address.
+  await page.getByRole('link', { name: 'Layer 1.1' }).click()
+  await expect(page.getByText('by Alice A')).toBeVisible()
+
+  // Charlie is NOT a member: the conversation is invisible to him.
+  await signIn(page, 'charlie@demo.local')
+  await page.goto('/o/demo-visual/m/visual-messaging')
+  await expect(page.getByRole('link', { name: 'Family sketch' })).not.toBeVisible()
+
+  // Alice adds charlie; now he can open it and see the reply tree.
+  await signIn(page, 'alice@demo.local')
+  await page.goto('/o/demo-visual/m/visual-messaging')
+  await page.getByRole('link', { name: 'Family sketch' }).click()
+  await page.getByPlaceholder('member@email').fill('charlie@demo.local')
+  const added = page.waitForResponse((r) => r.request().method() === 'POST')
+  await page.getByRole('button', { name: 'Add member' }).click()
+  await added
+
+  await signIn(page, 'charlie@demo.local')
+  await page.goto('/o/demo-visual/m/visual-messaging')
+  await page.getByRole('link', { name: 'Family sketch' }).click()
+  await expect(page.getByText('Replies to this layer (1)')).toBeVisible()
+})
+
 test('public schedule page works with no login', async ({ page }) => {
   await page.goto('/s/demo-shul')
   await expect(page.getByRole('heading', { name: 'Demo Synagogue' })).toBeVisible()

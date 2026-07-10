@@ -33,6 +33,7 @@
       "@modules/nail-salon/*": ["../../modules/nail-salon/*"],
       "@modules/speed-dating": ["../../modules/speed-dating/src/index.ts"],
       "@modules/speed-dating/*": ["../../modules/speed-dating/*"],
+      "@modules/visual-messaging/*": ["../../modules/visual-messaging/*"],
       "@modules/sample/*": ["../../modules/sample/*"]
     }
   },

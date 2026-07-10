@@ -34,6 +34,7 @@ describe('tenancy isolation', () => {
       'demo-match',
       'demo-salon',
       'demo-shul',
+      'demo-visual',
     ])
   })
 

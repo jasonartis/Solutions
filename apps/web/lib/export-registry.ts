@@ -5,6 +5,7 @@ import { nailSalonExport } from '@modules/nail-salon/ui/export'
 import { sampleExport } from '@modules/sample/ui/export'
 import { speedDatingExport } from '@modules/speed-dating/ui/export'
 import { synagogueSchedulesExport } from '@modules/synagogue-schedules/ui/export'
+import { visualMessagingExport } from '@modules/visual-messaging/ui/export'
 
 // Export manifests by module key (data-export primitive, docs/03). Every
 // real module carries one; the sample module's doubles as the template.
@@ -15,4 +16,5 @@ export const exportRegistry: Record<string, ModuleExport> = {
   [sampleExport.moduleKey]: sampleExport,
   [speedDatingExport.moduleKey]: speedDatingExport,
   [synagogueSchedulesExport.moduleKey]: synagogueSchedulesExport,
+  [visualMessagingExport.moduleKey]: visualMessagingExport,
 }

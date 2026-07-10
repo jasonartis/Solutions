@@ -5,6 +5,7 @@ import { nailSalonHelp } from '@modules/nail-salon/help/guides'
 import { sampleHelp } from '@modules/sample/help/guides'
 import { speedDatingHelp } from '@modules/speed-dating/help/guides'
 import { synagogueSchedulesHelp } from '@modules/synagogue-schedules/help/guides'
+import { visualMessagingHelp } from '@modules/visual-messaging/help/guides'
 
 // Walkthrough guides by module key (docs/03 user-walkthrough decision).
 // Every real module carries a set; module 4 gains one with its UI.
@@ -15,4 +16,5 @@ export const helpRegistry: Record<string, ModuleHelp> = {
   [sampleHelp.moduleKey]: sampleHelp,
   [speedDatingHelp.moduleKey]: speedDatingHelp,
   [synagogueSchedulesHelp.moduleKey]: synagogueSchedulesHelp,
+  [visualMessagingHelp.moduleKey]: visualMessagingHelp,
 }
