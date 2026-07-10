@@ -246,6 +246,15 @@ test('classroom module: professor creates an exam, grades by subproblem, publish
 })
 
 test('matchmaking module: single sees seeded matches and can answer; admin recomputes', async ({ page }) => {
+  // Dana shares one answer with her matches (wait on the POST per CLAUDE.md).
+  await signIn(page, 'dana@demo.local')
+  await page.goto('/o/demo-match/m/matchmaking')
+  const kidsForm = page.locator('form').filter({ hasText: 'I want children' })
+  await kidsForm.getByRole('checkbox', { name: /Share this answer/ }).check()
+  const saved = page.waitForResponse((r) => r.request().method() === 'POST')
+  await kidsForm.getByRole('button', { name: 'Save' }).click()
+  await saved
+
   // Charlie's top match is Dana (91%) from the seeded answers; same-gender
   // pairs are excluded by the gender dealbreaker and never appear.
   await signIn(page, 'charlie@demo.local')
@@ -256,6 +265,9 @@ test('matchmaking module: single sees seeded matches and can answer; admin recom
   await expect(matches).toContainText('Dana D')
   await expect(matches).toContainText('91%')
   await expect(matches).not.toContainText('Frank F') // same gender → excluded
+  // Dana's shared answer is revealed to her match — with the chosen label.
+  await expect(matches).toContainText('I want children: Yes')
+  await expect(matches).toContainText('(shared with you)')
 
   // Answer the open exercise question (radio + save).
   const exercise = page.locator('form').filter({ hasText: 'I exercise' })

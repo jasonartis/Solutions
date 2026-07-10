@@ -15,7 +15,9 @@ match, then see your top matches by compatibility.
 
 1. From the Dashboard, click **Make-a-Match** on your organization's card.
 2. **Your matches** (top of the page) lists your best matches with a
-   compatibility percentage. *(recompute pending)* next to a match means your
+   compatibility percentage. Answers a match chose to share appear under
+   their name marked *(shared with you)* — you control the same for them
+   with each question's share checkbox. *(recompute pending)* next to a match means your
    recent answers haven't been rescored yet — an admin runs the recompute.
 3. Under **Your answers**, every approved question shows:
    - **Your answer** — pick the option that describes you.

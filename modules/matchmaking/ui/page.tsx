@@ -114,6 +114,16 @@ async function SingleView(props: { orgSlug: string; orgId: string; userId: strin
     return p?.display_name || p?.email || id.slice(0, 8)
   }
 
+  // What each match chose to share with me (the mm_shared_answers definer
+  // function reveals ONLY share-flagged answers, ONLY between real matches).
+  type SharedAnswer = { question_text: string; scale_labels: string[]; answer_position: number }
+  const sharedByUser = new Map<string, SharedAnswer[]>()
+  for (const s of scores ?? []) {
+    const other = s.user_a === props.userId ? s.user_b : s.user_a
+    const { data: shared } = await supabase.rpc('mm_shared_answers', { check_other_user: other })
+    if (shared && shared.length > 0) sharedByUser.set(other, shared as SharedAnswer[])
+  }
+
   return (
     <div className="space-y-8">
       <section>
@@ -126,13 +136,26 @@ async function SingleView(props: { orgSlug: string; orgId: string; userId: strin
           <ul className="space-y-1 text-sm">
             {(scores ?? []).map((s, i) => {
               const other = s.user_a === props.userId ? s.user_b : s.user_a
+              const shared = sharedByUser.get(other)
               return (
-                <li key={i} className="flex items-center justify-between rounded border border-gray-100 bg-white px-3 py-2">
-                  <span>{nameOf(other)}</span>
-                  <span className="flex items-center gap-2">
-                    <span className="font-semibold">{s.percent}%</span>
-                    {s.stale && <span className="text-xs text-amber-600">(recompute pending)</span>}
-                  </span>
+                <li key={i} className="rounded border border-gray-100 bg-white px-3 py-2">
+                  <div className="flex items-center justify-between">
+                    <span>{nameOf(other)}</span>
+                    <span className="flex items-center gap-2">
+                      <span className="font-semibold">{s.percent}%</span>
+                      {s.stale && <span className="text-xs text-amber-600">(recompute pending)</span>}
+                    </span>
+                  </div>
+                  {shared && (
+                    <ul className="mt-1 space-y-0.5 text-xs text-gray-500">
+                      {shared.map((a, j) => (
+                        <li key={j}>
+                          {a.question_text}: <span className="text-gray-700">{a.scale_labels[a.answer_position] ?? '—'}</span>
+                          <span className="ml-1 text-gray-300">(shared with you)</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </li>
               )
             })}
