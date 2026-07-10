@@ -4,7 +4,16 @@ import { createClient } from '@/lib/supabase/server'
 import { requireOrgModule } from '@/lib/module-gate'
 import LayerCanvas, { type Stroke } from '../../layer-canvas'
 import LayerGrid from '../../layer-grid'
-import { addMember, replyWithDrawing, toggleReaction } from '../../actions'
+import {
+  addMember,
+  flagLayer,
+  replyWithDrawing,
+  restoreLayer,
+  reviewFlag,
+  setBranchFrozen,
+  toggleReaction,
+  tombstoneLayer,
+} from '../../actions'
 
 type LayerRow = {
   id: string
@@ -94,6 +103,18 @@ export default async function ConversationPage(props: {
   }
 
   const sendReply = replyWithDrawing.bind(null, orgSlug, conversationId, current.id)
+  const pathOf = (id: string) => byId.get(id)?.path ?? '?'
+
+  // Moderation queue: only fetched for moderators (vm_flags RLS would only
+  // return the caller's own reports otherwise, which isn't useful here).
+  const { data: flags } = canModerate
+    ? await supabase
+        .from('vm_flags')
+        .select('id, layer_id, reporter_user_id, reason, detail, state, created_at')
+        .eq('conversation_id', conversationId)
+        .order('created_at', { ascending: false })
+    : { data: null }
+  const openFlagCount = (flags ?? []).filter((f) => f.state === 'open').length
 
   return (
     <div>
@@ -168,6 +189,32 @@ export default async function ConversationPage(props: {
         </form>
       </div>
 
+      {me && (
+        <details className="mt-2 text-sm">
+          <summary className="cursor-pointer text-gray-400 hover:text-gray-600">Flag this layer</summary>
+          <form
+            action={flagLayer.bind(null, orgSlug, conversationId, current.id)}
+            className="mt-2 flex flex-col gap-2 rounded border border-gray-200 p-3 sm:flex-row sm:items-center"
+          >
+            <select name="reason" required className="rounded border border-gray-300 px-2 py-1 text-sm">
+              <option value="">Reason…</option>
+              <option value="inappropriate">Inappropriate content</option>
+              <option value="harassment">Harassment</option>
+              <option value="spam">Spam</option>
+              <option value="other">Other</option>
+            </select>
+            <input
+              name="detail"
+              placeholder="Details (optional)"
+              className="flex-1 rounded border border-gray-300 px-2 py-1 text-sm"
+            />
+            <button className="rounded border border-gray-300 px-3 py-1 text-sm text-gray-700 hover:bg-gray-50">
+              Flag
+            </button>
+          </form>
+        </details>
+      )}
+
       <section className="mt-6">
         <h2 className="mb-2 text-sm font-medium uppercase tracking-wide text-gray-500">
           Replies to this layer ({children.length})
@@ -190,6 +237,83 @@ export default async function ConversationPage(props: {
 
       {canModerate && (
         <section className="mt-8 border-t border-gray-100 pt-4">
+          <h2 className="mb-2 text-sm font-medium uppercase tracking-wide text-gray-500">
+            Moderation
+          </h2>
+          <div className="mb-4 flex flex-wrap items-center gap-2 text-sm">
+            {current.tombstoned ? (
+              <form action={restoreLayer.bind(null, orgSlug, conversationId, current.id)}>
+                <button className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50">
+                  Restore this layer
+                </button>
+              </form>
+            ) : (
+              <form
+                action={tombstoneLayer.bind(null, orgSlug, conversationId, current.id)}
+                className="flex items-center gap-2"
+              >
+                <input
+                  name="reason"
+                  placeholder="Reason (optional)"
+                  className="rounded border border-gray-300 px-2 py-1 text-xs"
+                />
+                <button className="rounded border border-red-300 px-2 py-1 text-xs text-red-600 hover:bg-red-50">
+                  Remove this layer
+                </button>
+              </form>
+            )}
+            <form action={setBranchFrozen.bind(null, orgSlug, conversationId, current.id, !current.frozen)}>
+              <button className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50">
+                {current.frozen ? 'Unfreeze this branch' : 'Freeze this branch'}
+              </button>
+            </form>
+          </div>
+
+          <h3 className="mb-1 text-xs font-medium uppercase tracking-wide text-gray-400">
+            Flagged content ({openFlagCount} open)
+          </h3>
+          <ul className="mb-6 space-y-2 text-sm">
+            {(flags ?? []).map((f) => (
+              <li key={f.id} className="rounded border border-gray-200 p-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Link href={`?layer=${f.layer_id}`} className="text-blue-600 hover:underline">
+                    Review layer {pathOf(f.layer_id)}
+                  </Link>
+                  <span className="text-gray-500">
+                    {f.reason}
+                    {f.detail ? ` — ${f.detail}` : ''} · reported by {nameOf(f.reporter_user_id)}
+                  </span>
+                  <span
+                    className={
+                      f.state === 'open'
+                        ? 'text-amber-600'
+                        : f.state === 'actioned'
+                          ? 'text-red-600'
+                          : 'text-gray-400'
+                    }
+                  >
+                    {f.state}
+                  </span>
+                </div>
+                {f.state === 'open' && (
+                  <div className="mt-1 flex gap-2">
+                    <form action={reviewFlag.bind(null, orgSlug, conversationId, f.id, 'actioned')}>
+                      <button className="rounded border border-gray-300 px-2 py-0.5 text-xs text-gray-700 hover:bg-gray-50">
+                        Mark actioned
+                      </button>
+                    </form>
+                    <form action={reviewFlag.bind(null, orgSlug, conversationId, f.id, 'dismissed')}>
+                      <button className="rounded border border-gray-300 px-2 py-0.5 text-xs text-gray-700 hover:bg-gray-50">
+                        Dismiss
+                      </button>
+                    </form>
+                  </div>
+                )}
+              </li>
+            ))}
+            {(flags ?? []).length === 0 && <li className="text-gray-400">No flags in this conversation.</li>}
+          </ul>
+
           <h2 className="mb-2 text-sm font-medium uppercase tracking-wide text-gray-500">
             Members (admin)
           </h2>

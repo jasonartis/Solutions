@@ -645,6 +645,45 @@ test('visual messaging: create from a picture, draw a reply, membership gates ac
   await page.goto('/o/demo-visual/m/visual-messaging')
   await page.getByRole('link', { name: title }).click()
   await expect(page.getByText('Replies to this layer (1)')).toBeVisible()
+
+  // Charlie flags the reply layer (a non-moderator member — he has no
+  // moderation controls of his own).
+  await page.getByRole('link', { name: 'Layer 1.1' }).click()
+  await expect(page.getByText('Replies to this layer (0)')).toBeVisible()
+  await page.getByText('Flag this layer').click()
+  await page.locator('select[name="reason"]').selectOption('inappropriate')
+  await page.getByPlaceholder('Details (optional)').fill('not appropriate for the group')
+  const flagged = page.waitForResponse((r) => r.request().method() === 'POST')
+  await page.getByRole('button', { name: 'Flag' }).click()
+  await flagged
+  await expect(page.getByText('Moderation')).not.toBeVisible() // charlie isn't a moderator
+
+  // Alice (the conversation admin) reviews the queue and removes the layer.
+  await signIn(page, 'alice@demo.local')
+  await page.goto('/o/demo-visual/m/visual-messaging')
+  await page.getByRole('link', { name: title }).click()
+  await expect(page.getByText('Flagged content (1 open)')).toBeVisible()
+  await expect(page.getByText(/inappropriate — not appropriate for the group · reported by Charlie C/)).toBeVisible()
+  await page.getByRole('link', { name: 'Review layer 1.1' }).click()
+  // Wait for a signal unique to the destination before acting — otherwise the
+  // click can fire against the still-rendered root page (its bound
+  // current.id), tombstoning the ROOT layer instead of 1.1.
+  await expect(page.getByText('Replies to this layer (0)')).toBeVisible()
+  const removed = page.waitForResponse((r) => r.request().method() === 'POST')
+  await page.getByRole('button', { name: 'Remove this layer' }).click()
+  await removed
+  await expect(page.getByText('removed', { exact: true })).toBeVisible()
+  const actioned = page.waitForResponse((r) => r.request().method() === 'POST')
+  await page.getByRole('button', { name: 'Mark actioned' }).click()
+  await actioned
+  await expect(page.getByText('Flagged content (0 open)')).toBeVisible()
+
+  // Charlie now sees the layer as removed — but the tree still makes sense.
+  await signIn(page, 'charlie@demo.local')
+  await page.goto('/o/demo-visual/m/visual-messaging')
+  await page.getByRole('link', { name: title }).click()
+  await page.getByRole('link', { name: 'Layer 1.1' }).click()
+  await expect(page.getByText('removed', { exact: true })).toBeVisible()
 })
 
 test('public schedule page works with no login', async ({ page }) => {

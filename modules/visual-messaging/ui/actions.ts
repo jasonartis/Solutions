@@ -118,6 +118,76 @@ export async function replyWithDrawing(
   revalidatePath(`/o/${orgSlug}/m/visual-messaging/conversations/${conversationId}`)
 }
 
+// Any member may flag a layer for moderator attention (safety reporting is
+// not a drawing privilege — RLS's vm_flags_insert_own only requires
+// membership, per vm_is_conv_member).
+export async function flagLayer(orgSlug: string, conversationId: string, layerId: string, formData: FormData) {
+  const reason = String(formData.get('reason') ?? '').trim()
+  const detail = String(formData.get('detail') ?? '').trim()
+  if (!reason) throw new Error('A reason is required')
+
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) throw new Error('Not signed in')
+  const { data: org } = await supabase.from('orgs').select('id').eq('slug', orgSlug).single()
+
+  const { error } = await supabase.from('vm_flags').insert({
+    org_id: org!.id,
+    conversation_id: conversationId,
+    layer_id: layerId,
+    reporter_user_id: user.id,
+    reason,
+    detail: detail || null,
+  })
+  fail(error, 'Flag failed')
+  revalidatePath(`/o/${orgSlug}/m/visual-messaging/conversations/${conversationId}`)
+}
+
+// Moderator triage on an open flag. The vm_flags_update_moderate policy pins
+// every other column to OLD and a trigger stamps reviewed_by/reviewed_at
+// server-side — this action only ever changes `state`.
+export async function reviewFlag(
+  orgSlug: string,
+  conversationId: string,
+  flagId: string,
+  state: 'actioned' | 'dismissed',
+) {
+  const supabase = await createClient()
+  const { error } = await supabase.from('vm_flags').update({ state }).eq('id', flagId)
+  fail(error, 'Review flag failed')
+  revalidatePath(`/o/${orgSlug}/m/visual-messaging/conversations/${conversationId}`)
+}
+
+// Moderator-only RPCs (vm_can_moderate / vm_is_conv_admin re-checked inside
+// each definer function — the app never trusts a client-side "is moderator"
+// flag).
+export async function tombstoneLayer(orgSlug: string, conversationId: string, layerId: string, formData: FormData) {
+  const reason = String(formData.get('reason') ?? '').trim()
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('vm_tombstone_layer', {
+    check_layer_id: layerId,
+    check_reason: reason || null,
+  })
+  fail(error, 'Remove layer failed')
+  revalidatePath(`/o/${orgSlug}/m/visual-messaging/conversations/${conversationId}`)
+}
+
+export async function restoreLayer(orgSlug: string, conversationId: string, layerId: string) {
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('vm_restore_layer', { check_layer_id: layerId })
+  fail(error, 'Restore layer failed')
+  revalidatePath(`/o/${orgSlug}/m/visual-messaging/conversations/${conversationId}`)
+}
+
+export async function setBranchFrozen(orgSlug: string, conversationId: string, layerId: string, frozen: boolean) {
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('vm_set_branch_frozen', { check_layer_id: layerId, check_frozen: frozen })
+  fail(error, 'Freeze branch failed')
+  revalidatePath(`/o/${orgSlug}/m/visual-messaging/conversations/${conversationId}`)
+}
+
 export async function toggleReaction(
   orgSlug: string,
   conversationId: string,

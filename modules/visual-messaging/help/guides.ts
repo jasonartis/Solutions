@@ -35,7 +35,9 @@ walk through.
    to jump straight to it, then **Back to layer** returns to normal viewing.
 5. **Hold to X-ray** fades the drawings so you can see the original picture
    underneath.
-6. React without drawing: the ❤️ and 😂 buttons under the picture.
+6. React without drawing: the ❤️ and 😂 buttons under the picture. If a layer
+   is a problem, click **Flag this layer**, pick a reason, and submit — a
+   moderator will review it (you won't be told what they decide).
 
 ## Reply by drawing
 
@@ -53,13 +55,19 @@ walk through.
       title: 'Moderator — keep conversations healthy',
       staff: true,
       body: `
-1. Removed content: a moderator can tombstone a layer — its drawing is
-   blanked but its slot stays, so replies drawn in its context still make
-   sense. Restore brings the original back. (Both actions are audited.)
-2. A conversation admin can freeze a branch (locks that subtree while the
-   rest stays live) or the whole conversation.
-3. Members can flag layers; the moderation queue UI is coming — today
-   moderation actions run per layer.
+1. Open any conversation you moderate and scroll to the **Moderation**
+   section (below the reply list). **Flagged content** lists every report in
+   this conversation — reason, who reported it (the flagged layer's author
+   never sees this), and a jump-to-layer link.
+2. **Mark actioned** or **Dismiss** closes a flag once you've decided.
+3. **Remove this layer** tombstones whatever layer you're currently viewing —
+   its drawing is blanked but its slot stays, so replies drawn in its context
+   still make sense. **Restore this layer** brings the original back. Both
+   actions are audited (who, when, and — for a removal — the original
+   content, kept in the moderation log even though it's gone from the
+   thread).
+4. **Freeze this branch** locks that layer and everything drawn under it
+   (view-only, no new replies); **Unfreeze** reopens it.
 `,
     },
   ],
