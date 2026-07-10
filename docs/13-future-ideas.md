@@ -196,6 +196,47 @@ Founder's framing: beautiful, analytics-heavy, and potentially life-saving.
   Provenance matters: which lab, which date, verified vs. self-reported —
   wrong medical data can cause harm, so validation and source-tracking are
   first-class.
+- **Test-name normalization via a canonical dictionary + "bring-your-own-LLM"
+  mapping** *(founder, 2026-07-10).* The same analyte has many names
+  ("Hemoglobin A1c" / "HbA1c" / "Glycated hemoglobin" / "A1c") — the single
+  biggest obstacle to comparing one upload to the next. Founder's proposal:
+  give the user a **prompt they run in their own LLM** alongside their
+  bloodwork; the prompt maps each result to the platform's canonical test list
+  and, for anything not found, emits it as a new tagged entry — output in a
+  strict defined format the platform ingests. Over time the canonical list
+  grows into a crowd-built synonym dictionary; every future upload either maps
+  to an existing test (clean comparison) or extends the list. **Evaluation —
+  worth considering, with four guardrails that make or break it:**
+  1. **The growing list needs a curation gate, or it self-defeats.** Auto-
+     adding every "unknown" as first-class canon fragments the data ("Vitamin
+     D" vs "25-OH Vitamin D" vs "Vitamin D, 25-Hydroxy" as three tests) and
+     destroys the comparison the feature exists for. New names must land as
+     *candidates* — similarity-checked against existing entries, reconciled
+     (auto-suggest a likely match for the user to confirm, or a curator/staff
+     review) — not promoted to canon on sight.
+  2. **Anchor the canonical list to LOINC**, not a purely home-grown list: the
+     LLM maps free-text → LOINC code + friendly name + known synonyms;
+     home-grown tags only for genuine gaps LOINC doesn't cover. Keeps the
+     dictionary principled and interoperable instead of an ad-hoc pile, and
+     de-dup becomes "same LOINC = same test."
+  3. **Map more than the name.** The prompt's output format must be a strict,
+     *versioned* schema carrying canonical-id-or-NEW, the reported name, value,
+     unit, reference-range low/high, date, and a confidence flag — so ingest is
+     deterministic and units normalize for comparison (name alone is
+     insufficient; mg/dL vs mmol/L will silently corrupt trends).
+  4. **Mandatory human-confirmation step.** The user is the extractor here and
+     LLMs hallucinate; the platform shows the parsed/mapped result for the user
+     to verify and correct before anything is stored. Low-confidence mappings
+     surface for explicit resolution rather than silent guessing.
+  **Why the approach is attractive:** it offloads the hard extraction+mapping
+  to a capable model the user already has — a **zero-infra bootstrap** that
+  sidesteps our no-GPU constraint (see the SLM analysis under the idea-capture
+  module), and it's privacy-cleaner for us (the raw document goes to the
+  *user's* LLM, not ours). UX friction (copy prompt → paste into external tool
+  → paste result back) is the cost; the smoother long-term form is the
+  integrated document-understanding pipeline above calling an LLM directly, with
+  this prompt approach as the bootstrap and offline fallback. The canonical
+  dictionary itself is a durable platform asset either way.
 - **Roles beyond the usual ladder.** Patient (owns their data), caregiver /
   proxy (parent managing a child's or an elderly relative's record — a real,
   common case), and clinician (time-limited, consented, read-only shared
