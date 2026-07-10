@@ -166,3 +166,51 @@ export async function markBillPaid(orgSlug: string, billId: string, appointmentI
   await supabase.from('sal_appointments').update({ state: 'paid' }).eq('id', appointmentId)
   revalidatePath(`/o/${orgSlug}/m/nail-salon`)
 }
+
+// Customer self-booking (spec: service + time required, preferred worker
+// optional). RLS's sal_appointments_insert_customer policy proves the caller
+// owns the customer record and forces state='booked'; the pin trigger keeps
+// later edits to cancel-only.
+export async function customerBookAppointment(orgSlug: string, formData: FormData) {
+  const serviceId = String(formData.get('serviceId') ?? '')
+  const workerId = String(formData.get('workerId') ?? '') || null
+  const startRaw = String(formData.get('start') ?? '').trim()
+  if (!serviceId || !startRaw) throw new Error('Service and time are required')
+
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) throw new Error('Not signed in')
+
+  // The caller's own customer record supplies the location.
+  const { data: me } = await supabase
+    .from('sal_customers')
+    .select('id, location_id')
+    .eq('user_id', user.id)
+    .limit(1)
+    .maybeSingle()
+  if (!me) throw new Error('No customer record — ask the salon to set you up')
+
+  const { data: svc } = await supabase
+    .from('sal_services')
+    .select('approx_duration_minutes')
+    .eq('id', serviceId)
+    .single()
+  const start = new Date(startRaw)
+  const end = new Date(start.getTime() + (svc?.approx_duration_minutes ?? 30) * 60000)
+
+  const { error } = await supabase.from('sal_appointments').insert({
+    org_id: PLACEHOLDER, // derived by trigger
+    location_id: me.location_id,
+    customer_id: me.id,
+    service_id: serviceId,
+    worker_id: workerId,
+    scheduled_start: start.toISOString(),
+    scheduled_end: end.toISOString(),
+    state: 'booked',
+    booked_by: user.id,
+  })
+  fail(error, 'Booking failed')
+  revalidatePath(`/o/${orgSlug}/m/nail-salon`)
+}

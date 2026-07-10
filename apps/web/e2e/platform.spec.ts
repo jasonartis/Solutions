@@ -332,6 +332,21 @@ test('nail-salon module: manager runs the back-office (catalog, expenses, shoppi
   await expect(page.locator('li').filter({ hasText: 'supplies' }).filter({ hasText: '$12.50' }).first()).toBeVisible()
 })
 
+test('nail-salon module: customer self-books and can cancel', async ({ page }) => {
+  await signIn(page, 'charlie@demo.local')
+  await page.goto('/o/demo-salon/m/nail-salon')
+  await expect(page.getByRole('heading', { name: 'Book an appointment' })).toBeVisible()
+
+  await page.locator('select[name="serviceId"]').selectOption({ label: 'Pedicure ($60)' })
+  await page.locator('input[name="start"]').fill('2099-03-05T14:00')
+  await page.getByRole('button', { name: 'Book', exact: true }).click()
+
+  const row = page.locator('li').filter({ hasText: 'Pedicure' }).first()
+  await expect(row).toContainText('booked')
+  await row.getByRole('button', { name: 'Cancel' }).click()
+  await expect(page.locator('li').filter({ hasText: 'Pedicure' }).first()).toContainText('cancelled')
+})
+
 test('nail-salon module: worker sees only their assigned chairs', async ({ page }) => {
   // dana is the salon worker; the seeded appointment is assigned to her.
   await signIn(page, 'dana@demo.local')

@@ -7,13 +7,17 @@ export const nailSalonHelp: ModuleHelp = {
   guides: [
     {
       role: 'customer',
-      title: 'Customer — see your appointments',
+      title: 'Customer — book appointments and see your visits',
       body: `
 1. From the Dashboard, click **Nail Salon** on your organization's card.
-2. **Your appointments** lists your visits, newest first, each with its
+2. **Book an appointment**: pick a service (prices shown), optionally a
+   preferred worker (or leave "Any worker"), choose a date and time, click
+   **Book**.
+3. **Your appointments** lists your visits, newest first, each with its
    service and status (booked, complete, paid, …).
-3. Booking today happens at the front desk; online self-booking is coming.
-4. **Export data** (Dashboard) downloads your own record and visit history.
+4. A *booked* appointment has a **Cancel** button until the salon checks
+   you in.
+5. **Export data** (Dashboard) downloads your own record and visit history.
 `,
     },
     {

@@ -3,6 +3,7 @@ import { requireOrgModule } from '@/lib/module-gate'
 import {
   bookAppointment,
   createBillForAppointment,
+  customerBookAppointment,
   markBillPaid,
   setAppointmentState,
   walkInAdd,
@@ -68,7 +69,7 @@ export default async function NailSalonPage(props: { params: Promise<{ orgSlug: 
         <WorkerConsole orgSlug={orgSlug} orgId={org.id} timeFmt={timeFmt} />
       )}
       {location && !canOperate && !isWorker && (
-        <CustomerConsole orgId={org.id} timeFmt={timeFmt} />
+        <CustomerConsole orgSlug={orgSlug} orgId={org.id} timeFmt={timeFmt} />
       )}
     </div>
   )
@@ -289,33 +290,71 @@ async function WorkerConsole(props: { orgSlug: string; orgId: string; timeFmt: I
   )
 }
 
-async function CustomerConsole(props: { orgId: string; timeFmt: Intl.DateTimeFormat }) {
+async function CustomerConsole(props: { orgSlug: string; orgId: string; timeFmt: Intl.DateTimeFormat }) {
   const { createClient } = await import('@/lib/supabase/server')
   const supabase = await createClient()
-  // RLS shows a customer only their own appointments.
-  const { data: appts } = await supabase
-    .from('sal_appointments')
-    .select('id, state, scheduled_start, service:sal_services(name, price)')
-    .order('scheduled_start', { ascending: false })
-    .limit(20)
+  // RLS shows a customer only their own appointments; services and workers
+  // are org-member-readable so the booking form can offer them.
+  const [{ data: appts }, { data: services }, { data: workers }] = await Promise.all([
+    supabase
+      .from('sal_appointments')
+      .select('id, state, scheduled_start, service:sal_services(name, price)')
+      .order('scheduled_start', { ascending: false })
+      .limit(20),
+    supabase.from('sal_services').select('id, name, price').eq('org_id', props.orgId).eq('active', true).order('sort'),
+    supabase.from('sal_worker_profiles').select('user_id, display_name').eq('org_id', props.orgId).eq('active', true),
+  ])
   const rows = (appts ?? []) as unknown as Appt[]
 
   const dateFmt = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
   return (
-    <section>
-      <h2 className="mb-3 text-lg font-medium">Your appointments</h2>
-      {rows.length === 0 ? (
-        <p className="text-sm text-gray-500">You have no appointments yet.</p>
-      ) : (
-        <ul className="space-y-1 text-sm">
-          {rows.map((a) => (
-            <li key={a.id} className="flex justify-between rounded border border-gray-100 bg-white px-3 py-2">
-              <span>{dateFmt.format(new Date(a.scheduled_start))} · {a.service?.name}</span>
-              <span className="text-xs uppercase text-gray-400">{a.state.replace('_', ' ')}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
+    <div className="space-y-6">
+      <section className="rounded-lg border border-gray-200 bg-white p-5">
+        <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-gray-500">
+          Book an appointment
+        </h2>
+        <form action={customerBookAppointment.bind(null, props.orgSlug)} className="flex flex-wrap items-center gap-2">
+          <select name="serviceId" required className={inputCls} defaultValue="">
+            <option value="" disabled>Service…</option>
+            {(services ?? []).map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name} (${Number(s.price).toFixed(0)})
+              </option>
+            ))}
+          </select>
+          <select name="workerId" className={inputCls} defaultValue="">
+            <option value="">Any worker</option>
+            {(workers ?? []).map((w) => (
+              <option key={w.user_id} value={w.user_id}>{w.display_name}</option>
+            ))}
+          </select>
+          <input name="start" type="datetime-local" required className={inputCls} />
+          <button className={btnCls}>Book</button>
+        </form>
+      </section>
+
+      <section>
+        <h2 className="mb-3 text-lg font-medium">Your appointments</h2>
+        {rows.length === 0 ? (
+          <p className="text-sm text-gray-500">You have no appointments yet.</p>
+        ) : (
+          <ul className="space-y-1 text-sm">
+            {rows.map((a) => (
+              <li key={a.id} className="flex items-center justify-between rounded border border-gray-100 bg-white px-3 py-2">
+                <span>{dateFmt.format(new Date(a.scheduled_start))} · {a.service?.name}</span>
+                <span className="flex items-center gap-3">
+                  <span className="text-xs uppercase text-gray-400">{a.state.replace('_', ' ')}</span>
+                  {a.state === 'booked' && (
+                    <form action={setAppointmentState.bind(null, props.orgSlug, a.id, 'cancelled')}>
+                      <button className="text-xs text-red-600 hover:underline">Cancel</button>
+                    </form>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </div>
   )
 }
