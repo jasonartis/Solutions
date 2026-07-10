@@ -224,5 +224,5 @@ else sees the non-staff guides ("each level sees their level and below").
 — "stale docs are bugs" extended to user docs; the e2e suite mirrors the same
 core flows, so a broken step usually turns CI red too. The founder tests the
 platform BY following these walkthroughs and gives feedback against step
-numbers. They are the script for future visual tutorials. The sample module
+numbers. They are the script for future visual tutorials — the interactive spotlight-tour evolution is specced as an idea in docs/13-future-ideas.md. The sample module
 carries a template walkthrough (composition rule).

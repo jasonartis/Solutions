@@ -32,6 +32,7 @@ Read in this order for full context:
 | [docs/10-worker-deploy.md](docs/10-worker-deploy.md) | Background worker: the local prod stopgap + the Hetzner VPS runbook |
 | [docs/11-walkthrough-testing-script.md](docs/11-walkthrough-testing-script.md) | Founder testing itinerary: every module, every role, from zero (production or offline) |
 | [docs/12-safeguards.md](docs/12-safeguards.md) | Mechanical guards, never-do list, backups, recovery playbook |
+| [docs/13-future-ideas.md](docs/13-future-ideas.md) | Parking lot for future platform ideas (dated, attributed, non-committal) |
 | [docs/modules/](docs/modules/) | Full specification for each module (1–6) |
 
 ## Modules (all live)
