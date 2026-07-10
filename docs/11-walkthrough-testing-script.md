@@ -59,8 +59,10 @@ in a repo terminal — each ⚙ chapter repeats this reminder in place.
    enabled", and nothing else — no other org's names anywhere.
 2. In the address bar, type `/o/demo-a/m/classroom` after the domain. You
    should get a 404 — bob cannot reach an org he isn't in, even by URL.
-3. Sign out (top right). Sign in as **owner**. You see every demo org plus
-   the **Owner Console** link (create orgs, toggle modules). Look, don't
+3. Sign out (top right). The superadmin view: **locally** sign in as
+   **owner**; **on production** use YOUR real account (the demo owner is
+   deliberately not a superadmin there). You see every org plus the
+   **Owner Console** link (create orgs, toggle modules). Look, don't
    change anything.
 4. Sign in as **alice**. This is the view you'll use most: each org card has
    its module buttons plus **Help** and **Export data**. Click **Help** on

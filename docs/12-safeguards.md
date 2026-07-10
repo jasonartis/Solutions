@@ -66,3 +66,37 @@ is the copy-me template. The founder's walkthroughs (docs/11 + in-app Help)
 are the acceptance tests: after any significant change, the affected
 walkthrough must still be followable step-by-step — and updated in the same
 commit when the UI changes.
+
+## Known risks & pre-launch checklist (2026-07-10 review)
+
+Found in a deliberate "what haven't we thought of" pass; ordered by urgency.
+
+1. **Supabase free-tier auto-pause (availability landmine).** Free projects
+   PAUSE after ~7 days without activity — the production site would break
+   until manually restored. Mitigations: an UptimeRobot monitor pinging
+   `/s/demo-shul` every 5 min (touches the DB → counts as activity, and
+   doubles as downtime alerting), or the Hetzner worker's minute heartbeat
+   once deployed. **Until one exists, a quiet week can take prod down.**
+2. **No monitoring at all.** Errors and downtime are invisible until a user
+   complains. 10-minute founder setup when ready: UptimeRobot (free) on the
+   site URL + `/healthz` of the worker; Sentry (free tier) DSN into the web
+   app. Both were deferred from M0.
+3. **Account 2FA.** GitHub, Vercel, and Supabase accounts are the real keys
+   to everything (pipeline, secrets, database). Enable 2FA on all three —
+   a compromised GitHub account defeats every safeguard in this file.
+4. **Demo superadmin (FIXED 2026-07-10).** The prod seed had made
+   owner@demo.local a platform superadmin guarded by the demo password —
+   demoted on prod, and the seed now only grants superadmin locally.
+   Rotate the demo password after each testing round (re-seed with a new
+   DEMO_PASSWORD).
+5. **Vercel Hobby plan prohibits commercial use.** Fine while free/testing;
+   upgrade to Vercel Pro (~$20/mo) when clients pay.
+6. **Privacy & terms before real users beyond Pozna.** The platform stores
+   sensitive-category personal data (dating preferences in modules 1/6,
+   student grades in module 2). Before onboarding real singles/students:
+   a privacy policy + terms page, and a decision on data-retention wording.
+   The authorship-export feature is the portability story; deletion requests
+   need a documented process.
+7. **Auth email sender.** Supabase's built-in sender is rate-limited and
+   spam-prone; before real user onboarding, configure custom SMTP (their
+   dashboard supports it) so magic links and confirmations actually arrive.

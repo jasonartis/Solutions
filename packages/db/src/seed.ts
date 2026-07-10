@@ -86,7 +86,14 @@ async function main() {
   const aliceId = await ensureUser('alice@demo.local', DEMO_PASSWORD, 'Alice A')
   const bobId = await ensureUser('bob@demo.local', DEMO_PASSWORD, 'Bob B')
 
-  await admin.from('profiles').update({ is_superadmin: true }).eq('user_id', founderId)
+  // SAFEGUARD (docs/12): the demo owner is only a superadmin LOCALLY. On a
+  // remote seed the real founder account is the only superadmin — a demo
+  // password must never guard platform-wide power in production.
+  if (/localhost|127.0.0.1/.test(String(url))) {
+    await admin.from('profiles').update({ is_superadmin: true }).eq('user_id', founderId)
+  } else {
+    await admin.from('profiles').update({ is_superadmin: false }).eq('user_id', founderId)
+  }
 
   const orgA = await ensureOrg('Demo Org A', 'demo-a')
   const orgB = await ensureOrg('Demo Org B', 'demo-b')
