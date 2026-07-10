@@ -63,6 +63,19 @@ export default async function ConversationPage(props: {
   const root = rows.find((l) => l.parent_layer_id === null)
   if (!root) notFound()
 
+  // A viewer seat may watch but not draw (vm_can_post gates the RLS insert
+  // policy the same way) — fetched separately since it needs `me`'s id,
+  // which the parallel batch above doesn't have until it resolves.
+  const { data: myMembership } = me
+    ? await supabase
+        .from('vm_conversation_members')
+        .select('role')
+        .eq('conversation_id', conversationId)
+        .eq('user_id', me.id)
+        .maybeSingle()
+    : { data: null }
+  const canPost = myMembership?.role === 'participant' || myMembership?.role === 'moderator' || myMembership?.role === 'admin'
+
   const current = rows.find((l) => l.id === layerParam) ?? root
   const byId = new Map(rows.map((l) => [l.id, l]))
 
@@ -170,7 +183,7 @@ export default async function ConversationPage(props: {
           imageUrl={signed.signedUrl}
           baseLayers={chain.slice(0, -1).map((l) => l.content.strokes ?? [])}
           currentStrokes={current.content.strokes ?? []}
-          drawable={!locked && !current.tombstoned && Boolean(me)}
+          drawable={!locked && !current.tombstoned && canPost}
           nav={nav}
           onSend={sendReply}
         />
