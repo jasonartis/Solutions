@@ -129,18 +129,66 @@ looser `vm_can_moderate` — a plain moderator would have seen buttons that
 error. The page now computes `vm_is_conv_admin` and gates those three on it,
 leaving tombstone/restore/flag-triage on `vm_can_moderate`.
 
-**OPEN — founder decision needed (anonymous public deep links):** the spec's
-"whether deep links work for non-members" is implemented for *logged-in* org
-members. **Truly anonymous, no-login public viewing** (the `syn_public_*`
-definer-function pattern, T10 in the schema notes) is deliberately NOT built:
-it's the only variant that needs a migration, and exposing private
-family/professional conversations to unauthenticated visitors is a one-way
-privacy door. **Question for the founder:** do you want anonymous public
-view-only links at all for this module? If yes, it's a migration slice
-(public definer fns + a public route + a per-conversation "public link"
-setting) to be done under Opus with the full security-review rhythm.
+Note: the "whether deep links work for non-members" setting is implemented for
+*logged-in org members* (the join flow above). **Anonymous, no-login public
+links are explicitly out of v1** — see the future-enhancement section below.
 
 **Still not built:** image stamps / styled text / emoji tools; the
 org-per-group auto-creation for ad-hoc person-to-person groups (awaiting
 founder confirmation, raised 2026-07-09: ad-hoc groups = auto-created
-lightweight orgs); anonymous public links (the decision above).
+lightweight orgs). Public links are deferred (below).
+
+## FUTURE ENHANCEMENT — public links (NOT v1, revisit later)
+
+*Founder, 2026-07-10: "make the whole public link a potential future
+enhancement to be discussed at a later time. Not for v1."* Captured here so
+the design thinking survives; nothing is built and no decision is final.
+
+The idea: a per-conversation **public** visibility tier (a third rung above
+private and org-link) letting anonymous, non-logged-in visitors get a taste of
+a conversation — modelled on the Facebook/Instagram pattern where a limited
+public view drives the viewer to want full access. Working design so far:
+
+- **Per-conversation, admin opt-in only — never a default, never
+  platform-wide.** This is a private-by-default messaging module; the inverse
+  of FB/IG, so public must be a deliberate, well-warned per-conversation act.
+- **Interactive teaser, not a static preview** (founder's refinement — the
+  stronger hook). Let the visitor actually *feel* the product: draw a reply
+  that won't save (the existing draft behavior with "Send" swapped for
+  "Request access"), and take a **limited number of swipes per direction** with
+  "there's more" walls — a bounded test-drive that conveys the gesture feel and
+  that depth exists, while withholding the content.
+- **The wall MUST be enforced server-side.** Anything the page can render, it
+  received over the network — so a UI-only wall leaks via the network payload.
+  The public definer function must return **only a small fixed neighborhood**
+  (e.g. root + its first reply + one step of siblings); the "random direction"
+  only shuffles presentation order *within* that fixed slice, never expands
+  reach — otherwise reload-farming reassembles the whole tree. The bound is on
+  total content exposed, not per-load randomness.
+- **Call-to-action is "Request access", NOT open self-signup** (founder's
+  correction — and it removes the biggest risk). The teaser does not turn the
+  platform into an open consumer-signup product (which would drag in
+  content-moderation, spam, ToS, an acquisition funnel). Instead "Request
+  access" routes to the org head / someone who can add members, who
+  approves → the person is added the normal way. Platform stays invite-only and
+  controlled. Introduces one small bounded new primitive: an **access request**
+  (a pending "someone wants in" item an approver accepts/declines), reusable
+  for invite-only conversations and other modules.
+- **OPEN — the multi-party consent question (the crux).** Once *others* have
+  replied, the admin no longer owns all the material; flipping public would
+  expose other people's drawings they never agreed to share. Options: (a)
+  simplest — allow public only **before the first outside reply**, lock after;
+  (b) fuller — notify contributors and let them withdraw their layers, or
+  expose only content created *after* the switch (drawing on after the "now
+  public" notice = implicit consent). This mirrors the module's existing
+  "immutable once replied-on" principle (others' contributions change what the
+  owner may do unilaterally). Left undecided.
+- **Technical shape when built:** the `syn_public_*` security-definer pattern
+  (T10) + a public route, keyed by a **revocable per-conversation share token**
+  (not the raw conversation UUID — so a leaked link can be killed by
+  regenerating the token), plus a scary confirmation on going public. This is a
+  migration/RLS slice for a verified-Opus session with the full security-review
+  rhythm.
+
+**Status:** parked, explicitly not v1 (founder). Revisit as a whole after the
+testing round; the multi-party-consent rule is the first thing to settle.
