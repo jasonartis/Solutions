@@ -79,3 +79,34 @@ moderation log) ship alongside.
 carousel + dots, zoomed-out thumbnail grids (needs the worker rasterizer),
 image stamps/text/emoji tools, moderation queue UI, deep links for
 non-members, org-per-group auto-creation (pending founder confirmation).
+
+## Gesture layer + moderation queue shipped (2026-07-10)
+
+The three items flagged above as the effort center are done, in a view/draw
+mode split (view is default; "Draw a reply" enters draw mode):
+
+- **Swipe navigation** — left dives into the first reply, right backs up to
+  the parent, up/down cycles siblings; **sibling dots** under the picture
+  show carousel position and are clickable. Nav targets are computed
+  server-side per render from the path-ordered layer rows.
+- **Zoomed-out tree view** (`?view=tree` toggle) — every layer as a small
+  Konva thumbnail (root image + composited ancestor-chain strokes; tombstoned
+  layers render blank), grouped by tree depth, click to jump. **No worker
+  rasterizer needed at this scale** — it composites client-side from data the
+  conversation page already loads; revisit only if a conversation's layer
+  count grows into the hundreds.
+- **Moderation queue UI** — members get **Flag this layer** (reason +
+  optional detail); moderators get a **Moderation** section per conversation:
+  a **Flagged content** list (reporter visible to moderators only — the
+  flagged layer's author never learns who reported), **Mark
+  actioned**/**Dismiss**, and **Remove**/**Restore this layer** +
+  **Freeze**/**Unfreeze this branch** wired to the already-audited
+  `vm_tombstone_layer`/`vm_restore_layer`/`vm_set_branch_frozen` RPCs from the
+  2026-07-09 security review — no new migration, this was UI + three server
+  actions.
+
+Both walkthroughs updated same commit (docs/03 update rule). **Still not
+built:** image stamps/text/emoji tools, deep links for non-members, and
+org-per-group auto-creation for ad-hoc person-to-person groups — the last one
+is still awaiting the founder's confirmation (raised 2026-07-09 in the
+design-decisions note above: ad-hoc groups = auto-created lightweight orgs).
