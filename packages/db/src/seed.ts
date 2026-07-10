@@ -48,6 +48,9 @@ if (!/localhost|127\.0\.0\.1/.test(url) && process.env.SEED_ALLOW_REMOTE !== 'ye
 
 const admin = createClient(url, serviceKey, { auth: { persistSession: false } })
 
+// Local default; PROD walkthrough seeding overrides via DEMO_PASSWORD.
+const DEMO_PASSWORD = process.env.DEMO_PASSWORD ?? 'password123'
+
 async function ensureUser(email: string, password: string, displayName: string) {
   const { data: created, error } = await admin.auth.admin.createUser({
     email,
@@ -79,9 +82,9 @@ async function ensureOrg(name: string, slug: string) {
 }
 
 async function main() {
-  const founderId = await ensureUser('owner@demo.local', 'password123', 'Founder')
-  const aliceId = await ensureUser('alice@demo.local', 'password123', 'Alice A')
-  const bobId = await ensureUser('bob@demo.local', 'password123', 'Bob B')
+  const founderId = await ensureUser('owner@demo.local', DEMO_PASSWORD, 'Founder')
+  const aliceId = await ensureUser('alice@demo.local', DEMO_PASSWORD, 'Alice A')
+  const bobId = await ensureUser('bob@demo.local', DEMO_PASSWORD, 'Bob B')
 
   await admin.from('profiles').update({ is_superadmin: true }).eq('user_id', founderId)
 
@@ -260,18 +263,23 @@ async function main() {
     .upsert({ org_id: shul, week_start: weekStart, published: true })
 
   // --- Demo classroom for module 2 -----------------------------------------
-  const charlieId = await ensureUser('charlie@demo.local', 'password123', 'Charlie C')
-  const danaId = await ensureUser('dana@demo.local', 'password123', 'Dana D')
+  const charlieId = await ensureUser('charlie@demo.local', DEMO_PASSWORD, 'Charlie C')
+  // GA for the classroom walkthrough (module role only — not a class member,
+  // so roster counts stay stable for the e2e).
+  const gabeId = await ensureUser('gabe@demo.local', DEMO_PASSWORD, 'Gabe G')
+  const danaId = await ensureUser('dana@demo.local', DEMO_PASSWORD, 'Dana D')
   await admin
     .from('org_members')
     .upsert([
       { org_id: orgA, user_id: charlieId, role: 'member' },
       { org_id: orgA, user_id: danaId, role: 'member' },
+      { org_id: orgA, user_id: gabeId, role: 'member' },
     ])
   await admin.from('org_modules').upsert({ org_id: orgA, module_key: 'classroom', enabled: true, settings: {} })
   await admin.from('module_roles').upsert([
     { org_id: orgA, user_id: aliceId, module_key: 'classroom', role: 'professor' },
     { org_id: orgA, user_id: charlieId, module_key: 'classroom', role: 'student' },
+    { org_id: orgA, user_id: gabeId, module_key: 'classroom', role: 'ga' },
     { org_id: orgA, user_id: danaId, module_key: 'classroom', role: 'student' },
   ])
 
@@ -366,9 +374,9 @@ async function main() {
   // matchmaker is assigned to two of them. Pair scores are precomputed here
   // with the real scoring engine (no worker runs during seed).
   const match = await ensureOrg('Demo Match', 'demo-match')
-  const eveId = await ensureUser('eve@demo.local', 'password123', 'Eve E')
-  const frankId = await ensureUser('frank@demo.local', 'password123', 'Frank F')
-  const melId = await ensureUser('mel@demo.local', 'password123', 'Mel M')
+  const eveId = await ensureUser('eve@demo.local', DEMO_PASSWORD, 'Eve E')
+  const frankId = await ensureUser('frank@demo.local', DEMO_PASSWORD, 'Frank F')
+  const melId = await ensureUser('mel@demo.local', DEMO_PASSWORD, 'Mel M')
 
   await admin.from('org_members').upsert([
     { org_id: match, user_id: aliceId, role: 'admin' },
@@ -588,9 +596,9 @@ async function main() {
   await admin.from('vm_conversations').delete().eq('org_id', visual)
 
   console.log('Seed complete:')
-  console.log('  owner@demo.local / password123  (superadmin)')
-  console.log('  alice@demo.local / password123  (admin of Demo Org A + Demo Synagogue + Demo Match + Demo Salon + Demo Dating)')
-  console.log('  bob@demo.local   / password123  (admin of Demo Org B, no modules)')
+  console.log('  owner@demo.local / <demo password>  (superadmin)')
+  console.log('  alice@demo.local / <demo password>  (admin of Demo Org A + Demo Synagogue + Demo Match + Demo Salon + Demo Dating)')
+  console.log('  bob@demo.local   / <demo password>  (admin of Demo Org B, no modules)')
   console.log('  Demo Synagogue (demo-shul): synagogue-schedules enabled, alice is maker')
   console.log('  Demo Match (demo-match): matchmaking enabled — singles charlie/dana/eve/frank, matchmaker mel')
   console.log('  Demo Salon (demo-salon): nail-salon — manager alice, cashier eve, worker dana, customer charlie')
