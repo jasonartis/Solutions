@@ -58,8 +58,10 @@ match, then see your top matches by compatibility.
    question a forced criterion, set **Lock care at** (e.g. −10) and check
    **Lock as dealbreaker** — the classic use is a gender question locked to
    "opposite, dealbreaker".
-4. After answers change, click **Recompute all matches** — every pair's
-   percentage refreshes and *(recompute pending)* flags clear.
+4. Rescoring is automatic: within about half a minute of someone changing
+   an answer, percentages refresh and *(recompute pending)* flags clear
+   (wherever the platform worker is running). **Recompute all matches**
+   forces an instant refresh.
 `,
     },
   ],

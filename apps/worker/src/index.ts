@@ -7,6 +7,7 @@ import { createClient as createSupabaseClient, type SupabaseClient } from '@supa
 import { RENDER_KIND, runSynagogueRender } from './jobs/synagogue-render'
 import { runRetentionSweep } from './jobs/classroom-retention'
 import { runOrchestratorTick } from './jobs/speed-dating-orchestrator'
+import { runRescoreTick } from './jobs/matchmaking-rescore'
 
 // import.meta.dirname is undefined under tsx — derive it from the module URL.
 const here = dirname(fileURLToPath(import.meta.url))
@@ -147,6 +148,21 @@ async function main() {
       }
     }, 10_000)
     console.log('Speed-dating orchestrator active (every 10s).')
+
+    // Matchmaking rescore (module 1): sweep stale pair scores every 30s.
+    let rescoring = false
+    setInterval(async () => {
+      if (rescoring) return
+      rescoring = true
+      try {
+        await runRescoreTick(admin)
+      } catch (err) {
+        console.error('[rescore]', err)
+      } finally {
+        rescoring = false
+      }
+    }, 30_000)
+    console.log('Matchmaking rescore active (every 30s).')
 
     let polling = false
     setInterval(async () => {
