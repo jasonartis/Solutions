@@ -516,6 +516,30 @@ test('data export: salon hats follow authorship — customer exports visits, cas
   await expect(page.getByText('Full appointment book')).not.toBeVisible()
 })
 
+test('help walkthroughs: role-aware — student sees their guide, professor sees all', async ({ page }) => {
+  // Charlie (student): sees the student guide, no staff guides listed, and a
+  // direct link to a staff guide 404s (enforced, not just hidden).
+  await signIn(page, 'charlie@demo.local')
+  await page.goto('/o/demo-a/help')
+  await expect(page.getByRole('heading', { name: 'Help & walkthroughs' })).toBeVisible()
+  await expect(page.getByRole('link', { name: /Student — take a class/ })).toBeVisible()
+  await expect(page.getByRole('link', { name: /Professor — run a course/ })).not.toBeVisible()
+  await page.goto('/o/demo-a/help/classroom/professor')
+  await expect(page.getByText('404')).toBeVisible()
+
+  // The student guide renders its numbered steps.
+  await page.goto('/o/demo-a/help/classroom/student')
+  await expect(page.getByRole('heading', { name: /Student — take a class/ })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Submit homework' })).toBeVisible()
+
+  // Alice (professor): sees and opens the staff guide.
+  await signIn(page, 'alice@demo.local')
+  await page.goto('/o/demo-a/help')
+  await expect(page.getByRole('link', { name: /Professor — run a course/ })).toBeVisible()
+  await page.getByRole('link', { name: /Professor — run a course/ }).click()
+  await expect(page.getByRole('heading', { name: 'Run the homework grading workflow' })).toBeVisible()
+})
+
 test('public schedule page works with no login', async ({ page }) => {
   await page.goto('/s/demo-shul')
   await expect(page.getByRole('heading', { name: 'Demo Synagogue' })).toBeVisible()

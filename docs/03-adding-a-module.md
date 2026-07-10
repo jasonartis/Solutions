@@ -211,3 +211,18 @@ higher role may deliberately choose a lower hat); output is one zip of
 CSV+JSON per set. **Export controls:** module staff can shut off any hat or
 data set for the levels below (`set_export_settings` / `module_can_manage`);
 staff bypass their own switches. v1 data-only, instant download.
+
+### User walkthroughs / in-app help (founder decision, 2026-07-09)
+
+Every module ships **role-level walkthroughs** — numbered click-by-click guides a
+user can follow to learn their level of the platform — rendered in-app at
+`/o/<slug>/m/<key>/help` and indexed at `/o/<slug>/help`. Files live in the
+module's folder: `modules/<key>/help/<role>.md`, one per role, with `staff: true`
+frontmatter on staff guides. Visibility: module staff see every guide; everyone
+else sees the non-staff guides ("each level sees their level and below").
+**Update rule: a UI change updates the module's walkthrough in the same commit**
+— "stale docs are bugs" extended to user docs; the e2e suite mirrors the same
+core flows, so a broken step usually turns CI red too. The founder tests the
+platform BY following these walkthroughs and gives feedback against step
+numbers. They are the script for future visual tutorials. The sample module
+carries a template walkthrough (composition rule).

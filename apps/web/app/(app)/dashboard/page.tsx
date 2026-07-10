@@ -20,6 +20,9 @@ export default async function DashboardPage() {
             <div className="mb-3 flex items-baseline justify-between">
               <h2 className="text-lg font-medium">{org.name}</h2>
               <span className="flex items-baseline gap-3">
+                <Link href={`/o/${org.slug}/help`} className="text-xs text-blue-600 hover:underline">
+                  Help
+                </Link>
                 <Link href={`/o/${org.slug}/export`} className="text-xs text-blue-600 hover:underline">
                   Export data
                 </Link>
