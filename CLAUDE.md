@@ -93,6 +93,15 @@ A multi-tenant modular platform: each client engagement produces a **module** bu
   Single commands starting with an allowlisted program (pnpm/git/node/tsx/docker/supabase);
   complex logic goes in script files, not shell one-liners.
 
+## Model choice (founder preference, 2026-07-10)
+
+- **Sonnet 5** for routine slices: UI/CRUD work, walkthrough-feedback fixes,
+  docs, manifest copies.
+- **Opus 4.8 (or better)** for anything touching `supabase/migrations/`, RLS
+  policies, triggers, export/privacy rules, or gnarly multi-step debugging.
+- Whatever the model: the docs/03 #12 security rhythm (agent-draft →
+  security-review → live verification) is the invariant, not the model.
+
 ## Working agreements
 
 - Never build platform primitives speculatively — extract them when a second module needs the same thing.
