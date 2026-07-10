@@ -22,6 +22,18 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # Safeguard (docs/12): destructive SQL in a migration fails CI unless it
+      # carries an explicit founder-approval marker. Advisory rules rot;
+      # mechanical ones don't.
+      - name: Block unapproved destructive migrations
+        run: |
+          bad=$(grep -rilE 'drop[[:space:]]+table|truncate[[:space:]]|drop[[:space:]]+schema' supabase/migrations/ | xargs -r grep -Li 'DESTRUCTIVE-CHANGE-APPROVED' || true)
+          if [ -n "$bad" ]; then
+            echo "Destructive SQL without the DESTRUCTIVE-CHANGE-APPROVED marker:"
+            echo "$bad"
+            exit 1
+          fi
+
       - run: pnpm typecheck
 
       # Supabase must be up BEFORE build: Next.js prerenders pages at build

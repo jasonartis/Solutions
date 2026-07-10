@@ -101,6 +101,9 @@ A multi-tenant modular platform: each client engagement produces a **module** bu
   policies, triggers, export/privacy rules, or gnarly multi-step debugging.
 - Whatever the model: the docs/03 #12 security rhythm (agent-draft →
   security-review → live verification) is the invariant, not the model.
+- **A lighter model whose task drifts into that territory must SAY SO and
+  suggest switching up — never push through quietly.**
+- Safeguards, never-do list, backups, recovery: [docs/12-safeguards.md](docs/12-safeguards.md).
 
 ## Working agreements
 

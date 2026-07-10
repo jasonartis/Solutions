@@ -36,3 +36,6 @@ client-materials/
 
 # VPS worker env (holds the service-role key)
 deploy/worker/worker.env
+
+# Prod database backups (scripts/prod-backup.ts) — never commit data
+backups/
