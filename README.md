@@ -4,11 +4,14 @@ A multi-tenant, modular web platform. Each client engagement produces a **module
 
 **Working name:** "Solutions Platform" (placeholder — rename when branding is chosen).
 
-## Status
+## Status (2026-07-10)
 
-- **Phase:** Planning complete, foundation not yet started.
-- Six modules are fully specified from client discussions (2026-07-06). No code exists yet.
-- Next step: M0 foundation skeleton per [docs/04-build-plan.md](docs/04-build-plan.md).
+- **Production is live:** https://solutions-platform.vercel.app (Vercel + cloud Supabase; every green CI run deploys automatically).
+- **All six modules are built and usable** — schemas security-reviewed with live-verified guards, role-adaptive UIs, per-role in-app walkthroughs (**Help** on every org card), and authorship-based data export with per-level controls.
+- Module 3 (Synagogue Schedules) passed acceptance against the first real client's data; a real org runs on it.
+- Platform primitives: org/entitlement/RLS tenancy, self-contained module composition (`modules/<key>` + `MODULES` env filter for white-label builds), background worker jobs (exports, round clocks, rescoring, retention), data export, in-app help. `modules/sample` is the living template for module 7+.
+- The worker runs in production via `pnpm worker:prod` from the dev PC ([docs/10](docs/10-worker-deploy.md) has the VPS runbook).
+- Founder testing round in progress against [docs/11](docs/11-walkthrough-testing-script.md).
 
 ## Documentation map
 
@@ -26,16 +29,19 @@ Read in this order for full context:
 | [docs/07-account-setup.md](docs/07-account-setup.md) | Founder checklist: GitHub, Supabase, Vercel, and later accounts |
 | [docs/08-first-shul-walkthrough.md](docs/08-first-shul-walkthrough.md) | Hands-on production test script: build + publish a schedule click by click |
 | [docs/09-continuing-development.md](docs/09-continuing-development.md) | Restarting development in a fresh session: starter prompt + where every thread lives |
+| [docs/10-worker-deploy.md](docs/10-worker-deploy.md) | Background worker: the local prod stopgap + the Hetzner VPS runbook |
+| [docs/11-walkthrough-testing-script.md](docs/11-walkthrough-testing-script.md) | Founder testing itinerary: every module, every role, from zero (production or offline) |
 | [docs/modules/](docs/modules/) | Full specification for each module (1–6) |
 
-## Modules specified so far
+## Modules (all live)
 
-1. **Make-a-Match** — matchmaking platform (singles, matchmakers, admins; slider-based compatibility scoring)
-2. **Classroom** — online course management (students, GAs, professors; submissions, peer review, gradebook)
-3. **Synagogue Schedules** — zmanim-driven schedule builder with rules engine and multi-format export
-4. **Visual Messaging** — layered image-annotation conversations (tree-structured transparent reply layers)
-5. **Nail Salon** — booking, appointment workflow, billing, light bookkeeping
-6. **Speed Dating** — live video events with timed round-robin rotation (Jitsi)
+1. **Make-a-Match** — weighted-question matchmaking: care sliders, dealbreakers, automatic rescoring, share-with-match reveal
+2. **Classroom** — materials with visibility windows, homework, GA + anonymous peer + exam grading, gradebook combination, surveys, retention
+3. **Synagogue Schedules** — zmanim rules engine, weekly publishing, public page, PDF/JPG exports (client-accepted)
+4. **Visual Messaging** — conversations as layer trees: draw replies on a picture, X-ray, moderation with tombstones + audit log
+5. **Nail Salon** — customer self-booking, day-board lifecycle through payment, promotions, earnings/expenses/shopping bookkeeping
+6. **Speed Dating** — events with an automatic round clock, block-aware rotation, privacy-preserving mutual-match reveal (video pending VPS)
+0. **Sample** — the living template new modules are copied from
 
 ## Running locally
 
@@ -46,7 +52,7 @@ Prerequisites (already installed on the dev machine): Node 24+, pnpm, Docker Des
    It starts local Supabase in Docker if needed, writes the `.env` files, and launches the web app + worker. First output shows the resolved config; wait for Next.js to print `Ready`.
 3. Open **http://localhost:3000** → you land on the **login page**.
 
-Demo logins (created by `pnpm seed`; all password `password123`):
+Demo logins (created by `pnpm seed`; all password `password123` locally — the full cast and testing itinerary live in [docs/11](docs/11-walkthrough-testing-script.md)):
 
 | Email | What you'll see after login |
 |---|---|

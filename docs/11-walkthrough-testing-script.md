@@ -1,14 +1,32 @@
 # Founder Testing Script — every module, every level, from zero
 
-Follow this top to bottom. You need: a browser, the production URL, and the
-demo password (given to you privately — it is deliberately written nowhere).
-Every chapter says who to sign in as and which in-app guide to follow; the
-guides themselves contain the numbered click-by-click steps, so this document
-only sequences them and adds the platform-level checks.
+Follow this top to bottom. Every chapter says who to sign in as and which
+in-app guide to follow; the guides themselves contain the numbered
+click-by-click steps, so this document only sequences them and adds the
+platform-level checks.
 
-**Start here:** https://solutions-platform.vercel.app
+## Where to test — pick one
 
-**The cast** (all `<name>@demo.local`, all with the demo password):
+**Option A — Production (any browser, nothing to install):**
+- Start at **https://solutions-platform.vercel.app**
+- Demo password: the one given to you privately (deliberately written nowhere).
+- Background-worker steps (marked ⚙ below): open a terminal in the repo
+  folder and run **`pnpm worker:prod`** — leave that window open while you
+  test. Without it, ⚙ steps queue and complete whenever it next runs.
+
+**Option B — Fully local / offline (the dev PC, no internet needed):**
+1. Start Docker Desktop (whale icon running).
+2. Open a terminal in `d:\Solutions Platform` and run **`pnpm dev`**
+   (or double-click `scripts\start-dev.bat`). Wait for `Ready`.
+3. If this is a fresh database, also run **`pnpm seed`** in a second terminal.
+4. Test at **http://localhost:3000** — demo password is `password123`.
+5. The background worker is ALREADY running (`pnpm dev` starts it), so ⚙
+   steps just work — nothing extra to start.
+6. When done: `Ctrl+C`, then `pnpm stop`.
+
+Everything below is identical in both options.
+
+**The cast** (all `<name>@demo.local`, with the password for your option):
 
 | Login | Plays |
 |---|---|
@@ -24,9 +42,10 @@ only sequences them and adds the platform-level checks.
 
 **How to give feedback:** `module / guide / step N — what happened`. Screenshots welcome.
 
-**Two steps need the background worker** (marked ⚙ below): synagogue exports
-and the speed-dating automatic round clock. Tell me before those chapters and
-I'll run `pnpm worker:prod`, or run it yourself in a terminal at the repo.
+**⚙ = needs the background worker running** (auto-rescoring in matchmaking,
+the speed-dating automatic round clock, synagogue exports). Local testing:
+already running via `pnpm dev`. Production testing: run `pnpm worker:prod`
+in a repo terminal — each ⚙ chapter repeats this reminder in place.
 
 ---
 
@@ -66,6 +85,11 @@ because it's the smallest complete example.
 
 ## Chapter 3 — Make-a-Match (20 min)
 
+> ⚙ One step here (automatic rescoring) uses the background worker.
+> **Local:** nothing to do — `pnpm dev` already runs it.
+> **Production:** run `pnpm worker:prod` in a terminal at the repo and leave
+> it open. (The admin's manual Recompute button works either way.)
+
 11. As **dana**: *Single — answer questions...*. Answer, move sliders, and
     check **Share this answer with a potential match** on one answer.
 12. As **charlie**: same guide — his matches should show dana's shared
@@ -85,7 +109,13 @@ because it's the smallest complete example.
 18. As **alice**: *Manager — catalog, promotions, and the books*. Add a
     service, a promotion, an expense; run a shopping item to purchased.
 
-## Chapter 5 — Speed Dating (30 min) ⚙ for the auto-clock
+## Chapter 5 — Speed Dating (30 min)
+
+> ⚙ The automatic round clock runs in the background worker.
+> **Local:** already running via `pnpm dev`.
+> **Production:** run `pnpm worker:prod` in a repo terminal before starting
+> the event. (The organizer's manual "Run next round" button works without
+> it, but the self-advancing clock is worth seeing.)
 
 19. As **charlie**, then **dana** (and **eve**/**frank** if you like a fuller
     event): *Participant — from registration...*. Register everyone.
@@ -96,7 +126,13 @@ because it's the smallest complete example.
     and after the reveal both should see *It's a match!* — and nobody else
     sees anything.
 
-## Chapter 6 — Synagogue Schedules (20 min) ⚙ for exports
+## Chapter 6 — Synagogue Schedules (20 min)
+
+> ⚙ Exports (PDF/JPG rendering) run in the background worker.
+> **Local:** already running via `pnpm dev`.
+> **Production:** run `pnpm worker:prod` in a repo terminal before clicking
+> Export. Without it, the export queues and finishes whenever the worker
+> next runs — nothing is lost.
 
 22. As **alice** on Demo Synagogue: *Maker — build rules, publish weeks,
     export*. Also try the public no-login page: open `/s/demo-shul` in a
