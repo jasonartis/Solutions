@@ -53,6 +53,29 @@ export async function getOrgsWithModules(): Promise<OrgWithModules[]> {
   })
 }
 
+// The caller's org-level role for one org by slug (founder feedback,
+// 2026-07-11: "once you click in you lose sight of your role" — the
+// dashboard card showed it, but nothing inside the org did). Used by the
+// org-scoped layout to keep a persistent "Org Name · ROLE" banner visible
+// on every page inside that org, not just the dashboard.
+export async function getMyOrgRole(orgSlug: string): Promise<{ orgName: string; role: string } | null> {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return null
+
+  const { data } = await supabase
+    .from('org_members')
+    .select('role, orgs!inner(name, slug)')
+    .eq('orgs.slug', orgSlug)
+    .eq('user_id', user.id)
+    .maybeSingle()
+  if (!data) return null
+  const org = data.orgs as unknown as { name: string; slug: string }
+  return { orgName: org.name, role: data.role }
+}
+
 export async function getProfile() {
   const supabase = await createClient()
   const {

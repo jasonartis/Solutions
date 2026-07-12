@@ -170,12 +170,38 @@ export default async function ConversationPage(props: {
     ? rows.filter((l) => l.parent_layer_id === current.parent_layer_id)
     : [current]
   const sibIndex = siblings.findIndex((l) => l.id === current.id)
+
+  // Per-direction swipe counts (founder feedback, 2026-07-11: "know which
+  // direction is available to swipe and how many are available"). Each is
+  // "how many times can I swipe THIS direction in a row from here" — right
+  // always ends at the root (one ancestor per hop, so just the chain
+  // length); left follows the first-child chain down as far as it goes;
+  // up/down are just how many siblings sit on either side of current.
+  const firstChildDepth = (startId: string): number => {
+    let depth = 0
+    let cursorId: string | null = startId
+    while (cursorId) {
+      const kids = rows.filter((l) => l.parent_layer_id === cursorId)
+      if (kids.length === 0) break
+      depth++
+      cursorId = kids[0]!.id
+    }
+    return depth
+  }
+  const swipeCounts = {
+    left: firstChildDepth(current.id),
+    right: chain.length - 1,
+    up: siblings.length - 1 - sibIndex,
+    down: sibIndex,
+  }
+
   const nav = {
     parentId: current.parent_layer_id,
     firstChildId: children[0]?.id ?? null,
     prevSiblingId: sibIndex > 0 ? siblings[sibIndex - 1]!.id : null,
     nextSiblingId: sibIndex >= 0 && sibIndex < siblings.length - 1 ? siblings[sibIndex + 1]!.id : null,
     siblings: siblings.map((l) => ({ id: l.id, current: l.id === current.id })),
+    swipeCounts,
   }
 
   const sendReply = replyWithDrawing.bind(null, orgSlug, conversationId, current.id)
@@ -247,6 +273,7 @@ export default async function ConversationPage(props: {
       ) : (
         <LayerCanvas
           imageUrl={signed.signedUrl}
+          currentLayerId={current.id}
           baseLayers={chain.slice(0, -1).map((l) => l.content.strokes ?? [])}
           currentStrokes={current.content.strokes ?? []}
           baseStamps={chain.slice(0, -1).map((l) => l.content.stamps ?? [])}

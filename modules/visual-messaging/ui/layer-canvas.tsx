@@ -57,6 +57,8 @@ export type LayerNav = {
   nextSiblingId: string | null
   /** this layer + its siblings, in path order (for the dots) */
   siblings: { id: string; current: boolean }[]
+  /** how many consecutive swipes each direction keeps working from here */
+  swipeCounts: { left: number; right: number; up: number; down: number }
 }
 
 const COLORS = ['#e11d48', '#2563eb', '#16a34a', '#f59e0b', '#111111', '#ffffff']
@@ -96,6 +98,7 @@ export function useImageCache(urls: string[]): Record<string, HTMLImageElement> 
 
 export default function LayerCanvas(props: {
   imageUrl: string
+  currentLayerId: string
   baseLayers: Stroke[][]
   currentStrokes: Stroke[]
   baseStamps: Stamp[][]
@@ -141,6 +144,17 @@ export default function LayerCanvas(props: {
   const genId = () => `d${nextDraftId.current++}`
   const shapeRefs = useRef<Record<string, any>>({})
   const transformerRef = useRef<any>(null)
+  // Slide-in transition on swipe navigation (founder Q2, 2026-07-11: "how
+  // hard would it be to show the new layer sliding in from the swipe
+  // direction" — answer was "not hard," this is that). The new layer
+  // starts nudged in the direction it swiped FROM, then eases to rest —
+  // a directional cue, not a scene transition, so the offset stays small.
+  const lastSwipeDir = useRef<'left' | 'right' | 'up' | 'down' | null>(null)
+  const prevLayerId = useRef(props.currentLayerId)
+  const [slideStyle, setSlideStyle] = useState<{ transform: string; transition: string }>({
+    transform: 'none',
+    transition: 'none',
+  })
 
   const imageCache = useImageCache([
     ...props.baseImages.flatMap((layer) => layer.map((i) => i.url)),
@@ -157,6 +171,34 @@ export default function LayerCanvas(props: {
     tr.nodes(node ? [node] : [])
     tr.getLayer()?.batchDraw()
   }, [selected, stampDraft, textDraft, imageDraft])
+
+  // Runs after navigation actually lands on a new layer (props.currentLayerId
+  // changed) — start the incoming view offset in the direction it swiped
+  // from, then ease it to rest on the next two frames (the double rAF
+  // ensures the browser paints the offset starting position before the
+  // transition kicks in, or it'd snap instead of animating).
+  useEffect(() => {
+    if (props.currentLayerId === prevLayerId.current) return
+    prevLayerId.current = props.currentLayerId
+    const dir = lastSwipeDir.current
+    lastSwipeDir.current = null
+    if (!dir) return
+    const offset = 24
+    const startTransform =
+      dir === 'left'
+        ? `translateX(${offset}px)`
+        : dir === 'right'
+          ? `translateX(-${offset}px)`
+          : dir === 'up'
+            ? `translateY(${offset}px)`
+            : `translateY(-${offset}px)`
+    setSlideStyle({ transform: startTransform, transition: 'none' })
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setSlideStyle({ transform: 'none', transition: 'transform 200ms ease-out' })
+      })
+    })
+  }, [props.currentLayerId])
 
   const selectShape = (kind: 'stamp' | 'text' | 'image', id: string) => {
     setSelected({ kind, id })
@@ -260,8 +302,10 @@ export default function LayerCanvas(props: {
   const scale = displayW / natural.w
   const displayH = natural.h * scale
 
-  const goTo = (layerId: string | null) => {
-    if (layerId) router.push(`${pathname}?layer=${layerId}`)
+  const goTo = (layerId: string | null, dir?: 'left' | 'right' | 'up' | 'down') => {
+    if (!layerId) return // no target — don't touch lastSwipeDir, a no-op swipe shouldn't taint the next real one
+    if (dir) lastSwipeDir.current = dir
+    router.push(`${pathname}?layer=${layerId}`)
   }
 
   const toImageSpace = (stage: any): number[] | null => {
@@ -353,11 +397,11 @@ export default function LayerCanvas(props: {
     const dy = pos.y - start.y
     if (Math.abs(dx) < SWIPE_MIN && Math.abs(dy) < SWIPE_MIN) return // a tap, not a swipe
     if (Math.abs(dx) >= Math.abs(dy)) {
-      if (dx < 0) goTo(props.nav.firstChildId)
-      else goTo(props.nav.parentId)
+      if (dx < 0) goTo(props.nav.firstChildId, 'left')
+      else goTo(props.nav.parentId, 'right')
     } else {
-      if (dy < 0) goTo(props.nav.nextSiblingId)
-      else goTo(props.nav.prevSiblingId)
+      if (dy < 0) goTo(props.nav.nextSiblingId, 'up')
+      else goTo(props.nav.prevSiblingId, 'down')
     }
   }
 
@@ -394,14 +438,66 @@ export default function LayerCanvas(props: {
           Drawing mode — swipes are off
         </p>
       )}
-      <div
-        className={
-          'inline-block overflow-hidden rounded bg-white ' +
-          (mode === 'draw' ? 'border-4 border-blue-500' : 'border border-gray-300')
-        }
-        style={{ touchAction: 'none' }}
-        data-canvas-mode={mode}
-      >
+      <div className="relative inline-block">
+        {/* Swipe-direction indicators (founder feedback, 2026-07-11): plain
+            HTML overlays, not part of the Konva stage, so they always
+            render above whatever's drawn underneath and are never obscured
+            by ink. Each shows only when that direction has somewhere to go;
+            the badge is how many consecutive swipes still work from here —
+            not just "can I swipe" but "how many times." Clicking one
+            navigates directly, same target as the matching swipe/dot. */}
+        {mode === 'view' && (
+          <>
+            {props.nav.swipeCounts.left > 0 && (
+              <button
+                type="button"
+                onClick={() => goTo(props.nav.firstChildId, 'left')}
+                aria-label={`swipe left: ${props.nav.swipeCounts.left} deeper`}
+                className="absolute left-1 top-1/2 z-10 flex -translate-y-1/2 items-center gap-1 rounded-full bg-black/40 px-2 py-1 text-sm text-white hover:bg-black/60"
+              >
+                ← <span className="rounded-full bg-white/90 px-1.5 text-[10px] font-semibold text-gray-800">{props.nav.swipeCounts.left}</span>
+              </button>
+            )}
+            {props.nav.swipeCounts.right > 0 && (
+              <button
+                type="button"
+                onClick={() => goTo(props.nav.parentId, 'right')}
+                aria-label={`swipe right: ${props.nav.swipeCounts.right} back up`}
+                className="absolute right-1 top-1/2 z-10 flex -translate-y-1/2 items-center gap-1 rounded-full bg-black/40 px-2 py-1 text-sm text-white hover:bg-black/60"
+              >
+                <span className="rounded-full bg-white/90 px-1.5 text-[10px] font-semibold text-gray-800">{props.nav.swipeCounts.right}</span> →
+              </button>
+            )}
+            {props.nav.swipeCounts.up > 0 && (
+              <button
+                type="button"
+                onClick={() => goTo(props.nav.nextSiblingId, 'up')}
+                aria-label={`swipe up: ${props.nav.swipeCounts.up} siblings`}
+                className="absolute left-1/2 top-1 z-10 flex -translate-x-1/2 items-center gap-1 rounded-full bg-black/40 px-2 py-1 text-sm text-white hover:bg-black/60"
+              >
+                ↑ <span className="rounded-full bg-white/90 px-1.5 text-[10px] font-semibold text-gray-800">{props.nav.swipeCounts.up}</span>
+              </button>
+            )}
+            {props.nav.swipeCounts.down > 0 && (
+              <button
+                type="button"
+                onClick={() => goTo(props.nav.prevSiblingId, 'down')}
+                aria-label={`swipe down: ${props.nav.swipeCounts.down} siblings`}
+                className="absolute bottom-1 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1 rounded-full bg-black/40 px-2 py-1 text-sm text-white hover:bg-black/60"
+              >
+                <span className="rounded-full bg-white/90 px-1.5 text-[10px] font-semibold text-gray-800">{props.nav.swipeCounts.down}</span> ↓
+              </button>
+            )}
+          </>
+        )}
+        <div
+          className={
+            'overflow-hidden rounded bg-white ' +
+            (mode === 'draw' ? 'border-4 border-blue-500' : 'border border-gray-300')
+          }
+          style={{ touchAction: 'none', ...slideStyle }}
+          data-canvas-mode={mode}
+        >
         <Stage
           width={displayW}
           height={displayH}
@@ -587,6 +683,7 @@ export default function LayerCanvas(props: {
             {mode === 'draw' && <Transformer ref={transformerRef} rotateEnabled />}
           </Layer>
         </Stage>
+        </div>
       </div>
 
       {/* Sibling dots: this layer among its siblings (carousel position). */}

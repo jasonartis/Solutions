@@ -13,7 +13,11 @@ async function signIn(page: Page, email: string) {
 }
 
 test('alice reaches her module through the entitlement chain', async ({ page }) => {
+  // The M0 stub-module proof lives in its own dedicated org (founder
+  // feedback, 2026-07-11: it's clutter on Demo Org A, which is meant for
+  // real walkthrough testing — Demo Org A no longer offers "Demo Module").
   await signIn(page, 'alice@demo.local')
+  await expect(page.getByText('Platform Self-Test')).toBeVisible()
   await expect(page.getByText('Demo Org A')).toBeVisible()
 
   await page.getByRole('link', { name: 'Demo Module' }).click()
@@ -28,7 +32,7 @@ test('bob sees his org without modules and cannot deep-link into org A', async (
   await expect(page.getByText('Demo Org A')).not.toBeVisible()
 
   // Direct URL into org A's module: RLS hides the org -> 404.
-  await page.goto('/o/demo-a/m/stub')
+  await page.goto('/o/demo-a/m/classroom')
   await expect(page.getByText('404')).toBeVisible()
 })
 

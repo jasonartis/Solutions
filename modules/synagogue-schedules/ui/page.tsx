@@ -133,7 +133,7 @@ export default async function SchedulesPage(props: {
             Setup
           </Link>
           <Link
-            href={`/o/${orgSlug}/m/synagogue-schedules/help`}
+            href={`/o/${orgSlug}/help`}
             className="text-sm text-blue-600 hover:underline"
           >
             Help

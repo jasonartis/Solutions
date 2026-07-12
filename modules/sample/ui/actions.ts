@@ -58,3 +58,18 @@ export async function toggleItem(orgSlug: string, itemId: string, done: boolean)
   fail(error, 'Toggle failed')
   revalidatePath(`/o/${orgSlug}/m/sample`)
 }
+
+// Founder feedback (2026-07-11): created a project by mistake (a duplicate
+// name) and had no way to remove it. RLS already allows staff to delete
+// (smp_projects_write_staff is `for all`) — this was purely a missing
+// action + button, not a permissions gap. Deliberately NOT adding a
+// name-uniqueness constraint alongside this: duplicate names are a
+// legitimate real case (two genuinely different projects can share a
+// name), and delete is the right fix for "I made a mistake," not a
+// database constraint preventing a valid state.
+export async function deleteProject(orgSlug: string, projectId: string) {
+  const supabase = await createClient()
+  const { error } = await supabase.from('smp_projects').delete().eq('id', projectId)
+  fail(error, 'Delete project failed')
+  revalidatePath(`/o/${orgSlug}/m/sample`)
+}

@@ -4,7 +4,7 @@
 //   - role detection via the module's definer rpc, not client-side guessing
 //   - role-adaptive rendering (staff form vs member view)
 import { requireOrgModule } from '@/lib/module-gate'
-import { addItem, createProject, toggleItem } from './actions'
+import { addItem, createProject, deleteProject, toggleItem } from './actions'
 
 const inputCls = 'rounded border border-gray-300 px-2 py-1 text-sm'
 const btnCls = 'rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700'
@@ -34,7 +34,14 @@ export default async function SamplePage(props: { params: Promise<{ orgSlug: str
       <div className="space-y-6">
         {(projects ?? []).map((p) => (
           <section key={p.id} className="rounded-lg border border-gray-200 bg-white p-5">
-            <h2 className="mb-3 text-lg font-medium">{p.name}</h2>
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-lg font-medium">{p.name}</h2>
+              {canManage && (
+                <form action={deleteProject.bind(null, orgSlug, p.id)}>
+                  <button className="text-xs text-red-600 hover:underline">Delete project</button>
+                </form>
+              )}
+            </div>
             <ul className="mb-4 space-y-1 text-sm">
               {(items ?? [])
                 .filter((i) => i.project_id === p.id)

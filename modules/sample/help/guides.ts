@@ -23,7 +23,9 @@ export const sampleHelp: ModuleHelp = {
       body: `
 1. Open **Sample Module**. Managers see the **New project name** form at the
    top — type a name and click **Create project**.
-2. Everything members can do (add/toggle items) works for you too.
+2. Click **Delete project** next to a project's name to remove it (and its
+   items) for good — there's no undo, so double-check the name first.
+3. Everything members can do (add/toggle items) works for you too.
 `,
     },
   ],

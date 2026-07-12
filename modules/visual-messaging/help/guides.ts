@@ -35,8 +35,13 @@ you a drawing seat). Invite-only conversations can't be joined this way.
    under it. **Swipe on the picture to move around**: swipe **left** to dive
    into its first reply, **right** to go back up, **up/down** to flip between
    sibling replies (the dots under the picture show where you are — click a
-   dot to jump). The **Layer** breadcrumb (e.g. 1 · 1.2 · 1.2.1) also shows
-   where you are — click any part to jump up the chain.
+   dot to jump). New layers slide in from the direction you swiped, so the
+   motion matches your gesture. Arrows overlaid on each edge of the picture
+   (← left, → right, ↑ up, ↓ down) show which directions have somewhere to
+   go and a badge with how many times in a row you can swipe that way before
+   running out — click an arrow to jump the same place a swipe would. The
+   **Layer** breadcrumb (e.g. 1 · 1.2 · 1.2.1) also shows where you are —
+   click any part to jump up the chain.
 4. **Replies to this layer** lists what was drawn in answer to it — click one
    to descend into it. For the bird's-eye view, click **Tree view**: every
    layer appears as a small thumbnail grouped by level — click any thumbnail

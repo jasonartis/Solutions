@@ -21,6 +21,7 @@ export default async function DashboardPage() {
               <div className="flex items-baseline gap-2">
                 <h2 className="text-lg font-medium">{org.name}</h2>
                 <span
+                  title="Your organization-level role (separate from any role you hold inside a specific module below)"
                   className={
                     'rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ' +
                     (org.role === 'owner'
@@ -30,7 +31,7 @@ export default async function DashboardPage() {
                         : 'bg-gray-100 text-gray-600')
                   }
                 >
-                  {org.role}
+                  org: {org.role}
                 </span>
               </div>
               <span className="flex items-baseline gap-3">
@@ -54,7 +55,10 @@ export default async function DashboardPage() {
                     >
                       {mod.name}
                       {mod.myRole && (
-                        <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-500">
+                        <span
+                          title="Your role inside this specific module (separate from your organization-level role above)"
+                          className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-500"
+                        >
                           {mod.myRole}
                         </span>
                       )}

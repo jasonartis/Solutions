@@ -1,10 +1,10 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { requireOrgModule } from '@/lib/module-gate'
+import AssignMatchmakerForm from './assign-matchmaker-form'
 import {
   addGroupMember,
   approveQuestion,
-  assignMatchmaker,
   createGroup,
   createQuestion,
   recompute,
@@ -64,6 +64,9 @@ export default async function MatchmakingManagePage(props: {
     return p?.display_name || p?.email || 'Someone'
   }
   const groupName = (groupId: string) => (groups ?? []).find((g) => g.id === groupId)?.name ?? 'Unknown group'
+  const emailOf = (userId: string) => (profiles ?? []).find((pr) => pr.user_id === userId)?.email ?? null
+  const matchmakerEmails = [...new Set((matchmakerRoles ?? []).map((r) => emailOf(r.user_id)).filter(Boolean))] as string[]
+  const singleEmails = [...new Set((singles ?? []).map((s) => emailOf(s.user_id)).filter(Boolean))] as string[]
 
   return (
     <div>
@@ -236,29 +239,12 @@ export default async function MatchmakingManagePage(props: {
           ))}
           {(assignments ?? []).length === 0 && <li className="text-gray-400">No assignments yet.</li>}
         </ul>
-        <form action={assignMatchmaker.bind(null, orgSlug)} className="flex flex-wrap items-center gap-2">
-          <input
-            name="matchmakerEmail"
-            type="email"
-            required
-            placeholder="matchmaker@email"
-            className={`${inputCls} w-48`}
-          />
-          <select name="targetType" required className={inputCls} defaultValue="individual">
-            <option value="individual">Individual single</option>
-            <option value="group">Group</option>
-          </select>
-          <input name="targetEmail" type="email" placeholder="single@email (if individual)" className={`${inputCls} w-56`} />
-          <select name="targetGroupId" className={inputCls} defaultValue="">
-            <option value="">— pick a group (if group) —</option>
-            {(groups ?? []).map((g) => (
-              <option key={g.id} value={g.id}>
-                {g.name}
-              </option>
-            ))}
-          </select>
-          <button className={btnCls}>Assign</button>
-        </form>
+        <AssignMatchmakerForm
+          orgSlug={orgSlug}
+          groups={groups ?? []}
+          matchmakerEmails={matchmakerEmails}
+          singleEmails={singleEmails}
+        />
       </section>
     </div>
   )

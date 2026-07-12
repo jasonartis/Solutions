@@ -12,9 +12,10 @@ import {
 const here = dirname(fileURLToPath(import.meta.url))
 
 // Local-dev seed (docs/03: seed data is mandatory).
-// Creates: a superadmin founder, two demo orgs with one user each, and the
-// stub module enabled for Demo Org A only — the exact fixture the RLS
-// isolation test needs.
+// Creates: a superadmin founder, two demo orgs with one user each, a
+// dedicated Platform Self-Test org with the stub module enabled (the M0
+// entitlement-chain proof — kept off Demo Org A so it stays clean for real
+// walkthrough testing), and one demo org per real module.
 //
 // Idempotent: safe to re-run. Uses the service-role key — LOCAL/STAGING ONLY.
 
@@ -103,10 +104,18 @@ async function main() {
     { org_id: orgB, user_id: bobId, role: 'admin' },
   ])
 
-  // Stub module: enabled for A only — B's absence is what the RLS test exercises.
-  await admin.from('org_modules').upsert({ org_id: orgA, module_key: 'stub', enabled: true })
+  // The M0-era "Demo Module" (stub) used to be enabled on Demo Org A purely
+  // to prove the entitlement chain works end-to-end (auth -> org membership
+  // -> entitlement -> module page). Founder feedback (2026-07-11): it's
+  // pure clutter on a founder-facing demo org now that six real modules
+  // exist, and it has no walkthrough since it does nothing real. Moved to
+  // its own dedicated org so Demo Org A stays clean for actual walkthrough
+  // testing, without weakening the original M0 acceptance proof.
+  const platformSelfTest = await ensureOrg('Platform Self-Test', 'platform-self-test')
+  await admin.from('org_members').upsert({ org_id: platformSelfTest, user_id: aliceId, role: 'admin' })
+  await admin.from('org_modules').upsert({ org_id: platformSelfTest, module_key: 'stub', enabled: true })
   await admin.from('module_roles').upsert({
-    org_id: orgA,
+    org_id: platformSelfTest,
     user_id: aliceId,
     module_key: 'stub',
     role: 'admin',
@@ -604,8 +613,9 @@ async function main() {
 
   console.log('Seed complete:')
   console.log('  owner@demo.local / <demo password>  (superadmin)')
-  console.log('  alice@demo.local / <demo password>  (admin of Demo Org A + Demo Synagogue + Demo Match + Demo Salon + Demo Dating)')
+  console.log('  alice@demo.local / <demo password>  (admin of Demo Org A + Demo Synagogue + Demo Match + Demo Salon + Demo Visual + Demo Dating + Platform Self-Test)')
   console.log('  bob@demo.local   / <demo password>  (admin of Demo Org B, no modules)')
+  console.log('  Platform Self-Test (platform-self-test): stub module only — the M0 entitlement-chain proof, not a real walkthrough')
   console.log('  Demo Synagogue (demo-shul): synagogue-schedules enabled, alice is maker')
   console.log('  Demo Match (demo-match): matchmaking enabled — singles charlie/dana/eve/frank, matchmaker mel')
   console.log('  Demo Salon (demo-salon): nail-salon — manager alice, cashier eve, worker dana, customer charlie')
