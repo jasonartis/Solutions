@@ -109,8 +109,12 @@ and export controls.
 
 ## Set up content
 
-1. Open **Classroom → Manage**. Each class card has forms for announcements,
-   homework, exams, and surveys; the header links to **Materials**.
+1. Open **Classroom → Manage**. At the top, **Courses** lets you create a
+   course (a course can span multiple classes/terms — e.g. "Stats 101, Fall"
+   and "Stats 101, Spring" are two classes under one course) and, under each
+   course, create a new class. Each class card below that has forms for
+   announcements, homework, exams, and surveys; the header links to
+   **Materials**.
 2. **Materials**: add a title + URL or file upload per course item. In its
    row, set optional **From/Until** dates per class and click **Publish** —
    students only see it inside that window (enforced by the database, not

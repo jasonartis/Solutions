@@ -115,6 +115,20 @@ test('classroom module: professor sees the seeded class, student view is scoped'
   await expect(page.getByRole('heading', { name: 'Classroom — Manage' })).toBeVisible()
   await expect(page.getByText('Roster (3)')).toBeVisible()
   await expect(page.getByText('Charlie C')).toBeVisible()
+
+  // Founder feedback (2026-07-12): a professor can create a new course and a
+  // new class under it directly — no more seed-only courses/classes.
+  await page.getByPlaceholder('New course name').fill('Advanced Statistics')
+  await page.getByRole('button', { name: 'Create course' }).click()
+  // exact: true — "New class under Advanced Statistics:" (that course's own
+  // create-class form label) also contains this string as a substring.
+  await expect(page.getByText('Advanced Statistics', { exact: true })).toBeVisible()
+
+  const newCourseForm = page.locator('form', { has: page.getByText('New class under Advanced Statistics:') })
+  await newCourseForm.getByPlaceholder('Class name').fill('Advanced Statistics — Spring')
+  await newCourseForm.getByPlaceholder('Term (optional)').fill('Spring 2027')
+  await newCourseForm.getByRole('button', { name: 'Create class' }).click()
+  await expect(page.getByText('Advanced Statistics — Spring')).toBeVisible()
 })
 
 test('classroom module: student sees published materials and can submit homework files', async ({ page }) => {
@@ -142,9 +156,13 @@ test('classroom module: professor publishes a material with a visibility window'
   await page.goto('/o/demo-a/m/classroom/manage/materials')
   await expect(page.getByRole('heading', { name: 'Classroom — Materials' })).toBeVisible()
 
-  await page.getByPlaceholder('Title').fill('Lecture 2 slides')
-  await page.getByPlaceholder('URL (optional)').fill('https://example.com/lecture2.pdf')
-  await page.getByRole('button', { name: 'Add' }).click()
+  // Scope to the Statistics 101 course section — there's more than one
+  // course now (a professor can create courses directly, 2026-07-12), so an
+  // unscoped 'Title' placeholder would be ambiguous across course sections.
+  const courseSection = page.locator('section').filter({ has: page.getByRole('heading', { name: 'Statistics 101', exact: true }) })
+  await courseSection.getByPlaceholder('Title').fill('Lecture 2 slides')
+  await courseSection.getByPlaceholder('URL (optional)').fill('https://example.com/lecture2.pdf')
+  await courseSection.getByRole('button', { name: 'Add' }).click()
   await expect(page.getByText('Lecture 2 slides')).toBeVisible()
 
   // Publish it into the future — should NOT be visible to the student yet.
@@ -262,9 +280,13 @@ test('classroom module: professor creates an exam, grades by subproblem, publish
   await signIn(page, 'alice@demo.local')
   await page.goto('/o/demo-a/m/classroom/manage')
 
-  await page.getByPlaceholder('New exam title').fill('Midterm')
-  await page.getByPlaceholder('Problems, e.g. 1a:10, 1b:5, 2:20').fill('1a:10, 1b:5, 2:20')
-  await page.getByRole('button', { name: 'Add exam' }).click()
+  // Scope to the Statistics 101 — Fall class section — there's more than one
+  // class now (a professor can create classes directly, 2026-07-12), so an
+  // unscoped 'New exam title' placeholder would be ambiguous across sections.
+  const classSection = page.locator('section').filter({ has: page.getByRole('heading', { name: 'Statistics 101 — Fall' }) })
+  await classSection.getByPlaceholder('New exam title').fill('Midterm')
+  await classSection.getByPlaceholder('Problems, e.g. 1a:10, 1b:5, 2:20').fill('1a:10, 1b:5, 2:20')
+  await classSection.getByRole('button', { name: 'Add exam' }).click()
   await page.getByRole('link', { name: 'Midterm' }).click()
   await expect(page.getByRole('heading', { name: 'Exam — Midterm' })).toBeVisible()
   await expect(page.getByText('1a (10) · 1b (5) · 2 (20) — max 35')).toBeVisible()

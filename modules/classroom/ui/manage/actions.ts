@@ -11,6 +11,42 @@ function fail(error: { message: string } | null, what: string) {
   if (error) throw new Error(`${what}: ${error.message}`)
 }
 
+// Founder feedback (2026-07-12): "if Alice can add projects in Sample
+// Module, shouldn't she be able to add classes in Classroom?" — cls_courses/
+// cls_classes already had full staff RLS write access (cls_can_manage, the
+// generic staff-write policy loop) and cls_classes already had a scope-sync
+// trigger deriving org_id from course_id — this was purely a missing
+// action + form, no migration needed.
+export async function createCourse(orgSlug: string, formData: FormData) {
+  const name = String(formData.get('name') ?? '').trim()
+  if (!name) throw new Error('Course name is required')
+
+  const supabase = await createClient()
+  const { data: org } = await supabase.from('orgs').select('id').eq('slug', orgSlug).single()
+  if (!org) throw new Error('Org not found')
+
+  const { error } = await supabase.from('cls_courses').insert({ org_id: org.id, name })
+  fail(error, 'Create course failed')
+  revalidatePath(`/o/${orgSlug}/m/classroom/manage`)
+}
+
+export async function createClass(orgSlug: string, courseId: string, formData: FormData) {
+  const name = String(formData.get('name') ?? '').trim()
+  const term = String(formData.get('term') ?? '').trim()
+  if (!name) throw new Error('Class name is required')
+
+  const supabase = await createClient()
+  const { error } = await supabase.from('cls_classes').insert({
+    org_id: DERIVED_SCOPE_PLACEHOLDER, // derived by cls_classes_scope trigger from course_id
+    course_id: courseId,
+    name,
+    term: term || null,
+  })
+  fail(error, 'Create class failed')
+  revalidatePath(`/o/${orgSlug}/m/classroom/manage`)
+  revalidatePath(`/o/${orgSlug}/m/classroom`)
+}
+
 export async function postAnnouncement(orgSlug: string, classId: string, formData: FormData) {
   const body = String(formData.get('body') ?? '').trim()
   if (!body) throw new Error('Announcement text is required')

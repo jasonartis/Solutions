@@ -1,7 +1,16 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { requireOrgModule } from '@/lib/module-gate'
-import { createExam, createHomework, createSurvey, postAnnouncement, setSubmissionsHiddenFrom, setSurveyResultsVisible } from './actions'
+import {
+  createClass,
+  createCourse,
+  createExam,
+  createHomework,
+  createSurvey,
+  postAnnouncement,
+  setSubmissionsHiddenFrom,
+  setSurveyResultsVisible,
+} from './actions'
 
 const inputCls = 'rounded border border-gray-300 px-2 py-1 text-sm'
 const btnCls = 'rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700'
@@ -11,10 +20,12 @@ export default async function ManagePage(props: { params: Promise<{ orgSlug: str
   const { orgSlug } = await props.params
   const { supabase, org } = await requireOrgModule(orgSlug, 'classroom')
 
-  // Staff check: cls_courses is staff/GA-readable only — an empty result for a
-  // student means this page 404s for them (RLS decides, not the UI).
+  // Explicit staff check (not "does a course already exist" — that broke the
+  // very first course/class an org creates, a chicken-and-egg 404).
+  const { data: canManage } = await supabase.rpc('cls_can_manage', { check_org_id: org.id })
+  if (!canManage) notFound()
+
   const { data: courses } = await supabase.from('cls_courses').select('id, name').eq('org_id', org.id)
-  if (!courses || courses.length === 0) notFound()
 
   const [{ data: classes }, { data: members }, { data: homeworks }, { data: profiles }, { data: surveys }] =
     await Promise.all([
@@ -43,7 +54,36 @@ export default async function ManagePage(props: { params: Promise<{ orgSlug: str
         </Link>
       </div>
 
+      <section className="mb-8 rounded-lg border border-gray-200 bg-white p-5">
+        <h2 className="mb-3 text-lg font-medium">Courses</h2>
+        <ul className="mb-4 space-y-1 text-sm text-gray-700">
+          {(courses ?? []).map((c) => (
+            <li key={c.id}>{c.name}</li>
+          ))}
+          {(courses ?? []).length === 0 && <li className="text-gray-400">No courses yet — create one below.</li>}
+        </ul>
+        <form action={createCourse.bind(null, orgSlug)} className="flex flex-wrap items-center gap-2">
+          <input name="name" required placeholder="New course name" className={`${inputCls} min-w-64`} />
+          <button className={btnCls}>Create course</button>
+        </form>
+      </section>
+
       <div className="space-y-8">
+        {(courses ?? []).map((course) => (
+          <form
+            key={course.id}
+            action={createClass.bind(null, orgSlug, course.id)}
+            className="flex flex-wrap items-center gap-2 text-sm"
+          >
+            <span className="text-gray-400">New class under {course.name}:</span>
+            <input name="name" required placeholder="Class name" className={`${inputCls} min-w-48`} />
+            <input name="term" placeholder="Term (optional)" className={`${inputCls} w-32`} />
+            <button className={btnCls}>Create class</button>
+          </form>
+        ))}
+      </div>
+
+      <div className="mt-8 space-y-8">
         {(classes ?? []).map((klass) => {
           const roster = (members ?? []).filter((m) => m.class_id === klass.id)
           const classHomeworks = (homeworks ?? []).filter((h) => h.class_id === klass.id)
