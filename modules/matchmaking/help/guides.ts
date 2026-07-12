@@ -62,6 +62,12 @@ match, then see your top matches by compatibility.
    an answer, percentages refresh and *(recompute pending)* flags clear
    (wherever the platform worker is running). **Recompute all matches**
    forces an instant refresh.
+5. **Groups**: create a group (e.g. "Cohort 2026") and **Add to group** by
+   email — useful when one matchmaker serves several singles at once.
+6. **Matchmaker assignments**: assign a matchmaker (by email) to either an
+   **Individual single** (their email) or a **Group** — this is what
+   determines whose matches that matchmaker sees. A matchmaker with no
+   assignment sees nothing.
 `,
     },
   ],

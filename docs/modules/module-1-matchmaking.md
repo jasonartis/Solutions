@@ -82,3 +82,19 @@ Design choices worth recording:
 Security-review fixes (`modules/matchmaking/schema-fixes.sql`, folded into the migration), both verified live against Postgres before merging:
 1. `mm_ensure_answer()` is `SECURITY DEFINER` and bypasses RLS — the draft let *any* authenticated caller create an answer row, skipping the "only singles answer" role gate the INSERT policy enforces for direct writes. Added an explicit `mm_is_single(org_id)` check inside the function.
 2. The UPDATE policy let a single repoint their own answer's `question_id`/`user_id` via UPDATE (only `user_id = auth.uid()` was checked), corrupting the one-row-per-(question,user) invariant. Added a pin-to-old-value trigger, named to fire alphabetically *before* the lock-enforcement trigger so it reverts the pointer before locks/org_id get derived from the wrong question.
+
+## Group/matchmaker-assignment management UI (2026-07-11)
+
+The last item on this module's "remaining" list. `mm_groups` /
+`mm_group_members` / `mm_matchmaker_assignments` had schema, RLS, and even the
+matchmaker's own read-scoped view since 2026-07-09 — but **no admin UI ever
+existed to create the rows**; the demo seed populated them directly via the
+service role, so a real admin had no way to run the "define groups... assign
+matchmakers to individuals or groups" workflow this spec's Roles section
+describes. Manage console now has it: create a group, add/remove members by
+email, assign a matchmaker (by email) to an individual single or a group,
+with a live list + remove. No migration — every write already lands on the
+existing admin-only `mm_can_manage` staff policy. **Module 1's only remaining
+gaps are the mutual-agreement→introduction flow and the platform-wide
+conversations primitive** (still deferred — no second module has forced it
+yet).

@@ -282,6 +282,38 @@ test('matchmaking module: single sees seeded matches and can answer; admin recom
   await page.getByRole('button', { name: 'Recompute all matches' }).click()
   // Page reloads with the recompute done (no error surfaced).
   await expect(page.getByRole('heading', { name: 'Make-a-Match — Manage' })).toBeVisible()
+
+  // Groups + matchmaker assignments: a matchmaker's own view relies entirely
+  // on these rows existing (RLS scopes their matches to assigned singles),
+  // and until this slice an admin had no UI to create them at all.
+  const groupName = 'Test Group ' + Date.now()
+  await page.getByPlaceholder('Group name').fill(groupName)
+  const groupCreated = page.waitForResponse((r) => r.request().method() === 'POST')
+  await page.getByRole('button', { name: 'Create group' }).click()
+  await groupCreated
+  const groupLi = page.locator('li').filter({ hasText: groupName }).first()
+  await expect(groupLi).toBeVisible()
+
+  await groupLi.getByPlaceholder('single@email').fill('eve@demo.local')
+  const memberAdded = page.waitForResponse((r) => r.request().method() === 'POST')
+  await groupLi.getByRole('button', { name: 'Add to group' }).click()
+  await memberAdded
+  await expect(groupLi).toContainText('Eve E')
+
+  await page.getByPlaceholder('matchmaker@email').fill('mel@demo.local')
+  await page.locator('select[name="targetType"]').selectOption('group')
+  await page.locator('select[name="targetGroupId"]').selectOption({ label: groupName })
+  const assigned = page.waitForResponse((r) => r.request().method() === 'POST')
+  await page.getByRole('button', { name: 'Assign' }).click()
+  await assigned
+  const assignmentLi = page.locator('li').filter({ hasText: `Mel M → ${groupName}` })
+  await expect(assignmentLi).toBeVisible()
+  await expect(assignmentLi).toContainText('(group)')
+
+  const removed = page.waitForResponse((r) => r.request().method() === 'POST')
+  await assignmentLi.getByRole('button', { name: 'Remove' }).click()
+  await removed
+  await expect(page.locator('li').filter({ hasText: `Mel M → ${groupName}` })).not.toBeVisible()
 })
 
 test('nail-salon module: operator runs an appointment from booked to paid', async ({ page }) => {
