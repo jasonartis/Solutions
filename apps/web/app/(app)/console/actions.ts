@@ -1,8 +1,15 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { moduleRegistry } from '@platform/core'
+import { getModule, moduleRegistry } from '@platform/core'
 import { createClient } from '@/lib/supabase/server'
+import {
+  removeModuleRole,
+  removeOrgMember,
+  resolveEmailToUserId,
+  upsertModuleRole,
+  upsertOrgMember,
+} from '@/lib/org-members'
 
 // Owner-console server actions. RLS already restricts writes on these tables
 // to superadmins, but each action also verifies explicitly so failures are
@@ -48,36 +55,51 @@ export async function toggleModule(orgId: string, moduleKey: string, enable: boo
   revalidatePath('/console')
 }
 
-export async function addMember(formData: FormData) {
+export async function addMember(orgId: string, formData: FormData) {
   const supabase = await requireSuperadmin()
-  const orgId = String(formData.get('orgId') ?? '')
-  const email = String(formData.get('email') ?? '')
-    .trim()
-    .toLowerCase()
+  const email = String(formData.get('email') ?? '').trim()
   const role = String(formData.get('role') ?? 'member')
   if (!orgId || !email) throw new Error('Org and email are required')
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('user_id')
-    .eq('email', email)
-    .single()
-  if (!profile) throw new Error(`No user found with email ${email} — they must sign up first`)
+  const found = await resolveEmailToUserId(supabase, orgId, email)
+  if (!found) throw new Error(`No user found with email ${email} — they must sign up first`)
 
-  const { error } = await supabase
-    .from('org_members')
-    .upsert({ org_id: orgId, user_id: profile.user_id, role })
-  if (error) throw new Error(error.message)
+  await upsertOrgMember(supabase, orgId, found.userId, role)
+  revalidatePath('/console')
+}
+
+export async function changeRole(orgId: string, formData: FormData) {
+  const supabase = await requireSuperadmin()
+  const userId = String(formData.get('userId') ?? '')
+  const role = String(formData.get('role') ?? '')
+  if (!orgId || !userId || !role) throw new Error('Org, member, and role are required')
+
+  await upsertOrgMember(supabase, orgId, userId, role)
   revalidatePath('/console')
 }
 
 export async function removeMember(orgId: string, userId: string) {
   const supabase = await requireSuperadmin()
-  const { error } = await supabase
-    .from('org_members')
-    .delete()
-    .eq('org_id', orgId)
-    .eq('user_id', userId)
-  if (error) throw new Error(error.message)
+  await removeOrgMember(supabase, orgId, userId)
+  revalidatePath('/console')
+}
+
+export async function addModuleRole(orgId: string, formData: FormData) {
+  const supabase = await requireSuperadmin()
+  const userId = String(formData.get('userId') ?? '')
+  const moduleKey = String(formData.get('moduleKey') ?? '')
+  const role = String(formData.get('role') ?? '')
+  if (!userId || !moduleKey || !role) throw new Error('Member, module, and role are required')
+
+  const manifest = getModule(moduleKey)
+  if (!manifest || !manifest.roles.includes(role)) throw new Error('Unknown module role')
+
+  await upsertModuleRole(supabase, orgId, userId, moduleKey, role)
+  revalidatePath('/console')
+}
+
+export async function removeModuleRoleAction(orgId: string, userId: string, moduleKey: string, role: string) {
+  const supabase = await requireSuperadmin()
+  await removeModuleRole(supabase, orgId, userId, moduleKey, role)
   revalidatePath('/console')
 }

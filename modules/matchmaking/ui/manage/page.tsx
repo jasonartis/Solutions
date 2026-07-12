@@ -175,6 +175,10 @@ export default async function MatchmakingManagePage(props: {
       <section className="mt-8 border-t border-gray-100 pt-6">
         <h2 className="mb-3 text-lg font-medium">Groups</h2>
         <p className="mb-3 text-xs text-gray-400">
+          A group is just a named bucket of singles for bulk matchmaker assignment below — it has
+          no effect on match scoring itself.
+        </p>
+        <p className="mb-3 text-xs text-gray-400">
           {(matchmakerRoles ?? []).length} matchmaker{(matchmakerRoles ?? []).length === 1 ? '' : 's'} in this org:{' '}
           {(matchmakerRoles ?? []).map((m) => nameOf(m.user_id)).join(', ') || 'none yet'}.
         </p>

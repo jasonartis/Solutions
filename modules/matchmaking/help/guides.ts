@@ -63,7 +63,9 @@ match, then see your top matches by compatibility.
    (wherever the platform worker is running). **Recompute all matches**
    forces an instant refresh.
 5. **Groups**: create a group (e.g. "Cohort 2026") and **Add to group** by
-   email — useful when one matchmaker serves several singles at once.
+   email — useful when one matchmaker serves several singles at once. A
+   group is purely an assignment bucket; it has no effect on match scoring
+   itself.
 6. **Matchmaker assignments**: assign a matchmaker (by email) to either an
    **Individual single** (their email) or a **Group** — this is what
    determines whose matches that matchmaker sees. A matchmaker with no

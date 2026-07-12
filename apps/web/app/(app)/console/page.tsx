@@ -2,19 +2,29 @@ import { notFound } from 'next/navigation'
 import { moduleRegistry } from '@platform/core'
 import { createClient } from '@/lib/supabase/server'
 import { getProfile } from '@/lib/platform'
-import { addMember, createOrg, removeMember, toggleModule } from './actions'
+import OrgMembersPanel, { type OrgMemberRow } from '@/components/org-members-panel'
+import {
+  addMember,
+  addModuleRole,
+  changeRole,
+  createOrg,
+  removeMember,
+  removeModuleRoleAction,
+  toggleModule,
+} from './actions'
 
 export default async function ConsolePage() {
   const profile = await getProfile()
   if (!profile?.is_superadmin) notFound()
 
   const supabase = await createClient()
-  const [{ data: orgs }, { data: members }, { data: entitlements }, { data: profiles }] =
+  const [{ data: orgs }, { data: members }, { data: entitlements }, { data: profiles }, { data: moduleRoles }] =
     await Promise.all([
       supabase.from('orgs').select('id, name, slug').order('name'),
       supabase.from('org_members').select('org_id, user_id, role'),
       supabase.from('org_modules').select('org_id, module_key, enabled'),
       supabase.from('profiles').select('user_id, email, display_name'),
+      supabase.from('module_roles').select('org_id, user_id, module_key, role'),
     ])
 
   const profileById = new Map((profiles ?? []).map((p) => [p.user_id, p]))
@@ -86,50 +96,32 @@ export default async function ConsolePage() {
               <h3 className="mb-2 text-sm font-medium text-gray-600">
                 Members ({orgMembers.length})
               </h3>
-              <ul className="mb-4 space-y-1 text-sm">
-                {orgMembers.map((m) => {
+              <OrgMembersPanel
+                members={orgMembers.map((m) => {
                   const p = profileById.get(m.user_id)
-                  return (
-                    <li key={m.user_id} className="flex items-center gap-3">
-                      <span>{p?.display_name || p?.email || m.user_id}</span>
-                      <span className="text-xs uppercase text-gray-400">{m.role}</span>
-                      <form
-                        action={async () => {
-                          'use server'
-                          await removeMember(org.id, m.user_id)
-                        }}
-                      >
-                        <button className="text-xs text-red-500 hover:underline">remove</button>
-                      </form>
-                    </li>
-                  )
+                  return {
+                    userId: m.user_id,
+                    displayName: p?.display_name ?? null,
+                    email: p?.email ?? null,
+                    orgRole: m.role,
+                    moduleRoles: (moduleRoles ?? [])
+                      .filter((r) => r.org_id === org.id && r.user_id === m.user_id)
+                      .map((r) => ({
+                        moduleKey: r.module_key,
+                        moduleName: moduleRegistry.find((mod) => mod.key === r.module_key)?.name ?? r.module_key,
+                        role: r.role,
+                      })),
+                  } satisfies OrgMemberRow
                 })}
-                {orgMembers.length === 0 && <li className="text-gray-400">No members</li>}
-              </ul>
-
-              <form action={addMember} className="flex flex-wrap items-end gap-3">
-                <input type="hidden" name="orgId" value={org.id} />
-                <label className="text-sm">
-                  <span className="mb-1 block font-medium">Add member by email</span>
-                  <input
-                    name="email"
-                    type="email"
-                    required
-                    className="rounded border border-gray-300 px-3 py-2"
-                  />
-                </label>
-                <label className="text-sm">
-                  <span className="mb-1 block font-medium">Role</span>
-                  <select name="role" className="rounded border border-gray-300 px-3 py-2">
-                    <option value="member">member</option>
-                    <option value="admin">admin</option>
-                    <option value="owner">owner</option>
-                  </select>
-                </label>
-                <button className="rounded bg-gray-800 px-4 py-2 text-sm font-medium text-white hover:bg-gray-900">
-                  Add
-                </button>
-              </form>
+                enabledModules={moduleRegistry
+                  .filter((mod) => orgEntitlements.get(mod.key) === true)
+                  .map((mod) => ({ key: mod.key, name: mod.name, roles: mod.roles }))}
+                addMemberAction={addMember.bind(null, org.id)}
+                changeRoleAction={changeRole.bind(null, org.id)}
+                removeMemberAction={removeMember.bind(null, org.id)}
+                addModuleRoleAction={addModuleRole.bind(null, org.id)}
+                removeModuleRoleAction={removeModuleRoleAction.bind(null, org.id)}
+              />
             </section>
           )
         })}

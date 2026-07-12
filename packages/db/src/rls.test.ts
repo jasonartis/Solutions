@@ -16,11 +16,13 @@ async function signIn(email: string): Promise<SupabaseClient> {
 
 let alice: SupabaseClient
 let bob: SupabaseClient
+let orgtest: SupabaseClient
 
 beforeAll(async () => {
   if (!anonKey) throw new Error('SUPABASE_ANON_KEY not set — run `pnpm dev` once to generate .env')
   alice = await signIn('alice@demo.local')
   bob = await signIn('bob@demo.local')
+  orgtest = await signIn('orgtest@demo.local')
 })
 
 describe('tenancy isolation', () => {
@@ -75,5 +77,133 @@ describe('tenancy isolation', () => {
     await bob.from('profiles').update({ is_superadmin: true }).eq('email', 'bob@demo.local')
     const { data } = await bob.from('profiles').select('is_superadmin').single()
     expect(data?.is_superadmin).toBe(false)
+  })
+})
+
+// Org self-management (2026-07-12, docs/03 "Control hierarchy"): org owners/
+// admins can now manage their own org's membership + module roles directly
+// (previously superadmin-only). Exercised entirely on the dedicated
+// Platform Self-Test org (alice=admin, orgtest=member) so it can't collide
+// with any other test's assumptions about who belongs to which org.
+describe('org self-management', () => {
+  async function selfTestOrgId(client: SupabaseClient) {
+    const { data } = await client.from('orgs').select('id').eq('slug', 'platform-self-test').single()
+    return data!.id as string
+  }
+
+  it('org_find_user_by_email resolves an email only for an org the caller admins', async () => {
+    const orgId = await selfTestOrgId(alice)
+    const { data: found } = await alice.rpc('org_find_user_by_email', {
+      check_org_id: orgId,
+      target_email: 'orgtest@demo.local',
+    })
+    expect(found?.[0]?.email).toBe('orgtest@demo.local')
+
+    const { data: notFound } = await bob.rpc('org_find_user_by_email', {
+      check_org_id: orgId,
+      target_email: 'orgtest@demo.local',
+    })
+    expect(notFound ?? []).toEqual([])
+  })
+
+  it('alice can add a new member to an org she admins (resolved via org_find_user_by_email)', async () => {
+    const orgId = await selfTestOrgId(alice)
+    const { data: found } = await alice.rpc('org_find_user_by_email', {
+      check_org_id: orgId,
+      target_email: 'bob@demo.local',
+    })
+    const bobUserId = found![0]!.user_id as string
+    const { error } = await alice.from('org_members').upsert({ org_id: orgId, user_id: bobUserId, role: 'member' })
+    expect(error).toBeNull()
+    // cleanup — leave the fixture org as it was for other tests
+    await alice.from('org_members').delete().eq('org_id', orgId).eq('user_id', bobUserId)
+  })
+
+  it('alice can promote and demote orgtest within an org she admins', async () => {
+    const orgId = await selfTestOrgId(alice)
+    const { data: orgtestProfile } = await alice
+      .from('profiles')
+      .select('user_id')
+      .eq('email', 'orgtest@demo.local')
+      .single()
+    const { error: promoteErr } = await alice
+      .from('org_members')
+      .update({ role: 'admin' })
+      .eq('org_id', orgId)
+      .eq('user_id', orgtestProfile!.user_id)
+    expect(promoteErr).toBeNull()
+    const { error: demoteErr } = await alice
+      .from('org_members')
+      .update({ role: 'member' })
+      .eq('org_id', orgId)
+      .eq('user_id', orgtestProfile!.user_id)
+    expect(demoteErr).toBeNull()
+  })
+
+  it('alice cannot write org_members for an org she does NOT admin', async () => {
+    const { data: bobOrg } = await bob.from('orgs').select('id').eq('slug', 'demo-b').single()
+    const { data: aliceUser } = await alice.auth.getUser()
+    const { error } = await alice
+      .from('org_members')
+      .upsert({ org_id: bobOrg!.id, user_id: aliceUser.user!.id, role: 'member' })
+    expect(error).not.toBeNull()
+  })
+
+  it('a plain member cannot demote the admin of their own org', async () => {
+    const orgId = await selfTestOrgId(alice)
+    const { data: aliceUser } = await alice.auth.getUser()
+    // Postgres RLS quirk: an UPDATE whose USING clause excludes every
+    // matching row succeeds with zero rows affected — it does not error
+    // the way a blocked INSERT's WITH CHECK does. So the real assertion is
+    // "the row didn't change," not "the call errored."
+    await orgtest
+      .from('org_members')
+      .update({ role: 'member' })
+      .eq('org_id', orgId)
+      .eq('user_id', aliceUser.user!.id)
+    const { data: stillAdmin } = await alice
+      .from('org_members')
+      .select('role')
+      .eq('org_id', orgId)
+      .eq('user_id', aliceUser.user!.id)
+      .single()
+    expect(stillAdmin?.role).toBe('admin')
+  })
+
+  it('the last admin of an org cannot be demoted or removed', async () => {
+    const orgId = await selfTestOrgId(alice)
+    const { data: aliceUser } = await alice.auth.getUser()
+    const { error: demoteErr } = await alice
+      .from('org_members')
+      .update({ role: 'member' })
+      .eq('org_id', orgId)
+      .eq('user_id', aliceUser.user!.id)
+    expect(demoteErr).not.toBeNull()
+
+    const { error: deleteErr } = await alice
+      .from('org_members')
+      .delete()
+      .eq('org_id', orgId)
+      .eq('user_id', aliceUser.user!.id)
+    expect(deleteErr).not.toBeNull()
+  })
+
+  it('alice can grant a module role to orgtest for a module enabled on her org', async () => {
+    const orgId = await selfTestOrgId(alice)
+    const { data: orgtestProfile } = await alice
+      .from('profiles')
+      .select('user_id')
+      .eq('email', 'orgtest@demo.local')
+      .single()
+    const { error } = await alice.from('module_roles').upsert({
+      org_id: orgId,
+      user_id: orgtestProfile!.user_id,
+      module_key: 'stub',
+      role: 'user',
+    })
+    expect(error).toBeNull()
+
+    const { data: mine } = await orgtest.from('module_roles').select('role').eq('module_key', 'stub')
+    expect(mine?.map((r) => r.role)).toContain('user')
   })
 })

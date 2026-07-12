@@ -1,3 +1,4 @@
+import { notFound } from 'next/navigation'
 import { moduleRegistry } from '@platform/core'
 import { createClient } from '@/lib/supabase/server'
 
@@ -74,6 +75,23 @@ export async function getMyOrgRole(orgSlug: string): Promise<{ orgName: string; 
   if (!data) return null
   const org = data.orgs as unknown as { name: string; slug: string }
   return { orgName: org.name, role: data.role }
+}
+
+// The org-level (not module-level) analogue of requireOrgModule
+// (lib/module-gate.ts): resolve the org by slug, 404 if the caller isn't an
+// org owner/admin (is_org_admin() — RLS's own tenancy check, restated here
+// so the page fails with a clear 404 rather than an empty/broken render).
+// Used by the org self-management page (docs/03 "Control hierarchy" level 2).
+export async function requireOrgAdmin(orgSlug: string) {
+  const supabase = await createClient()
+
+  const { data: org } = await supabase.from('orgs').select('id, name, slug').eq('slug', orgSlug).single()
+  if (!org) notFound()
+
+  const { data: isAdmin } = await supabase.rpc('is_org_admin', { check_org_id: org.id })
+  if (!isAdmin) notFound()
+
+  return { supabase, org }
 }
 
 export async function getProfile() {

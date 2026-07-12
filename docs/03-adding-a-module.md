@@ -110,17 +110,36 @@ Founder-proposed, adopted with one adjustment:
   into `packages/platform`, the sample module is updated in the same pass** —
   the template must never rot behind the conventions.
 
-### Control hierarchy (founder question, 2026-07-09 — formalized)
+### Control hierarchy (founder question, 2026-07-09 — formalized; level 2 built 2026-07-12)
 
 Three levels, uniform across modules: **superadmin** (platform-wide) → **org
-owner/admin** (`is_org_admin()`, everything in their org) → **module role ladders**
+owner/admin** (`is_org_admin()`, everything in their own org) → **module role ladders**
 (tiers compose downward via the `_can_*` helpers — each tier includes all higher
-tiers, so higher always controls lower). Two things deliberately NOT built until a
-real client needs them (extract-don't-speculate): **delegated role-granting** (only
-org owner/admin assigns module_roles today — e.g. a salon manager cannot appoint
-cashiers) and **location-scoped staff** (the franchise-owner layer; salon data is
-org→location-ready but staff RLS is org-wide). When the first client needs either,
-build it as a platform primitive, not per-module.
+tiers, so higher always controls lower).
+
+**Level 2 is now self-serve**, not superadmin-only: `/o/[orgSlug]/members`
+(gated `requireOrgAdmin`, linked from the dashboard's org card whenever the
+caller is owner/admin) lets an org owner/admin add/remove their own org's
+members, change org roles, and grant/revoke module-specific roles (`module_roles`)
+for modules already enabled there — everything an org runs day-to-day short of
+deciding WHICH modules it has access to. `org_modules` (module enablement)
+deliberately stayed superadmin-only (`20260712010000_org_self_management.sql`
+is additive-only RLS, never touches `org_modules`) — the founder's explicit
+call: some orgs shouldn't have access to some modules, and that's a platform-owner
+business decision, not something an org can grant itself. A "last-admin-standing"
+guard trigger (mirroring the visual-messaging conversation-admin pattern) stops
+an org from ever being left with zero owner/admin. The superadmin Owner Console
+(`/console`) and the new org page share one component
+(`apps/web/components/org-members-panel.tsx`) and one set of data-operation
+helpers (`apps/web/lib/org-members.ts`) — one place to change either surface,
+not two that can drift.
+
+Two things remain deliberately NOT built until a real client needs them
+(extract-don't-speculate): **delegated role-granting one level further down**
+(e.g. a salon manager appointing cashiers themselves, rather than the org
+owner/admin doing it) and **location-scoped staff** (the franchise-owner layer;
+salon data is org→location-ready but staff RLS is org-wide). When the first
+client needs either, build it as a platform primitive, not per-module.
 
 **New-module acceptance checklist (the docs/04 extraction-pass criterion):** a new
 module must need no code outside (a) `modules/<key>/`, (b) its migration, (c) its

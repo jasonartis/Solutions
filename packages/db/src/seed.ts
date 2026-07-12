@@ -121,6 +121,13 @@ async function main() {
     role: 'admin',
   })
 
+  // A second, dedicated fixture user for org-self-management RLS/e2e
+  // (2026-07-12) — kept separate from alice/bob/etc. so this feature's tests
+  // can add/remove/promote/demote freely without colliding with any other
+  // test's assumptions about who belongs to which org.
+  const selfTestMemberId = await ensureUser('orgtest@demo.local', DEMO_PASSWORD, 'Org Test Member')
+  await admin.from('org_members').upsert({ org_id: platformSelfTest, user_id: selfTestMemberId, role: 'member' })
+
   // --- Demo synagogue for module 3 -----------------------------------------
   const shul = await ensureOrg('Demo Synagogue', 'demo-shul')
   await admin.from('org_members').upsert({ org_id: shul, user_id: aliceId, role: 'admin' })

@@ -43,6 +43,51 @@ test('owner has the console; regular users do not', async ({ page }) => {
   await expect(page.getByText('Create organization')).toBeVisible()
 })
 
+test('org self-management: admin adds/removes members, changes roles, grants/revokes module roles', async ({
+  page,
+}) => {
+  // Exercised on the dedicated Platform Self-Test org (alice=admin,
+  // orgtest=member) so it can't collide with any other test's assumptions
+  // about who belongs to which org (docs/03 "Control hierarchy" level 2,
+  // 2026-07-12).
+  await signIn(page, 'alice@demo.local')
+  await page.goto('/o/platform-self-test/members')
+  await expect(page.getByRole('heading', { name: 'Members' })).toBeVisible()
+  await expect(page.getByText('orgtest@demo.local')).toBeVisible()
+
+  // Add bob as a new member by email.
+  await page.getByPlaceholder('email@example.com').fill('bob@demo.local')
+  await page.getByRole('button', { name: 'Add' }).click()
+  await expect(page.getByText('bob@demo.local')).toBeVisible()
+
+  // Change bob's org role to admin.
+  const bobRow = page.locator('li', { has: page.getByText('bob@demo.local') });
+  await bobRow.getByRole('combobox').first().selectOption('admin')
+  await bobRow.getByRole('button', { name: 'Update' }).click()
+  await expect(bobRow.getByRole('combobox').first()).toHaveValue('admin')
+
+  // Grant a module role to Org Test Member for the stub module — 'user',
+  // not 'admin' (the seed already grants alice herself "Demo Module: admin"
+  // in this org, so reusing that role would collide with her existing
+  // chip). The module-role-grant form is the last <form> on the page
+  // (rendered after every member row and the add-member form).
+  const orgtestRow = page.locator('li', { has: page.getByText('orgtest@demo.local') })
+  const grantForm = page.locator('form').last()
+  await grantForm.locator('select[name="userId"]').selectOption({ label: 'Org Test Member' })
+  await grantForm.locator('select[name="moduleKey"]').selectOption({ label: 'Demo Module' })
+  await grantForm.locator('select[name="role"]').selectOption('user')
+  await grantForm.getByRole('button', { name: 'Grant role' }).click()
+  await expect(orgtestRow.getByText('Demo Module: user')).toBeVisible()
+
+  // Revoke that module role.
+  await orgtestRow.getByRole('button', { name: 'Remove this role' }).click()
+  await expect(orgtestRow.getByText('Demo Module: user')).not.toBeVisible()
+
+  // Remove bob (cleanup — leaves the fixture org as other tests expect it).
+  await bobRow.getByRole('button', { name: 'Remove' }).click()
+  await expect(page.getByText('bob@demo.local')).not.toBeVisible()
+})
+
 test('alice sees a generated week in the synagogue schedules module', async ({ page }) => {
   await signIn(page, 'alice@demo.local')
   await expect(page.getByText('Demo Synagogue')).toBeVisible()
