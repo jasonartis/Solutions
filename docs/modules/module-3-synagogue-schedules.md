@@ -50,3 +50,20 @@ A real synagogue configured end-to-end; generated week matches the founder's exi
 ## Future enhancements
 
 Logged-in viewer features (subscriptions/reminders); additional layout templates if a second synagogue truly needs one; email/WhatsApp distribution of exports.
+
+## 2026-07-12 — two help documents merged into one
+
+Founder feedback: this module had a bespoke in-module setup guide
+(`ui/help/page.tsx`, built 2026-07-07 as the very first module, before the
+platform-wide walkthrough registry existed) AND the generic registry guide
+(`help/guides.ts`, built 2026-07-10) — two different "Help" links with
+different, drifting content. Folded the bespoke page's richer detail
+(name-templating tokens, worked rule examples, publish/export/public-link
+steps) into the one registry guide and deleted the duplicate page/route —
+this module now matches every other module's one-help-document convention.
+
+Also surfaced, not fixed: the location settings this module's zmanim depend
+on (address/lat-long/timezone/myzmanim location id) are **seed-only** —
+`org_modules.settings.location`, no UI to view or edit them anywhere. Same
+gap as "who can add people to an org" — belongs to a future self-serve
+org-settings design pass, not a quick patch here.

@@ -98,3 +98,17 @@ existing admin-only `mm_can_manage` staff policy. **Module 1's only remaining
 gaps are the mutual-agreement→introduction flow and the platform-wide
 conversations primitive** (still deferred — no second module has forced it
 yet).
+
+**2026-07-12 follow-up (founder testing round):** the assignment form's
+individual-vs-group target fields were both always visible and fillable
+regardless of which was selected, and nothing rejected filling both.
+Rewritten as a client component (`assign-matchmaker-form.tsx`) that shows
+exactly one target input at a time — the unselected field's `name` attribute
+is entirely absent from the submitted FormData, not just visually hidden, so
+mutual exclusivity is enforced at the DOM level, not just in the eye. Both
+email fields also gained `<datalist>` suggestions from existing
+matchmakers/singles instead of blind free-text. Also confirmed: there is
+still no UI for GRANTING the matchmaker/single module roles themselves
+(only for assigning an *existing* matchmaker to an *existing* single/group)
+— that's the same "no self-serve org-admin management" gap recorded in
+CLAUDE.md's 2026-07-12 entry, not specific to this module.

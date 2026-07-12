@@ -287,3 +287,32 @@ production.
 layer-count badges, and a slide-in transition when navigating between
 layers — both queued next. Mobile/tablet layout is explicitly out of scope
 for this module alone (docs/13 cross-cutting item).
+
+### 2026-07-12 — swipe UX finished + platform-wide error boundary
+
+Closed out the two items deferred above, plus a real platform gap found
+while fixing an unrelated matchmaking bug report:
+
+- **Swipe-direction arrows + count badges**: non-editable ← → ↑ ↓ overlays
+  on the canvas edges (plain HTML siblings of the Konva stage, not part of
+  it, so they always render above whatever's drawn and are never obscured
+  by ink), each shown only when that direction has somewhere to go, with a
+  badge counting how many consecutive swipes still work that way (not just
+  "can I" but "how many"). Clicking one navigates the same place the
+  matching swipe/dot would. Reuses the `swipeCounts` already computed
+  server-side in the conversation page (left = first-child chain depth,
+  right = ancestor count, up/down = position within the sibling group).
+- **Slide-in transition**: the new layer nudges in ~24px from the direction
+  it was reached from (swipe or arrow-button click) and eases to rest over
+  200ms — a directional cue, not a scene transition, so the offset stays
+  small. Implemented client-side only: on `currentLayerId` change, set an
+  offset transform with no CSS transition, then in a double
+  `requestAnimationFrame` clear it back to `none` WITH a transition, so the
+  browser paints the starting offset before animating away from it.
+- **First `error.tsx` in the entire app** (platform-wide, not module-4-
+  specific, but found via a module-4-adjacent report): every module's
+  thrown server-action errors were falling back to Next's generic unstyled
+  crash page for lack of any error boundary anywhere. One boundary at
+  `apps/web/app/(app)/error.tsx` now covers every module.
+
+e2e 27/27, RLS 7/7.
