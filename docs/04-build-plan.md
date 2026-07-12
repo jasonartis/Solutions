@@ -12,13 +12,15 @@ Includes the **dev-script harness** (docs/01 dev-mode matrix): named start/stop 
 
 **Explicitly excluded:** dashboard builders, ingestion frameworks, any primitive no module needs yet.
 
+**Status: DONE (2026-07-07).** Live in production at solutions-platform.vercel.app (Vercel + GitHub Actions, prod Supabase migrated); RLS isolation proven by test; CI green with e2e. Sentry/UptimeRobot are not yet wired (tracked as a founder action, docs/12).
+
 ## M1 — Module 3: Synagogue Schedules (first real module)
 
 Why first: smallest scope, live demand (replaces founder's current Sheets solution), and it forces org multi-tenancy, public pages, the API connector + cache (myzmanim, hebcal), the settings primitive, the worker + render pipeline, and i18n/RTL.
 
 **Acceptance:** one real synagogue configured end-to-end; a maker generates a week's schedules; "Export" produces all enabled presets correctly; the public page serves congregants with no login; results match the founder's existing Sheets output for the same week.
 
-**Status 2026-07-07:** core loop built and green (engine, maker UI, exports, public page — see module SPEC.md). Remaining for M1 sign-off: myzmanim connector (founder's key) and the match-the-Sheets acceptance validation (founder's sample).
+**Status: ACCEPTANCE PASSED (2026-07-07 night).** Pozna's real Shabbos schedule reproduced from real myzmanim values (49 module tests). Full rule grammar exposed in the maker UI; production configured for the real org `pozne`. Remaining: myzmanim live auth is parked (context in the module spec) since the export pipeline (worker) already renders correctly; prod exports run via `pnpm worker:prod` on the founder's PC pending the VPS (docs/10).
 
 ## M2 — Module 2: Classroom (second real module)
 
@@ -26,29 +28,37 @@ Why second: the founder's most mature existing solution, and it forces files/sto
 
 **Acceptance:** a full simulated course cycle in staging with seeded students: publish materials on a schedule → students submit multi-file homework → GA grades by subproblem → peer review round-trips with the assignment matrix → gradebook computes `0.2*peer+0.8*GA`-style combination → student sees only Final when flipped visible → retention sweep hides submissions.
 
-**Status 2026-07-09:** core assessment loop built and green (e2e 11/11): materials publish with visibility windows, multi-file homework submission, GA grading, peer-review assignment via the pure `assignPeerReviews` engine with real roster/history data, finalize (peer average), professor-published Final gated `is_final`+`visible`. **Remaining for M2 sign-off:** GA grading is a single score per submission, not broken out by subproblem; the gradebook has no *automatic* weighted combination (professor manually types a final "override" score rather than the system computing `0.2*peer+0.8*GA`-style blends); the `cls_publications.retention` field exists but no sweep job hides/purges expired submissions yet; exam grading and survey UI are unbuilt (schema exists). GA-specific dedicated views also don't exist yet — the current grading console serves both roles but isn't tailored to a GA-only workflow.
+**Status (2026-07-09, later): core spec surface COMPLETE.** Beyond the 2026-07-09-morning core loop, subsequent slices shipped: exam grading (problem structure, per-subproblem scoring, published finals), per-class surveys with aggregate reveal, **automatic weighted gradebook combination** (GA+peer blend, renormalized, override-wins), and the retention sweep (daily worker job purging/hiding expired submissions+files per publication settings). **Module 2 now implements everything in its spec that's buildable without new client decisions** — the one open item (submission retention needs a class end-date + hide-vs-purge choice) is recorded in the module spec awaiting the founder as client. GA-specific dedicated views (vs. the shared grading console) remain a nice-to-have, not required.
 
 ## Extraction pass (after M2)
 
 The platform-defining milestone: factor everything modules 2 and 3 share into `packages/platform`, refactor both modules onto the shared primitives, write/finalize docs/03 conventions against reality, designate `modules/synagogue-schedules` the canonical exemplar, and update CLAUDE.md. **Acceptance:** both modules pass their e2e suites on shared primitives; a written checklist proves a new module needs no code outside its own folder + platform extensions.
 
+**Status: DONE (2026-07-07), extended twice more (2026-07-09).** `is_org_admin()` + `DERIVED_SCOPE_PLACEHOLDER` + the new-module acceptance checklist landed in the first pass; a second pass added `module_can_manage()` (export-controls dispatcher) and further conventions (docs/03) as real modules kept proving them out. `modules/sample` (module 0) is the living template, annotated convention-by-convention, with its own seed + e2e.
+
 ## M3 — Module 1: Make-a-Match
 
 First module built "the fast way" against stable conventions — this validates the whole model. Forces: question engine, pair scoring with the stale-row worker pattern, approval queues, conversations, dealbreaker/lock settings. **Acceptance:** built in days-not-weeks (if not, fix the conventions, that's the real deliverable); full flow singles→questions→scores→mutual agreement→introduction works with seeded data.
 
-**Status 2026-07-09:** scoring engine done (26 unit tests) and schema integrated (`mm_questions`/`mm_answers`/`mm_pair_scores`/`mm_groups`/`mm_group_members`/`mm_matchmaker_assignments`, security-reviewed, live local+prod) — manifest registered but not enabled for any org. **Remaining:** all UI (question answering, admin approval queue, matches list, group/assignment management), the `matchmaking.rescore` worker job, and the conversations primitive this module needs for users→admin messaging (deferred — doesn't exist anywhere in the platform yet).
+**Status (2026-07-10): usable end-to-end.** Full UI shipped on the live schema — single view (answer questions, see top-X matches, share-with-match reveal via the `mm_shared_answers` definer fn), matchmaker view, admin console (approval queue, question authoring, recompute). The `matchmaking.rescore` worker job now runs the same pure engine on a 30s tick, so recompute is automatic (the manual button is now just an instant-refresh convenience). Validated the "days-not-weeks" acceptance goal for the conventions. **Remaining:** the mutual-agreement→introduction flow, group/assignment management UI, and the conversations primitive for users→admin messaging (still doesn't exist platform-wide).
 
 ## M4 — Module 5: Nail Salon
 
 Forces: scheduling/availability, appointment state machine, billing/receipts, ledger/expenses, day-view live board. Reuses: roles ladder, settings+locks, workflows, notifications.
 
+**Status (2026-07-10): usable end-to-end.** Operational spine (day board, booking, billing with auto earnings-ledger feed), worker chair view, manager back office (revenue summary, service catalog, promotions, expense log, shopping-list→expense flow), and **customer self-booking** (book + cancel) all shipped. Remaining: per-service availability windows, reporting beyond the summary cards, assignment-algorithm + reminder workers.
+
 ## M5 — Module 4: Visual Messaging
 
 Forces: canvas stack (Konva), vector layer storage, tree navigation, thumbnails, moderation (tombstones), PWA gestures. Deliberately after the platform is stable — its effort is frontend-deep, platform-shallow.
 
+**Status (2026-07-11): the most feature-complete module on the platform.** Core loop (conversations, drawing, reactions), the gesture layer (swipe navigation, sibling dots, zoomed-out tree view), a full moderation queue (flag/review/tombstone/restore/freeze), and deep-link joining (open/invite policy, viewer seats for org members) all shipped — plus the **spec's entire layer-content vocabulary**: freehand strokes, emoji stamps, styled text, and image stamps, all mixable in one reply. All of it built with **zero migrations** beyond the original 2026-07-09 schema (the security review anticipated image stamps' storage needs a session ahead of the UI). Remaining: per-org tunable size/opacity guards (fixed defaults today), org-per-group auto-creation for ad-hoc groups (awaiting founder confirmation), and anonymous public view-links (explicitly deferred as a future enhancement, not v1).
+
 ## M6 — Module 6: Speed Dating
 
 Last on purpose: leans on module 1's primitives (questions, matches, orgs) plus the two heaviest new pieces — Jitsi video (provider interface, VPS) and the Socket.IO orchestration engine. **Acceptance:** a seeded 7v7 test event runs end-to-end locally against docker-jitsi with simulated clients; organizer console controls a live event; mutual-interest reveal honors privacy rules.
+
+**Status (2026-07-09): event-runnable minus video.** Full UI (events, registration, lifecycle controls) plus the **real rotation engine + automatic round-clock worker** (two-sided/single-pool rotation, byes, block avoidance, no-repeat enforcement — 7 unit tests, 7 live clock assertions) replaced the manual organizer stand-in. Mutual-interest reveal honors privacy end-to-end (proven by e2e). **Remaining:** Jitsi video (needs the VPS), lobby/live-round UI, notes UI, reports/blocks UI, resume-review profiles, waitlist promotion.
 
 ## Cross-cutting, throughout
 
