@@ -809,6 +809,24 @@ test('public schedule page works with no login', async ({ page }) => {
   await expect(page.getByText('404')).toBeVisible()
 })
 
+test('help guides: a non-admin staff role (GA) sees their own staff guide', async ({ page }) => {
+  // Gabe is seeded as classroom GA (module_roles role='ga') but only an org
+  // MEMBER (not admin) — exactly the case that used to 404, since the guide
+  // gate previously checked module_can_manage (admin-tier only) instead of
+  // the caller's own module role.
+  await signIn(page, 'gabe@demo.local')
+  await page.goto('/o/demo-a/help')
+  await expect(page.getByRole('link', { name: 'GA — grade homework and exams' })).toBeVisible()
+  await page.getByRole('link', { name: 'GA — grade homework and exams' }).click()
+  await expect(page.getByRole('heading', { name: 'GA — grade homework and exams' })).toBeVisible()
+  // The professor-only guide (a DIFFERENT staff tier gabe doesn't hold) must
+  // still be invisible — this fix must not broaden access beyond the
+  // caller's own role.
+  await expect(page.getByRole('link', { name: /^Professor/ })).not.toBeVisible()
+  await page.goto('/o/demo-a/help/classroom/professor')
+  await expect(page.getByText('404')).toBeVisible()
+})
+
 test('unauthenticated visitors are redirected to login', async ({ page }) => {
   await page.goto('/dashboard')
   await expect(page).toHaveURL(/\/login/)

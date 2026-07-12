@@ -4,6 +4,7 @@ import { marked } from 'marked'
 import { getModule } from '@platform/core'
 import { createClient } from '@/lib/supabase/server'
 import { helpRegistry } from '@/lib/help-registry'
+import { visibleGuides } from '@/lib/help-visibility'
 
 // One walkthrough (docs/03): numbered click-by-click steps for a role.
 // Staff guides 404 for non-staff — visibility is enforced here, not just
@@ -31,11 +32,8 @@ export default async function GuidePage(props: {
     .single()
   if (!entitlement?.enabled) notFound()
   if (guide.staff) {
-    const { data: isStaff } = await supabase.rpc('module_can_manage', {
-      check_org_id: org.id,
-      check_module_key: moduleKey,
-    })
-    if (!isStaff) notFound()
+    const { guides: allowed } = await visibleGuides(supabase, org.id, moduleKey, [guide])
+    if (allowed.length === 0) notFound()
   }
 
   const html = await marked.parse(guide.body)

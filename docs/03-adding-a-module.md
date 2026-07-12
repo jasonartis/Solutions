@@ -215,11 +215,28 @@ staff bypass their own switches. v1 data-only, instant download.
 ### User walkthroughs / in-app help (founder decision, 2026-07-09)
 
 Every module ships **role-level walkthroughs** — numbered click-by-click guides a
-user can follow to learn their level of the platform — rendered in-app at
-`/o/<slug>/m/<key>/help` and indexed at `/o/<slug>/help`. Files live in the
-module's folder: `modules/<key>/help/<role>.md`, one per role, with `staff: true`
-frontmatter on staff guides. Visibility: module staff see every guide; everyone
-else sees the non-staff guides ("each level sees their level and below").
+user can follow to learn their level of the platform — indexed at
+`/o/<slug>/help` and rendered at `/o/<slug>/help/<moduleKey>/<role>`. Guides
+live as typed data in the module's folder (`modules/<key>/help/guides.ts`, one
+`HelpGuide` per role, `staff: true` on staff guides — no fs reads, so it's
+deployment-safe on Vercel and type-checked). Visibility: module staff see every
+guide; everyone else sees the non-staff guides ("each level sees their level
+and below").
+
+**Visibility gotcha found 2026-07-11 — don't reuse `module_can_manage` for
+this.** It was built for export-controls (admin-tier gating, above) and is
+correctly admin-only there — but a module's "staff" guides are usually for
+*operational* sub-tiers (GA, matchmaker, moderator, organizer, host) that
+aren't module admins. Gating on `module_can_manage` alone 404s real non-admin
+staff on their own guide, invisibly masked in every demo seed because the demo
+staff member also happens to be an org admin. **Correct check** (see
+`apps/web/lib/help-visibility.ts`): a staff guide is visible if
+`module_can_manage` is true (top tier, unchanged) **OR** the caller's own
+`module_roles` row for this module matches the guide's `role` field exactly —
+confirmed 1:1 against every module's real role strings, no per-module
+special-casing needed. Use this helper (not the bare RPC) for any new
+staff-gated surface.
+
 **Update rule: a UI change updates the module's walkthrough in the same commit**
 — "stale docs are bugs" extended to user docs; the e2e suite mirrors the same
 core flows, so a broken step usually turns CI red too. The founder tests the

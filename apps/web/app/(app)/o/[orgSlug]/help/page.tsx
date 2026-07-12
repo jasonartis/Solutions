@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import { getModule } from '@platform/core'
 import { createClient } from '@/lib/supabase/server'
 import { helpRegistry } from '@/lib/help-registry'
+import { visibleGuides } from '@/lib/help-visibility'
 
 // Platform Help index (docs/03 walkthrough decision): every enabled module
 // with guides, filtered to the caller's level — module staff see staff
@@ -24,11 +25,7 @@ export default async function HelpIndexPage(props: { params: Promise<{ orgSlug: 
     const help = helpRegistry[moduleKey]
     const manifest = getModule(moduleKey)
     if (!help || !manifest) continue
-    const { data: isStaff } = await supabase.rpc('module_can_manage', {
-      check_org_id: org.id,
-      check_module_key: moduleKey,
-    })
-    const guides = help.guides.filter((g) => isStaff || !g.staff)
+    const { guides } = await visibleGuides(supabase, org.id, moduleKey, help.guides)
     if (guides.length === 0) continue
     sections.push({
       moduleKey,
