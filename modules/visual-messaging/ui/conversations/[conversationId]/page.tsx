@@ -363,7 +363,7 @@ export default async function ConversationPage(props: {
             ) : (
               <form
                 action={tombstoneLayer.bind(null, orgSlug, conversationId, current.id)}
-                className="flex items-center gap-2"
+                className="flex flex-wrap items-center gap-2"
               >
                 <input
                   name="reason"
@@ -441,7 +441,7 @@ export default async function ConversationPage(props: {
 
               {/* Deep-link join policy: whether an org member with the link can
                   join as a viewer without an explicit invite (spec setting). */}
-              <div className="mb-3 flex items-center gap-2 text-sm">
+              <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
                 <span className="text-gray-500">
                   Link joining: <span className="font-medium">{joinOpen ? 'open' : 'invite-only'}</span>
                 </span>
@@ -452,7 +452,7 @@ export default async function ConversationPage(props: {
                 </form>
               </div>
 
-              <form action={addMember.bind(null, orgSlug, conversationId)} className="flex items-center gap-2">
+              <form action={addMember.bind(null, orgSlug, conversationId)} className="flex flex-wrap items-center gap-2">
                 <input
                   name="email"
                   type="email"

@@ -25,7 +25,7 @@ export default async function SamplePage(props: { params: Promise<{ orgSlug: str
       <h1 className="mb-6 text-2xl font-semibold">Sample Module</h1>
 
       {canManage && (
-        <form action={createProject.bind(null, orgSlug)} className="mb-6 flex items-center gap-2">
+        <form action={createProject.bind(null, orgSlug)} className="mb-6 flex flex-wrap items-center gap-2">
           <input name="name" required placeholder="New project name" className={`${inputCls} min-w-56`} />
           <button className={btnCls}>Create project</button>
         </form>
@@ -38,7 +38,7 @@ export default async function SamplePage(props: { params: Promise<{ orgSlug: str
               <h2 className="text-lg font-medium">{p.name}</h2>
               {canManage && (
                 <form action={deleteProject.bind(null, orgSlug, p.id)}>
-                  <button className="text-xs text-red-600 hover:underline">Delete project</button>
+                  <button className="px-1 py-1.5 text-xs text-red-600 hover:underline">Delete project</button>
                 </form>
               )}
             </div>

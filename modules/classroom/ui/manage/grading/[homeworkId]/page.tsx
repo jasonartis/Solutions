@@ -126,7 +126,8 @@ export default async function GradingPage(props: {
         </div>
       )}
 
-      <table className="w-full text-sm">
+      <div className="overflow-x-auto">
+      <table className="w-full min-w-[640px] text-sm">
         <thead>
           <tr className="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-500">
             <th className="py-2 pr-3">Student</th>
@@ -219,6 +220,7 @@ export default async function GradingPage(props: {
           )}
         </tbody>
       </table>
+      </div>
     </div>
   )
 }

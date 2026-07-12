@@ -193,13 +193,13 @@ export default async function MatchmakingManagePage(props: {
                     <li key={gm.id} className="flex items-center justify-between">
                       <span>{nameOf(gm.user_id)}</span>
                       <form action={removeGroupMember.bind(null, orgSlug, gm.id)}>
-                        <button className="text-xs text-red-600 hover:underline">Remove</button>
+                        <button className="px-1 py-1.5 text-xs text-red-600 hover:underline">Remove</button>
                       </form>
                     </li>
                   ))}
                   {members.length === 0 && <li className="text-gray-400">No members yet.</li>}
                 </ul>
-                <form action={addGroupMember.bind(null, orgSlug, g.id)} className="flex items-center gap-2">
+                <form action={addGroupMember.bind(null, orgSlug, g.id)} className="flex flex-wrap items-center gap-2">
                   <input
                     name="email"
                     type="email"
@@ -216,8 +216,8 @@ export default async function MatchmakingManagePage(props: {
           })}
           {(groups ?? []).length === 0 && <li className="text-gray-400">No groups yet.</li>}
         </ul>
-        <form action={createGroup.bind(null, orgSlug)} className="flex items-center gap-2">
-          <input name="name" required placeholder="Group name" className={`${inputCls} w-56`} />
+        <form action={createGroup.bind(null, orgSlug)} className="flex flex-wrap items-center gap-2">
+          <input name="name" required placeholder="Group name" className={`${inputCls} w-full sm:w-56`} />
           <button className={btnCls}>Create group</button>
         </form>
       </section>
@@ -237,7 +237,7 @@ export default async function MatchmakingManagePage(props: {
                 <span className="ml-1 text-xs uppercase text-gray-400">({a.target_type})</span>
               </span>
               <form action={removeAssignment.bind(null, orgSlug, a.id)}>
-                <button className="text-xs text-red-600 hover:underline">Remove</button>
+                <button className="px-1 py-1.5 text-xs text-red-600 hover:underline">Remove</button>
               </form>
             </li>
           ))}

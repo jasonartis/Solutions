@@ -14,7 +14,7 @@ import {
 
 const inputCls = 'rounded border border-gray-300 px-2 py-1 text-sm'
 const btnCls = 'rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700'
-const linkBtn = 'text-xs text-blue-600 hover:underline'
+const linkBtn = 'px-1 py-1.5 text-xs text-blue-600 hover:underline'
 
 // Manager back-office: service catalog, promotions, earnings summary,
 // expenses, shopping list. sal_can_manage gates the page (RLS decides).
@@ -124,7 +124,7 @@ export default async function SalonManagePage(props: { params: Promise<{ orgSlug
         <h2 className="mb-3 text-lg font-medium">Service catalog</h2>
         <ul className="mb-4 space-y-1 text-sm">
           {(services ?? []).map((s) => (
-            <li key={s.id} className="flex items-center justify-between">
+            <li key={s.id} className="flex flex-wrap items-center justify-between gap-2">
               <span className={s.active ? '' : 'text-gray-400 line-through'}>
                 {s.name} · {fmtMoney(Number(s.price))} · {s.approx_duration_minutes} min
               </span>
@@ -231,7 +231,7 @@ export default async function SalonManagePage(props: { params: Promise<{ orgSlug
         <h2 className="mb-3 text-lg font-medium">Shopping list</h2>
         <ul className="mb-4 space-y-2 text-sm">
           {(shopping ?? []).map((s) => (
-            <li key={s.id} className="flex items-center justify-between">
+            <li key={s.id} className="flex flex-wrap items-center justify-between gap-2">
               <span className={s.status !== 'to_buy' ? 'text-gray-400' : ''}>
                 {s.item} ×{s.quantity}
                 {s.estimated_cost !== null && <span className="text-gray-400"> (est. {fmtMoney(Number(s.estimated_cost))})</span>}

@@ -122,7 +122,7 @@ export default async function ManagePage(props: { params: Promise<{ orgSlug: str
                 action={postAnnouncement.bind(null, orgSlug, klass.id)}
                 className="mb-5 flex flex-wrap items-center gap-2"
               >
-                <input name="body" required placeholder="Announcement…" className={`${inputCls} min-w-96 flex-1`} />
+                <input name="body" required placeholder="Announcement…" className={`${inputCls} w-full flex-1 sm:min-w-96 sm:w-auto`} />
                 <button className={btnCls}>Post</button>
               </form>
 

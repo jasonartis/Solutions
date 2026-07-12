@@ -11,7 +11,7 @@ import {
 
 const inputCls = 'rounded border border-gray-300 px-2 py-1 text-sm'
 const btnCls = 'rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700'
-const linkBtn = 'text-xs text-blue-600 hover:underline'
+const linkBtn = 'px-1 py-1.5 text-xs text-blue-600 hover:underline'
 
 type Appt = {
   id: string
@@ -119,7 +119,8 @@ async function OperatorConsole(props: {
         {apptRows.length === 0 ? (
           <p className="text-sm text-gray-500">No appointments today.</p>
         ) : (
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[560px] text-sm">
             <thead>
               <tr className="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-500">
                 <th className="py-2 pr-3">Time</th>
@@ -188,6 +189,7 @@ async function OperatorConsole(props: {
               })}
             </tbody>
           </table>
+          </div>
         )}
       </section>
 
@@ -346,7 +348,7 @@ async function CustomerConsole(props: { orgSlug: string; orgId: string; timeFmt:
                   <span className="text-xs uppercase text-gray-400">{a.state.replace('_', ' ')}</span>
                   {a.state === 'booked' && (
                     <form action={setAppointmentState.bind(null, props.orgSlug, a.id, 'cancelled')}>
-                      <button className="text-xs text-red-600 hover:underline">Cancel</button>
+                      <button className="px-1 py-1.5 text-xs text-red-600 hover:underline">Cancel</button>
                     </form>
                   )}
                 </span>

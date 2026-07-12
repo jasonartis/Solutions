@@ -297,8 +297,26 @@ export default function LayerCanvas(props: {
     el.src = props.imageUrl
   }, [props.imageUrl])
 
+  // Founder feedback (2026-07-12, "doesn't come out very well on phone/
+  // tablet"): the canvas used to hard-cap at 640px regardless of viewport,
+  // overflowing the page on any screen narrower than that. Measure the
+  // actual available width via the wrapping container (itself capped at
+  // 640px, shrinking to fit on narrower screens) instead of a constant.
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [containerWidth, setContainerWidth] = useState(640)
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect.width
+      if (width) setContainerWidth(width)
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
   const natural = { w: img?.naturalWidth || 800, h: img?.naturalHeight || 600 }
-  const displayW = Math.min(640, natural.w)
+  const displayW = Math.min(640, natural.w, containerWidth || 640)
   const scale = displayW / natural.w
   const displayH = natural.h * scale
 
@@ -438,7 +456,13 @@ export default function LayerCanvas(props: {
           Drawing mode — swipes are off
         </p>
       )}
-      <div className="relative inline-block">
+      {/* Outer div is purely a width-measuring container (ResizeObserver
+          reads its clientWidth so the canvas can shrink to fit a phone
+          screen) — everything visual, including the swipe-arrow overlays,
+          lives in the inner div below, sized to the actual displayW so
+          arrows hug the canvas edges rather than a wider measuring box. */}
+      <div ref={containerRef} className="w-full max-w-[640px]">
+      <div className="relative" style={{ width: displayW }}>
         {/* Swipe-direction indicators (founder feedback, 2026-07-11): plain
             HTML overlays, not part of the Konva stage, so they always
             render above whatever's drawn underneath and are never obscured
@@ -495,7 +519,7 @@ export default function LayerCanvas(props: {
             'overflow-hidden rounded bg-white ' +
             (mode === 'draw' ? 'border-4 border-blue-500' : 'border border-gray-300')
           }
-          style={{ touchAction: 'none', ...slideStyle }}
+          style={{ touchAction: 'none', width: displayW, ...slideStyle }}
           data-canvas-mode={mode}
         >
         <Stage
@@ -684,6 +708,7 @@ export default function LayerCanvas(props: {
           </Layer>
         </Stage>
         </div>
+      </div>
       </div>
 
       {/* Sibling dots: this layer among its siblings (carousel position). */}

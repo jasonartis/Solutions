@@ -16,7 +16,7 @@ import {
 } from '../../actions'
 
 const btnCls = 'rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700'
-const linkBtn = 'text-xs text-blue-600 hover:underline'
+const linkBtn = 'px-1 py-1.5 text-xs text-blue-600 hover:underline'
 
 // Event page — role-adaptive. Organizer: lifecycle controls + pairing-round
 // stand-in + reveal. Staff (organizer OR host): roster + report triage.
@@ -243,7 +243,7 @@ export default async function EventPage(props: {
             {event.resume_review_enabled && (
               <form
                 action={saveProfileCard.bind(null, orgSlug, eventId, mySeat.id)}
-                className="mt-3 flex items-center gap-2 border-t border-gray-100 pt-3"
+                className="mt-3 flex flex-wrap items-center gap-2 border-t border-gray-100 pt-3"
               >
                 <label className="text-xs uppercase tracking-wide text-gray-500">My profile card</label>
                 <input
@@ -299,7 +299,7 @@ export default async function EventPage(props: {
                             <summary className={`cursor-pointer ${linkBtn}`}>Private note</summary>
                             <form
                               action={saveNote.bind(null, orgSlug, eventId, otherUserId)}
-                              className="mt-1 flex items-center gap-2"
+                              className="mt-1 flex flex-wrap items-center gap-2"
                             >
                               <textarea
                                 name="body"

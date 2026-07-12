@@ -81,7 +81,7 @@ export default async function HomeworkPage(props: {
               <span>{f.file_name}</span>
               {canModify && (
                 <form action={deleteSubmissionFile.bind(null, orgSlug, homeworkId, f.id, f.storage_path)}>
-                  <button className="text-xs text-red-600 hover:underline">Remove</button>
+                  <button className="px-1 py-1.5 text-xs text-red-600 hover:underline">Remove</button>
                 </form>
               )}
             </li>

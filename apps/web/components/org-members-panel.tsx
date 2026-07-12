@@ -52,7 +52,7 @@ export default function OrgMembersPanel(props: {
                   <button className="text-xs text-blue-600 hover:underline">Update</button>
                 </form>
                 <form action={props.removeMemberAction.bind(null, m.userId)}>
-                  <button className="text-xs text-red-600 hover:underline">Remove</button>
+                  <button className="px-1 py-1.5 text-xs text-red-600 hover:underline">Remove</button>
                 </form>
               </span>
             </div>

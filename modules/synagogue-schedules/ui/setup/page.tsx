@@ -19,7 +19,7 @@ const ZMANIM = zmanNameSchema.options
 
 const inputCls = 'rounded border border-gray-300 px-2 py-1 text-sm'
 const btnCls = 'rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700'
-const delCls = 'text-xs text-red-500 hover:underline'
+const delCls = 'px-1 py-1.5 text-xs text-red-500 hover:underline'
 
 function describeRule(rule: unknown): string {
   const r = rule as {
