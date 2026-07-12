@@ -72,4 +72,41 @@ Security-review pass built all nine flagged guards (T1–T9): event/round state-
 
 Two reviewer findings beyond the flagged TODOs: (a) `sd_can_manage` now delegates to the platform's `is_org_admin()` (docs/03 convention #9); (b) **a live-discovered RLS gotcha** — the draft's own-row SELECT policy used `sd_owns_participant(id)`, a definer function querying the same table, which breaks `INSERT … RETURNING` (the function's snapshot excludes the row being inserted); replaced with a direct `user_id = auth.uid()` comparison. Rule for docs/03: a table's own policies use direct column checks, never self-referential lookups.
 
-**Remaining for module 6:** all UI (event setup, registration, lobby, live rounds, interest submission, match reveal, organizer live console), the `speeddating.event-orchestrator` worker (round clock, rotation build honoring blocks/repeats, room provisioning), the Jitsi provider interface, waitlist auto-promotion, contact-share population on reveal.
+**Remaining for module 6 (2026-07-09 snapshot, since superseded — see below):** all UI, the orchestrator worker, the Jitsi provider interface, waitlist auto-promotion, contact-share population on reveal.
+
+## UI + orchestrator worker shipped (2026-07-09)
+
+Event setup, registration, lifecycle controls, the real rotation engine +
+automatic round-clock worker (replacing the manual organizer stand-in), and
+the mutual-interest reveal all shipped — see the CLAUDE.md state log entries
+for 2026-07-09. Module 6 became event-runnable minus video.
+
+## Notes/reports/blocks UI + a real host-tier gap fixed (2026-07-11)
+
+The three tables that had schema but no UI (`sd_notes`, `sd_reports`,
+`sd_blocks` — all security-reviewed 2026-07-09) are wired up, no migration
+needed. Participants get **Private note** (author-only, never visible to
+staff) and **Report** on every person in "People you met", plus **Never pair
+me with them again** — a personal, cross-event block managed from a new
+**People you've blocked** section on the main page. Staff (organizer OR
+host — `sd_can_staff_event`) get a **Roster & reports** section with triage;
+the reported person never has a read path.
+
+**Real gap fixed:** the event page previously gated everything on
+`sd_can_organize`, so a pure **host** (a distinct module role with lobby/
+safety duty but no event-setup rights) saw nothing but the page header — not
+even the roster. Now gates roster+reports on the broader `sd_can_staff_event`,
+and a `host` walkthrough guide was added.
+
+**Latent platform bug found, NOT fixed here (flagged for its own pass):** the
+generic help-guide route gates `staff: true` guides on `module_can_manage`
+(org-admin tier), but every module's "staff" guide actually means
+"operational tier" (organizer/host here; professor/GA, matchmaker-admin,
+cashier/manager, moderator elsewhere) — a real non-admin staff member would
+404 on their own guide. Masked in every demo seed because the demo
+organizer/professor/etc. also happens to be an org admin. Cross-cutting
+(one shared route, every module) — deliberately not rushed into this slice.
+
+**Still remaining:** Jitsi video (needs the VPS), lobby/live-round UI,
+resume-review profiles, waitlist auto-promotion, contact-share population on
+reveal.

@@ -203,3 +203,117 @@ export async function revealMatches(orgSlug: string, eventId: string) {
   fail(error, 'Reveal failed')
   revalidatePath(`/o/${orgSlug}/m/speed-dating/events/${eventId}`)
 }
+
+// Private notepad (spec: strictly author-only, never visible to organizers —
+// sd_notes_all_own is the only policy on the table). One row per
+// (event, author, about); a re-save updates it in place.
+export async function saveNote(orgSlug: string, eventId: string, aboutUserId: string, formData: FormData) {
+  const body = String(formData.get('body') ?? '').trim()
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) throw new Error('Not signed in')
+
+  const { data: existing } = await supabase
+    .from('sd_notes')
+    .select('id')
+    .eq('event_id', eventId)
+    .eq('author_user_id', user.id)
+    .eq('about_user_id', aboutUserId)
+    .maybeSingle()
+
+  const { error } = existing
+    ? await supabase.from('sd_notes').update({ body }).eq('id', existing.id)
+    : await supabase.from('sd_notes').insert({
+        org_id: DERIVED_SCOPE_PLACEHOLDER, // derived by trigger
+        event_id: eventId,
+        author_user_id: user.id,
+        about_user_id: aboutUserId,
+        body,
+      })
+  fail(error, 'Save note failed')
+  revalidatePath(`/o/${orgSlug}/m/speed-dating/events/${eventId}`)
+}
+
+// Safety report on an encounter. The reported person never has a read path
+// (RLS) — this is reporter + staff_event tier only.
+export async function fileReport(
+  orgSlug: string,
+  eventId: string,
+  reporterParticipantId: string,
+  reportedParticipantId: string,
+  formData: FormData,
+) {
+  const reason = String(formData.get('reason') ?? '').trim()
+  const detail = String(formData.get('detail') ?? '').trim()
+  if (!reason) throw new Error('A reason is required')
+
+  const supabase = await createClient()
+  const { error } = await supabase.from('sd_reports').insert({
+    org_id: DERIVED_SCOPE_PLACEHOLDER, // derived by trigger
+    event_id: eventId,
+    reporter_participant_id: reporterParticipantId,
+    reported_participant_id: reportedParticipantId,
+    reason,
+    detail: detail || null,
+  })
+  fail(error, 'Report failed')
+  revalidatePath(`/o/${orgSlug}/m/speed-dating/events/${eventId}`)
+}
+
+// Host/organizer triage. sd_pin_report stamps reviewed_by/reviewed_at
+// server-side on any state change — this only ever touches `state`.
+export async function reviewReport(
+  orgSlug: string,
+  eventId: string,
+  reportId: string,
+  state: 'reviewed' | 'actioned' | 'dismissed',
+) {
+  const supabase = await createClient()
+  const { error } = await supabase.from('sd_reports').update({ state }).eq('id', reportId)
+  fail(error, 'Review report failed')
+  revalidatePath(`/o/${orgSlug}/m/speed-dating/events/${eventId}`)
+}
+
+// Personal, cross-event block list (spec: "never pair me with them again").
+// A root table — org_id is client-supplied (no parent row to derive it from);
+// RLS's write policy re-checks org membership. Idempotent: blocking twice is
+// a no-op rather than a raw unique-constraint error.
+export async function blockUser(orgSlug: string, blockedUserId: string, formData: FormData) {
+  const reason = String(formData.get('reason') ?? '').trim()
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) throw new Error('Not signed in')
+  const orgId = await resolveOrgId(supabase, orgSlug)
+
+  const { data: existing } = await supabase
+    .from('sd_blocks')
+    .select('id')
+    .eq('org_id', orgId)
+    .eq('blocker_user_id', user.id)
+    .eq('blocked_user_id', blockedUserId)
+    .maybeSingle()
+  if (existing) {
+    revalidatePath(`/o/${orgSlug}/m/speed-dating`)
+    return
+  }
+
+  const { error } = await supabase.from('sd_blocks').insert({
+    org_id: orgId,
+    blocker_user_id: user.id,
+    blocked_user_id: blockedUserId,
+    reason: reason || null,
+  })
+  fail(error, 'Block failed')
+  revalidatePath(`/o/${orgSlug}/m/speed-dating`)
+}
+
+export async function unblockUser(orgSlug: string, blockId: string) {
+  const supabase = await createClient()
+  const { error } = await supabase.from('sd_blocks').delete().eq('id', blockId)
+  fail(error, 'Unblock failed')
+  revalidatePath(`/o/${orgSlug}/m/speed-dating`)
+}

@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { requireOrgModule } from '@/lib/module-gate'
-import { createEvent } from './actions'
+import { createEvent, unblockUser } from './actions'
 
 const inputCls = 'rounded border border-gray-300 px-2 py-1 text-sm'
 const btnCls = 'rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700'
@@ -11,14 +11,33 @@ export default async function SpeedDatingPage(props: { params: Promise<{ orgSlug
   const { orgSlug } = await props.params
   const { supabase, org } = await requireOrgModule(orgSlug, 'speed-dating')
 
-  const [{ data: canOrganize }, { data: events }] = await Promise.all([
+  const [{ data: canOrganize }, { data: events }, { data: me }] = await Promise.all([
     supabase.rpc('sd_can_organize', { check_org_id: org.id }),
     supabase
       .from('sd_events')
       .select('id, name, state, scheduled_at')
       .eq('org_id', org.id)
       .order('scheduled_at', { ascending: false, nullsFirst: false }),
+    supabase.auth.getUser().then(({ data }) => ({ data: data.user })),
   ])
+
+  // Personal, cross-event block list (spec: "never pair me with them again").
+  // Filtered to MY OWN blocks even though RLS also lets the manage tier read
+  // everyone's — this section means "my list", not an org-wide admin view.
+  const [{ data: myBlocks }, { data: profiles }] = me
+    ? await Promise.all([
+        supabase
+          .from('sd_blocks')
+          .select('id, blocked_user_id, reason')
+          .eq('org_id', org.id)
+          .eq('blocker_user_id', me.id),
+        supabase.from('profiles').select('user_id, display_name, email'),
+      ])
+    : [{ data: null }, { data: null }]
+  const nameOf = (userId: string) => {
+    const p = (profiles ?? []).find((pr) => pr.user_id === userId)
+    return p?.display_name || p?.email || 'Someone'
+  }
 
   const fmt = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
 
@@ -43,13 +62,42 @@ export default async function SpeedDatingPage(props: { params: Promise<{ orgSlug
       </ul>
 
       {canOrganize && (
-        <section className="rounded-lg border border-gray-200 bg-white p-5">
+        <section className="mb-8 rounded-lg border border-gray-200 bg-white p-5">
           <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-gray-500">Create event</h2>
           <form action={createEvent.bind(null, orgSlug)} className="flex flex-wrap items-center gap-2">
             <input name="name" required placeholder="Event name" className={`${inputCls} min-w-56`} />
             <input name="scheduledAt" type="datetime-local" className={inputCls} />
             <button className={btnCls}>Create (draft)</button>
           </form>
+        </section>
+      )}
+
+      {/* Personal, cross-event block list — "never pair me with them again".
+          Blocking itself happens from an event page (after meeting someone);
+          this is just view + remove. */}
+      {me && (
+        <section className="rounded-lg border border-gray-200 bg-white p-5">
+          <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-gray-500">
+            People you&apos;ve blocked
+          </h2>
+          <ul className="space-y-1 text-sm">
+            {(myBlocks ?? []).map((b) => (
+              <li key={b.id} className="flex items-center justify-between">
+                <span>
+                  {nameOf(b.blocked_user_id)}
+                  {b.reason && <span className="ml-2 text-xs text-gray-400">— {b.reason}</span>}
+                </span>
+                <form action={unblockUser.bind(null, orgSlug, b.id)}>
+                  <button className="text-xs text-blue-600 hover:underline">Unblock</button>
+                </form>
+              </li>
+            ))}
+            {(myBlocks ?? []).length === 0 && (
+              <li className="text-gray-400">
+                No one blocked. You can block someone from an event&apos;s &quot;People you met&quot; list.
+              </li>
+            )}
+          </ul>
         </section>
       )}
     </div>

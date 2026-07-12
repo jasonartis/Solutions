@@ -390,6 +390,25 @@ test('speed-dating module: register → round → mutual interest → reveal', a
   await page.getByRole('button', { name: 'interested', exact: true }).click()
   await expect(page.getByRole('button', { name: 'interested', exact: true })).toHaveClass(/bg-blue-600/)
 
+  // Charlie saves a private note about Dana — author-only, never visible to
+  // the organizer/host.
+  await page.getByText('Private note').click() // opens the <details>
+  await page.getByPlaceholder('Only you can see this…').fill('Great conversation about hiking.')
+  const notePost = page.waitForResponse((r) => r.request().method() === 'POST')
+  await page.getByRole('button', { name: 'Save' }).click()
+  await notePost
+  await page.reload()
+  await page.getByText('Private note').click()
+  await expect(page.getByPlaceholder('Only you can see this…')).toHaveValue('Great conversation about hiking.')
+
+  // Charlie files a safety report about Dana.
+  await page.getByText('Report', { exact: true }).click() // opens the <details>
+  await page.locator('select[name="reason"]').selectOption('other')
+  await page.getByPlaceholder('Details (optional)').fill('Test report — please ignore')
+  const reportPost = page.waitForResponse((r) => r.request().method() === 'POST')
+  await page.getByRole('button', { name: 'Submit report' }).click()
+  await reportPost
+
   await signIn(page, 'dana@demo.local')
   await page.goto('/o/demo-dating/m/speed-dating')
   await page.getByRole('link', { name: 'Friday Night Mixer' }).click()
@@ -400,10 +419,19 @@ test('speed-dating module: register → round → mutual interest → reveal', a
   // Still unrevealed — mutual interest alone shows nothing until the organizer reveals.
   await expect(page.getByText("It's a match!")).not.toBeVisible()
 
-  // Organizer completes the event and reveals (each step confirmed on-page).
+  // Organizer sees Charlie's report in triage (staff-only — Dana, the
+  // reported person, never has a read path) and dismisses it.
   await signIn(page, 'alice@demo.local')
   await page.goto('/o/demo-dating/m/speed-dating')
   await page.getByRole('link', { name: 'Friday Night Mixer' }).click()
+  await expect(page.getByText('Safety reports (1 open)')).toBeVisible()
+  await expect(page.getByText(/Charlie C reported Dana D/)).toBeVisible()
+  const dismissed = page.waitForResponse((r) => r.request().method() === 'POST')
+  await page.getByRole('button', { name: 'Dismiss' }).click()
+  await dismissed
+  await expect(page.getByText('Safety reports (0 open)')).toBeVisible()
+
+  // Organizer completes the event and reveals (each step confirmed on-page).
   await expect(page.getByText('Matches: 0 revealed / 1 total')).toBeVisible()
   await page.getByRole('button', { name: 'Complete event' }).click()
   await page.getByRole('button', { name: 'Reveal mutual matches' }).click()
@@ -415,6 +443,21 @@ test('speed-dating module: register → round → mutual interest → reveal', a
   await page.getByRole('link', { name: 'Friday Night Mixer' }).click()
   await expect(page.getByText("It's a match!")).toBeVisible()
   await expect(page.getByText('Charlie C is interested too.')).toBeVisible()
+
+  // Charlie blocks Dana ("never pair me with them again") — personal,
+  // cross-event, managed from the main Speed Dating page.
+  await signIn(page, 'charlie@demo.local')
+  await page.goto('/o/demo-dating/m/speed-dating')
+  await page.getByRole('link', { name: 'Friday Night Mixer' }).click()
+  const blocked = page.waitForResponse((r) => r.request().method() === 'POST')
+  await page.getByRole('button', { name: 'Never pair me with them again' }).click()
+  await blocked
+  await page.goto('/o/demo-dating/m/speed-dating')
+  await expect(page.getByText('Dana D')).toBeVisible()
+  const unblocked = page.waitForResponse((r) => r.request().method() === 'POST')
+  await page.getByRole('button', { name: 'Unblock' }).click()
+  await unblocked
+  await expect(page.getByText('No one blocked.', { exact: false })).toBeVisible()
 })
 
 test('sample module (module 0 template): staff creates, member contributes', async ({ page }) => {
