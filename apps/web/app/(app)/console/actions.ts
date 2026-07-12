@@ -103,3 +103,26 @@ export async function removeModuleRoleAction(orgId: string, userId: string, modu
   await removeModuleRole(supabase, orgId, userId, moduleKey, role)
   revalidatePath('/console')
 }
+
+// Founder feedback (2026-07-12): synagogue-schedules' location settings
+// (address/timezone/myzmanim id) were seed-only, no UI anywhere to view or
+// edit them. No migration needed — org_modules.settings is already a jsonb
+// column the superadmin write policy fully covers (the same path
+// toggleModule already uses); this is purely a missing form.
+export async function updateSynagogueSettings(orgId: string, formData: FormData) {
+  const supabase = await requireSuperadmin()
+  const latitude = Number(formData.get('latitude'))
+  const longitude = Number(formData.get('longitude'))
+  const timezone = String(formData.get('timezone') ?? '').trim()
+  const myzmanimLocationId = String(formData.get('myzmanimLocationId') ?? '').trim()
+  const israel = formData.get('israel') === 'on'
+  if (!timezone || Number.isNaN(latitude) || Number.isNaN(longitude)) {
+    throw new Error('Latitude, longitude, and timezone are required')
+  }
+
+  const { error } = await supabase.from('org_modules').update({
+    settings: { latitude, longitude, timezone, israel, myzmanimLocationId: myzmanimLocationId || null },
+  }).eq('org_id', orgId).eq('module_key', 'synagogue-schedules')
+  if (error) throw new Error(error.message)
+  revalidatePath('/console')
+}

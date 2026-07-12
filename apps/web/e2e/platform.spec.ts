@@ -41,6 +41,16 @@ test('owner has the console; regular users do not', async ({ page }) => {
   await page.getByRole('link', { name: 'Owner Console' }).click()
   await expect(page.getByRole('heading', { name: 'Owner Console' })).toBeVisible()
   await expect(page.getByText('Create organization')).toBeVisible()
+
+  // Founder feedback (2026-07-12): synagogue location settings were
+  // seed-only, no UI. The superadmin console now edits them directly (no
+  // migration needed — org_modules.settings already covered by the
+  // existing superadmin RLS write policy).
+  const synSection = page.locator('section', { has: page.getByRole('heading', { name: 'Demo Synagogue' }) })
+  await expect(synSection.getByLabel('Timezone')).toHaveValue('America/New_York')
+  await synSection.getByLabel('myzmanim location ID').fill('US99999')
+  await synSection.getByRole('button', { name: 'Save location' }).click()
+  await expect(synSection.getByLabel('myzmanim location ID')).toHaveValue('US99999')
 })
 
 test('org self-management: admin adds/removes members, changes roles, grants/revokes module roles', async ({

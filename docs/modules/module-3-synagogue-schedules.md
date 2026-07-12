@@ -67,3 +67,22 @@ on (address/lat-long/timezone/myzmanim location id) are **seed-only** —
 `org_modules.settings.location`, no UI to view or edit them anywhere. Same
 gap as "who can add people to an org" — belongs to a future self-serve
 org-settings design pass, not a quick patch here.
+
+## 2026-07-12 — location settings now editable (superadmin console)
+
+Closed the gap above. `org_modules.settings` for this module (`latitude`,
+`longitude`, `timezone`, `israel`, `myzmanimLocationId` — flat fields, not
+nested under a `location` key as the note above assumed) is now editable
+from the superadmin Owner Console (`apps/web/app/(app)/console/page.tsx`,
+`updateSynagogueSettings` action) whenever synagogue-schedules is enabled
+for an org. No migration was needed: `org_modules`'s existing superadmin
+RLS policy is `for all` and already covers the `settings` column — the
+same write path `toggleModule` already used for `enabled`. **Deliberately
+superadmin-only, not org-admin self-serve**, matching the founder's
+explicit 2026-07-12 decision that module-level configuration (like module
+enablement itself) stays a platform-owner action — org self-management
+(docs/03 "Control hierarchy" level 2) only covers membership/module-role
+grants, not settings. **Module 3 has no other known remaining gaps** short
+of the parked myzmanim live-auth item and the explicitly-future items
+(subscriptions/reminders, extra layout templates, distribution) already
+listed above. e2e coverage added to the existing console test.

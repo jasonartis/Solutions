@@ -90,10 +90,18 @@ Answers to the open question above:
   its own expiration.
 - Policy is **per class**.
 
-Implementation implication (next slice): `cls_classes` gains an end/hide date,
-`cls_submissions` gains a per-item `visible_override_until`, and the visibility
-becomes an RLS-time computation — no destructive sweep involved at all, fully
-reversible, which matches "never deleted" exactly.
+**Built (2026-07-09, `20260709080000_classroom_submission_retention.sql`) —
+this section was stale until 2026-07-12, describing a "next slice" that had
+already shipped:** `cls_classes.submissions_hidden_from` (date) and
+`cls_submissions.visible_override_until` (timestamptz) exist; visibility is
+an RLS-time computation (`cls_submissions`/`cls_submission_files`/
+`storage.objects` select policies), never a destructive sweep — matching
+"never deleted" exactly. UI: the professor sets the per-class hide date from
+Manage (`setSubmissionsHiddenFrom`, `modules/classroom/ui/manage/page.tsx`)
+and re-reveals one submission at a time with its own expiration from the
+grading console (`setRevealUntil`, `modules/classroom/ui/manage/grading/
+[homeworkId]/actions.ts`, columns pinned to professor-only via
+`cls_pin_submission_columns`). Verified live 8/8 at the time.
 
 **Grades-export decision (founder, 2026-07-09):** the authorship rule stands with
 no exception — students cannot export grades about them (professor/GA-entered).
