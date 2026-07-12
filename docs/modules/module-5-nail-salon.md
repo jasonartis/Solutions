@@ -66,4 +66,35 @@ Key design choices: org→location on nearly every table (chain = config change,
 
 Security-review fixes (verified live, 18/18 guard assertions): (1) `sal_pin_appointment` — operators keep full control; a worker may only tick checklist/notes and advance their own appointment along its lane (checked_in→in_progress→complete/no_show), every other column pinned and out-of-lane transitions rejected, and a completed row locks; a customer may only cancel their own still-booked appointment. Named to sort before the scope trigger so a bogus `location_id` is reverted before `org_id` is derived from it. (2) `sal_guard_bill` — void/refund require manager tier and stamp `voided_by/refunded_by` + timestamps server-side; once paid/void/refunded, monetary + payment columns and state are immutable to non-managers; paid metadata stamped server-side.
 
-**Remaining for module 5:** all UI (booking flow + price preview, worker chair view with checklist, cashier billing + walk-in quick-add, manager day-board/catalog/promotions/reporting/bookkeeping), the shopping-list→expense app action, the assignment-algorithm + reminder worker jobs, and the `sal-receipts` storage bucket + policies. Availability/slot math stays in-module until a second module needs a scheduling primitive.
+**Remaining for module 5 (2026-07-09 snapshot, since superseded — see below):** all UI, the shopping-list→expense app action, the assignment-algorithm + reminder worker jobs, the `sal-receipts` storage bucket. Availability/slot math stays in-module until a second module needs a scheduling primitive.
+
+## UI + operational spine shipped (2026-07-09/10)
+
+Day board, booking (operator + customer self-book), worker chair view,
+cashier billing, manager back office (catalog/promotions/expenses/shopping→
+expense) all shipped — see the CLAUDE.md state log for 2026-07-09/10. Module 5
+became usable end-to-end.
+
+## Reporting expansion (2026-07-11)
+
+Manage console gains **Net profit** (revenue − all-time expenses), **Top
+services** (billed revenue + count per service, from `sal_bill_items`), and
+**expenses by category** (all-time totals). Also fixed a real accuracy bug:
+the old "Expenses (recent)" tile silently summed only the last 20 rows (the
+same capped query used for the activity log), under-reporting total spend for
+any salon with more history — renamed "Total expenses", now sums the full
+set. Pure read-only addition, chosen deliberately while the founder's live
+testing round was in progress (no new writes, nothing touching booking).
+
+**Still remaining:** the shopping-list→expense app action was already
+built; genuinely open items are the assignment-algorithm + reminder worker
+jobs, the `sal-receipts` storage bucket, and **per-worker availability
+windows** — `sal_worker_profiles.weekly_schedule` and `sal_worker_time_off`
+have schema, RLS, and a security review (2026-07-09) but **no UI at all**,
+and nothing in the booking flow checks a worker's schedule or time-off
+before confirming an appointment. Deliberately deferred (not a quick slice —
+needs a JSON shape designed for `weekly_schedule` mirroring
+`sal_locations.store_hours`, a manager editor for it, a time-off entry UI,
+and real availability-checking logic wired into booking) for a quieter
+moment than an active testing round, since a mistake here could wrongly
+block or wrongly allow a real booking.

@@ -73,12 +73,15 @@ Everything the cashier does, plus the back office at **Nail Salon → Manage**.
 ## The summary cards
 
 1. **Net revenue** totals the earnings ledger (sales minus refunds);
-   **Expenses** totals recent spending; **Revenue by worker** splits sales.
+   **Total expenses** and **Net profit** cover all-time spending and the
+   difference; **Revenue by worker** splits sales.
 
 ## Service catalog
 
 2. Add a service with name, price, and duration (drives slot sizing) —
    **Add service**. **Deactivate** hides one from booking without deleting.
+   **Top services** (just below) ranks every service by revenue billed and
+   how many times it's been sold.
 
 ## Promotions
 
@@ -89,7 +92,9 @@ Everything the cashier does, plus the back office at **Nail Salon → Manage**.
 
 ## Expenses & shopping list
 
-4. **Log expense**: category, description, amount.
+4. **Log expense**: category, description, amount. **By category** (above
+   the log) totals all-time spending per category, so you can see where
+   the money's going at a glance.
 5. **Shopping list**: add items to buy; when purchased, type the ACTUAL
    paid amount next to the item and click **Purchased** — a linked expense
    is created automatically. **Cancel** drops an item.

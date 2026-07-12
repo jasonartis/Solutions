@@ -362,6 +362,12 @@ test('nail-salon module: manager runs the back-office (catalog, expenses, shoppi
   await expect(page.locator('li').filter({ hasText: 'Acetone (1L) ×1' }).first()).toContainText('purchased')
   // The linked expense appears in the expenses section (category "supplies").
   await expect(page.locator('li').filter({ hasText: 'supplies' }).filter({ hasText: '$12.50' }).first()).toBeVisible()
+
+  // Reporting: net profit tile, expenses grouped by category (this purchase's
+  // "supplies" category included), and top services ranked by revenue billed.
+  await expect(page.getByText('Net profit')).toBeVisible()
+  await expect(page.getByTestId('expenses-by-category').getByText('supplies')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Top services (by revenue billed)' })).toBeVisible()
 })
 
 test('nail-salon module: customer self-books and can cancel', async ({ page }) => {

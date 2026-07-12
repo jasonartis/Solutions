@@ -34,24 +34,52 @@ export default async function SalonManagePage(props: { params: Promise<{ orgSlug
     .maybeSingle()
   if (!location) notFound()
 
-  const [{ data: services }, { data: promotions }, { data: earnings }, { data: expenses }, { data: shopping }, { data: workers }] =
-    await Promise.all([
-      supabase.from('sal_services').select('id, name, price, approx_duration_minutes, active').eq('location_id', location.id).order('sort'),
-      supabase.from('sal_promotions').select('id, name, kind, threshold, lapsed_days, discount_type, discount_value, active').eq('location_id', location.id).order('created_at'),
-      supabase.from('sal_earnings_ledger').select('kind, amount, worker_id, occurred_at').eq('location_id', location.id),
-      supabase.from('sal_expenses').select('id, category, description, amount, spent_at').eq('location_id', location.id).order('spent_at', { ascending: false }).limit(20),
-      supabase.from('sal_shopping_list').select('id, item, quantity, estimated_cost, status').eq('location_id', location.id).order('created_at', { ascending: false }).limit(30),
-      supabase.from('sal_worker_profiles').select('user_id, display_name').eq('location_id', location.id),
-    ])
+  const [
+    { data: services },
+    { data: promotions },
+    { data: earnings },
+    { data: expenses },
+    { data: expensesAll },
+    { data: billItems },
+    { data: shopping },
+    { data: workers },
+  ] = await Promise.all([
+    supabase.from('sal_services').select('id, name, price, approx_duration_minutes, active').eq('location_id', location.id).order('sort'),
+    supabase.from('sal_promotions').select('id, name, kind, threshold, lapsed_days, discount_type, discount_value, active').eq('location_id', location.id).order('created_at'),
+    supabase.from('sal_earnings_ledger').select('kind, amount, worker_id, occurred_at').eq('location_id', location.id),
+    supabase.from('sal_expenses').select('id, category, description, amount, spent_at').eq('location_id', location.id).order('spent_at', { ascending: false }).limit(20),
+    // Unlimited, for accurate category totals (the list above is capped at 20
+    // for the recent-activity log — a report needs the full set).
+    supabase.from('sal_expenses').select('category, amount').eq('location_id', location.id),
+    supabase.from('sal_bill_items').select('service_id, line_total, quantity').eq('location_id', location.id),
+    supabase.from('sal_shopping_list').select('id, item, quantity, estimated_cost, status').eq('location_id', location.id).order('created_at', { ascending: false }).limit(30),
+    supabase.from('sal_worker_profiles').select('user_id, display_name').eq('location_id', location.id),
+  ])
 
   const revenue = (earnings ?? []).reduce((sum, e) => sum + Number(e.amount), 0)
-  const spent = (expenses ?? []).reduce((sum, e) => sum + Number(e.amount), 0)
+  const spent = (expensesAll ?? []).reduce((sum, e) => sum + Number(e.amount), 0)
+  const profit = revenue - spent
   const workerName = new Map((workers ?? []).map((w) => [w.user_id, w.display_name]))
   const byWorker = new Map<string, number>()
   for (const e of earnings ?? []) {
     if (!e.worker_id) continue
     byWorker.set(e.worker_id, (byWorker.get(e.worker_id) ?? 0) + Number(e.amount))
   }
+  const byCategory = new Map<string, number>()
+  for (const e of expensesAll ?? []) {
+    byCategory.set(e.category, (byCategory.get(e.category) ?? 0) + Number(e.amount))
+  }
+  const serviceName = new Map((services ?? []).map((s) => [s.id, s.name]))
+  const byService = new Map<string, { revenue: number; count: number }>()
+  for (const item of billItems ?? []) {
+    if (!item.service_id) continue
+    const entry = byService.get(item.service_id) ?? { revenue: 0, count: 0 }
+    entry.revenue += Number(item.line_total)
+    entry.count += item.quantity
+    byService.set(item.service_id, entry)
+  }
+  const topServices = [...byService.entries()].sort((a, b) => b[1].revenue - a[1].revenue)
+  const topCategories = [...byCategory.entries()].sort((a, b) => b[1] - a[1])
   const fmtMoney = (n: number) => `$${n.toFixed(2)}`
   const dateFmt = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' })
 
@@ -65,14 +93,18 @@ export default async function SalonManagePage(props: { params: Promise<{ orgSlug
         </Link>
       </div>
 
-      <section className="mb-8 grid gap-4 md:grid-cols-3">
+      <section className="mb-8 grid gap-4 md:grid-cols-4">
         <div className="rounded-lg border border-gray-200 bg-white p-4">
           <p className="text-xs uppercase tracking-wide text-gray-500">Net revenue (ledger)</p>
           <p className="text-2xl font-semibold">{fmtMoney(revenue)}</p>
         </div>
         <div className="rounded-lg border border-gray-200 bg-white p-4">
-          <p className="text-xs uppercase tracking-wide text-gray-500">Expenses (recent)</p>
+          <p className="text-xs uppercase tracking-wide text-gray-500">Total expenses</p>
           <p className="text-2xl font-semibold">{fmtMoney(spent)}</p>
+        </div>
+        <div className="rounded-lg border border-gray-200 bg-white p-4">
+          <p className="text-xs uppercase tracking-wide text-gray-500">Net profit</p>
+          <p className={`text-2xl font-semibold ${profit < 0 ? 'text-red-600' : ''}`}>{fmtMoney(profit)}</p>
         </div>
         <div className="rounded-lg border border-gray-200 bg-white p-4">
           <p className="text-xs uppercase tracking-wide text-gray-500">Revenue by worker</p>
@@ -111,6 +143,22 @@ export default async function SalonManagePage(props: { params: Promise<{ orgSlug
       </section>
 
       <section className="mb-8 rounded-lg border border-gray-200 bg-white p-5">
+        <h2 className="mb-3 text-lg font-medium">Top services (by revenue billed)</h2>
+        <ul className="space-y-1 text-sm">
+          {topServices.map(([id, stat]) => (
+            <li key={id} className="flex items-center justify-between">
+              <span>
+                {serviceName.get(id) ?? 'Unknown service'}{' '}
+                <span className="text-xs text-gray-400">× {stat.count}</span>
+              </span>
+              <span>{fmtMoney(stat.revenue)}</span>
+            </li>
+          ))}
+          {topServices.length === 0 && <li className="text-gray-400">No billed services yet.</li>}
+        </ul>
+      </section>
+
+      <section className="mb-8 rounded-lg border border-gray-200 bg-white p-5">
         <h2 className="mb-3 text-lg font-medium">Promotions</h2>
         <ul className="mb-4 space-y-1 text-sm">
           {(promotions ?? []).map((p) => (
@@ -146,6 +194,19 @@ export default async function SalonManagePage(props: { params: Promise<{ orgSlug
 
       <section className="mb-8 rounded-lg border border-gray-200 bg-white p-5">
         <h2 className="mb-3 text-lg font-medium">Expenses</h2>
+        <div data-testid="expenses-by-category" className="mb-4 rounded border border-gray-100 bg-gray-50 p-3">
+          <p className="mb-1 text-xs uppercase tracking-wide text-gray-500">By category (all time)</p>
+          <ul className="space-y-0.5 text-sm">
+            {topCategories.map(([category, amt]) => (
+              <li key={category} className="flex justify-between">
+                <span className="uppercase text-xs text-gray-500">{category}</span>
+                <span>{fmtMoney(amt)}</span>
+              </li>
+            ))}
+            {topCategories.length === 0 && <li className="text-gray-400">No expenses logged.</li>}
+          </ul>
+        </div>
+        <p className="mb-1 text-xs uppercase tracking-wide text-gray-400">Recent activity</p>
         <ul className="mb-4 space-y-1 text-sm">
           {(expenses ?? []).map((e) => (
             <li key={e.id} className="flex justify-between">
