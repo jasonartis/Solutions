@@ -14,9 +14,11 @@ function fail(error: { message: string } | null, what: string) {
 }
 
 // Layer content vocabulary (Zod-light for v1; the canvas produces exactly
-// this shape): a root layer carries the image; replies carry strokes drawn
-// in IMAGE pixel space so every zoom level stays registered.
+// this shape): a root layer carries the image; replies carry strokes and/or
+// emoji stamps, both drawn in IMAGE pixel space so every zoom level stays
+// registered.
 export type Stroke = { points: number[][]; color: string; size: number }
+export type Stamp = { emoji: string; x: number; y: number; fontSize: number }
 
 export async function createConversation(orgSlug: string, formData: FormData) {
   const title = String(formData.get('title') ?? '').trim()
@@ -125,13 +127,27 @@ export async function replyWithDrawing(
   orgSlug: string,
   conversationId: string,
   parentLayerId: string,
-  strokesJson: string,
+  payloadJson: string,
 ) {
-  const strokes = JSON.parse(strokesJson) as Stroke[]
-  if (!Array.isArray(strokes) || strokes.length === 0) throw new Error('Draw something first')
+  const payload = JSON.parse(payloadJson) as { strokes: Stroke[]; stamps: Stamp[] }
+  const strokes = Array.isArray(payload.strokes) ? payload.strokes : []
+  const stamps = Array.isArray(payload.stamps) ? payload.stamps : []
+  if (strokes.length === 0 && stamps.length === 0) throw new Error('Draw or place something first')
   for (const s of strokes) {
     if (!Array.isArray(s.points) || s.points.length < 2 || typeof s.color !== 'string' || typeof s.size !== 'number') {
       throw new Error('Malformed drawing')
+    }
+  }
+  for (const st of stamps) {
+    if (
+      typeof st.emoji !== 'string' ||
+      st.emoji.length === 0 ||
+      st.emoji.length > 8 ||
+      typeof st.x !== 'number' ||
+      typeof st.y !== 'number' ||
+      typeof st.fontSize !== 'number'
+    ) {
+      throw new Error('Malformed stamp')
     }
   }
 
@@ -148,7 +164,7 @@ export async function replyWithDrawing(
     parent_layer_id: parentLayerId,
     author_id: user.id,
     path: 'server-assigned',
-    content: { strokes },
+    content: { strokes, stamps },
   })
   fail(error, 'Send reply failed')
   revalidatePath(`/o/${orgSlug}/m/visual-messaging/conversations/${conversationId}`)

@@ -583,11 +583,23 @@ test('visual messaging: create from a picture, draw a reply, membership gates ac
   await expect(page.getByRole('heading', { name: title })).toBeVisible()
   await expect(page.getByText('No replies yet — draw one above.')).toBeVisible()
 
-  // Enter draw mode, ink a stroke, send it as a reply layer.
+  // Enter draw mode, place an emoji stamp, ink a stroke, send both as one reply.
   await page.getByRole('button', { name: 'Draw a reply' }).click()
   const stage = page.locator('canvas').first()
   await expect(stage).toBeVisible()
   const box = (await stage.boundingBox())!
+
+  // Emoji tool: switching shows the palette (not the pen swatches), picking
+  // one updates the placement hint, and a tap on the picture drops it.
+  await page.getByRole('button', { name: 'Emoji', exact: true }).click()
+  await expect(page.getByText('tap the picture to place 😀')).toBeVisible()
+  await expect(page.getByLabel('pen #e11d48')).not.toBeVisible()
+  await page.getByLabel('emoji 🔥').click()
+  await expect(page.getByText('tap the picture to place 🔥')).toBeVisible()
+  await page.mouse.click(box.x + 300, box.y + 60)
+
+  // Back to the pen for a stroke.
+  await page.getByRole('button', { name: 'Pen', exact: true }).click()
   await page.mouse.move(box.x + 60, box.y + 60)
   await page.mouse.down()
   await page.mouse.move(box.x + 180, box.y + 120, { steps: 8 })

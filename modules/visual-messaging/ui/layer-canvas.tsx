@@ -14,10 +14,14 @@
 
 import { useMemo, useRef, useState, useTransition } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
-import { Stage, Layer, Line, Image as KonvaImage } from 'react-konva'
+import { Stage, Layer, Line, Text as KonvaText, Image as KonvaImage } from 'react-konva'
 import { getStroke } from 'perfect-freehand'
 
 export type Stroke = { points: number[][]; color: string; size: number }
+// x/y are the placed CENTER point in image pixel space (matches Stroke's
+// registration approach); fontSize is also in image pixels, so stamps stay
+// registered at any display scale, same as strokes.
+export type Stamp = { emoji: string; x: number; y: number; fontSize: number }
 
 export type LayerNav = {
   parentId: string | null
@@ -29,6 +33,7 @@ export type LayerNav = {
 }
 
 const COLORS = ['#e11d48', '#2563eb', '#16a34a', '#f59e0b', '#111111', '#ffffff']
+const EMOJIS = ['😀', '😍', '😂', '😢', '😡', '👍', '👎', '❤️', '🔥', '🎉', '⭐', '✅', '❌', '🤔']
 const SWIPE_MIN = 60 // px of drag before a gesture counts as a swipe
 
 function strokeToPolygon(stroke: Stroke): number[] {
@@ -40,18 +45,24 @@ export default function LayerCanvas(props: {
   imageUrl: string
   baseLayers: Stroke[][]
   currentStrokes: Stroke[]
+  baseStamps: Stamp[][]
+  currentStamps: Stamp[]
   drawable: boolean
   nav: LayerNav
-  onSend?: (strokesJson: string) => Promise<void>
+  onSend?: (payloadJson: string) => Promise<void>
 }) {
   const router = useRouter()
   const pathname = usePathname()
   const [img, setImg] = useState<HTMLImageElement | null>(null)
   const [mode, setMode] = useState<'view' | 'draw'>('view')
+  const [tool, setTool] = useState<'pen' | 'emoji'>('pen')
   const [drawing, setDrawing] = useState(false)
   const [draft, setDraft] = useState<Stroke[]>([])
+  const [stampDraft, setStampDraft] = useState<Stamp[]>([])
   const [color, setColor] = useState(COLORS[0]!)
   const [size, setSize] = useState(6)
+  const [selectedEmoji, setSelectedEmoji] = useState(EMOJIS[0]!)
+  const [stampSize, setStampSize] = useState(48)
   const [xray, setXray] = useState(false)
   const [pending, startTransition] = useTransition()
   const activeStroke = useRef<number[][] | null>(null)
@@ -85,6 +96,10 @@ export default function LayerCanvas(props: {
     if (mode === 'draw' && props.drawable) {
       const pt = toImageSpace(stage)
       if (!pt) return
+      if (tool === 'emoji') {
+        setStampDraft((d) => [...d, { emoji: selectedEmoji, x: pt[0]!, y: pt[1]!, fontSize: stampSize }])
+        return
+      }
       activeStroke.current = [pt]
       setDrawing(true)
     } else {
@@ -128,11 +143,13 @@ export default function LayerCanvas(props: {
   }
 
   const send = () => {
-    if (!props.onSend || draft.length === 0) return
-    const payload = JSON.stringify(draft.filter((s) => s.points.length >= 2))
+    const strokes = draft.filter((s) => s.points.length >= 2)
+    if (!props.onSend || (strokes.length === 0 && stampDraft.length === 0)) return
+    const payload = JSON.stringify({ strokes, stamps: stampDraft })
     startTransition(async () => {
       await props.onSend!(payload)
       setDraft([])
+      setStampDraft([])
       setMode('view')
     })
   }
@@ -162,10 +179,34 @@ export default function LayerCanvas(props: {
                 <Line key={`b${li}-${si}`} points={strokeToPolygon(s)} closed fill={s.color} />
               )),
             )}
+            {props.baseStamps.flatMap((layerStamps, li) =>
+              layerStamps.map((st, si) => (
+                <KonvaText
+                  key={`bs${li}-${si}`}
+                  text={st.emoji}
+                  fontSize={st.fontSize}
+                  x={st.x}
+                  y={st.y}
+                  offsetX={st.fontSize / 2}
+                  offsetY={st.fontSize / 2}
+                />
+              )),
+            )}
           </Layer>
           <Layer opacity={xray ? 0.15 : 1}>
             {props.currentStrokes.map((s, i) => (
               <Line key={`c${i}`} points={strokeToPolygon(s)} closed fill={s.color} />
+            ))}
+            {props.currentStamps.map((st, i) => (
+              <KonvaText
+                key={`cs${i}`}
+                text={st.emoji}
+                fontSize={st.fontSize}
+                x={st.x}
+                y={st.y}
+                offsetX={st.fontSize / 2}
+                offsetY={st.fontSize / 2}
+              />
             ))}
           </Layer>
           <Layer>
@@ -174,6 +215,17 @@ export default function LayerCanvas(props: {
               .map((s, i) => (
                 <Line key={`d${i}`} points={strokeToPolygon(s)} closed fill={s.color} />
               ))}
+            {stampDraft.map((st, i) => (
+              <KonvaText
+                key={`ds${i}`}
+                text={st.emoji}
+                fontSize={st.fontSize}
+                x={st.x}
+                y={st.y}
+                offsetX={st.fontSize / 2}
+                offsetY={st.fontSize / 2}
+              />
+            ))}
           </Layer>
         </Stage>
       </div>
@@ -229,28 +281,80 @@ export default function LayerCanvas(props: {
 
         {mode === 'draw' && props.drawable && (
           <>
-            {COLORS.map((c) => (
+            <div className="flex overflow-hidden rounded border border-gray-300 text-xs">
               <button
-                key={c}
                 type="button"
-                onClick={() => setColor(c)}
-                className="h-6 w-6 rounded-full border"
-                style={{ backgroundColor: c, outline: c === color ? '2px solid #2563eb' : 'none' }}
-                aria-label={`pen ${c}`}
-              />
-            ))}
-            <input
-              type="range"
-              min={2}
-              max={24}
-              value={size}
-              onChange={(e) => setSize(Number(e.target.value))}
-              className="w-24"
-              aria-label="pen size"
-            />
+                onClick={() => setTool('pen')}
+                className={tool === 'pen' ? 'bg-blue-600 px-2 py-1 text-white' : 'bg-white px-2 py-1 text-gray-600'}
+              >
+                Pen
+              </button>
+              <button
+                type="button"
+                onClick={() => setTool('emoji')}
+                className={tool === 'emoji' ? 'bg-blue-600 px-2 py-1 text-white' : 'bg-white px-2 py-1 text-gray-600'}
+              >
+                Emoji
+              </button>
+            </div>
+
+            {tool === 'pen' ? (
+              <>
+                {COLORS.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => setColor(c)}
+                    className="h-6 w-6 rounded-full border"
+                    style={{ backgroundColor: c, outline: c === color ? '2px solid #2563eb' : 'none' }}
+                    aria-label={`pen ${c}`}
+                  />
+                ))}
+                <input
+                  type="range"
+                  min={2}
+                  max={24}
+                  value={size}
+                  onChange={(e) => setSize(Number(e.target.value))}
+                  className="w-24"
+                  aria-label="pen size"
+                />
+              </>
+            ) : (
+              <>
+                {EMOJIS.map((e) => (
+                  <button
+                    key={e}
+                    type="button"
+                    onClick={() => setSelectedEmoji(e)}
+                    className={
+                      'rounded px-1 text-lg ' +
+                      (e === selectedEmoji ? 'bg-blue-100 ring-2 ring-blue-400' : 'hover:bg-gray-100')
+                    }
+                    aria-label={`emoji ${e}`}
+                  >
+                    {e}
+                  </button>
+                ))}
+                <input
+                  type="range"
+                  min={24}
+                  max={120}
+                  value={stampSize}
+                  onChange={(e) => setStampSize(Number(e.target.value))}
+                  className="w-24"
+                  aria-label="emoji size"
+                />
+                <span className="text-[11px] text-gray-400">tap the picture to place {selectedEmoji}</span>
+              </>
+            )}
+
             <button
               type="button"
-              onClick={() => setDraft([])}
+              onClick={() => {
+                setDraft([])
+                setStampDraft([])
+              }}
               className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-600"
             >
               Clear draft
@@ -259,6 +363,7 @@ export default function LayerCanvas(props: {
               type="button"
               onClick={() => {
                 setDraft([])
+                setStampDraft([])
                 setMode('view')
               }}
               className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-600"
@@ -268,7 +373,7 @@ export default function LayerCanvas(props: {
             <button
               type="button"
               onClick={send}
-              disabled={pending || draft.length === 0}
+              disabled={pending || (draft.length === 0 && stampDraft.length === 0)}
               className="rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
             >
               {pending ? 'Sending…' : 'Send reply'}

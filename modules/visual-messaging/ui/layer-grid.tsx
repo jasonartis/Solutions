@@ -10,15 +10,16 @@
 
 import { useMemo, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
-import { Stage, Layer, Line, Image as KonvaImage } from 'react-konva'
+import { Stage, Layer, Line, Text as KonvaText, Image as KonvaImage } from 'react-konva'
 import { getStroke } from 'perfect-freehand'
-import type { Stroke } from './layer-canvas'
+import type { Stroke, Stamp } from './layer-canvas'
 
 export type GridLayer = {
   id: string
   path: string
   parentId: string | null
   strokes: Stroke[]
+  stamps: Stamp[]
   tombstoned: boolean
   author: string
 }
@@ -51,13 +52,22 @@ export default function LayerGrid(props: {
   const scale = THUMB_W / natural.w
   const thumbH = natural.h * scale
 
-  // Ancestor-chain strokes per layer (composited context), computed once.
+  // Ancestor-chain content per layer (composited context), computed once.
   const byId = useMemo(() => new Map(props.layers.map((l) => [l.id, l])), [props.layers])
   const chainStrokes = (layer: GridLayer): Stroke[] => {
     const acc: Stroke[] = []
     let cursor: GridLayer | undefined = layer
     while (cursor) {
       acc.unshift(...cursor.strokes)
+      cursor = cursor.parentId ? byId.get(cursor.parentId) : undefined
+    }
+    return acc
+  }
+  const chainStamps = (layer: GridLayer): Stamp[] => {
+    const acc: Stamp[] = []
+    let cursor: GridLayer | undefined = layer
+    while (cursor) {
+      acc.unshift(...cursor.stamps)
       cursor = cursor.parentId ? byId.get(cursor.parentId) : undefined
     }
     return acc
@@ -100,10 +110,22 @@ export default function LayerGrid(props: {
                         {img && <KonvaImage image={img} width={natural.w} height={natural.h} />}
                       </Layer>
                       <Layer>
-                        {/* Tombstoned layers arrive with strokes=[] from the
-                            page, so removed content never renders here. */}
+                        {/* Tombstoned layers arrive with strokes/stamps=[]
+                            from the page, so removed content never renders
+                            here. */}
                         {chainStrokes(l).map((s, i) => (
                           <Line key={i} points={strokeToPolygon(s)} closed fill={s.color} />
+                        ))}
+                        {chainStamps(l).map((st, i) => (
+                          <KonvaText
+                            key={`s${i}`}
+                            text={st.emoji}
+                            fontSize={st.fontSize}
+                            x={st.x}
+                            y={st.y}
+                            offsetX={st.fontSize / 2}
+                            offsetY={st.fontSize / 2}
+                          />
                         ))}
                       </Layer>
                     </Stage>

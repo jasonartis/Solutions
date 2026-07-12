@@ -133,10 +133,22 @@ Note: the "whether deep links work for non-members" setting is implemented for
 *logged-in org members* (the join flow above). **Anonymous, no-login public
 links are explicitly out of v1** — see the future-enhancement section below.
 
-**Still not built:** image stamps / styled text / emoji tools; the
-org-per-group auto-creation for ad-hoc person-to-person groups (awaiting
-founder confirmation, raised 2026-07-09: ad-hoc groups = auto-created
-lightweight orgs). Public links are deferred (below).
+**Still not built:** image stamps / styled text tools; the org-per-group
+auto-creation for ad-hoc person-to-person groups (awaiting founder
+confirmation, raised 2026-07-09: ad-hoc groups = auto-created lightweight
+orgs). Public links are deferred (below).
+
+## Emoji stamps (2026-07-10)
+
+Content vocabulary gains its second type: a fixed-palette (14 emoji) drop-to-
+place stamp tool alongside the pen, in `layer-canvas.tsx`. A layer's `content`
+jsonb now carries `stamps: [{ emoji, x, y, fontSize }]` (image-pixel
+coordinates, same registration approach as strokes) alongside `strokes` — no
+migration. A single reply can mix pen strokes and emoji stamps. Tree-view
+thumbnails composite stamps the same way as strokes. **Remaining content
+types from the spec:** styled text (color, angle) and image stamps (upload,
+shrink/rotate/place, plus the spec's default-size/transparency guards) —
+image stamps are the bigger lift since they need a storage upload path.
 
 ## FUTURE ENHANCEMENT — public links (NOT v1, revisit later)
 

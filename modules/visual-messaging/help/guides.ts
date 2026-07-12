@@ -49,9 +49,11 @@ you a drawing seat). Invite-only conversations can't be joined this way.
 
 ## Reply by drawing
 
-7. Click **Draw a reply** to switch the picture into drawing mode, pick a
-   pen color and size, then draw directly on the picture. (**Cancel** returns
-   to viewing without saving anything.)
+7. Click **Draw a reply** to switch the picture into drawing mode. Choose the
+   **Pen** tool (pick a color and size, then draw directly on the picture) or
+   the **Emoji** tool (pick an emoji and a size, then tap the picture to drop
+   it) — a reply can mix both. (**Cancel** returns to viewing without saving
+   anything.)
 8. **Clear draft** starts over — nothing is saved until you send.
 9. Click **Send reply**. Your drawing becomes a new layer under the one you
    were viewing. Once someone replies on top of yours, it can't be edited —
