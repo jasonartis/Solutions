@@ -19,6 +19,7 @@ function fail(error: { message: string } | null, what: string) {
 // registered.
 export type Stroke = { points: number[][]; color: string; size: number }
 export type Stamp = { emoji: string; x: number; y: number; fontSize: number }
+export type TextStamp = { text: string; color: string; x: number; y: number; fontSize: number; angle: number }
 
 export async function createConversation(orgSlug: string, formData: FormData) {
   const title = String(formData.get('title') ?? '').trim()
@@ -129,10 +130,13 @@ export async function replyWithDrawing(
   parentLayerId: string,
   payloadJson: string,
 ) {
-  const payload = JSON.parse(payloadJson) as { strokes: Stroke[]; stamps: Stamp[] }
+  const payload = JSON.parse(payloadJson) as { strokes: Stroke[]; stamps: Stamp[]; texts: TextStamp[] }
   const strokes = Array.isArray(payload.strokes) ? payload.strokes : []
   const stamps = Array.isArray(payload.stamps) ? payload.stamps : []
-  if (strokes.length === 0 && stamps.length === 0) throw new Error('Draw or place something first')
+  const texts = Array.isArray(payload.texts) ? payload.texts : []
+  if (strokes.length === 0 && stamps.length === 0 && texts.length === 0) {
+    throw new Error('Draw or place something first')
+  }
   for (const s of strokes) {
     if (!Array.isArray(s.points) || s.points.length < 2 || typeof s.color !== 'string' || typeof s.size !== 'number') {
       throw new Error('Malformed drawing')
@@ -150,6 +154,20 @@ export async function replyWithDrawing(
       throw new Error('Malformed stamp')
     }
   }
+  for (const t of texts) {
+    if (
+      typeof t.text !== 'string' ||
+      t.text.trim().length === 0 ||
+      t.text.length > 500 ||
+      typeof t.color !== 'string' ||
+      typeof t.x !== 'number' ||
+      typeof t.y !== 'number' ||
+      typeof t.fontSize !== 'number' ||
+      typeof t.angle !== 'number'
+    ) {
+      throw new Error('Malformed text')
+    }
+  }
 
   const supabase = await createClient()
   const {
@@ -164,7 +182,7 @@ export async function replyWithDrawing(
     parent_layer_id: parentLayerId,
     author_id: user.id,
     path: 'server-assigned',
-    content: { strokes, stamps },
+    content: { strokes, stamps, texts },
   })
   fail(error, 'Send reply failed')
   revalidatePath(`/o/${orgSlug}/m/visual-messaging/conversations/${conversationId}`)

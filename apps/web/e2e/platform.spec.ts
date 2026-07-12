@@ -583,7 +583,8 @@ test('visual messaging: create from a picture, draw a reply, membership gates ac
   await expect(page.getByRole('heading', { name: title })).toBeVisible()
   await expect(page.getByText('No replies yet — draw one above.')).toBeVisible()
 
-  // Enter draw mode, place an emoji stamp, ink a stroke, send both as one reply.
+  // Enter draw mode, place an emoji stamp + styled text, ink a stroke, send
+  // all three as one reply.
   await page.getByRole('button', { name: 'Draw a reply' }).click()
   const stage = page.locator('canvas').first()
   await expect(stage).toBeVisible()
@@ -597,6 +598,15 @@ test('visual messaging: create from a picture, draw a reply, membership gates ac
   await page.getByLabel('emoji 🔥').click()
   await expect(page.getByText('tap the picture to place 🔥')).toBeVisible()
   await page.mouse.click(box.x + 300, box.y + 60)
+
+  // Text tool: a tap does nothing until something is typed; typing updates
+  // the placement hint; a tap after typing drops it.
+  await page.getByRole('button', { name: 'Text', exact: true }).click()
+  await expect(page.getByText('type something first')).toBeVisible()
+  await page.mouse.click(box.x + 100, box.y + 200) // no-op: nothing typed yet
+  await page.getByLabel('text content').fill('Hello!')
+  await expect(page.getByText('tap the picture to place "Hello!"')).toBeVisible()
+  await page.mouse.click(box.x + 100, box.y + 200)
 
   // Back to the pen for a stroke.
   await page.getByRole('button', { name: 'Pen', exact: true }).click()

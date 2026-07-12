@@ -22,6 +22,9 @@ export type Stroke = { points: number[][]; color: string; size: number }
 // registration approach); fontSize is also in image pixels, so stamps stay
 // registered at any display scale, same as strokes.
 export type Stamp = { emoji: string; x: number; y: number; fontSize: number }
+// Styled text (spec: "styled text (color, angle)") — angle is degrees, same
+// rotation convention as Konva's `rotation` prop.
+export type TextStamp = { text: string; color: string; x: number; y: number; fontSize: number; angle: number }
 
 export type LayerNav = {
   parentId: string | null
@@ -47,6 +50,8 @@ export default function LayerCanvas(props: {
   currentStrokes: Stroke[]
   baseStamps: Stamp[][]
   currentStamps: Stamp[]
+  baseTexts: TextStamp[][]
+  currentTexts: TextStamp[]
   drawable: boolean
   nav: LayerNav
   onSend?: (payloadJson: string) => Promise<void>
@@ -55,14 +60,19 @@ export default function LayerCanvas(props: {
   const pathname = usePathname()
   const [img, setImg] = useState<HTMLImageElement | null>(null)
   const [mode, setMode] = useState<'view' | 'draw'>('view')
-  const [tool, setTool] = useState<'pen' | 'emoji'>('pen')
+  const [tool, setTool] = useState<'pen' | 'emoji' | 'text'>('pen')
   const [drawing, setDrawing] = useState(false)
   const [draft, setDraft] = useState<Stroke[]>([])
   const [stampDraft, setStampDraft] = useState<Stamp[]>([])
+  const [textDraft, setTextDraft] = useState<TextStamp[]>([])
   const [color, setColor] = useState(COLORS[0]!)
   const [size, setSize] = useState(6)
   const [selectedEmoji, setSelectedEmoji] = useState(EMOJIS[0]!)
   const [stampSize, setStampSize] = useState(48)
+  const [textValue, setTextValue] = useState('')
+  const [textColor, setTextColor] = useState(COLORS[0]!)
+  const [textFontSize, setTextFontSize] = useState(32)
+  const [textAngle, setTextAngle] = useState(0)
   const [xray, setXray] = useState(false)
   const [pending, startTransition] = useTransition()
   const activeStroke = useRef<number[][] | null>(null)
@@ -98,6 +108,12 @@ export default function LayerCanvas(props: {
       if (!pt) return
       if (tool === 'emoji') {
         setStampDraft((d) => [...d, { emoji: selectedEmoji, x: pt[0]!, y: pt[1]!, fontSize: stampSize }])
+        return
+      }
+      if (tool === 'text') {
+        const text = textValue.trim()
+        if (!text) return // nothing typed yet — a tap does nothing
+        setTextDraft((d) => [...d, { text, color: textColor, x: pt[0]!, y: pt[1]!, fontSize: textFontSize, angle: textAngle }])
         return
       }
       activeStroke.current = [pt]
@@ -144,12 +160,13 @@ export default function LayerCanvas(props: {
 
   const send = () => {
     const strokes = draft.filter((s) => s.points.length >= 2)
-    if (!props.onSend || (strokes.length === 0 && stampDraft.length === 0)) return
-    const payload = JSON.stringify({ strokes, stamps: stampDraft })
+    if (!props.onSend || (strokes.length === 0 && stampDraft.length === 0 && textDraft.length === 0)) return
+    const payload = JSON.stringify({ strokes, stamps: stampDraft, texts: textDraft })
     startTransition(async () => {
       await props.onSend!(payload)
       setDraft([])
       setStampDraft([])
+      setTextDraft([])
       setMode('view')
     })
   }
@@ -192,6 +209,19 @@ export default function LayerCanvas(props: {
                 />
               )),
             )}
+            {props.baseTexts.flatMap((layerTexts, li) =>
+              layerTexts.map((t, ti) => (
+                <KonvaText
+                  key={`bt${li}-${ti}`}
+                  text={t.text}
+                  fontSize={t.fontSize}
+                  fill={t.color}
+                  rotation={t.angle}
+                  x={t.x}
+                  y={t.y}
+                />
+              )),
+            )}
           </Layer>
           <Layer opacity={xray ? 0.15 : 1}>
             {props.currentStrokes.map((s, i) => (
@@ -206,6 +236,17 @@ export default function LayerCanvas(props: {
                 y={st.y}
                 offsetX={st.fontSize / 2}
                 offsetY={st.fontSize / 2}
+              />
+            ))}
+            {props.currentTexts.map((t, i) => (
+              <KonvaText
+                key={`ct${i}`}
+                text={t.text}
+                fontSize={t.fontSize}
+                fill={t.color}
+                rotation={t.angle}
+                x={t.x}
+                y={t.y}
               />
             ))}
           </Layer>
@@ -224,6 +265,17 @@ export default function LayerCanvas(props: {
                 y={st.y}
                 offsetX={st.fontSize / 2}
                 offsetY={st.fontSize / 2}
+              />
+            ))}
+            {textDraft.map((t, i) => (
+              <KonvaText
+                key={`dt${i}`}
+                text={t.text}
+                fontSize={t.fontSize}
+                fill={t.color}
+                rotation={t.angle}
+                x={t.x}
+                y={t.y}
               />
             ))}
           </Layer>
@@ -296,9 +348,16 @@ export default function LayerCanvas(props: {
               >
                 Emoji
               </button>
+              <button
+                type="button"
+                onClick={() => setTool('text')}
+                className={tool === 'text' ? 'bg-blue-600 px-2 py-1 text-white' : 'bg-white px-2 py-1 text-gray-600'}
+              >
+                Text
+              </button>
             </div>
 
-            {tool === 'pen' ? (
+            {tool === 'pen' && (
               <>
                 {COLORS.map((c) => (
                   <button
@@ -320,7 +379,9 @@ export default function LayerCanvas(props: {
                   aria-label="pen size"
                 />
               </>
-            ) : (
+            )}
+
+            {tool === 'emoji' && (
               <>
                 {EMOJIS.map((e) => (
                   <button
@@ -349,11 +410,56 @@ export default function LayerCanvas(props: {
               </>
             )}
 
+            {tool === 'text' && (
+              <>
+                <input
+                  type="text"
+                  value={textValue}
+                  onChange={(e) => setTextValue(e.target.value)}
+                  placeholder="Type text…"
+                  aria-label="text content"
+                  className="w-32 rounded border border-gray-300 px-2 py-1 text-sm"
+                />
+                {COLORS.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => setTextColor(c)}
+                    className="h-6 w-6 rounded-full border"
+                    style={{ backgroundColor: c, outline: c === textColor ? '2px solid #2563eb' : 'none' }}
+                    aria-label={`text color ${c}`}
+                  />
+                ))}
+                <input
+                  type="range"
+                  min={12}
+                  max={96}
+                  value={textFontSize}
+                  onChange={(e) => setTextFontSize(Number(e.target.value))}
+                  className="w-20"
+                  aria-label="text size"
+                />
+                <input
+                  type="range"
+                  min={-180}
+                  max={180}
+                  value={textAngle}
+                  onChange={(e) => setTextAngle(Number(e.target.value))}
+                  className="w-20"
+                  aria-label="text angle"
+                />
+                <span className="text-[11px] text-gray-400">
+                  {textValue.trim() ? `tap the picture to place "${textValue.trim()}"` : 'type something first'}
+                </span>
+              </>
+            )}
+
             <button
               type="button"
               onClick={() => {
                 setDraft([])
                 setStampDraft([])
+                setTextDraft([])
               }}
               className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-600"
             >
@@ -364,6 +470,7 @@ export default function LayerCanvas(props: {
               onClick={() => {
                 setDraft([])
                 setStampDraft([])
+                setTextDraft([])
                 setMode('view')
               }}
               className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-600"
@@ -373,7 +480,7 @@ export default function LayerCanvas(props: {
             <button
               type="button"
               onClick={send}
-              disabled={pending || (draft.length === 0 && stampDraft.length === 0)}
+              disabled={pending || (draft.length === 0 && stampDraft.length === 0 && textDraft.length === 0)}
               className="rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
             >
               {pending ? 'Sending…' : 'Send reply'}

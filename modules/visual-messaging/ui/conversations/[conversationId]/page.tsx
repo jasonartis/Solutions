@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { requireOrgModule } from '@/lib/module-gate'
-import LayerCanvas, { type Stroke, type Stamp } from '../../layer-canvas'
+import LayerCanvas, { type Stroke, type Stamp, type TextStamp } from '../../layer-canvas'
 import LayerGrid from '../../layer-grid'
 import {
   addMember,
@@ -22,7 +22,7 @@ type LayerRow = {
   parent_layer_id: string | null
   path: string
   author_id: string
-  content: { image?: { path: string }; strokes?: Stroke[]; stamps?: Stamp[] }
+  content: { image?: { path: string }; strokes?: Stroke[]; stamps?: Stamp[]; texts?: TextStamp[] }
   tombstoned: boolean
   frozen: boolean
   created_at: string
@@ -217,6 +217,7 @@ export default async function ConversationPage(props: {
             parentId: l.parent_layer_id,
             strokes: l.tombstoned ? [] : (l.content.strokes ?? []),
             stamps: l.tombstoned ? [] : (l.content.stamps ?? []),
+            texts: l.tombstoned ? [] : (l.content.texts ?? []),
             tombstoned: l.tombstoned,
             author: nameOf(l.author_id),
           }))}
@@ -228,6 +229,8 @@ export default async function ConversationPage(props: {
           currentStrokes={current.content.strokes ?? []}
           baseStamps={chain.slice(0, -1).map((l) => l.content.stamps ?? [])}
           currentStamps={current.content.stamps ?? []}
+          baseTexts={chain.slice(0, -1).map((l) => l.content.texts ?? [])}
+          currentTexts={current.content.texts ?? []}
           drawable={!locked && !current.tombstoned && canPost}
           nav={nav}
           onSend={sendReply}

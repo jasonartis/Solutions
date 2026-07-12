@@ -12,7 +12,7 @@ import { useMemo, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { Stage, Layer, Line, Text as KonvaText, Image as KonvaImage } from 'react-konva'
 import { getStroke } from 'perfect-freehand'
-import type { Stroke, Stamp } from './layer-canvas'
+import type { Stroke, Stamp, TextStamp } from './layer-canvas'
 
 export type GridLayer = {
   id: string
@@ -20,6 +20,7 @@ export type GridLayer = {
   parentId: string | null
   strokes: Stroke[]
   stamps: Stamp[]
+  texts: TextStamp[]
   tombstoned: boolean
   author: string
 }
@@ -68,6 +69,15 @@ export default function LayerGrid(props: {
     let cursor: GridLayer | undefined = layer
     while (cursor) {
       acc.unshift(...cursor.stamps)
+      cursor = cursor.parentId ? byId.get(cursor.parentId) : undefined
+    }
+    return acc
+  }
+  const chainTexts = (layer: GridLayer): TextStamp[] => {
+    const acc: TextStamp[] = []
+    let cursor: GridLayer | undefined = layer
+    while (cursor) {
+      acc.unshift(...cursor.texts)
       cursor = cursor.parentId ? byId.get(cursor.parentId) : undefined
     }
     return acc
@@ -125,6 +135,17 @@ export default function LayerGrid(props: {
                             y={st.y}
                             offsetX={st.fontSize / 2}
                             offsetY={st.fontSize / 2}
+                          />
+                        ))}
+                        {chainTexts(l).map((t, i) => (
+                          <KonvaText
+                            key={`t${i}`}
+                            text={t.text}
+                            fontSize={t.fontSize}
+                            fill={t.color}
+                            rotation={t.angle}
+                            x={t.x}
+                            y={t.y}
                           />
                         ))}
                       </Layer>

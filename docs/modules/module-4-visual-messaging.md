@@ -145,10 +145,20 @@ place stamp tool alongside the pen, in `layer-canvas.tsx`. A layer's `content`
 jsonb now carries `stamps: [{ emoji, x, y, fontSize }]` (image-pixel
 coordinates, same registration approach as strokes) alongside `strokes` — no
 migration. A single reply can mix pen strokes and emoji stamps. Tree-view
-thumbnails composite stamps the same way as strokes. **Remaining content
-types from the spec:** styled text (color, angle) and image stamps (upload,
-shrink/rotate/place, plus the spec's default-size/transparency guards) —
-image stamps are the bigger lift since they need a storage upload path.
+thumbnails composite stamps the same way as strokes.
+
+## Text stamps (2026-07-11) — spec content vocabulary complete short of image stamps
+
+Third content type: **styled text** (the spec's "color, angle"). A third tool
+alongside Pen/Emoji — type a message, pick color/size/-180°..180° angle, tap
+to place (a tap is a no-op until something's typed). `content` gains
+`texts: [{ text, color, x, y, fontSize, angle }]` as a third sibling next to
+`strokes`/`stamps` — still no migration, still jsonb. `replyWithDrawing`'s
+payload is `{ strokes, stamps, texts }`; any one non-empty is enough to send.
+Tree-view thumbnails render texts the same way. **Only image stamps remain**
+from the spec's content vocabulary (upload, shrink/rotate/place, plus the
+spec's default-size/transparency guards) — the bigger lift since it needs a
+storage upload path, unlike the two jsonb-only types above.
 
 ## FUTURE ENHANCEMENT — public links (NOT v1, revisit later)
 
