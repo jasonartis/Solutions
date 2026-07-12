@@ -26,6 +26,7 @@ async function resolveOrgId(supabase: Awaited<ReturnType<typeof createClient>>, 
 export async function createEvent(orgSlug: string, formData: FormData) {
   const name = String(formData.get('name') ?? '').trim()
   const scheduledAt = String(formData.get('scheduledAt') ?? '').trim()
+  const resumeReview = formData.get('resumeReview') === 'on'
   if (!name) throw new Error('Event name is required')
 
   const supabase = await createClient()
@@ -38,10 +39,24 @@ export async function createEvent(orgSlug: string, formData: FormData) {
     org_id: orgId,
     name,
     scheduled_at: scheduledAt ? new Date(scheduledAt).toISOString() : null,
+    resume_review_enabled: resumeReview,
     created_by: user?.id ?? null,
   })
   fail(error, 'Create event failed')
   revalidatePath(`/o/${orgSlug}/m/speed-dating`)
+}
+
+// Resume-review profile card (spec: an opt-in event format where participants
+// see each other's short profile instead of going in blind). Self-only write
+// (RLS's sd_participants_update_self, pinned to a handful of columns
+// including profile_card); readable by staff + anyone paired with you
+// (sd_paired_with) once you've actually met.
+export async function saveProfileCard(orgSlug: string, eventId: string, participantId: string, formData: FormData) {
+  const profileCard = String(formData.get('profileCard') ?? '').trim().slice(0, 1000)
+  const supabase = await createClient()
+  const { error } = await supabase.from('sd_participants').update({ profile_card: profileCard }).eq('id', participantId)
+  fail(error, 'Save profile card failed')
+  revalidatePath(`/o/${orgSlug}/m/speed-dating/events/${eventId}`)
 }
 
 export async function setEventState(orgSlug: string, eventId: string, state: string) {

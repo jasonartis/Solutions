@@ -498,6 +498,31 @@ test('speed-dating module: register → round → mutual interest → reveal', a
   await expect(page.getByText('No one blocked.', { exact: false })).toBeVisible()
 })
 
+test('speed-dating module: resume-review profile card is self-write and gated by event setting', async ({ page }) => {
+  // Organizer creates a resume-review event; the field only appears at all
+  // when the event was configured for it.
+  await signIn(page, 'alice@demo.local')
+  await page.goto('/o/demo-dating/m/speed-dating')
+  const eventName = 'Resume Review Night ' + Date.now()
+  await page.getByPlaceholder('Event name').fill(eventName)
+  await page.getByLabel('Resume-review (participants see profile cards)').check()
+  await page.getByRole('button', { name: 'Create (draft)' }).click()
+  await page.getByRole('link', { name: eventName }).click()
+  await page.getByRole('button', { name: 'Open registration' }).click()
+
+  await signIn(page, 'charlie@demo.local')
+  await page.goto('/o/demo-dating/m/speed-dating')
+  await page.getByRole('link', { name: eventName }).click()
+  await page.getByRole('button', { name: 'Register for this event' }).click()
+  await expect(page.getByText('My profile card')).toBeVisible()
+  await page.getByPlaceholder(/A short line about you/).fill('Loves hiking and board games')
+  const saved = page.waitForResponse((r) => r.request().method() === 'POST')
+  await page.getByRole('button', { name: 'Save' }).click()
+  await saved
+  await page.reload()
+  await expect(page.getByPlaceholder(/A short line about you/)).toHaveValue('Loves hiking and board games')
+})
+
 test('sample module (module 0 template): staff creates, member contributes', async ({ page }) => {
   // Proves the living template stays green: module UI physically inside
   // modules/sample/ui, mounted by a thin wrapper (docs/03 composition).

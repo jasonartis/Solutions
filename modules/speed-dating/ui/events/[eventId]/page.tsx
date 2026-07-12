@@ -10,6 +10,7 @@ import {
   reviewReport,
   runPairingRound,
   saveNote,
+  saveProfileCard,
   setEventState,
   withdrawFromEvent,
 } from '../../actions'
@@ -29,7 +30,7 @@ export default async function EventPage(props: {
 
   const { data: event } = await supabase
     .from('sd_events')
-    .select('id, name, state, scheduled_at')
+    .select('id, name, state, scheduled_at, resume_review_enabled')
     .eq('id', eventId)
     .maybeSingle()
   if (!event) notFound()
@@ -55,7 +56,7 @@ export default async function EventPage(props: {
     { data: reports },
     { data: myNotes },
   ] = await Promise.all([
-    supabase.from('sd_participants').select('id, user_id, status, seat_type, checked_in').eq('event_id', eventId),
+    supabase.from('sd_participants').select('id, user_id, status, seat_type, checked_in, profile_card').eq('event_id', eventId),
     supabase.from('sd_pairings').select('id, round_id, participant_a_id, participant_b_id').eq('event_id', eventId),
     supabase.from('sd_interest').select('rater_participant_id, target_participant_id, verdict').eq('event_id', eventId),
     supabase.from('sd_matches').select('participant_a_id, participant_b_id, revealed').eq('event_id', eventId),
@@ -81,6 +82,8 @@ export default async function EventPage(props: {
   }
   const noteFor = (userId: string) => (myNotes ?? []).find((n) => n.about_user_id === userId)?.body ?? ''
   const openReportCount = (reports ?? []).filter((r) => r.state === 'open').length
+  const profileCardFor = (participantId: string) =>
+    (participants ?? []).find((p) => p.id === participantId)?.profile_card ?? ''
 
   // Everyone this caller's seat has met (their pairings; RLS already filters).
   const metSeatIds = new Set<string>()
@@ -237,6 +240,23 @@ export default async function EventPage(props: {
                 </form>
               )}
             </div>
+            {event.resume_review_enabled && (
+              <form
+                action={saveProfileCard.bind(null, orgSlug, eventId, mySeat.id)}
+                className="mt-3 flex items-center gap-2 border-t border-gray-100 pt-3"
+              >
+                <label className="text-xs uppercase tracking-wide text-gray-500">My profile card</label>
+                <input
+                  name="profileCard"
+                  defaultValue={mySeat.profile_card ?? ''}
+                  placeholder="A short line about you — shown to people you're paired with"
+                  className="flex-1 rounded border border-gray-300 px-2 py-1 text-sm"
+                />
+                <button className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50">
+                  Save
+                </button>
+              </form>
+            )}
           </section>
 
           {metSeatIds.size > 0 && (
@@ -248,10 +268,14 @@ export default async function EventPage(props: {
                 {[...metSeatIds].map((seatId) => {
                   const mark = myMarks.get(seatId)
                   const otherUserId = (participants ?? []).find((p) => p.id === seatId)?.user_id
+                  const card = event.resume_review_enabled ? profileCardFor(seatId) : ''
                   return (
                     <li key={seatId} className="border-b border-gray-100 pb-3 last:border-0 last:pb-0">
                       <div className="flex items-center justify-between text-sm">
-                        <span>{seatName(seatId)}</span>
+                        <span>
+                          {seatName(seatId)}
+                          {card && <span className="ml-2 text-xs italic text-gray-500">&quot;{card}&quot;</span>}
+                        </span>
                         <span className="flex gap-2">
                           {(['interested', 'not_interested', 'no_show'] as const).map((v) => (
                             <form key={v} action={markInterest.bind(null, orgSlug, eventId, mySeat.id, seatId, v)}>

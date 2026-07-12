@@ -67,6 +67,10 @@ export default async function SpeedDatingPage(props: { params: Promise<{ orgSlug
           <form action={createEvent.bind(null, orgSlug)} className="flex flex-wrap items-center gap-2">
             <input name="name" required placeholder="Event name" className={`${inputCls} min-w-56`} />
             <input name="scheduledAt" type="datetime-local" className={inputCls} />
+            <label className="flex items-center gap-1 text-sm text-gray-600">
+              <input type="checkbox" name="resumeReview" />
+              Resume-review (participants see profile cards)
+            </label>
             <button className={btnCls}>Create (draft)</button>
           </form>
         </section>

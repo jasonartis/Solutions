@@ -21,6 +21,10 @@ export const speedDatingHelp: ModuleHelp = {
 3. Once the organizer starts the event, rounds run on a timer — each round
    pairs you with someone new; sitting out a round ("bye") just means you're
    back in the next one.
+3b. If the organizer enabled **resume-review** for this event, you'll see
+   **My profile card** — a short line about yourself. Fill it in before the
+   event; anyone you're paired with sees it next to your name (and you see
+   theirs) instead of going in blind.
 4. **People you met** lists everyone you've been paired with. After each
    meeting, mark them: **interested**, **not interested**, or **no show**.
    You can change a mark until results are revealed.
@@ -49,8 +53,9 @@ export const speedDatingHelp: ModuleHelp = {
       body: `
 ## Create and open
 
-1. Open **Speed Dating**, fill **Create event** (name + date/time), click
-   **Create (draft)**.
+1. Open **Speed Dating**, fill **Create event** (name + date/time), check
+   **Resume-review** if you want participants to see each other's profile
+   cards instead of going in blind, then click **Create (draft)**.
 2. Open the event and click **Open registration** — participants can now
    register. The roster shows who's in.
 
