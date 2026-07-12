@@ -10,10 +10,13 @@ platform-level checks.
 **Option A — Production (any browser, nothing to install):**
 - Start at **https://solutions-platform.vercel.app**
 - Demo password: the one given to you privately (deliberately written
-  nowhere). **Lost it?** Any session can set a new one by re-seeding prod:
-  load .env.deploy values, then run the seed with SEED_ALLOW_REMOTE=yes,
+  nowhere in this repo) — **this is a DIFFERENT password from local**.
+  `password123` (below) only works on your own machine; it will NOT log
+  you into any `@demo.local` account on the live site. **Lost the prod
+  password?** Any session can set a new one by re-seeding prod: load
+  .env.deploy values, then run the seed with SEED_ALLOW_REMOTE=yes,
   DEMO_PASSWORD=<new password>, and SUPABASE_URL/SERVICE_ROLE_KEY pointed at
-  the prod project. Local is always password123.
+  the prod project.
 - Background-worker steps (marked ⚙ below): open a terminal in the repo
   folder and run **`pnpm worker:prod`** — leave that window open while you
   test. Without it, ⚙ steps queue and complete whenever it next runs.
