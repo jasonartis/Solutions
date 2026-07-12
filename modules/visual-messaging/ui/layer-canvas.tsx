@@ -12,7 +12,7 @@
 // Stroke points are stored in IMAGE pixel space, so layers stay registered
 // at any display scale (the plans/zoom use case).
 
-import { useMemo, useRef, useState, useTransition } from 'react'
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { Stage, Layer, Line, Text as KonvaText, Image as KonvaImage } from 'react-konva'
 import { getStroke } from 'perfect-freehand'
@@ -25,6 +25,20 @@ export type Stamp = { emoji: string; x: number; y: number; fontSize: number }
 // Styled text (spec: "styled text (color, angle)") — angle is degrees, same
 // rotation convention as Konva's `rotation` prop.
 export type TextStamp = { text: string; color: string; x: number; y: number; fontSize: number; angle: number }
+// Image stamps (spec: "image stamps (upload, shrink/rotate/place)"). x/y are
+// the placed TOP-LEFT corner, width/height the placed box, all image pixels.
+// `url` is added by the page (a signed URL for the private vm-images path) —
+// not part of what's stored.
+export type ImageStamp = {
+  path: string
+  x: number
+  y: number
+  width: number
+  height: number
+  rotation: number
+  opacity: number
+}
+export type ResolvedImageStamp = ImageStamp & { url: string }
 
 export type LayerNav = {
   parentId: string | null
@@ -38,10 +52,36 @@ export type LayerNav = {
 const COLORS = ['#e11d48', '#2563eb', '#16a34a', '#f59e0b', '#111111', '#ffffff']
 const EMOJIS = ['😀', '😍', '😂', '😢', '😡', '👍', '👎', '❤️', '🔥', '🎉', '⭐', '✅', '❌', '🤔']
 const SWIPE_MIN = 60 // px of drag before a gesture counts as a swipe
+// Spec's image-stamp guards: "default max stamp size relative to canvas
+// (admin/org-tunable)" and "default slight transparency" — the tunable-per-
+// org part is deferred (no settings UI yet); these are the fixed v1 defaults.
+const IMAGE_STAMP_DEFAULT_FRACTION = 0.3 // of the root image's natural width
+const IMAGE_STAMP_DEFAULT_OPACITY = 0.85
 
 function strokeToPolygon(stroke: Stroke): number[] {
   const outline = getStroke(stroke.points, { size: stroke.size, thinning: 0.6, smoothing: 0.5 })
   return outline.flatMap((p) => [p[0]!, p[1]!])
+}
+
+// Loads arbitrary URLs into HTMLImageElements for Konva (signed vm-images
+// URLs for already-sent stamps, plus local object URLs for an unsent draft —
+// both need a real Image() to paint on canvas). Cache persists across
+// renders so a URL already loaded isn't re-fetched.
+export function useImageCache(urls: string[]): Record<string, HTMLImageElement> {
+  const [cache, setCache] = useState<Record<string, HTMLImageElement>>({})
+  const key = urls.filter(Boolean).join('|')
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    for (const url of urls) {
+      if (!url || cache[url]) continue
+      const el = new window.Image()
+      el.crossOrigin = 'anonymous'
+      el.onload = () => setCache((c) => (c[url] ? c : { ...c, [url]: el }))
+      el.src = url
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key])
+  return cache
 }
 
 export default function LayerCanvas(props: {
@@ -52,19 +92,23 @@ export default function LayerCanvas(props: {
   currentStamps: Stamp[]
   baseTexts: TextStamp[][]
   currentTexts: TextStamp[]
+  baseImages: ResolvedImageStamp[][]
+  currentImages: ResolvedImageStamp[]
   drawable: boolean
   nav: LayerNav
   onSend?: (payloadJson: string) => Promise<void>
+  onUploadImage?: (file: File) => Promise<string>
 }) {
   const router = useRouter()
   const pathname = usePathname()
   const [img, setImg] = useState<HTMLImageElement | null>(null)
   const [mode, setMode] = useState<'view' | 'draw'>('view')
-  const [tool, setTool] = useState<'pen' | 'emoji' | 'text'>('pen')
+  const [tool, setTool] = useState<'pen' | 'emoji' | 'text' | 'image'>('pen')
   const [drawing, setDrawing] = useState(false)
   const [draft, setDraft] = useState<Stroke[]>([])
   const [stampDraft, setStampDraft] = useState<Stamp[]>([])
   const [textDraft, setTextDraft] = useState<TextStamp[]>([])
+  const [imageDraft, setImageDraft] = useState<ImageStamp[]>([])
   const [color, setColor] = useState(COLORS[0]!)
   const [size, setSize] = useState(6)
   const [selectedEmoji, setSelectedEmoji] = useState(EMOJIS[0]!)
@@ -73,10 +117,47 @@ export default function LayerCanvas(props: {
   const [textColor, setTextColor] = useState(COLORS[0]!)
   const [textFontSize, setTextFontSize] = useState(32)
   const [textAngle, setTextAngle] = useState(0)
+  const [stagedImage, setStagedImage] = useState<{ path: string; naturalW: number; naturalH: number } | null>(null)
+  const [imageObjectUrls, setImageObjectUrls] = useState<Record<string, string>>({})
+  const [imageScale, setImageScale] = useState(1)
+  const [imageRotation, setImageRotation] = useState(0)
+  const [uploadingImage, setUploadingImage] = useState(false)
   const [xray, setXray] = useState(false)
   const [pending, startTransition] = useTransition()
   const activeStroke = useRef<number[][] | null>(null)
   const swipeStart = useRef<{ x: number; y: number } | null>(null)
+
+  const imageCache = useImageCache([
+    ...props.baseImages.flatMap((layer) => layer.map((i) => i.url)),
+    ...props.currentImages.map((i) => i.url),
+    ...Object.values(imageObjectUrls),
+  ])
+
+  const resetImageTool = () => {
+    Object.values(imageObjectUrls).forEach((url) => URL.revokeObjectURL(url))
+    setImageObjectUrls({})
+    setStagedImage(null)
+    setImageScale(1)
+    setImageRotation(0)
+  }
+
+  const handleImageFile = async (file: File | null) => {
+    if (!file || !props.onUploadImage) return
+    setUploadingImage(true)
+    try {
+      const path = await props.onUploadImage(file)
+      const url = URL.createObjectURL(file)
+      const naturalSize = await new Promise<{ w: number; h: number }>((resolve) => {
+        const el = new window.Image()
+        el.onload = () => resolve({ w: el.naturalWidth, h: el.naturalHeight })
+        el.src = url
+      })
+      setImageObjectUrls((m) => ({ ...m, [path]: url }))
+      setStagedImage({ path, naturalW: naturalSize.w, naturalH: naturalSize.h })
+    } finally {
+      setUploadingImage(false)
+    }
+  }
 
   useMemo(() => {
     if (typeof window === 'undefined') return
@@ -114,6 +195,24 @@ export default function LayerCanvas(props: {
         const text = textValue.trim()
         if (!text) return // nothing typed yet — a tap does nothing
         setTextDraft((d) => [...d, { text, color: textColor, x: pt[0]!, y: pt[1]!, fontSize: textFontSize, angle: textAngle }])
+        return
+      }
+      if (tool === 'image') {
+        if (!stagedImage) return // nothing uploaded yet — a tap does nothing
+        const baseW = natural.w * IMAGE_STAMP_DEFAULT_FRACTION * imageScale
+        const baseH = baseW * (stagedImage.naturalH / stagedImage.naturalW)
+        setImageDraft((d) => [
+          ...d,
+          {
+            path: stagedImage.path,
+            x: pt[0]! - baseW / 2,
+            y: pt[1]! - baseH / 2,
+            width: baseW,
+            height: baseH,
+            rotation: imageRotation,
+            opacity: IMAGE_STAMP_DEFAULT_OPACITY,
+          },
+        ])
         return
       }
       activeStroke.current = [pt]
@@ -160,13 +259,20 @@ export default function LayerCanvas(props: {
 
   const send = () => {
     const strokes = draft.filter((s) => s.points.length >= 2)
-    if (!props.onSend || (strokes.length === 0 && stampDraft.length === 0 && textDraft.length === 0)) return
-    const payload = JSON.stringify({ strokes, stamps: stampDraft, texts: textDraft })
+    if (
+      !props.onSend ||
+      (strokes.length === 0 && stampDraft.length === 0 && textDraft.length === 0 && imageDraft.length === 0)
+    ) {
+      return
+    }
+    const payload = JSON.stringify({ strokes, stamps: stampDraft, texts: textDraft, images: imageDraft })
     startTransition(async () => {
       await props.onSend!(payload)
       setDraft([])
       setStampDraft([])
       setTextDraft([])
+      setImageDraft([])
+      resetImageTool()
       setMode('view')
     })
   }
@@ -222,6 +328,23 @@ export default function LayerCanvas(props: {
                 />
               )),
             )}
+            {props.baseImages.flatMap((layerImages, li) =>
+              layerImages.map(
+                (im, ii) =>
+                  imageCache[im.url] && (
+                    <KonvaImage
+                      key={`bi${li}-${ii}`}
+                      image={imageCache[im.url]}
+                      x={im.x}
+                      y={im.y}
+                      width={im.width}
+                      height={im.height}
+                      rotation={im.rotation}
+                      opacity={im.opacity}
+                    />
+                  ),
+              ),
+            )}
           </Layer>
           <Layer opacity={xray ? 0.15 : 1}>
             {props.currentStrokes.map((s, i) => (
@@ -249,6 +372,21 @@ export default function LayerCanvas(props: {
                 y={t.y}
               />
             ))}
+            {props.currentImages.map(
+              (im, i) =>
+                imageCache[im.url] && (
+                  <KonvaImage
+                    key={`ci${i}`}
+                    image={imageCache[im.url]}
+                    x={im.x}
+                    y={im.y}
+                    width={im.width}
+                    height={im.height}
+                    rotation={im.rotation}
+                    opacity={im.opacity}
+                  />
+                ),
+            )}
           </Layer>
           <Layer>
             {draft
@@ -278,6 +416,24 @@ export default function LayerCanvas(props: {
                 y={t.y}
               />
             ))}
+            {imageDraft.map((im, i) => {
+              const url = imageObjectUrls[im.path]
+              const el = url ? imageCache[url] : undefined
+              return (
+                el && (
+                  <KonvaImage
+                    key={`di${i}`}
+                    image={el}
+                    x={im.x}
+                    y={im.y}
+                    width={im.width}
+                    height={im.height}
+                    rotation={im.rotation}
+                    opacity={im.opacity}
+                  />
+                )
+              )
+            })}
           </Layer>
         </Stage>
       </div>
@@ -354,6 +510,13 @@ export default function LayerCanvas(props: {
                 className={tool === 'text' ? 'bg-blue-600 px-2 py-1 text-white' : 'bg-white px-2 py-1 text-gray-600'}
               >
                 Text
+              </button>
+              <button
+                type="button"
+                onClick={() => setTool('image')}
+                className={tool === 'image' ? 'bg-blue-600 px-2 py-1 text-white' : 'bg-white px-2 py-1 text-gray-600'}
+              >
+                Image
               </button>
             </div>
 
@@ -454,12 +617,52 @@ export default function LayerCanvas(props: {
               </>
             )}
 
+            {tool === 'image' && (
+              <>
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
+                  onChange={(e) => handleImageFile(e.target.files?.[0] ?? null)}
+                  aria-label="upload image"
+                  className="w-40 text-xs"
+                />
+                <span className="text-[11px] text-gray-500">Size</span>
+                <input
+                  type="range"
+                  min={50}
+                  max={250}
+                  value={Math.round(imageScale * 100)}
+                  onChange={(e) => setImageScale(Number(e.target.value) / 100)}
+                  className="w-20"
+                  aria-label="image size"
+                />
+                <span className="text-[11px] text-gray-500">Rotate</span>
+                <input
+                  type="range"
+                  min={-180}
+                  max={180}
+                  value={imageRotation}
+                  onChange={(e) => setImageRotation(Number(e.target.value))}
+                  className="w-20"
+                  aria-label="image rotation"
+                />
+                <span className="text-[11px] text-gray-400">
+                  {uploadingImage
+                    ? 'uploading…'
+                    : stagedImage
+                      ? 'tap the picture to place it'
+                      : 'upload an image first'}
+                </span>
+              </>
+            )}
+
             <button
               type="button"
               onClick={() => {
                 setDraft([])
                 setStampDraft([])
                 setTextDraft([])
+                setImageDraft([])
               }}
               className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-600"
             >
@@ -471,6 +674,8 @@ export default function LayerCanvas(props: {
                 setDraft([])
                 setStampDraft([])
                 setTextDraft([])
+                setImageDraft([])
+                resetImageTool()
                 setMode('view')
               }}
               className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-600"
@@ -480,7 +685,10 @@ export default function LayerCanvas(props: {
             <button
               type="button"
               onClick={send}
-              disabled={pending || (draft.length === 0 && stampDraft.length === 0 && textDraft.length === 0)}
+              disabled={
+                pending ||
+                (draft.length === 0 && stampDraft.length === 0 && textDraft.length === 0 && imageDraft.length === 0)
+              }
               className="rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
             >
               {pending ? 'Sending…' : 'Send reply'}

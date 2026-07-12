@@ -160,6 +160,42 @@ from the spec's content vocabulary (upload, shrink/rotate/place, plus the
 spec's default-size/transparency guards) — the bigger lift since it needs a
 storage upload path, unlike the two jsonb-only types above.
 
+## Image stamps (2026-07-11) — content vocabulary COMPLETE
+
+Fourth and final content type: **image stamps** (the spec's "upload,
+shrink/rotate/place" + "default max stamp size... default slight
+transparency"). Upload a photo, adjust size (50%-250% of a default box) and
+rotation (-180°..180°), tap to place. `content` gains a fourth sibling
+`images: [{ path, x, y, width, height, rotation, opacity }]` — path is a
+`vm-images` storage object, x/y/width/height/rotation in image pixels like
+the other three types, opacity fixed at the spec's "default slight
+transparency" guard (0.85; the "admin/org-tunable" part of that guard is
+deferred — no settings UI yet). Default box size is 30% of the root image's
+width (also fixed, same deferral).
+
+**No migration** — the `vm-images` bucket and its `vm_can_post`-gated write
+policy already existed from the 2026-07-09 security review (T8); this was UI
++ one new server action (`uploadImageStamp`). That action takes a `File`
+directly rather than `FormData` since the canvas calls it programmatically
+(not from a `<form>` submit like the root-image upload). **New guard added in
+`replyWithDrawing`:** every image path must start with
+`${org.id}/${conversationId}/` — `uploadImageStamp` is the only writer of
+that prefix, so a crafted payload can't reference a storage path from
+elsewhere.
+
+Rendering needed one new piece the other three types didn't: `vm-images` is a
+**private** bucket, so stamped photos need signed URLs, not direct src. The
+page batch-signs every distinct stamp path across the **whole conversation**
+in one `createSignedUrls()` call (tree view needs every layer's, not just the
+viewed chain's), and a shared `useImageCache` hook (exported from
+`layer-canvas.tsx`, reused by `layer-grid.tsx`) loads each resolved URL — and
+the draft's local blob URLs, for an instant preview of a just-uploaded photo
+with no round trip — into an `HTMLImageElement` for Konva to paint.
+
+**Module 4's layer-content vocabulary from the spec is now fully built**:
+strokes, emoji stamps, styled text, and image stamps — all four, mixable in
+one reply. e2e 25/25.
+
 ## FUTURE ENHANCEMENT — public links (NOT v1, revisit later)
 
 *Founder, 2026-07-10: "make the whole public link a potential future

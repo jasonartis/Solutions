@@ -608,6 +608,19 @@ test('visual messaging: create from a picture, draw a reply, membership gates ac
   await expect(page.getByText('tap the picture to place "Hello!"')).toBeVisible()
   await page.mouse.click(box.x + 100, box.y + 200)
 
+  // Image tool: a tap does nothing until an image is uploaded; uploading
+  // updates the placement hint; a tap after that drops it.
+  await page.getByRole('button', { name: 'Image', exact: true }).click()
+  await expect(page.getByText('upload an image first')).toBeVisible()
+  await page.mouse.click(box.x + 200, box.y + 60) // no-op: nothing uploaded yet
+  await page.setInputFiles('input[aria-label="upload image"]', {
+    name: 'stamp.svg',
+    mimeType: 'image/svg+xml',
+    buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="100" height="80"><circle cx="50" cy="40" r="30" fill="#16a34a"/></svg>'),
+  })
+  await expect(page.getByText('tap the picture to place it')).toBeVisible()
+  await page.mouse.click(box.x + 200, box.y + 60)
+
   // Back to the pen for a stroke.
   await page.getByRole('button', { name: 'Pen', exact: true }).click()
   await page.mouse.move(box.x + 60, box.y + 60)

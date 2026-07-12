@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { requireOrgModule } from '@/lib/module-gate'
-import LayerCanvas, { type Stroke, type Stamp, type TextStamp } from '../../layer-canvas'
+import LayerCanvas, { type Stroke, type Stamp, type TextStamp, type ImageStamp } from '../../layer-canvas'
 import LayerGrid from '../../layer-grid'
 import {
   addMember,
@@ -15,6 +15,7 @@ import {
   setJoinPolicy,
   toggleReaction,
   tombstoneLayer,
+  uploadImageStamp,
 } from '../../actions'
 
 type LayerRow = {
@@ -22,7 +23,13 @@ type LayerRow = {
   parent_layer_id: string | null
   path: string
   author_id: string
-  content: { image?: { path: string }; strokes?: Stroke[]; stamps?: Stamp[]; texts?: TextStamp[] }
+  content: {
+    image?: { path: string }
+    strokes?: Stroke[]
+    stamps?: Stamp[]
+    texts?: TextStamp[]
+    images?: ImageStamp[]
+  }
   tombstoned: boolean
   frozen: boolean
   created_at: string
@@ -133,6 +140,20 @@ export default async function ConversationPage(props: {
     ? await supabase.storage.from('vm-images').createSignedUrl(imagePath, 3600)
     : { data: null }
 
+  // Image stamps (attached photos, distinct from the root background above)
+  // reference private storage paths — sign every distinct one across the
+  // WHOLE conversation in one batch (tree view needs every layer's, not just
+  // the current chain's).
+  const stampPaths = [...new Set(rows.flatMap((l) => (l.content.images ?? []).map((im) => im.path)))]
+  const { data: signedStamps } = stampPaths.length
+    ? await supabase.storage.from('vm-images').createSignedUrls(stampPaths, 3600)
+    : { data: null }
+  const stampUrl = new Map((signedStamps ?? []).map((s) => [s.path, s.signedUrl]))
+  const resolveImages = (images: ImageStamp[]) =>
+    images
+      .map((im) => ({ ...im, url: stampUrl.get(im.path) ?? '' }))
+      .filter((im) => im.url)
+
   const nameOf = (id: string) => {
     const p = (profiles ?? []).find((pr) => pr.user_id === id)
     return p?.display_name || p?.email || 'Someone'
@@ -218,6 +239,7 @@ export default async function ConversationPage(props: {
             strokes: l.tombstoned ? [] : (l.content.strokes ?? []),
             stamps: l.tombstoned ? [] : (l.content.stamps ?? []),
             texts: l.tombstoned ? [] : (l.content.texts ?? []),
+            images: l.tombstoned ? [] : resolveImages(l.content.images ?? []),
             tombstoned: l.tombstoned,
             author: nameOf(l.author_id),
           }))}
@@ -231,9 +253,12 @@ export default async function ConversationPage(props: {
           currentStamps={current.content.stamps ?? []}
           baseTexts={chain.slice(0, -1).map((l) => l.content.texts ?? [])}
           currentTexts={current.content.texts ?? []}
+          baseImages={chain.slice(0, -1).map((l) => resolveImages(l.content.images ?? []))}
+          currentImages={resolveImages(current.content.images ?? [])}
           drawable={!locked && !current.tombstoned && canPost}
           nav={nav}
           onSend={sendReply}
+          onUploadImage={uploadImageStamp.bind(null, orgSlug, conversationId)}
         />
       )}
 

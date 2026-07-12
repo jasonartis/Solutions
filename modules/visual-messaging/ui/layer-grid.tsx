@@ -12,7 +12,7 @@ import { useMemo, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { Stage, Layer, Line, Text as KonvaText, Image as KonvaImage } from 'react-konva'
 import { getStroke } from 'perfect-freehand'
-import type { Stroke, Stamp, TextStamp } from './layer-canvas'
+import { useImageCache, type Stroke, type Stamp, type TextStamp, type ResolvedImageStamp } from './layer-canvas'
 
 export type GridLayer = {
   id: string
@@ -21,6 +21,7 @@ export type GridLayer = {
   strokes: Stroke[]
   stamps: Stamp[]
   texts: TextStamp[]
+  images: ResolvedImageStamp[]
   tombstoned: boolean
   author: string
 }
@@ -82,6 +83,16 @@ export default function LayerGrid(props: {
     }
     return acc
   }
+  const chainImages = (layer: GridLayer): ResolvedImageStamp[] => {
+    const acc: ResolvedImageStamp[] = []
+    let cursor: GridLayer | undefined = layer
+    while (cursor) {
+      acc.unshift(...cursor.images)
+      cursor = cursor.parentId ? byId.get(cursor.parentId) : undefined
+    }
+    return acc
+  }
+  const imageCache = useImageCache(props.layers.flatMap((l) => l.images.map((im) => im.url)))
 
   // Group by depth so the grid reads as tree levels (path "1.2.1" = depth 3).
   const depths = new Map<number, GridLayer[]>()
@@ -148,6 +159,21 @@ export default function LayerGrid(props: {
                             y={t.y}
                           />
                         ))}
+                        {chainImages(l).map(
+                          (im, i) =>
+                            imageCache[im.url] && (
+                              <KonvaImage
+                                key={`im${i}`}
+                                image={imageCache[im.url]}
+                                x={im.x}
+                                y={im.y}
+                                width={im.width}
+                                height={im.height}
+                                rotation={im.rotation}
+                                opacity={im.opacity}
+                              />
+                            ),
+                        )}
                       </Layer>
                     </Stage>
                   </div>

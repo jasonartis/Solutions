@@ -20,6 +20,46 @@ function fail(error: { message: string } | null, what: string) {
 export type Stroke = { points: number[][]; color: string; size: number }
 export type Stamp = { emoji: string; x: number; y: number; fontSize: number }
 export type TextStamp = { text: string; color: string; x: number; y: number; fontSize: number; angle: number }
+// path is a vm-images storage object (uploaded via uploadImageStamp, private
+// bucket — the page resolves it to a signed URL for rendering); x/y are the
+// placed TOP-LEFT corner, width/height the placed size, all image pixels.
+export type ImageStamp = {
+  path: string
+  x: number
+  y: number
+  width: number
+  height: number
+  rotation: number
+  opacity: number
+}
+
+const IMAGE_STAMP_MAX_BYTES = 8 * 1024 * 1024
+const IMAGE_STAMP_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/svg+xml']
+
+// Upload an image to place as a stamp (spec: "image stamps (upload,
+// shrink/rotate/place)"). The vm-images bucket + its vm_can_post-gated write
+// policy already exist from the 2026-07-09 security review (T8) — this is
+// the first UI to use them for anything other than the root image. Called
+// programmatically from the canvas (not a <form> submit), so it takes the
+// File directly rather than FormData.
+export async function uploadImageStamp(orgSlug: string, conversationId: string, image: File): Promise<string> {
+  if (!image || image.size === 0) throw new Error('Pick an image first')
+  if (image.size > IMAGE_STAMP_MAX_BYTES) throw new Error('Image is too large (max 8MB)')
+  if (!IMAGE_STAMP_TYPES.includes(image.type)) throw new Error('Unsupported image type')
+
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) throw new Error('Not signed in')
+  const { data: org } = await supabase.from('orgs').select('id').eq('slug', orgSlug).single()
+  if (!org) throw new Error('Org not found')
+
+  const path = `${org.id}/${conversationId}/stamp-${Date.now()}-${image.name}`
+  const { error } = await supabase.storage.from('vm-images').upload(path, image)
+  fail(error, 'Image upload failed')
+  return path
+}
 
 export async function createConversation(orgSlug: string, formData: FormData) {
   const title = String(formData.get('title') ?? '').trim()
@@ -130,11 +170,17 @@ export async function replyWithDrawing(
   parentLayerId: string,
   payloadJson: string,
 ) {
-  const payload = JSON.parse(payloadJson) as { strokes: Stroke[]; stamps: Stamp[]; texts: TextStamp[] }
+  const payload = JSON.parse(payloadJson) as {
+    strokes: Stroke[]
+    stamps: Stamp[]
+    texts: TextStamp[]
+    images: ImageStamp[]
+  }
   const strokes = Array.isArray(payload.strokes) ? payload.strokes : []
   const stamps = Array.isArray(payload.stamps) ? payload.stamps : []
   const texts = Array.isArray(payload.texts) ? payload.texts : []
-  if (strokes.length === 0 && stamps.length === 0 && texts.length === 0) {
+  const images = Array.isArray(payload.images) ? payload.images : []
+  if (strokes.length === 0 && stamps.length === 0 && texts.length === 0 && images.length === 0) {
     throw new Error('Draw or place something first')
   }
   for (const s of strokes) {
@@ -175,14 +221,36 @@ export async function replyWithDrawing(
   } = await supabase.auth.getUser()
   if (!user) throw new Error('Not signed in')
   const { data: org } = await supabase.from('orgs').select('id').eq('slug', orgSlug).single()
+  if (!org) throw new Error('Org not found')
+
+  // Images must be objects THIS reply actually uploaded into THIS
+  // conversation's folder — not an arbitrary storage path the client could
+  // otherwise reference (uploadImageStamp is the only writer of this prefix).
+  const expectedPrefix = `${org.id}/${conversationId}/`
+  for (const img of images) {
+    if (
+      typeof img.path !== 'string' ||
+      !img.path.startsWith(expectedPrefix) ||
+      typeof img.x !== 'number' ||
+      typeof img.y !== 'number' ||
+      typeof img.width !== 'number' ||
+      img.width <= 0 ||
+      typeof img.height !== 'number' ||
+      img.height <= 0 ||
+      typeof img.rotation !== 'number' ||
+      typeof img.opacity !== 'number'
+    ) {
+      throw new Error('Malformed image stamp')
+    }
+  }
 
   const { error } = await supabase.from('vm_layers').insert({
-    org_id: org!.id,
+    org_id: org.id,
     conversation_id: conversationId,
     parent_layer_id: parentLayerId,
     author_id: user.id,
     path: 'server-assigned',
-    content: { strokes, stamps, texts },
+    content: { strokes, stamps, texts, images },
   })
   fail(error, 'Send reply failed')
   revalidatePath(`/o/${orgSlug}/m/visual-messaging/conversations/${conversationId}`)
