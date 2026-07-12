@@ -704,6 +704,28 @@ test('visual messaging: create from a picture, draw a reply, membership gates ac
   await page.getByLabel('emoji 🔥').click()
   await expect(page.getByText('tap the picture to place 🔥')).toBeVisible()
   await page.mouse.click(box.x + 300, box.y + 60)
+  // Wait for the placement's state update + Konva redraw to actually commit
+  // before the next click — otherwise the "select" tap can race the shape
+  // still mounting and land on empty canvas instead (placing a duplicate).
+  await expect(page.getByRole('button', { name: 'Send reply' })).toBeEnabled()
+
+  // Founder feedback (2026-07-11): a placed stamp isn't locked in — tapping
+  // it selects it (shows "Delete selected"), and dragging it doesn't crash
+  // or accidentally drop a second copy. "Delete selected" actually removes
+  // it: with nothing else queued, Send goes back to disabled.
+  await expect(page.getByRole('button', { name: 'Delete selected' })).not.toBeVisible()
+  await page.mouse.click(box.x + 300, box.y + 60) // tap the emoji just placed
+  await expect(page.getByRole('button', { name: 'Delete selected' })).toBeVisible()
+  await page.mouse.move(box.x + 300, box.y + 60)
+  await page.mouse.down()
+  await page.mouse.move(box.x + 340, box.y + 100, { steps: 4 })
+  await page.mouse.up()
+  await expect(page.getByRole('button', { name: 'Send reply' })).toBeEnabled()
+  await page.getByRole('button', { name: 'Delete selected' }).click()
+  await expect(page.getByRole('button', { name: 'Delete selected' })).not.toBeVisible()
+  await expect(page.getByRole('button', { name: 'Send reply' })).toBeDisabled()
+  // Place it again so the rest of this reply (text/image/stroke below) sends.
+  await page.mouse.click(box.x + 300, box.y + 60)
 
   // Text tool: a tap does nothing until something is typed; typing updates
   // the placement hint; a tap after typing drops it.

@@ -14,7 +14,7 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
-import { Stage, Layer, Line, Text as KonvaText, Image as KonvaImage } from 'react-konva'
+import { Stage, Layer, Line, Text as KonvaText, Image as KonvaImage, Transformer } from 'react-konva'
 import { getStroke } from 'perfect-freehand'
 
 export type Stroke = { points: number[][]; color: string; size: number }
@@ -39,6 +39,16 @@ export type ImageStamp = {
   opacity: number
 }
 export type ResolvedImageStamp = ImageStamp & { url: string }
+
+// Draft-only local ids (founder feedback, 2026-07-11: placed stamps/text/
+// images should be selectable, draggable, resizable, rotatable, and
+// deletable before Send — not locked in place the instant they're tapped
+// down). Ids exist purely for the Konva Transformer/selection wiring on
+// this client and are stripped before the payload is sent.
+type DraftStamp = Stamp & { id: string }
+type DraftTextStamp = TextStamp & { id: string }
+type DraftImageStamp = ImageStamp & { id: string }
+type Selection = { kind: 'stamp' | 'text' | 'image'; id: string } | null
 
 export type LayerNav = {
   parentId: string | null
@@ -106,9 +116,10 @@ export default function LayerCanvas(props: {
   const [tool, setTool] = useState<'pen' | 'emoji' | 'text' | 'image'>('pen')
   const [drawing, setDrawing] = useState(false)
   const [draft, setDraft] = useState<Stroke[]>([])
-  const [stampDraft, setStampDraft] = useState<Stamp[]>([])
-  const [textDraft, setTextDraft] = useState<TextStamp[]>([])
-  const [imageDraft, setImageDraft] = useState<ImageStamp[]>([])
+  const [stampDraft, setStampDraft] = useState<DraftStamp[]>([])
+  const [textDraft, setTextDraft] = useState<DraftTextStamp[]>([])
+  const [imageDraft, setImageDraft] = useState<DraftImageStamp[]>([])
+  const [selected, setSelected] = useState<Selection>(null)
   const [color, setColor] = useState(COLORS[0]!)
   const [size, setSize] = useState(6)
   const [selectedEmoji, setSelectedEmoji] = useState(EMOJIS[0]!)
@@ -126,12 +137,89 @@ export default function LayerCanvas(props: {
   const [pending, startTransition] = useTransition()
   const activeStroke = useRef<number[][] | null>(null)
   const swipeStart = useRef<{ x: number; y: number } | null>(null)
+  const nextDraftId = useRef(0)
+  const genId = () => `d${nextDraftId.current++}`
+  const shapeRefs = useRef<Record<string, any>>({})
+  const transformerRef = useRef<any>(null)
 
   const imageCache = useImageCache([
     ...props.baseImages.flatMap((layer) => layer.map((i) => i.url)),
     ...props.currentImages.map((i) => i.url),
     ...Object.values(imageObjectUrls),
   ])
+
+  // Attach the Transformer's resize/rotate handles to whichever draft shape
+  // is selected (or detach when nothing is).
+  useEffect(() => {
+    const tr = transformerRef.current
+    if (!tr) return
+    const node = selected ? shapeRefs.current[selected.id] : null
+    tr.nodes(node ? [node] : [])
+    tr.getLayer()?.batchDraw()
+  }, [selected, stampDraft, textDraft, imageDraft])
+
+  const selectShape = (kind: 'stamp' | 'text' | 'image', id: string) => {
+    setSelected({ kind, id })
+  }
+
+  const deleteSelected = () => {
+    if (!selected) return
+    if (selected.kind === 'stamp') setStampDraft((d) => d.filter((s) => s.id !== selected.id))
+    if (selected.kind === 'text') setTextDraft((d) => d.filter((t) => t.id !== selected.id))
+    if (selected.kind === 'image') setImageDraft((d) => d.filter((im) => im.id !== selected.id))
+    setSelected(null)
+  }
+
+  // A resize/rotate on the Transformer changes the underlying Konva node's
+  // scaleX/scaleY/rotation directly — translate that into our data model
+  // (fontSize for text-like shapes, width/height for images) and reset the
+  // node's own scale back to 1 so it doesn't compound on the next transform.
+  const onStampTransformEnd = (id: string) => {
+    const node = shapeRefs.current[id]
+    if (!node) return
+    const scale = (node.scaleX() + node.scaleY()) / 2
+    node.scaleX(1)
+    node.scaleY(1)
+    setStampDraft((d) =>
+      d.map((s) => (s.id === id ? { ...s, fontSize: Math.max(8, s.fontSize * scale), x: node.x(), y: node.y() } : s)),
+    )
+  }
+  const onTextTransformEnd = (id: string) => {
+    const node = shapeRefs.current[id]
+    if (!node) return
+    const scale = (node.scaleX() + node.scaleY()) / 2
+    const rotation = node.rotation()
+    node.scaleX(1)
+    node.scaleY(1)
+    setTextDraft((d) =>
+      d.map((t) =>
+        t.id === id ? { ...t, fontSize: Math.max(8, t.fontSize * scale), angle: rotation, x: node.x(), y: node.y() } : t,
+      ),
+    )
+  }
+  const onImageTransformEnd = (id: string) => {
+    const node = shapeRefs.current[id]
+    if (!node) return
+    const scaleX = node.scaleX()
+    const scaleY = node.scaleY()
+    const rotation = node.rotation()
+    node.scaleX(1)
+    node.scaleY(1)
+    setImageDraft((d) =>
+      d.map((im) =>
+        im.id === id
+          ? {
+              ...im,
+              width: Math.max(16, im.width * scaleX),
+              height: Math.max(16, im.height * scaleY),
+              rotation,
+              x: node.x(),
+              y: node.y(),
+            }
+          : im,
+      ),
+    )
+  }
 
   const resetImageTool = () => {
     Object.values(imageObjectUrls).forEach((url) => URL.revokeObjectURL(url))
@@ -185,16 +273,31 @@ export default function LayerCanvas(props: {
   const handleDown = (e: any) => {
     const stage = e.target.getStage()
     if (mode === 'draw' && props.drawable) {
+      // A tap that landed on an already-placed stamp/text/image is a
+      // SELECT, not a new placement — that shape's own onClick handles it
+      // (fires on pointer up). Bail out here so we don't also drop a new
+      // item at the same spot or start inking a stroke underneath it.
+      // NOTE: e.target !== stage is the WRONG check — the background photo
+      // is itself a KonvaImage node covering the whole canvas, so almost
+      // every tap would hit it (not the bare Stage) and this branch would
+      // never place anything. Only bail for taps that hit one of OUR
+      // tracked draft shapes specifically.
+      if (Object.values(shapeRefs.current).includes(e.target)) return
+      if (selected) setSelected(null) // tapping empty canvas deselects
+
       const pt = toImageSpace(stage)
       if (!pt) return
       if (tool === 'emoji') {
-        setStampDraft((d) => [...d, { emoji: selectedEmoji, x: pt[0]!, y: pt[1]!, fontSize: stampSize }])
+        setStampDraft((d) => [...d, { id: genId(), emoji: selectedEmoji, x: pt[0]!, y: pt[1]!, fontSize: stampSize }])
         return
       }
       if (tool === 'text') {
         const text = textValue.trim()
         if (!text) return // nothing typed yet — a tap does nothing
-        setTextDraft((d) => [...d, { text, color: textColor, x: pt[0]!, y: pt[1]!, fontSize: textFontSize, angle: textAngle }])
+        setTextDraft((d) => [
+          ...d,
+          { id: genId(), text, color: textColor, x: pt[0]!, y: pt[1]!, fontSize: textFontSize, angle: textAngle },
+        ])
         return
       }
       if (tool === 'image') {
@@ -204,6 +307,7 @@ export default function LayerCanvas(props: {
         setImageDraft((d) => [
           ...d,
           {
+            id: genId(),
             path: stagedImage.path,
             x: pt[0]! - baseW / 2,
             y: pt[1]! - baseH / 2,
@@ -265,13 +369,18 @@ export default function LayerCanvas(props: {
     ) {
       return
     }
-    const payload = JSON.stringify({ strokes, stamps: stampDraft, texts: textDraft, images: imageDraft })
+    // Strip the local-only selection id — the server has no use for it.
+    const stamps = stampDraft.map(({ id: _id, ...s }) => s)
+    const texts = textDraft.map(({ id: _id, ...t }) => t)
+    const images = imageDraft.map(({ id: _id, ...im }) => im)
+    const payload = JSON.stringify({ strokes, stamps, texts, images })
     startTransition(async () => {
       const newLayerId = await props.onSend!(payload)
       setDraft([])
       setStampDraft([])
       setTextDraft([])
       setImageDraft([])
+      setSelected(null)
       resetImageTool()
       setMode('view')
       goTo(newLayerId) // land on the reply just sent, not the parent
@@ -403,35 +512,58 @@ export default function LayerCanvas(props: {
               .map((s, i) => (
                 <Line key={`d${i}`} points={strokeToPolygon(s)} closed fill={s.color} />
               ))}
-            {stampDraft.map((st, i) => (
+            {stampDraft.map((st) => (
               <KonvaText
-                key={`ds${i}`}
+                key={st.id}
+                ref={(node: any) => {
+                  if (node) shapeRefs.current[st.id] = node
+                }}
                 text={st.emoji}
                 fontSize={st.fontSize}
                 x={st.x}
                 y={st.y}
                 offsetX={st.fontSize / 2}
                 offsetY={st.fontSize / 2}
+                draggable
+                onClick={() => selectShape('stamp', st.id)}
+                onTap={() => selectShape('stamp', st.id)}
+                onDragEnd={(e: any) =>
+                  setStampDraft((d) => d.map((s) => (s.id === st.id ? { ...s, x: e.target.x(), y: e.target.y() } : s)))
+                }
+                onTransformEnd={() => onStampTransformEnd(st.id)}
               />
             ))}
-            {textDraft.map((t, i) => (
+            {textDraft.map((t) => (
               <KonvaText
-                key={`dt${i}`}
+                key={t.id}
+                ref={(node: any) => {
+                  if (node) shapeRefs.current[t.id] = node
+                }}
                 text={t.text}
                 fontSize={t.fontSize}
                 fill={t.color}
                 rotation={t.angle}
                 x={t.x}
                 y={t.y}
+                draggable
+                onClick={() => selectShape('text', t.id)}
+                onTap={() => selectShape('text', t.id)}
+                onDragEnd={(e: any) =>
+                  setTextDraft((d) => d.map((s) => (s.id === t.id ? { ...s, x: e.target.x(), y: e.target.y() } : s)))
+                }
+                onTransformEnd={() => onTextTransformEnd(t.id)}
               />
             ))}
-            {imageDraft.map((im, i) => {
+            {imageDraft.map((im) => {
               const url = imageObjectUrls[im.path]
               const el = url ? imageCache[url] : undefined
               return (
                 el && (
                   <KonvaImage
-                    key={`di${i}`}
+                    key={im.id}
+                    ref={(node: any) => {
+                      if (node) shapeRefs.current[im.id] = node
+                    }}
                     image={el}
                     x={im.x}
                     y={im.y}
@@ -439,10 +571,20 @@ export default function LayerCanvas(props: {
                     height={im.height}
                     rotation={im.rotation}
                     opacity={im.opacity}
+                    draggable
+                    onClick={() => selectShape('image', im.id)}
+                    onTap={() => selectShape('image', im.id)}
+                    onDragEnd={(e: any) =>
+                      setImageDraft((d) =>
+                        d.map((s) => (s.id === im.id ? { ...s, x: e.target.x(), y: e.target.y() } : s)),
+                      )
+                    }
+                    onTransformEnd={() => onImageTransformEnd(im.id)}
                   />
                 )
               )
             })}
+            {mode === 'draw' && <Transformer ref={transformerRef} rotateEnabled />}
           </Layer>
         </Stage>
       </div>
@@ -501,28 +643,28 @@ export default function LayerCanvas(props: {
             <div className="flex overflow-hidden rounded border border-gray-300 text-xs">
               <button
                 type="button"
-                onClick={() => setTool('pen')}
+                onClick={() => { setTool('pen'); setSelected(null) }}
                 className={tool === 'pen' ? 'bg-blue-600 px-2 py-1 text-white' : 'bg-white px-2 py-1 text-gray-600'}
               >
                 Pen
               </button>
               <button
                 type="button"
-                onClick={() => setTool('emoji')}
+                onClick={() => { setTool('emoji'); setSelected(null) }}
                 className={tool === 'emoji' ? 'bg-blue-600 px-2 py-1 text-white' : 'bg-white px-2 py-1 text-gray-600'}
               >
                 Emoji
               </button>
               <button
                 type="button"
-                onClick={() => setTool('text')}
+                onClick={() => { setTool('text'); setSelected(null) }}
                 className={tool === 'text' ? 'bg-blue-600 px-2 py-1 text-white' : 'bg-white px-2 py-1 text-gray-600'}
               >
                 Text
               </button>
               <button
                 type="button"
-                onClick={() => setTool('image')}
+                onClick={() => { setTool('image'); setSelected(null) }}
                 className={tool === 'image' ? 'bg-blue-600 px-2 py-1 text-white' : 'bg-white px-2 py-1 text-gray-600'}
               >
                 Image
@@ -685,6 +827,15 @@ export default function LayerCanvas(props: {
               </>
             )}
 
+            {selected && (
+              <button
+                type="button"
+                onClick={deleteSelected}
+                className="rounded border border-red-300 px-2 py-1 text-xs text-red-600 hover:bg-red-50"
+              >
+                Delete selected
+              </button>
+            )}
             <button
               type="button"
               onClick={() => {
@@ -692,6 +843,7 @@ export default function LayerCanvas(props: {
                 setStampDraft([])
                 setTextDraft([])
                 setImageDraft([])
+                setSelected(null)
               }}
               className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-600"
             >
@@ -704,6 +856,7 @@ export default function LayerCanvas(props: {
                 setStampDraft([])
                 setTextDraft([])
                 setImageDraft([])
+                setSelected(null)
                 resetImageTool()
                 setMode('view')
               }}

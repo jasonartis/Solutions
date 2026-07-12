@@ -58,6 +58,9 @@ you a drawing seat). Invite-only conversations can't be joined this way.
    a photo, adjust its size/rotation, then tap the picture to place it) — a
    reply can mix all four. (**Cancel** returns to viewing without saving
    anything.)
+7b. Placing something isn't final: **tap it again** to select it — drag it
+   to move, use the corner handles to resize, and the top handle to rotate.
+   With something selected, **Delete selected** removes just that one item.
 8. **Clear draft** starts over — nothing is saved until you send.
 9. Click **Send reply**. Your drawing becomes a new layer under the one you
    were viewing, and you're taken straight to it. Once someone replies on

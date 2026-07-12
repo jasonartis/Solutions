@@ -250,3 +250,40 @@ public view drives the viewer to want full access. Working design so far:
 
 **Status:** parked, explicitly not v1 (founder). Revisit as a whole after the
 testing round; the multi-party-consent rule is the first thing to settle.
+
+## Testing-round feedback fixes (2026-07-11)
+
+Real feedback from the founder's live walkthrough of the shipped-complete
+canvas, addressed same-session:
+
+- **Placed stamps are now editable, not locked in** (the founder's biggest
+  ask). Every draft emoji/text/image is selectable (tap it), draggable,
+  resizable + rotatable via Konva's `Transformer`, and deletable (**Delete
+  selected**). Draft items carry a local-only `id` for
+  selection/ref-tracking, stripped before the send payload — the stored
+  `Stamp`/`TextStamp`/`ImageStamp` shape is unchanged, no migration.
+- **Draw-mode is now visually unmistakable**: a blue border + "Drawing mode"
+  label (founder had swiped without realizing draw mode was active).
+- **Sending a reply now lands on it directly** instead of leaving you on the
+  parent requiring a swipe to find what you just sent
+  (`replyWithDrawing` returns the new layer's id).
+- **Color picker swatches enlarged** with a proper `ring-offset` selected
+  state and a "current color" preview (the old CSS `outline` barely showed,
+  and the choice wasn't visible until you actually drew something).
+- **Dashboard now shows the caller's per-module role** (professor/GA/
+  matchmaker/etc.), not just the org-level role, which looked identical for
+  any two org admins regardless of what they actually do in each module.
+
+**Real bug caught before it shipped:** the first cut of the stamp-selection
+logic checked `e.target !== stage` to detect "tapped an existing shape" —
+wrong, since the background photo is itself a full-canvas `KonvaImage`, so
+nearly every tap hits *it*, not the bare Stage, silently blocking ALL new
+placements everywhere. Fixed by checking against the actual tracked
+draft-shape refs instead of the Stage object. The new e2e caught it
+immediately (placement itself stopped working) before this ever reached
+production.
+
+**Deferred (documented, not built):** swipe-direction arrows with
+layer-count badges, and a slide-in transition when navigating between
+layers — both queued next. Mobile/tablet layout is explicitly out of scope
+for this module alone (docs/13 cross-cutting item).
