@@ -96,7 +96,7 @@ export default function LayerCanvas(props: {
   currentImages: ResolvedImageStamp[]
   drawable: boolean
   nav: LayerNav
-  onSend?: (payloadJson: string) => Promise<void>
+  onSend?: (payloadJson: string) => Promise<string>
   onUploadImage?: (file: File) => Promise<string>
 }) {
   const router = useRouter()
@@ -267,20 +267,29 @@ export default function LayerCanvas(props: {
     }
     const payload = JSON.stringify({ strokes, stamps: stampDraft, texts: textDraft, images: imageDraft })
     startTransition(async () => {
-      await props.onSend!(payload)
+      const newLayerId = await props.onSend!(payload)
       setDraft([])
       setStampDraft([])
       setTextDraft([])
       setImageDraft([])
       resetImageTool()
       setMode('view')
+      goTo(newLayerId) // land on the reply just sent, not the parent
     })
   }
 
   return (
     <div>
+      {mode === 'draw' && (
+        <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-blue-600">
+          Drawing mode — swipes are off
+        </p>
+      )}
       <div
-        className="inline-block overflow-hidden rounded border border-gray-300 bg-white"
+        className={
+          'inline-block overflow-hidden rounded bg-white ' +
+          (mode === 'draw' ? 'border-4 border-blue-500' : 'border border-gray-300')
+        }
         style={{ touchAction: 'none' }}
         data-canvas-mode={mode}
       >
@@ -527,11 +536,21 @@ export default function LayerCanvas(props: {
                     key={c}
                     type="button"
                     onClick={() => setColor(c)}
-                    className="h-6 w-6 rounded-full border"
-                    style={{ backgroundColor: c, outline: c === color ? '2px solid #2563eb' : 'none' }}
+                    className={
+                      'h-8 w-8 rounded-full border-2 border-gray-300 ' +
+                      (c === color ? 'ring-[3px] ring-offset-2 ring-black' : '')
+                    }
+                    style={{ backgroundColor: c }}
                     aria-label={`pen ${c}`}
+                    aria-pressed={c === color}
                   />
                 ))}
+                <span
+                  className="h-8 w-8 rounded-full border-2 border-gray-300"
+                  style={{ backgroundColor: color }}
+                  aria-label="current pen color"
+                  title="Current color"
+                />
                 <input
                   type="range"
                   min={2}
@@ -588,11 +607,21 @@ export default function LayerCanvas(props: {
                     key={c}
                     type="button"
                     onClick={() => setTextColor(c)}
-                    className="h-6 w-6 rounded-full border"
-                    style={{ backgroundColor: c, outline: c === textColor ? '2px solid #2563eb' : 'none' }}
+                    className={
+                      'h-8 w-8 rounded-full border-2 border-gray-300 ' +
+                      (c === textColor ? 'ring-[3px] ring-offset-2 ring-black' : '')
+                    }
+                    style={{ backgroundColor: c }}
                     aria-label={`text color ${c}`}
+                    aria-pressed={c === textColor}
                   />
                 ))}
+                <span
+                  className="h-8 w-8 rounded-full border-2 border-gray-300"
+                  style={{ backgroundColor: textColor }}
+                  aria-label="current text color"
+                  title="Current color"
+                />
                 <input
                   type="range"
                   min={12}

@@ -735,12 +735,14 @@ test('visual messaging: create from a picture, draw a reply, membership gates ac
   await page.mouse.move(box.x + 240, box.y + 200, { steps: 8 })
   await page.mouse.up()
   await page.getByRole('button', { name: 'Send reply' }).click()
-  await expect(page.getByText('Replies to this layer (1)')).toBeVisible()
-
-  // Descend into the reply. Wait for a LEAF-unique signal before swiping —
-  // 'by Alice A' matches the root too, and swiping against the old page's
-  // nav props makes 'up' a no-op (the root has no parent).
-  await page.getByRole('link', { name: 'Layer 1.1' }).click()
+  // Founder feedback (2026-07-11): after sending, land on the reply just
+  // sent — not the parent, requiring a swipe to find it. The send handler
+  // flips local mode to 'view' synchronously (stale root props) BEFORE the
+  // router.push to the new layer resolves, so 'Replies to this layer (0)'
+  // transiently matches the STALE root render too (root had 0 replies before
+  // this send) — not a true destination-unique signal. The breadcrumb
+  // segment "1.1" only ever appears once the real navigation lands.
+  await expect(page.getByText('1.1', { exact: true })).toBeVisible()
   await expect(page.getByText('Replies to this layer (0)')).toBeVisible()
   await expect(page.getByText(/by Alice A ·/).first()).toBeVisible()
 

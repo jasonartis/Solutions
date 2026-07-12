@@ -18,7 +18,21 @@ export default async function DashboardPage() {
         {orgs.map((org) => (
           <section key={org.id} className="rounded-lg border border-gray-200 bg-white p-5">
             <div className="mb-3 flex items-baseline justify-between">
-              <h2 className="text-lg font-medium">{org.name}</h2>
+              <div className="flex items-baseline gap-2">
+                <h2 className="text-lg font-medium">{org.name}</h2>
+                <span
+                  className={
+                    'rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ' +
+                    (org.role === 'owner'
+                      ? 'bg-purple-100 text-purple-700'
+                      : org.role === 'admin'
+                        ? 'bg-amber-100 text-amber-700'
+                        : 'bg-gray-100 text-gray-600')
+                  }
+                >
+                  {org.role}
+                </span>
+              </div>
               <span className="flex items-baseline gap-3">
                 <Link href={`/o/${org.slug}/help`} className="text-xs text-blue-600 hover:underline">
                   Help
@@ -26,7 +40,6 @@ export default async function DashboardPage() {
                 <Link href={`/o/${org.slug}/export`} className="text-xs text-blue-600 hover:underline">
                   Export data
                 </Link>
-                <span className="text-xs uppercase tracking-wide text-gray-400">{org.role}</span>
               </span>
             </div>
             {org.modules.length === 0 ? (
@@ -37,9 +50,14 @@ export default async function DashboardPage() {
                   <li key={mod.key}>
                     <Link
                       href={`/o/${org.slug}/m/${mod.key}`}
-                      className="inline-block rounded border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100"
+                      className="inline-flex items-center gap-1.5 rounded border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100"
                     >
                       {mod.name}
+                      {mod.myRole && (
+                        <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-500">
+                          {mod.myRole}
+                        </span>
+                      )}
                     </Link>
                   </li>
                 ))}

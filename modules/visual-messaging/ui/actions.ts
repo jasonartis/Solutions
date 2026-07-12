@@ -244,16 +244,23 @@ export async function replyWithDrawing(
     }
   }
 
-  const { error } = await supabase.from('vm_layers').insert({
-    org_id: org.id,
-    conversation_id: conversationId,
-    parent_layer_id: parentLayerId,
-    author_id: user.id,
-    path: 'server-assigned',
-    content: { strokes, stamps, texts, images },
-  })
+  const { data: newLayer, error } = await supabase
+    .from('vm_layers')
+    .insert({
+      org_id: org.id,
+      conversation_id: conversationId,
+      parent_layer_id: parentLayerId,
+      author_id: user.id,
+      path: 'server-assigned',
+      content: { strokes, stamps, texts, images },
+    })
+    .select('id')
+    .single()
   fail(error, 'Send reply failed')
   revalidatePath(`/o/${orgSlug}/m/visual-messaging/conversations/${conversationId}`)
+  // Founder feedback (2026-07-11): after sending, land on the reply just
+  // sent — not back on the parent, requiring a swipe to find it.
+  return newLayer!.id as string
 }
 
 // Any member may flag a layer for moderator attention (safety reporting is
