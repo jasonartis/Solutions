@@ -40,3 +40,9 @@ deploy/worker/worker.env
 
 # Prod database backups (scripts/prod-backup.ts) — never commit data
 backups/
+
+# Founder/session scratch — personal, evolving notes and one-off verify
+# scripts, deliberately kept out of the repo (CLAUDE.md convention)
+/founder-feedback.md
+/TESTING-TODO-2DAYS.md
+/verify-*.mjs
