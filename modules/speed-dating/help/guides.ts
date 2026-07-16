@@ -67,12 +67,8 @@ export const speedDatingHelp: ModuleHelp = {
 2. Open the event and click **Open registration** — participants can now
    register (choosing a side first, if you set up two sides). The roster
    shows who's in, and — for a two-sided event — each side's count against
-   its capacity and anyone waitlisted.
-2a. **Known limitation**: per-side capacity is currently soft — registering
-   past a side's capacity doesn't yet actually land someone on the waitlist
-   (a real bug the team caught before calling it done; fix in progress).
-   The roster, labels, and **Promote next waitlisted** button all work
-   correctly once a waitlisted row exists.
+   its capacity and anyone waitlisted. Once a side hits its capacity, further
+   registrations for that side automatically land on the waitlist.
 
 ## Run the rounds
 

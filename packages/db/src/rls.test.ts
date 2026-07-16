@@ -255,3 +255,61 @@ describe('nail-salon worker availability RPC', () => {
     expect(raw).toEqual([])
   })
 })
+
+// Speed-dating two-sided capacity (2026-07-16, 20260716020000): the
+// sd_side_registered_count definer RPC lets a registering participant find
+// out how full a side is even though their own RLS session can't see other
+// participants' rows. The tenancy property CI must protect: a non-member of
+// the event's org always gets 0 and can't probe another org's event sizes.
+describe('speed-dating side capacity RPC', () => {
+  it('a member counts a side they cannot directly read; a non-member always gets 0', async () => {
+    const charlie = await signIn('charlie@demo.local') // demo-dating participant
+    // alice organizes demo-dating, so she can set up a fixture event + seat.
+    const { data: org } = await alice.from('orgs').select('id').eq('slug', 'demo-dating').single()
+    const eventName = 'RLS Capacity Fixture'
+    await alice.from('sd_events').delete().eq('org_id', org!.id).eq('name', eventName)
+    const { data: event } = await alice
+      .from('sd_events')
+      .insert({
+        org_id: org!.id,
+        name: eventName,
+        state: 'open',
+        format: { sides: { a: { label: 'Men', capacity: 1 }, b: { label: 'Women', capacity: 1 } } },
+      })
+      .select('id')
+      .single()
+    const { data: dana } = await alice.from('profiles').select('user_id').eq('email', 'dana@demo.local').single()
+    // Seat dana on side 'a' (organizer can insert any participant row).
+    await alice.from('sd_participants').insert({
+      org_id: org!.id,
+      event_id: event!.id,
+      user_id: dana!.user_id,
+      pool_side: 'a',
+      status: 'registered',
+    })
+
+    // charlie (a DIFFERENT member) can't directly see dana's row...
+    const { count: direct } = await charlie
+      .from('sd_participants')
+      .select('id', { count: 'exact', head: true })
+      .eq('event_id', event!.id)
+      .eq('pool_side', 'a')
+      .eq('status', 'registered')
+    expect(direct ?? 0).toBe(0)
+    // ...but the RPC gives him the true count.
+    const { data: memberCount } = await charlie.rpc('sd_side_registered_count', {
+      check_event_id: event!.id,
+      check_side: 'a',
+    })
+    expect(memberCount).toBe(1)
+
+    // bob is not a member of demo-dating → always 0.
+    const { data: nonMemberCount } = await bob.rpc('sd_side_registered_count', {
+      check_event_id: event!.id,
+      check_side: 'a',
+    })
+    expect(nonMemberCount).toBe(0)
+
+    await alice.from('sd_events').delete().eq('id', event!.id) // cleanup
+  })
+})

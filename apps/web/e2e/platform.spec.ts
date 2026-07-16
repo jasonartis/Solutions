@@ -831,10 +831,10 @@ test('speed-dating module: two-sided event lets a participant pick a side at reg
   await expect(page.getByRole('button', { name: 'Promote next waitlisted' })).not.toBeVisible()
 })
 
-// Intended behavior once the KNOWN GAP is fixed (a SECURITY DEFINER count
-// function, per the actions.ts comment — needs an Opus session, not built
-// on Sonnet). Un-skip this test in the same commit as that migration.
-test.fixme('speed-dating module: two-sided event enforces per-side capacity and waitlist promotion', async ({ page }) => {
+// Capacity + waitlist enforced end-to-end via the sd_side_registered_count
+// definer RPC (20260716020000) — the fresh registrant's own session can't
+// see other participants, so the count goes through the RPC.
+test('speed-dating module: two-sided event enforces per-side capacity and waitlist promotion', async ({ page }) => {
   // Organizer creates a two-sided event with a tiny capacity (1 per side) so
   // a second registrant on the same side is trivially forced to waitlist.
   await signIn(page, 'alice@demo.local')

@@ -197,29 +197,36 @@ optional two-sides config; a side selector on registration; per-side
 registered/waitlisted counts + labels in the staff roster; a
 `promoteNextWaitlisted` action.
 
-**Real bug caught by e2e before shipping as working, same shape as the
-nail-salon customer/time-off gap (2026-07-16)**: a plain participant cannot
-write another participant's row (`sd_participants_update_self` is
+**Two real bugs caught by e2e before shipping as working, same shape as the
+nail-salon customer/time-off gap (2026-07-16)**: (1) a plain participant
+cannot write another participant's row (`sd_participants_update_self` is
 `user_id = auth.uid()` only) — so promotion CANNOT be triggered from the
 withdrawing participant's own action; it's staff/organizer-triggered instead
 (mirroring the module's existing manual-round-advance-stands-in-for-worker
-pattern). **A second, deeper bug of the identical shape was then found by
-e2e for the capacity check itself**: `registerForEvent`'s per-side capacity
-count runs under the REGISTERING PARTICIPANT's own session, and
+pattern). (2) The capacity check itself: `registerForEvent`'s per-side
+capacity count ran under the REGISTERING PARTICIPANT's own session, and
 `sd_participants_select` only lets a participant see their own row (or
 staff, or someone they've actually been paired with — neither applies to a
-fresh registrant). The count therefore always sees zero other registrants,
-and capacity enforcement silently never triggers for the only caller that
-uses it — confirmed live when a second registrant on a size-1-capacity side
-was wrongly accepted as `'registered'` instead of `'waitlisted'`.
+fresh registrant). The count therefore always saw zero other registrants,
+and capacity enforcement silently never triggered — confirmed live when a
+second registrant on a size-1-capacity side was wrongly accepted as
+`'registered'` instead of `'waitlisted'`.
 
-**Fix needs a migration** (a `SECURITY DEFINER` function returning just a
-count/boolean, matching the `sal_worker_has_time_off` / `mm_shared_answers`
-pattern — NOT a widened read policy), so it's deliberately not pushed
-through on Sonnet, queued for an Opus session per docs/03 #12. The intended
-end-to-end behavior is captured as a `test.fixme(...)` in the e2e suite
-(un-skip in the same commit as the migration); a separate, real,
-currently-passing test covers what genuinely works today (side selection at
-registration, roster label/status display, no stray promote button when
-nothing's waitlisted). The promotion mechanism itself (`promoteNextWaitlisted`)
-is correct and staff-safe already — only the capacity *count* is broken.
+**Capacity check fixed (Opus session, `20260716020000`, full docs/03 #12
+rhythm).** New `SECURITY DEFINER` function `sd_side_registered_count(event,
+side) → integer` returns ONLY the count of registered participants on a side
+— never the rows, identities, or statuses — so a registrant's own session
+gets the true number without `sd_participants_select` being widened (which
+would expose participant identities to every co-registrant). The count is
+taken only when the caller is a member of the event's org (`is_org_member`
+inside the WHERE, org derived through the event row, not caller-supplied), so
+a non-member always gets 0 and can't probe another org's event sizes.
+Independently security-reviewed (SHIP AS-IS — no cross-tenant leak, only an
+integer escapes, count filters `status='registered'` correctly), live-
+verified 5/5 as real users (the load-bearing case: a *different* member gets
+the true count via the RPC while their direct query — RLS-scoped — sees 0),
+and covered by a tracked RLS test (non-member gets 0) plus the now-un-skipped
+e2e (register → capacity forces waitlist → withdraw → organizer promotes).
+`registerForEvent` and `promoteNextWaitlisted` both route the count through
+the RPC (one source of truth). RLS 16/16, e2e 33/33. The promotion mechanism
+(`promoteNextWaitlisted`) was already correct and staff-safe.

@@ -71,29 +71,21 @@ export async function setEventState(orgSlug: string, eventId: string, state: str
 }
 
 // Two-sided events (opt-in, set at event creation — see event-format.ts):
-// the participant picks their side; capacity is *meant* to be checked per
-// side, landing a registration past capacity as 'waitlisted' instead of
-// 'registered' (both allowed by sd_participants_insert_self's WITH CHECK —
-// RLS trusts the app to compute the right status, per that policy's own
-// INTEGRATION NOTE). Single-pool events (no sides configured) are
-// unaffected: no side param, always 'registered', matching the previous
-// behavior exactly.
+// the participant picks their side; a registration past that side's capacity
+// lands as 'waitlisted' instead of 'registered' (both allowed by
+// sd_participants_insert_self's WITH CHECK — RLS trusts the app to compute
+// the right status, per that policy's own INTEGRATION NOTE). Single-pool
+// events (no sides configured) are unaffected: no side param, always
+// 'registered', matching the previous behavior exactly.
 //
-// KNOWN GAP, caught by e2e before shipping as working (2026-07-16, needs
-// Opus — do not fix on Sonnet): the count query below runs under the
-// REGISTERING PARTICIPANT's own session, and sd_participants_select only
-// lets a participant see their OWN row (or staff, or someone they've
-// actually been paired with in a round — neither applies to a fresh
-// registrant). So this count always sees 0 other registrants, and the
-// capacity check silently never triggers for the only caller that uses it.
-// Same shape as the nail-salon customer/time-off gap: fix is a SECURITY
-// DEFINER function returning just a count/boolean (not the rows), matching
-// the mm_shared_answers / sal_worker_has_time_off pattern — NOT a widened
-// read policy. Until that migration exists, every registration on a
-// capacity-limited side lands 'registered' regardless of capacity; the
-// waitlist/promotion machinery built on top (roster counts, "Promote next
-// waitlisted") is otherwise correct and works once real waitlisted rows
-// exist (e.g. seeded directly, or once the count is fixed).
+// The registered-count-on-a-side goes through the sd_side_registered_count
+// definer RPC (20260716020000): a fresh registrant's own RLS session can
+// only see their own participant row, so a direct count would see 0 others
+// and the capacity check would never trigger — the RPC returns just the
+// number (never the rows/identities), matching sal_worker_has_time_off.
+// NOTE: the check-then-insert isn't race-proof (two people racing for the
+// last spot could both land 'registered') — acceptable at this scale, the
+// same tolerance the platform's other booking flows already have.
 export async function registerForEvent(orgSlug: string, eventId: string, formData: FormData) {
   const supabase = await createClient()
   const {
@@ -113,13 +105,12 @@ export async function registerForEvent(orgSlug: string, eventId: string, formDat
     poolSide = chosen
     const capacity = sides[chosen].capacity
     if (capacity !== null) {
-      const { count } = await supabase
-        .from('sd_participants')
-        .select('id', { count: 'exact', head: true })
-        .eq('event_id', eventId)
-        .eq('pool_side', chosen)
-        .eq('status', 'registered')
-      if ((count ?? 0) >= capacity) status = 'waitlisted'
+      const { data: registeredCount, error: countErr } = await supabase.rpc('sd_side_registered_count', {
+        check_event_id: eventId,
+        check_side: chosen,
+      })
+      if (countErr) throw new Error(`Capacity check failed: ${countErr.message}`)
+      if ((registeredCount ?? 0) >= capacity) status = 'waitlisted'
     }
   }
 
@@ -161,13 +152,14 @@ export async function promoteNextWaitlisted(orgSlug: string, eventId: string, po
   const capacity = sides?.[poolSide]?.capacity ?? null
 
   if (capacity !== null) {
-    const { count } = await supabase
-      .from('sd_participants')
-      .select('id', { count: 'exact', head: true })
-      .eq('event_id', eventId)
-      .eq('pool_side', poolSide)
-      .eq('status', 'registered')
-    if ((count ?? 0) >= capacity) return // no room; nothing to do
+    // Same definer RPC as registration — a single source of truth for
+    // "how many are registered on this side". (A staff caller could count
+    // directly, but routing through the RPC keeps one code path.)
+    const { data: registeredCount } = await supabase.rpc('sd_side_registered_count', {
+      check_event_id: eventId,
+      check_side: poolSide,
+    })
+    if ((registeredCount ?? 0) >= capacity) return // no room; nothing to do
   }
 
   const { data: next } = await supabase
