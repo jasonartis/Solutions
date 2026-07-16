@@ -36,25 +36,21 @@ export function isWithinWeeklySchedule(schedule: WeeklySchedule | null | undefin
   return ranges.some(([rs, re]) => startMin >= minutesOf(rs) && endMin <= minutesOf(re))
 }
 
-export function overlapsTimeOff(
-  timeOff: { starts_at: string; ends_at: string }[] | null | undefined,
-  start: Date,
-  end: Date,
-): boolean {
-  return (timeOff ?? []).some((t) => start < new Date(t.ends_at) && end > new Date(t.starts_at))
-}
-
-export function availabilityError(
+// Weekly-schedule half of the availability check. The TIME-OFF half is NOT
+// here: a customer's RLS scope can't read sal_worker_time_off (its `reason`
+// may be sensitive), so all booking paths check time off through the
+// sal_worker_has_time_off definer RPC instead — one code path, one source of
+// truth (see 20260716010000_salon_worker_availability_check.sql). Weekly
+// schedule stays in TS because every org member can already read
+// sal_worker_profiles.weekly_schedule, so there's no RLS reason to move it,
+// and the day/time-window math is far simpler here than in SQL.
+export function weeklyScheduleError(
   schedule: WeeklySchedule | null | undefined,
-  timeOff: { starts_at: string; ends_at: string }[] | null | undefined,
   start: Date,
   end: Date,
 ): string | null {
   if (!isWithinWeeklySchedule(schedule, start, end)) {
     return `This worker isn't scheduled to work on ${DAY_LABELS[DAY_KEYS[start.getDay()]]} at that time.`
-  }
-  if (overlapsTimeOff(timeOff, start, end)) {
-    return 'This worker has time off during that time.'
   }
   return null
 }

@@ -584,19 +584,14 @@ test('nail-salon module: customer self-books and can cancel', async ({ page }) =
   await expect(page.locator('li').filter({ hasText: 'Pedicure' }).first()).toContainText('cancelled')
 })
 
-test('nail-salon module: operator booking a specific worker respects their time off', async ({ page }) => {
-  // Mirrors the seed's dana time-off block: 3 days out, 09:00-17:00.
-  // KNOWN GAP (flagged, not silently shipped): this enforcement only works
-  // for operate-tier bookers (manager/cashier) — sal_worker_time_off's SELECT
-  // policy (20260709030000) only grants operators or the worker themselves,
-  // so a customer's own session can't read time-off rows to check against
-  // them (RLS returns empty, not an error) and customerBookAppointment's
-  // call to the same helper silently no-ops. Fixing that needs a migration
-  // (a SECURITY DEFINER availability-check function, matching the
-  // mm_shared_answers/cls_material_storage_visible pattern, not a blanket
-  // read-policy widening — sal_worker_time_off.reason can hold something
-  // like "medical leave") — flagged for an Opus session per docs/03 #12,
-  // not pushed through on Sonnet. See docs/modules/module-5-nail-salon.md.
+test('nail-salon module: booking a specific worker respects their time off (operator AND customer paths)', async ({ page }) => {
+  // Dana's seeded time-off block is 3 days out, 09:00-17:00 local. Enforcement
+  // covers all three booking entry points: the operator/walk-in paths read
+  // sal_worker_time_off directly (operate-tier RLS), and the CUSTOMER path
+  // goes through the sal_worker_has_time_off definer RPC
+  // (20260716010000_salon_worker_availability_check.sql) — a customer can't
+  // read the time-off rows (reason is private) but the RPC answers the
+  // yes/no overlap question so their self-booking still honors it.
   const timeOffDay = new Date()
   timeOffDay.setDate(timeOffDay.getDate() + 3)
   const y = timeOffDay.getFullYear()
@@ -604,41 +599,55 @@ test('nail-salon module: operator booking a specific worker respects their time 
   const d = String(timeOffDay.getDate()).padStart(2, '0')
   const dateStr = `${y}-${m}-${d}`
 
+  // --- Operator path (alice, manager) ---
   await signIn(page, 'alice@demo.local')
   await page.goto('/o/demo-salon/m/nail-salon')
   // Scope to the "Book appointment" form specifically — the day board also
   // has a Walk-in quick-add form with its own serviceId/workerId selects.
-  const bookForm = page.locator('form').filter({ has: page.locator('select[name="customerId"]') })
+  const opForm = () => page.locator('form').filter({ has: page.locator('select[name="customerId"]') })
 
-  // Booking Dana at 10:00 that day falls inside her time off -> rejected.
-  await bookForm.locator('select[name="customerId"]').selectOption({ label: 'Charlie C' })
-  await bookForm.locator('select[name="serviceId"]').selectOption({ label: 'Manicure ($40)' })
-  await bookForm.locator('select[name="workerId"]').selectOption({ label: 'Dana D' })
-  await bookForm.locator('input[name="start"]').fill(`${dateStr}T10:00`)
-  await bookForm.getByRole('button', { name: 'Book', exact: true }).click()
+  // 10:00 falls inside Dana's 09:00-17:00 time off -> rejected.
+  await opForm().locator('select[name="customerId"]').selectOption({ label: 'Charlie C' })
+  await opForm().locator('select[name="serviceId"]').selectOption({ label: 'Manicure ($40)' })
+  await opForm().locator('select[name="workerId"]').selectOption({ label: 'Dana D' })
+  await opForm().locator('input[name="start"]').fill(`${dateStr}T10:00`)
+  await opForm().getByRole('button', { name: 'Book', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Something went wrong' })).toBeVisible()
 
-  // Same day at 20:00 is outside the 09:00-17:00 time-off window -> succeeds.
-  // (This booking is 3 days out, so it won't appear on TODAY's board — check
-  // via the customer's own appointment list instead, which isn't date-scoped.)
+  // 20:00 is outside the time-off window -> succeeds.
   await page.goto('/o/demo-salon/m/nail-salon')
-  const bookForm2 = page.locator('form').filter({ has: page.locator('select[name="customerId"]') })
-  await bookForm2.locator('select[name="customerId"]').selectOption({ label: 'Charlie C' })
-  await bookForm2.locator('select[name="serviceId"]').selectOption({ label: 'Manicure ($40)' })
-  await bookForm2.locator('select[name="workerId"]').selectOption({ label: 'Dana D' })
-  await bookForm2.locator('input[name="start"]').fill(`${dateStr}T20:00`)
-  // Wait on the POST response itself (per CLAUDE.md's documented gotcha) —
-  // a bare click + immediate navigation elsewhere can race the in-flight
-  // write and check charlie's list before this booking actually lands.
-  const booked = page.waitForResponse((r) => r.request().method() === 'POST')
-  await bookForm2.getByRole('button', { name: 'Book', exact: true }).click()
-  await booked
+  await opForm().locator('select[name="customerId"]').selectOption({ label: 'Charlie C' })
+  await opForm().locator('select[name="serviceId"]').selectOption({ label: 'Manicure ($40)' })
+  await opForm().locator('select[name="workerId"]').selectOption({ label: 'Dana D' })
+  await opForm().locator('input[name="start"]').fill(`${dateStr}T20:00`)
+  const opBooked = page.waitForResponse((r) => r.request().method() === 'POST')
+  await opForm().getByRole('button', { name: 'Book', exact: true }).click()
+  await opBooked
   await expect(page.getByRole('heading', { name: 'Something went wrong' })).not.toBeVisible()
 
+  // --- Customer path (charlie, self-booking) — the RPC-backed fix ---
   await signIn(page, 'charlie@demo.local')
   await page.goto('/o/demo-salon/m/nail-salon')
-  // The seed already books charlie one Manicure (today); this adds a second.
-  await expect(page.locator('li').filter({ hasText: 'Manicure' })).toHaveCount(2)
+  const custForm = () => page.locator('form').filter({ has: page.locator('select[name="serviceId"]') })
+
+  // 11:00 falls inside Dana's time off -> rejected (previously slipped through).
+  await custForm().locator('select[name="serviceId"]').selectOption({ label: 'Manicure ($40)' })
+  await custForm().locator('select[name="workerId"]').selectOption({ label: 'Dana D' })
+  await custForm().locator('input[name="start"]').fill(`${dateStr}T11:00`)
+  await custForm().getByRole('button', { name: 'Book', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Something went wrong' })).toBeVisible()
+
+  // 21:00 is outside the window -> succeeds.
+  await page.goto('/o/demo-salon/m/nail-salon')
+  await custForm().locator('select[name="serviceId"]').selectOption({ label: 'Manicure ($40)' })
+  await custForm().locator('select[name="workerId"]').selectOption({ label: 'Dana D' })
+  await custForm().locator('input[name="start"]').fill(`${dateStr}T21:00`)
+  const custBooked = page.waitForResponse((r) => r.request().method() === 'POST')
+  await custForm().getByRole('button', { name: 'Book', exact: true }).click()
+  await custBooked
+  await expect(page.getByRole('heading', { name: 'Something went wrong' })).not.toBeVisible()
+  // Seed(1, today) + operator(1, 20:00) + customer(1, 21:00) = 3 manicures.
+  await expect(page.locator('li').filter({ hasText: 'Manicure' })).toHaveCount(3)
 })
 
 test('nail-salon module: worker sees only their assigned chairs', async ({ page }) => {

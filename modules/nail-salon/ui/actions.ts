@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { DERIVED_SCOPE_PLACEHOLDER as PLACEHOLDER } from '@platform/core'
 import { createClient } from '@/lib/supabase/server'
-import { availabilityError } from './availability'
+import { weeklyScheduleError } from './availability'
 
 // Nail-salon operational actions. RLS (sal_can_operate / sal_is_worker) plus
 // the sal_pin_appointment lifecycle trigger are the enforcement layer; these
@@ -22,7 +22,12 @@ async function resolveOrgId(supabase: Awaited<ReturnType<typeof createClient>>, 
 
 // Only checked when a SPECIFIC worker is requested — "Any worker" bookings
 // have no assignment engine yet (spec's still-deferred item) so there's
-// nobody's schedule to check against.
+// nobody's schedule to check against. Works identically for all three booking
+// paths (operator, walk-in, customer): the weekly-schedule half reads
+// sal_worker_profiles (every org member can), and the time-off half goes
+// through the sal_worker_has_time_off definer RPC — which a customer can call
+// even though they can't read sal_worker_time_off directly (its `reason` is
+// private). See 20260716010000_salon_worker_availability_check.sql.
 async function assertWorkerAvailable(
   supabase: Awaited<ReturnType<typeof createClient>>,
   workerId: string,
@@ -32,17 +37,23 @@ async function assertWorkerAvailable(
 ) {
   const { data: profile } = await supabase
     .from('sal_worker_profiles')
-    .select('id, weekly_schedule')
+    .select('weekly_schedule')
     .eq('user_id', workerId)
     .eq('location_id', locationId)
     .maybeSingle()
   if (!profile) return // the scope trigger rejects an unknown worker anyway
-  const { data: timeOff } = await supabase
-    .from('sal_worker_time_off')
-    .select('starts_at, ends_at')
-    .eq('worker_profile_id', profile.id)
-  const error = availabilityError(profile.weekly_schedule, timeOff, start, end)
-  if (error) throw new Error(error)
+
+  const scheduleError = weeklyScheduleError(profile.weekly_schedule, start, end)
+  if (scheduleError) throw new Error(scheduleError)
+
+  const { data: hasTimeOff, error: rpcError } = await supabase.rpc('sal_worker_has_time_off', {
+    check_worker_id: workerId,
+    check_location_id: locationId,
+    window_start: start.toISOString(),
+    window_end: end.toISOString(),
+  })
+  if (rpcError) throw new Error(`Availability check failed: ${rpcError.message}`)
+  if (hasTimeOff) throw new Error('This worker has time off during that time.')
 }
 
 // Operator books an appointment. scheduled_end is derived from the service's

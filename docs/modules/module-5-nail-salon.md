@@ -141,26 +141,34 @@ the platform yet — deliberately NOT built speculatively for one module,
 per the "extract when a second module needs it" rule) and the
 `sal-receipts` storage bucket.
 
-**KNOWN GAP found by the e2e test, not silently shipped (2026-07-16, needs
-Opus per docs/03 #12):** availability enforcement only actually works for
-operate-tier bookers (manager/cashier via the day-board "Book appointment" /
-walk-in forms) — the CUSTOMER self-booking path (`customerBookAppointment`)
-calls the same `assertWorkerAvailable` helper but it silently no-ops for a
-customer caller, because `sal_worker_time_off_select`'s RLS policy
-(`20260709030000`) only grants read access to operate-tier callers or the
-worker themselves. A customer's own session queries `sal_worker_time_off`
-under RLS and gets an empty result (not an error), so the availability check
-always passes trivially. First caught by the e2e test itself: booking
-Dana-during-her-time-off as charlie (customer) succeeded when it should
-have been rejected; switching the test to book as alice (manager, operate
-tier) via the same day-board form reproduced the correct rejection,
-confirming the enforcement logic itself is right — only the customer read
-path is blocked.
+**Customer-path enforcement fixed (2026-07-16, Opus, `20260716010000`).**
+The e2e test caught a real gap in the base feature before it shipped as
+"working": availability enforcement worked for operate-tier bookers
+(manager/cashier) but silently no-opped on the CUSTOMER self-booking path.
+`customerBookAppointment` calls the same helper, but `sal_worker_time_off`'s
+SELECT policy grants read only to operate-tier callers or the worker
+themselves (deliberately — `reason` can hold "medical leave"), so a
+customer's own RLS-scoped session saw zero time-off rows and the check passed
+trivially. Confirmed by the test: booking Dana-during-time-off as charlie
+(customer) wrongly succeeded; as alice (manager) it was correctly rejected —
+proving the enforcement logic was right and only the customer read path was
+blocked.
 
-**Fix needs a migration**, so it's deliberately NOT pushed through on
-Sonnet: add a `SECURITY DEFINER` availability-check function (matching the
-`mm_shared_answers` / `cls_material_storage_visible` pattern — return just a
-boolean, not the raw rows) rather than widening `sal_worker_time_off`'s
-SELECT policy to all org members, since `reason` can hold something like
-"medical leave" that shouldn't become customer-readable. Queued for an Opus
-session.
+The fix (an Opus session, full docs/03 #12 rhythm): a `SECURITY DEFINER`
+function `sal_worker_has_time_off(worker, location, window_start, window_end)
+→ boolean` that answers ONLY the yes/no overlap question — never the rows,
+`reason`, count, or dates — so a customer honors a worker's time off without
+any detail leaking (the reveal-only-the-answer pattern of `mm_shared_answers`
+/ `cls_material_storage_visible`, NOT a widening of the SELECT policy). The
+overlap is only counted when the caller is a member of the org owning the
+worker's location (`is_org_member(l.org_id)` inside the `EXISTS`), so a
+non-member always gets `false` and cannot probe another tenant's workers.
+All three booking paths now route the time-off check through it; the
+weekly-schedule half stays in TS (every org member can read
+`weekly_schedule`, so RLS never blocked it). Independently security-reviewed
+(verdict SHIP AS-IS: no cross-tenant leak — the org is derived through the
+worker's own profile/location chain, so an org-B worker can't be paired with
+an org-A location to spoof membership), live-verified 4/4 as real users, and
+covered by a tracked RLS test (non-member gets `false`) plus the e2e
+(customer booking honored) — RLS 15/15, e2e still 31 (test extended, not
+added).

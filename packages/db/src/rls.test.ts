@@ -207,3 +207,51 @@ describe('org self-management', () => {
     expect(mine?.map((r) => r.role)).toContain('user')
   })
 })
+
+// Nail-salon worker availability (2026-07-16, 20260716010000): the
+// sal_worker_has_time_off definer RPC lets a CUSTOMER honor a worker's time
+// off at booking without reading sal_worker_time_off (its `reason` is
+// operator/self-only). The tenancy property that CI must protect: a
+// non-member of the salon's org can never use it to probe a worker's time
+// off — they always get `false`, indistinguishable from "no time off".
+describe('nail-salon worker availability RPC', () => {
+  it('customer gets a truthful overlap answer; non-member always gets false (no cross-tenant probe)', async () => {
+    const charlie = await signIn('charlie@demo.local') // salon customer (org member)
+    // alice administers demo-salon (operate tier), so she can read the fixtures
+    // + the seeded time-off row to compute in/out-of-window probe times.
+    const { data: salon } = await alice.from('orgs').select('id').eq('slug', 'demo-salon').single()
+    const { data: loc } = await alice.from('sal_locations').select('id').eq('org_id', salon!.id).single()
+    const { data: dana } = await alice.from('profiles').select('user_id').eq('email', 'dana@demo.local').single()
+    const { data: timeOff } = await alice
+      .from('sal_worker_time_off')
+      .select('starts_at, ends_at')
+      .order('starts_at')
+      .limit(1)
+      .single()
+
+    const at = (base: string, offsetMs: number) => new Date(new Date(base).getTime() + offsetMs).toISOString()
+    const args = (ws: string, we: string) => ({
+      check_worker_id: dana!.user_id,
+      check_location_id: loc!.id,
+      window_start: ws,
+      window_end: we,
+    })
+    const inStart = at(timeOff!.starts_at, 30 * 60000) // 30m into the block
+    const inEnd = at(timeOff!.starts_at, 60 * 60000)
+    const outStart = at(timeOff!.ends_at, 3 * 3600000) // 3h after it ends
+    const outEnd = at(timeOff!.ends_at, 3.5 * 3600000)
+
+    const { data: cIn } = await charlie.rpc('sal_worker_has_time_off', args(inStart, inEnd))
+    expect(cIn).toBe(true)
+    const { data: cOut } = await charlie.rpc('sal_worker_has_time_off', args(outStart, outEnd))
+    expect(cOut).toBe(false)
+
+    // bob is not a member of demo-salon → the SAME real-overlap window is false.
+    const { data: bIn } = await bob.rpc('sal_worker_has_time_off', args(inStart, inEnd))
+    expect(bIn).toBe(false)
+
+    // And the customer still cannot read the raw rows (reason stays private).
+    const { data: raw } = await charlie.from('sal_worker_time_off').select('id')
+    expect(raw).toEqual([])
+  })
+})
