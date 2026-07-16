@@ -680,6 +680,8 @@ test('speed-dating module: register → round → mutual interest → reveal', a
   await page.getByRole('button', { name: 'Run next round (pair everyone)' }).click()
   // Confirm the round landed before navigating (goto-after-POST race).
   await expect(page.getByText(/Rounds run: 1/)).toBeVisible()
+  // Organizer's own summary line shows the live round's countdown too.
+  await expect(page.getByText(/Round 1 ends in/)).toBeVisible()
 
   // Charlie marks interested in Dana; Dana sees NO match yet (one-sided).
   // After each mutating click, wait for the re-render to confirm the mark
@@ -688,9 +690,13 @@ test('speed-dating module: register → round → mutual interest → reveal', a
   await signIn(page, 'charlie@demo.local')
   await page.goto('/o/demo-dating/m/speed-dating')
   await page.getByRole('link', { name: 'Friday Night Mixer' }).click()
-  await expect(page.getByText('People you met')).toBeVisible()
-  await expect(page.getByText('Dana D')).toBeVisible()
-  await page.getByRole('button', { name: 'interested', exact: true }).click()
+  // Lobby/live-round panel: charlie's current pairing + a live countdown.
+  await expect(page.getByRole('heading', { name: 'Right now' })).toBeVisible()
+  await expect(page.getByText(/Round 1 — you're with Dana D\. Ends in/)).toBeVisible()
+  const metSection = page.locator('section').filter({ hasText: 'People you met' })
+  await expect(metSection).toBeVisible()
+  await expect(metSection.getByText('Dana D')).toBeVisible()
+  await metSection.getByRole('button', { name: 'interested', exact: true }).click()
   await expect(page.getByRole('button', { name: 'interested', exact: true })).toHaveClass(/bg-blue-600/)
 
   // Charlie saves a private note about Dana — author-only, never visible to

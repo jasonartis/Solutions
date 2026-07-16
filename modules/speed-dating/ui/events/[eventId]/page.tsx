@@ -14,6 +14,14 @@ import {
   setEventState,
   withdrawFromEvent,
 } from '../../actions'
+import LiveRoundRefresh from './live-round-refresh'
+
+function formatCountdown(ms: number): string {
+  const total = Math.max(0, Math.round(ms / 1000))
+  const mm = Math.floor(total / 60)
+  const ss = total % 60
+  return `${mm}:${String(ss).padStart(2, '0')}`
+}
 
 const btnCls = 'rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700'
 const linkBtn = 'px-1 py-1.5 text-xs text-blue-600 hover:underline'
@@ -30,7 +38,7 @@ export default async function EventPage(props: {
 
   const { data: event } = await supabase
     .from('sd_events')
-    .select('id, name, state, scheduled_at, resume_review_enabled')
+    .select('id, name, state, scheduled_at, resume_review_enabled, round_duration_seconds, break_duration_seconds, lobby_opens_at')
     .eq('id', eventId)
     .maybeSingle()
   if (!event) notFound()
@@ -61,7 +69,7 @@ export default async function EventPage(props: {
     supabase.from('sd_interest').select('rater_participant_id, target_participant_id, verdict').eq('event_id', eventId),
     supabase.from('sd_matches').select('participant_a_id, participant_b_id, revealed').eq('event_id', eventId),
     supabase.from('profiles').select('user_id, display_name, email'),
-    supabase.from('sd_rounds').select('id, state').eq('event_id', eventId),
+    supabase.from('sd_rounds').select('id, round_number, state, ends_at').eq('event_id', eventId),
     supabase
       .from('sd_reports')
       .select('id, reporter_participant_id, reported_participant_id, reason, detail, state, created_at')
@@ -99,6 +107,30 @@ export default async function EventPage(props: {
       .map((i) => [i.target_participant_id, i.verdict]),
   )
 
+  // Live round: the state machine guarantees at most one 'active' round per
+  // event (the orchestrator's single-active-round guard). 'break' is in the
+  // schema's CHECK but never actually written — the orchestrator keeps a
+  // round 'active' through its break too, so the round-vs-break distinction
+  // is computed here from ends_at + break_duration_seconds, not from state.
+  const activeRound = (rounds ?? []).find((r) => r.state === 'active') ?? null
+  const myCurrentPairing = activeRound
+    ? (pairings ?? []).find(
+        (p) =>
+          p.round_id === activeRound.id &&
+          (p.participant_a_id === mySeat?.id || p.participant_b_id === mySeat?.id),
+      ) ?? null
+    : null
+  const myCurrentPartnerId = myCurrentPairing
+    ? myCurrentPairing.participant_a_id === mySeat?.id
+      ? myCurrentPairing.participant_b_id
+      : myCurrentPairing.participant_a_id
+    : undefined
+  const now = new Date()
+  const roundEndsAt = activeRound?.ends_at ? new Date(activeRound.ends_at) : null
+  const breakEndsAt = roundEndsAt ? new Date(roundEndsAt.getTime() + event.break_duration_seconds * 1000) : null
+  const onBreak = Boolean(roundEndsAt && now >= roundEndsAt)
+  const lobbyOpen = event.lobby_opens_at ? now >= new Date(event.lobby_opens_at) : null
+
   return (
     <div>
       <p className="mb-1 text-sm text-gray-400">{org.name}</p>
@@ -109,6 +141,12 @@ export default async function EventPage(props: {
         </Link>
       </div>
       <p className="mb-6 text-sm uppercase tracking-wide text-gray-400">{event.state}</p>
+
+      {event.state === 'open' && lobbyOpen && (
+        <p className="mb-6 rounded border border-blue-100 bg-blue-50 px-4 py-2 text-sm text-blue-700">
+          The lobby is open{event.scheduled_at ? ` — the event starts at ${new Date(event.scheduled_at).toLocaleString()}` : ''}.
+        </p>
+      )}
 
       {canOrganize && (
         <section className="mb-8 rounded-lg border border-gray-200 bg-white p-5">
@@ -143,6 +181,12 @@ export default async function EventPage(props: {
           </div>
           <p className="text-xs text-gray-400">
             Rounds run: {(rounds ?? []).length} · Matches: {(matches ?? []).filter((m) => m.revealed).length} revealed / {(matches ?? []).length} total
+            {activeRound && roundEndsAt && (
+              <>
+                {' '}
+                · Round {activeRound.round_number} {onBreak && breakEndsAt ? `on break, next in ${formatCountdown(breakEndsAt.getTime() - now.getTime())}` : `ends in ${formatCountdown(roundEndsAt.getTime() - now.getTime())}`}
+              </>
+            )}
           </p>
         </section>
       )}
@@ -258,6 +302,54 @@ export default async function EventPage(props: {
               </form>
             )}
           </section>
+
+          {event.state === 'running' && (
+            <section className="rounded-lg border border-indigo-200 bg-indigo-50 p-5">
+              <LiveRoundRefresh />
+              <h2 className="mb-2 text-sm font-medium uppercase tracking-wide text-indigo-700">
+                Right now
+              </h2>
+              {!activeRound && (
+                <p className="text-sm text-indigo-900">Waiting for the next round to start…</p>
+              )}
+              {activeRound && !myCurrentPairing && (
+                <p className="text-sm text-indigo-900">
+                  You&apos;re not in this round{!mySeat.checked_in ? ' — check in at the front desk to join the next one' : ''}.
+                </p>
+              )}
+              {activeRound && myCurrentPairing && myCurrentPartnerId === null && (
+                <p className="text-sm text-indigo-900">
+                  Round {activeRound.round_number} — you have a bye this round. Grab water; you&apos;re back in next round.
+                </p>
+              )}
+              {activeRound && myCurrentPairing && myCurrentPartnerId && (
+                <p className="text-sm text-indigo-900">
+                  {onBreak ? (
+                    <>Round {activeRound.round_number} complete — you were with {seatName(myCurrentPartnerId)}. Take a break.</>
+                  ) : (
+                    <>
+                      Round {activeRound.round_number} — you&apos;re with{' '}
+                      <span className="font-medium">{seatName(myCurrentPartnerId)}</span>.
+                    </>
+                  )}
+                  {/* A round created before ends_at was tracked has no timer to
+                      show — degrade to just the pairing rather than nothing. */}
+                  {!onBreak && roundEndsAt && (
+                    <>
+                      {' '}
+                      Ends in <span className="font-medium">{formatCountdown(roundEndsAt.getTime() - now.getTime())}</span>.
+                    </>
+                  )}
+                  {onBreak && breakEndsAt && (
+                    <>
+                      {' '}
+                      Next round starts in <span className="font-medium">{formatCountdown(breakEndsAt.getTime() - now.getTime())}</span>.
+                    </>
+                  )}
+                </p>
+              )}
+            </section>
+          )}
 
           {metSeatIds.size > 0 && (
             <section className="rounded-lg border border-gray-200 bg-white p-5">

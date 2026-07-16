@@ -105,7 +105,7 @@ export async function runPairingRound(orgSlug: string, eventId: string) {
 
   const [{ data: event }, { data: rounds }, { data: participants }, { data: pairings }] =
     await Promise.all([
-      supabase.from('sd_events').select('org_id, allow_repeat_pairings').eq('id', eventId).single(),
+      supabase.from('sd_events').select('org_id, allow_repeat_pairings, round_duration_seconds').eq('id', eventId).single(),
       supabase.from('sd_rounds').select('id, round_number, state').eq('event_id', eventId),
       supabase
         .from('sd_participants')
@@ -150,6 +150,12 @@ export async function runPairingRound(orgSlug: string, eventId: string) {
   }
 
   const nextNumber = Math.max(0, ...(rounds ?? []).map((r) => r.round_number)) + 1
+  // ends_at mirrors the orchestrator's own round creation (speed-dating-
+  // orchestrator.ts) — without it, a manually-run round has no expiry for
+  // the "Right now" panel's countdown to key off (the manual button is the
+  // stand-in for the worker, so it should produce an equivalent round).
+  const startsAt = new Date()
+  const endsAt = new Date(startsAt.getTime() + event.round_duration_seconds * 1000)
   const { data: round, error: roundErr } = await supabase
     .from('sd_rounds')
     .insert({
@@ -157,7 +163,8 @@ export async function runPairingRound(orgSlug: string, eventId: string) {
       event_id: eventId,
       round_number: nextNumber,
       state: 'pending',
-      starts_at: new Date().toISOString(),
+      starts_at: startsAt.toISOString(),
+      ends_at: endsAt.toISOString(),
     })
     .select('id')
     .single()

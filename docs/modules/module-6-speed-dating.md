@@ -110,3 +110,50 @@ organizer/professor/etc. also happens to be an org admin. Cross-cutting
 **Still remaining:** Jitsi video (needs the VPS), lobby/live-round UI,
 resume-review profiles, waitlist auto-promotion, contact-share population on
 reveal.
+
+## Lobby/live-round UI shipped (2026-07-16)
+
+Closed the "lobby/live-round UI" item above — a fresh survey (not stale
+notes) confirmed video specifically needs the VPS decision, but a live
+pairing display doesn't. No migration: `sd_rounds`/`sd_pairings` already had
+schema + RLS letting a participant read their event's rounds and their own
+pairings; this was pure app-logic work reading data nobody had surfaced yet.
+
+**"Right now" panel** (participant's event page, shown while the event is
+`running`): who you're currently paired with (or a bye, or "not in this
+round" if not checked in), with a live countdown to the round's end —
+computed from `sd_rounds.ends_at`, not from the `state` column. Real finding:
+the `'break'` state in the schema's CHECK is never actually written by the
+orchestrator — a round stays `'active'` through its whole round+break window,
+and only `ends_at` distinguishes "still going" from "on break" (the
+orchestrator computes the break deadline inline and only flips to
+`'complete'` once BOTH have elapsed). So the panel infers round-vs-break from
+`now` vs `ends_at`/`ends_at + break_duration_seconds` client-side, matching
+the orchestrator's actual behavior rather than the unused schema state.
+
+**Real bug found and fixed before it shipped as "working":** the manual
+"Run next round" button (`runPairingRound`, the pre-worker stand-in used by
+organizers and by e2e) never set `ends_at` on the round it created — only
+the orchestrator did. The new countdown would have silently shown nothing
+for every manually-run round (i.e., every deployment without the worker
+running). Fixed by mirroring the orchestrator's `ends_at` calculation in the
+manual action too, so both paths produce an equivalent round. The display
+also degrades gracefully (shows the pairing without a timer) if `ends_at` is
+ever still null, rather than disappearing.
+
+A small `lobby_opens_at`-driven banner ("The lobby is open — starts at …")
+was added too — that column existed in schema since 2026-07-09 but was never
+read anywhere. Auto-refresh (`LiveRoundRefresh`, a tiny client component
+polling `router.refresh()` every 15s while the panel is showing) keeps the
+countdown current without a full reload — matching the platform's existing
+poll-not-push rhythm (matchmaking rescore, this module's own orchestrator)
+rather than wiring up Realtime for one panel. The organizer console's summary
+line also gained the same round/break countdown.
+
+e2e extended (not a new test): charlie's event page now asserts the "Right
+now" panel and its countdown text; the organizer's summary line assertion
+extended to check for the countdown too.
+
+**Still remaining:** Jitsi video (needs the VPS decision), resume-review
+profiles beyond the profile card already shipped, waitlist auto-promotion,
+contact-share population on reveal.

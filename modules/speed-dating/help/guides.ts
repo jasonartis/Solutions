@@ -20,7 +20,11 @@ export const speedDatingHelp: ModuleHelp = {
 
 3. Once the organizer starts the event, rounds run on a timer — each round
    pairs you with someone new; sitting out a round ("bye") just means you're
-   back in the next one.
+   back in the next one. If you arrive before it starts, a banner tells you
+   the lobby is open and when the event begins.
+3a. **Right now** shows who you're currently paired with (or that you have a
+   bye, or that you're not checked in yet) with a live countdown to when the
+   round ends — no need to guess or ask; it refreshes on its own.
 3b. If the organizer enabled **resume-review** for this event, you'll see
    **My profile card** — a short line about yourself. Fill it in before the
    event; anyone you're paired with sees it next to your name (and you see
@@ -68,8 +72,9 @@ export const speedDatingHelp: ModuleHelp = {
    handled automatically.
 4. **Run next round (pair everyone)** manually advances if you don't want to
    wait out the clock.
-5. The console shows **Rounds run** and **Matches: X revealed / Y total** as
-   the event progresses. When everyone has met, rounds stop advancing.
+5. The console shows **Rounds run**, **Matches: X revealed / Y total**, and
+   the current round's countdown (or the break before the next one) as the
+   event progresses. When everyone has met, rounds stop advancing.
 6. **Roster & reports** (below the console) shows who's registered and every
    safety report filed for this event — **Mark reviewed / actioned /
    dismiss** to triage. The reported person is never told they were reported.
