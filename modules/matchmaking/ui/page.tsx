@@ -43,9 +43,15 @@ export default async function MatchmakingPage(props: {
 
   // Everyone who shares the org can read display names (shares_org_with policy).
   const { data: profiles } = await supabase.from('profiles').select('user_id, display_name, email')
+  // Founder feedback (2026-07-16): confirmed the matches list shows only a
+  // name label, never a contact email — EXCEPT this fallback used to fall
+  // through to the raw email if a real user never set a display name,
+  // silently leaking contact info to every scored match regardless of
+  // mutual interest. Falls back to a generic label instead now; email only
+  // ever surfaces via the explicit mutual-match reveal.
   const nameOf = (id: string) => {
     const p = (profiles ?? []).find((pr) => pr.user_id === id)
-    return p?.display_name || p?.email || id.slice(0, 8)
+    return p?.display_name || 'A match'
   }
 
   return (
@@ -109,9 +115,15 @@ async function SingleView(props: { orgSlug: string; orgId: string; userId: strin
     .order('percent', { ascending: false })
     .limit(props.topX)
   const { data: profiles } = await supabase.from('profiles').select('user_id, display_name, email')
+  // Founder feedback (2026-07-16): confirmed the matches list shows only a
+  // name label, never a contact email — EXCEPT this fallback used to fall
+  // through to the raw email if a real user never set a display name,
+  // silently leaking contact info to every scored match regardless of
+  // mutual interest. Falls back to a generic label instead now; email only
+  // ever surfaces via the explicit mutual-match reveal.
   const nameOf = (id: string) => {
     const p = (profiles ?? []).find((pr) => pr.user_id === id)
-    return p?.display_name || p?.email || id.slice(0, 8)
+    return p?.display_name || 'A match'
   }
 
   // What each match chose to share with me (the mm_shared_answers definer

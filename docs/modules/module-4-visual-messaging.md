@@ -316,3 +316,62 @@ while fixing an unrelated matchmaking bug report:
   `apps/web/app/(app)/error.tsx` now covers every module.
 
 e2e 27/27, RLS 7/7.
+
+## Ad-hoc groups — discussion expanded (2026-07-16, still OPEN, don't build)
+
+Founder asked to discuss the ad-hoc-group question further after the earlier
+sketch ("auto-created lightweight orgs"). Talked through a concrete example
+first (a synagogue member wanting a private thread with their out-of-town
+sister, who has no relationship to the synagogue's org at all) — confirmed:
+yes, the group is just between those two (or however many) specific people;
+they'd be added to the conversation itself via `vm_conversation_members`,
+same mechanism as today.
+
+**Two candidate technical shapes, discussed but not decided:**
+
+1. **Per-pair lightweight orgs** (the original sketch): auto-create a tiny,
+   invisible org for each ad-hoc group. Con surfaced in discussion: these
+   would clutter the Owner Console's org list (every ad-hoc chat = one more
+   row), and org-level features that assume a real multi-person business
+   context (last-admin-standing guard, org self-management) don't make much
+   sense for a 2-person pairing.
+2. **One shared "everyone" org**: every signed-up platform user automatically
+   belongs to a single hidden org; ad-hoc conversations live inside it, with
+   `vm_conversation_members` (unchanged) still gating who's actually in a
+   given conversation — the shared org is just plumbing to satisfy the
+   tenancy model, never a real access boundary on its own for this module.
+
+**Bigger strategic thread surfaced by this discussion, worth its own
+session**: the founder asked whether other modules could go "global" the
+same way — Make-a-Match or Speed Dating across ALL platform members, not
+scoped to one client's org, if Visual Messaging is meant to become more
+WhatsApp-like/widespread. This is the SAME underlying tenancy question
+already flagged as open for the proposed Redt-It module
+(`docs/modules/module-7-redt-it-DRAFT.md`) — a platform-wide user pool that
+doesn't fit today's "one org = one client engagement" model. Three separate
+ideas (ad-hoc visual-messaging groups, Redt-It's singles pool, and a
+hypothetical global matchmaking/speed-dating) are now independently pointing
+at the same missing primitive — per docs/00's own extraction principle,
+that's a strong signal this deserves ONE deliberate decision made together,
+not three separate ad-hoc answers per module. Real considerations if
+pursued: automatic inclusion in a global pool raises real privacy questions
+(would a synagogue member's account automatically become part of a global
+dating/networking pool unless they opt out, or does joining need to be a
+deliberate per-user action?) — this needs explicit design, not a default.
+
+Still fully open — nothing here is a decision, and this stays blocking for
+ad-hoc groups specifically until resolved (ideally alongside the Redt-It
+planning session, given the overlap).
+
+## Future enhancement: conversation-admin transfer (2026-07-16, not built)
+
+Founder asked whether transferring ownership of a conversation (or,
+separately, a classroom course — see module-2 spec) would be hard to add
+later. Assessed as NOT architecturally hard: conversation admin is already
+just a role on `vm_conversation_members` (per-conversation, not global), so
+"transfer" is fundamentally removing the old admin's role + granting the new
+one — the only real design work is the offer/accept flow itself (a pending-
+transfer state so the new admin has to affirmatively accept, not just be
+silently reassigned), which is comparable in shape to classroom's existing
+peer-review-assignment or matchmaking's question-approval flows already
+built on this platform. Parked as a future enhancement, not scoped further.

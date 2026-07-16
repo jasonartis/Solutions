@@ -11,9 +11,12 @@ import {
   createOrg,
   removeMember,
   removeModuleRoleAction,
+  renameOrg,
   toggleModule,
   updateSynagogueSettings,
 } from './actions'
+
+const inputCls = 'rounded border border-gray-300 px-2 py-1 text-sm'
 
 export default async function ConsolePage() {
   const profile = await getProfile()
@@ -69,6 +72,21 @@ export default async function ConsolePage() {
                 <h2 className="text-lg font-medium">{org.name}</h2>
                 <code className="text-xs text-gray-400">/{org.slug}</code>
               </div>
+              <form action={renameOrg.bind(null, org.id)} className="mb-4 flex flex-wrap items-center gap-2">
+                <label className="text-xs text-gray-500">
+                  Rename
+                  <input
+                    name="name"
+                    defaultValue={org.name}
+                    required
+                    className={`${inputCls} ml-2 w-56`}
+                  />
+                </label>
+                <button className="rounded border border-gray-300 px-3 py-1 text-sm text-gray-700 hover:bg-gray-50">
+                  Save name
+                </button>
+                <span className="text-xs text-gray-400">(slug /{org.slug} stays fixed — it's used in existing links)</span>
+              </form>
 
               <h3 className="mb-2 text-sm font-medium text-gray-600">Modules</h3>
               <ul className="mb-4 flex flex-wrap gap-2">

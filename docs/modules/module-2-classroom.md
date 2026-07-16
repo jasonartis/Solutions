@@ -137,3 +137,45 @@ and **Final** columns and all workflow buttons from non-professors, matching
 what RLS returns. GA walkthrough guide updated to say "you see only the
 grades you entered yourself." e2e: GA reaches Manage + grading with no
 professor controls or peer/final columns visible.
+
+## Future enhancement: course/class ownership transfer (2026-07-16, not built)
+
+Founder asked whether transferring ownership of a course/class to another
+professor would be hard to add later — same question asked about Visual
+Messaging's conversation admin (see that module's spec for the fuller
+answer; the shape is identical here). Not architecturally hard: professor
+status could be a per-class role transfer (offer + accept, not silent
+reassignment) once `cls_class_members`'s per-class role is actually wired
+into authorization (see the 2026-07-16 professor-scoping discussion below —
+this enhancement is naturally sequenced after that work, not before it,
+since there's no per-class "ownership" to transfer until scoping exists).
+Parked as a future enhancement, not scoped further.
+
+## Professor role scoping — real finding + founder's parallel (2026-07-16, still OPEN, don't build)
+
+Founder asked whether "professor" should scope to the specific courses they
+teach rather than being able to edit every course in the org, after
+observing this firsthand in testing. Confirmed by reading the code: today
+`cls_can_manage` checks only the org-wide `module_roles` grant — a professor
+really can edit every course in the org, with no course-level restriction.
+
+**Real, useful architectural finding**: the schema already has a per-class
+role column (`cls_class_members.role`, holding student/ga/professor scoped
+to ONE class) that was apparently designed with this scoping in mind, but
+`cls_can_manage` never actually consults it — the two systems (org-wide
+grant vs. per-class role) are completely disconnected today. This also
+explains a separate founder-reported bug: a user's per-class role BADGE
+(shown on the Classes list) reads from this same disconnected table, so
+granting someone "professor" via the org-wide module role never updated
+what badge they saw.
+
+**Founder's own parallel, confirmed accurate**: Visual Messaging already
+proves this exact pattern works — a conversation's admin is a role stored
+PER CONVERSATION (`vm_conversation_members.role`), not an org-wide grant.
+Classroom's per-class role column is structurally the same shape, just never
+wired up. This means building real per-course professor scoping is applying
+an already-proven pattern to a table that already has the right shape, not
+inventing something new — meaningfully lower risk than starting from
+scratch, though still real RLS/authorization work (`cls_can_manage` would
+need to become course-aware) needing an Opus session if pursued. Not
+decided; not built.

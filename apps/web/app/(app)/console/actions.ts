@@ -45,6 +45,21 @@ export async function createOrg(formData: FormData) {
   revalidatePath('/console')
 }
 
+// Founder feedback (2026-07-16): no way anywhere to rename an org — surfaced
+// while explaining that the "Solutions" org is really Pozna's real client
+// (slug `pozne`), just misleadingly named. Slug is deliberately NOT editable
+// here — it's baked into the public schedule URL (/s/pozne) and anything
+// else already linking to it; renaming that would break existing links.
+export async function renameOrg(orgId: string, formData: FormData) {
+  const supabase = await requireSuperadmin()
+  const name = String(formData.get('name') ?? '').trim()
+  if (!name) throw new Error('Name is required')
+
+  const { error } = await supabase.from('orgs').update({ name }).eq('id', orgId)
+  if (error) throw new Error(error.message)
+  revalidatePath('/console')
+}
+
 export async function toggleModule(orgId: string, moduleKey: string, enable: boolean) {
   if (!moduleRegistry.some((m) => m.key === moduleKey)) throw new Error('Unknown module')
   const supabase = await requireSuperadmin()
