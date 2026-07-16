@@ -46,7 +46,7 @@ First module built "the fast way" against stable conventions — this validates 
 
 Forces: scheduling/availability, appointment state machine, billing/receipts, ledger/expenses, day-view live board. Reuses: roles ladder, settings+locks, workflows, notifications.
 
-**Status (2026-07-10): usable end-to-end.** Operational spine (day board, booking, billing with auto earnings-ledger feed), worker chair view, manager back office (revenue summary, service catalog, promotions, expense log, shopping-list→expense flow), and **customer self-booking** (book + cancel) all shipped. Reporting expanded 2026-07-11 (net profit, top services, expenses by category). **Remaining:** per-worker availability windows (schema/RLS exist, no UI, deliberately deferred — see module spec), assignment-algorithm + reminder workers.
+**Status (2026-07-10): usable end-to-end.** Operational spine (day board, booking, billing with auto earnings-ledger feed), worker chair view, manager back office (revenue summary, service catalog, promotions, expense log, shopping-list→expense flow), and **customer self-booking** (book + cancel) all shipped. Reporting expanded 2026-07-11 (net profit, top services, expenses by category). **Per-worker availability windows shipped 2026-07-16** (weekly schedule + time-off editor, enforced at every booking entry point — see module spec). **Remaining:** assignment-algorithm + reminder workers (the latter needs a notification primitive no module has yet).
 
 ## M5 — Module 4: Visual Messaging
 

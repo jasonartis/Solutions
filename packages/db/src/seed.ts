@@ -563,6 +563,31 @@ async function main() {
   })
   if (apptErr) throw new Error(`Salon appointment seed failed: ${apptErr.message}`)
 
+  // Worker availability demo (2026-07-16): dana's weekly_schedule stays
+  // unrestricted ({} — the seed doesn't know what weekday it's running on,
+  // and an unset schedule means "no restriction" by design) but she has one
+  // real, absolute time-off block 3 days out so the e2e booking-enforcement
+  // test has something concrete to hit.
+  const { data: danaProfile } = await admin
+    .from('sal_worker_profiles')
+    .select('id')
+    .eq('location_id', loc!.id)
+    .eq('user_id', danaId)
+    .single()
+  await admin.from('sal_worker_time_off').delete().eq('worker_profile_id', danaProfile!.id)
+  const timeOffDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 3)
+  const timeOffStart = new Date(timeOffDay.getFullYear(), timeOffDay.getMonth(), timeOffDay.getDate(), 9, 0, 0)
+  const timeOffEnd = new Date(timeOffDay.getFullYear(), timeOffDay.getMonth(), timeOffDay.getDate(), 17, 0, 0)
+  const { error: timeOffErr } = await admin.from('sal_worker_time_off').insert({
+    org_id: salon,
+    location_id: loc!.id,
+    worker_profile_id: danaProfile!.id,
+    starts_at: timeOffStart.toISOString(),
+    ends_at: timeOffEnd.toISOString(),
+    reason: 'Vacation',
+  })
+  if (timeOffErr) throw new Error(`Salon worker time-off seed failed: ${timeOffErr.message}`)
+
   // --- Demo speed dating for module 6 --------------------------------------
   // alice organizes; charlie/dana/eve/frank are participants. One event with
   // registration open so the e2e flow (register → rounds → interest → reveal)

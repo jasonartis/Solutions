@@ -98,3 +98,69 @@ needs a JSON shape designed for `weekly_schedule` mirroring
 and real availability-checking logic wired into booking) for a quieter
 moment than an active testing round, since a mistake here could wrongly
 block or wrongly allow a real booking.
+
+## Worker availability windows shipped (2026-07-16)
+
+Closed the gap flagged above — the module's last purely-buildable remaining
+item (no infra/decision blocking it, unlike speed-dating's video or visual
+messaging's group-model question). No migration: `sal_worker_profiles.
+weekly_schedule` and `sal_worker_time_off` already had schema, RLS, and a
+security review from 2026-07-09 — this was app-logic work the schema's own
+INTEGRATION NOTE explicitly flagged as deferred ("slot-availability
+enforcement is module logic to add at integration; RLS only proves ownership
++ org scoping").
+
+**Design (`modules/nail-salon/ui/availability.ts`, pure functions, no
+supabase-js dependency):** `weekly_schedule` mirrors `sal_locations.
+store_hours`'s shape (`{"mon":[["09:00","17:00"]], ...}`). An EMPTY/unset
+schedule means unrestricted — a worker with nothing configured can be booked
+any time, so shipping this couldn't silently make every existing worker
+(including the demo seed) unbookable. Once a manager sets ANY day, days left
+blank mean "not working that day" — the natural reading of a weekly
+schedule, and a deliberate choice over "unset days stay wildcard-open" (which
+would make a partial schedule meaningless). Time-off is a simple absolute
+overlap check against `starts_at`/`ends_at`. The enforcement is checked ONLY
+when a customer/operator names a SPECIFIC worker — "Any worker" bookings
+have no assignment engine yet (still explicitly deferred), so there's nobody
+whose schedule to check.
+
+**UI:** Manage console gains a **Worker schedules** section — one text
+input per weekday (`HH:MM-HH:MM[, HH:MM-HH:MM]`, comma-separated ranges for
+breaks, mirroring the exam problem-structure text-parsing convention from
+module 2 rather than a heavier structured-input component), plus an add/
+remove time-off list per worker. All writes stay manager-tier per the
+schema's own note ("worker self-service time-off requests are NOT granted
+here"). Enforcement wired into all three booking entry points (operator
+book, walk-in, customer self-book) — booking a specific worker outside their
+schedule or during time off now throws a clear error instead of silently
+overbooking them.
+
+**Still remaining:** the assignment-algorithm + reminder worker jobs (the
+latter needs a notification/email primitive that doesn't exist anywhere on
+the platform yet — deliberately NOT built speculatively for one module,
+per the "extract when a second module needs it" rule) and the
+`sal-receipts` storage bucket.
+
+**KNOWN GAP found by the e2e test, not silently shipped (2026-07-16, needs
+Opus per docs/03 #12):** availability enforcement only actually works for
+operate-tier bookers (manager/cashier via the day-board "Book appointment" /
+walk-in forms) — the CUSTOMER self-booking path (`customerBookAppointment`)
+calls the same `assertWorkerAvailable` helper but it silently no-ops for a
+customer caller, because `sal_worker_time_off_select`'s RLS policy
+(`20260709030000`) only grants read access to operate-tier callers or the
+worker themselves. A customer's own session queries `sal_worker_time_off`
+under RLS and gets an empty result (not an error), so the availability check
+always passes trivially. First caught by the e2e test itself: booking
+Dana-during-her-time-off as charlie (customer) succeeded when it should
+have been rejected; switching the test to book as alice (manager, operate
+tier) via the same day-board form reproduced the correct rejection,
+confirming the enforcement logic itself is right — only the customer read
+path is blocked.
+
+**Fix needs a migration**, so it's deliberately NOT pushed through on
+Sonnet: add a `SECURITY DEFINER` availability-check function (matching the
+`mm_shared_answers` / `cls_material_storage_visible` pattern — return just a
+boolean, not the raw rows) rather than widening `sal_worker_time_off`'s
+SELECT policy to all org members, since `reason` can hold something like
+"medical leave" that shouldn't become customer-readable. Queued for an Opus
+session.

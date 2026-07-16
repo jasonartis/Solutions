@@ -98,6 +98,19 @@ Everything the cashier does, plus the back office at **Nail Salon → Manage**.
 5. **Shopping list**: add items to buy; when purchased, type the ACTUAL
    paid amount next to the item and click **Purchased** — a linked expense
    is created automatically. **Cancel** drops an item.
+
+## Worker schedules
+
+6. **Worker schedules** (bottom of Manage): set each worker's weekly hours,
+   one text box per day in \`HH:MM-HH:MM\` form (e.g. \`09:00-13:00,
+   14:00-18:00\` for a lunch break; leave a day blank if they don't work
+   it). Until you set a schedule for a worker, they can be booked any
+   time — setting any day is what turns the restriction on.
+7. **Time off**: add a start/end and optional reason; **Remove** clears it.
+   A customer or the front desk can no longer book that worker during a
+   time-off window — booking with **Any worker** still works (there's no
+   auto-assignment yet, so an unassigned booking has nobody's schedule to
+   check).
 `,
     },
   ],

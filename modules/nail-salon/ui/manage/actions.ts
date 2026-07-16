@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { DERIVED_SCOPE_PLACEHOLDER as PLACEHOLDER } from '@platform/core'
 import { createClient } from '@/lib/supabase/server'
+import { ORDERED_DAYS, parseDayRangesInput, type WeeklySchedule } from '../availability'
 
 // Manager back-office actions: service catalog, promotions, bookkeeping.
 // RLS enforces tiers — catalog/promotions are sal_can_manage (blanket manage
@@ -150,5 +151,55 @@ export async function cancelShoppingItem(orgSlug: string, itemId: string) {
     .update({ status: 'cancelled' })
     .eq('id', itemId)
   fail(error, 'Cancel item failed')
+  revalidatePath(`/o/${orgSlug}/m/nail-salon/manage`)
+}
+
+// Worker availability (spec's still-deferred item, closed 2026-07-16): a
+// weekly template + time-off exceptions, both write-gated manager-tier per
+// the schema's own INTEGRATION NOTE ("worker self-service time-off requests
+// are NOT granted here — write stays manager-tier per spec"). One text field
+// per day, parsed into the jsonb shape store_hours/weekly_schedule already use.
+export async function setWorkerSchedule(orgSlug: string, workerProfileId: string, formData: FormData) {
+  const schedule: WeeklySchedule = {}
+  for (const day of ORDERED_DAYS) {
+    const ranges = parseDayRangesInput(String(formData.get(day) ?? ''))
+    if (ranges.length > 0) schedule[day] = ranges
+  }
+
+  const supabase = await createClient()
+  const { error } = await supabase
+    .from('sal_worker_profiles')
+    .update({ weekly_schedule: schedule })
+    .eq('id', workerProfileId)
+  fail(error, 'Save schedule failed')
+  revalidatePath(`/o/${orgSlug}/m/nail-salon/manage`)
+}
+
+export async function addWorkerTimeOff(orgSlug: string, workerProfileId: string, formData: FormData) {
+  const startsRaw = String(formData.get('startsAt') ?? '').trim()
+  const endsRaw = String(formData.get('endsAt') ?? '').trim()
+  const reason = String(formData.get('reason') ?? '').trim() || null
+  if (!startsRaw || !endsRaw) throw new Error('Start and end are required')
+  const startsAt = new Date(startsRaw)
+  const endsAt = new Date(endsRaw)
+  if (endsAt <= startsAt) throw new Error('End must be after start')
+
+  const supabase = await createClient()
+  const { error } = await supabase.from('sal_worker_time_off').insert({
+    org_id: PLACEHOLDER, // derived by trigger
+    location_id: PLACEHOLDER, // derived by trigger
+    worker_profile_id: workerProfileId,
+    starts_at: startsAt.toISOString(),
+    ends_at: endsAt.toISOString(),
+    reason,
+  })
+  fail(error, 'Add time off failed')
+  revalidatePath(`/o/${orgSlug}/m/nail-salon/manage`)
+}
+
+export async function removeWorkerTimeOff(orgSlug: string, timeOffId: string) {
+  const supabase = await createClient()
+  const { error } = await supabase.from('sal_worker_time_off').delete().eq('id', timeOffId)
+  fail(error, 'Remove time off failed')
   revalidatePath(`/o/${orgSlug}/m/nail-salon/manage`)
 }

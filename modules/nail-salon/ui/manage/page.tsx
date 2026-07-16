@@ -1,16 +1,24 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { requireOrgModule } from '@/lib/module-gate'
+import { ORDERED_DAYS, formatDayRangesForInput, type WeeklySchedule } from '../availability'
 import {
   addExpense,
   addShoppingItem,
+  addWorkerTimeOff,
   cancelShoppingItem,
   createPromotion,
   createService,
   purchaseShoppingItem,
+  removeWorkerTimeOff,
   setPromotionActive,
   setServiceActive,
+  setWorkerSchedule,
 } from './actions'
+
+const DAY_LABEL: Record<string, string> = {
+  mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', fri: 'Fri', sat: 'Sat', sun: 'Sun',
+}
 
 const inputCls = 'rounded border border-gray-300 px-2 py-1 text-sm'
 const btnCls = 'rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700'
@@ -53,8 +61,23 @@ export default async function SalonManagePage(props: { params: Promise<{ orgSlug
     supabase.from('sal_expenses').select('category, amount').eq('location_id', location.id),
     supabase.from('sal_bill_items').select('service_id, line_total, quantity').eq('location_id', location.id),
     supabase.from('sal_shopping_list').select('id, item, quantity, estimated_cost, status').eq('location_id', location.id).order('created_at', { ascending: false }).limit(30),
-    supabase.from('sal_worker_profiles').select('user_id, display_name').eq('location_id', location.id),
+    supabase.from('sal_worker_profiles').select('id, user_id, display_name, weekly_schedule').eq('location_id', location.id),
   ])
+  const workerIds = (workers ?? []).map((w) => w.id)
+  const { data: timeOff } = workerIds.length
+    ? await supabase
+        .from('sal_worker_time_off')
+        .select('id, worker_profile_id, starts_at, ends_at, reason')
+        .in('worker_profile_id', workerIds)
+        .order('starts_at')
+    : { data: [] as { id: string; worker_profile_id: string; starts_at: string; ends_at: string; reason: string | null }[] }
+  const timeOffByWorker = new Map<string, typeof timeOff>()
+  for (const t of timeOff ?? []) {
+    const list = timeOffByWorker.get(t.worker_profile_id) ?? []
+    list.push(t)
+    timeOffByWorker.set(t.worker_profile_id, list)
+  }
+  const dateTimeFmt = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
 
   const revenue = (earnings ?? []).reduce((sum, e) => sum + Number(e.amount), 0)
   const spent = (expensesAll ?? []).reduce((sum, e) => sum + Number(e.amount), 0)
@@ -257,6 +280,70 @@ export default async function SalonManagePage(props: { params: Promise<{ orgSlug
           <input name="estimated" type="number" step="0.01" min="0" placeholder="Est. cost" className={`${inputCls} w-24`} />
           <button className={btnCls}>Add item</button>
         </form>
+      </section>
+
+      <section className="mt-8 rounded-lg border border-gray-200 bg-white p-5">
+        <h2 className="mb-1 text-lg font-medium">Worker schedules</h2>
+        <p className="mb-4 text-sm text-gray-500">
+          Set each worker&apos;s weekly hours and time off. A worker with no schedule set can be
+          booked any time (unrestricted) until you set one — leaving a day blank once you&apos;ve
+          set any day means they don&apos;t work that day.
+        </p>
+        <div className="space-y-6">
+          {(workers ?? []).map((w) => {
+            const schedule = (w.weekly_schedule ?? {}) as WeeklySchedule
+            const workerTimeOff = timeOffByWorker.get(w.id) ?? []
+            return (
+              <div key={w.id} className="rounded border border-gray-100 p-4">
+                <h3 className="mb-2 text-sm font-medium">{w.display_name}</h3>
+                <form
+                  action={setWorkerSchedule.bind(null, orgSlug, w.id)}
+                  className="mb-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4"
+                >
+                  {ORDERED_DAYS.map((day) => (
+                    <label key={day} className="text-xs text-gray-500">
+                      {DAY_LABEL[day]}
+                      <input
+                        name={day}
+                        defaultValue={formatDayRangesForInput(schedule[day])}
+                        placeholder="off"
+                        className={`${inputCls} mt-0.5 block w-full`}
+                      />
+                    </label>
+                  ))}
+                  <div className="flex items-end sm:col-span-2 lg:col-span-4">
+                    <button className={btnCls}>Save schedule</button>
+                  </div>
+                </form>
+                <p className="mb-1 text-xs uppercase tracking-wide text-gray-500">Time off</p>
+                <ul className="mb-2 space-y-1 text-sm">
+                  {workerTimeOff.map((t) => (
+                    <li key={t.id} className="flex items-center justify-between">
+                      <span>
+                        {dateTimeFmt.format(new Date(t.starts_at))} – {dateTimeFmt.format(new Date(t.ends_at))}
+                        {t.reason && <span className="text-gray-400"> ({t.reason})</span>}
+                      </span>
+                      <form action={removeWorkerTimeOff.bind(null, orgSlug, t.id)}>
+                        <button className={linkBtn}>Remove</button>
+                      </form>
+                    </li>
+                  ))}
+                  {workerTimeOff.length === 0 && <li className="text-gray-400">None scheduled.</li>}
+                </ul>
+                <form
+                  action={addWorkerTimeOff.bind(null, orgSlug, w.id)}
+                  className="flex flex-wrap items-center gap-2"
+                >
+                  <input name="startsAt" type="datetime-local" required className={inputCls} />
+                  <input name="endsAt" type="datetime-local" required className={inputCls} />
+                  <input name="reason" placeholder="Reason (optional)" className={`${inputCls} min-w-40`} />
+                  <button className={linkBtn}>Add time off</button>
+                </form>
+              </div>
+            )
+          })}
+          {(workers ?? []).length === 0 && <p className="text-gray-400">No workers on file yet.</p>}
+        </div>
       </section>
     </div>
   )

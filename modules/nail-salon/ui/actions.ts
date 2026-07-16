@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { DERIVED_SCOPE_PLACEHOLDER as PLACEHOLDER } from '@platform/core'
 import { createClient } from '@/lib/supabase/server'
+import { availabilityError } from './availability'
 
 // Nail-salon operational actions. RLS (sal_can_operate / sal_is_worker) plus
 // the sal_pin_appointment lifecycle trigger are the enforcement layer; these
@@ -17,6 +18,31 @@ async function resolveOrgId(supabase: Awaited<ReturnType<typeof createClient>>, 
   const { data: org } = await supabase.from('orgs').select('id').eq('slug', orgSlug).single()
   if (!org) throw new Error('Org not found')
   return org.id as string
+}
+
+// Only checked when a SPECIFIC worker is requested — "Any worker" bookings
+// have no assignment engine yet (spec's still-deferred item) so there's
+// nobody's schedule to check against.
+async function assertWorkerAvailable(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  workerId: string,
+  locationId: string,
+  start: Date,
+  end: Date,
+) {
+  const { data: profile } = await supabase
+    .from('sal_worker_profiles')
+    .select('id, weekly_schedule')
+    .eq('user_id', workerId)
+    .eq('location_id', locationId)
+    .maybeSingle()
+  if (!profile) return // the scope trigger rejects an unknown worker anyway
+  const { data: timeOff } = await supabase
+    .from('sal_worker_time_off')
+    .select('starts_at, ends_at')
+    .eq('worker_profile_id', profile.id)
+  const error = availabilityError(profile.weekly_schedule, timeOff, start, end)
+  if (error) throw new Error(error)
 }
 
 // Operator books an appointment. scheduled_end is derived from the service's
@@ -36,6 +62,7 @@ export async function bookAppointment(orgSlug: string, locationId: string, formD
     .single()
   const start = new Date(startRaw)
   const end = new Date(start.getTime() + (svc?.approx_duration_minutes ?? 30) * 60000)
+  if (workerId) await assertWorkerAvailable(supabase, workerId, locationId, start, end)
 
   const {
     data: { user },
@@ -77,6 +104,8 @@ export async function walkInAdd(orgSlug: string, locationId: string, formData: F
     .single()
   const start = new Date()
   const end = new Date(start.getTime() + (svc?.approx_duration_minutes ?? 30) * 60000)
+  if (workerId) await assertWorkerAvailable(supabase, workerId, locationId, start, end)
+
   const {
     data: { user },
   } = await supabase.auth.getUser()
@@ -199,6 +228,7 @@ export async function customerBookAppointment(orgSlug: string, formData: FormDat
     .single()
   const start = new Date(startRaw)
   const end = new Date(start.getTime() + (svc?.approx_duration_minutes ?? 30) * 60000)
+  if (workerId) await assertWorkerAvailable(supabase, workerId, me.location_id, start, end)
 
   const { error } = await supabase.from('sal_appointments').insert({
     org_id: PLACEHOLDER, // derived by trigger

@@ -584,6 +584,63 @@ test('nail-salon module: customer self-books and can cancel', async ({ page }) =
   await expect(page.locator('li').filter({ hasText: 'Pedicure' }).first()).toContainText('cancelled')
 })
 
+test('nail-salon module: operator booking a specific worker respects their time off', async ({ page }) => {
+  // Mirrors the seed's dana time-off block: 3 days out, 09:00-17:00.
+  // KNOWN GAP (flagged, not silently shipped): this enforcement only works
+  // for operate-tier bookers (manager/cashier) — sal_worker_time_off's SELECT
+  // policy (20260709030000) only grants operators or the worker themselves,
+  // so a customer's own session can't read time-off rows to check against
+  // them (RLS returns empty, not an error) and customerBookAppointment's
+  // call to the same helper silently no-ops. Fixing that needs a migration
+  // (a SECURITY DEFINER availability-check function, matching the
+  // mm_shared_answers/cls_material_storage_visible pattern, not a blanket
+  // read-policy widening — sal_worker_time_off.reason can hold something
+  // like "medical leave") — flagged for an Opus session per docs/03 #12,
+  // not pushed through on Sonnet. See docs/modules/module-5-nail-salon.md.
+  const timeOffDay = new Date()
+  timeOffDay.setDate(timeOffDay.getDate() + 3)
+  const y = timeOffDay.getFullYear()
+  const m = String(timeOffDay.getMonth() + 1).padStart(2, '0')
+  const d = String(timeOffDay.getDate()).padStart(2, '0')
+  const dateStr = `${y}-${m}-${d}`
+
+  await signIn(page, 'alice@demo.local')
+  await page.goto('/o/demo-salon/m/nail-salon')
+  // Scope to the "Book appointment" form specifically — the day board also
+  // has a Walk-in quick-add form with its own serviceId/workerId selects.
+  const bookForm = page.locator('form').filter({ has: page.locator('select[name="customerId"]') })
+
+  // Booking Dana at 10:00 that day falls inside her time off -> rejected.
+  await bookForm.locator('select[name="customerId"]').selectOption({ label: 'Charlie C' })
+  await bookForm.locator('select[name="serviceId"]').selectOption({ label: 'Manicure ($40)' })
+  await bookForm.locator('select[name="workerId"]').selectOption({ label: 'Dana D' })
+  await bookForm.locator('input[name="start"]').fill(`${dateStr}T10:00`)
+  await bookForm.getByRole('button', { name: 'Book', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Something went wrong' })).toBeVisible()
+
+  // Same day at 20:00 is outside the 09:00-17:00 time-off window -> succeeds.
+  // (This booking is 3 days out, so it won't appear on TODAY's board — check
+  // via the customer's own appointment list instead, which isn't date-scoped.)
+  await page.goto('/o/demo-salon/m/nail-salon')
+  const bookForm2 = page.locator('form').filter({ has: page.locator('select[name="customerId"]') })
+  await bookForm2.locator('select[name="customerId"]').selectOption({ label: 'Charlie C' })
+  await bookForm2.locator('select[name="serviceId"]').selectOption({ label: 'Manicure ($40)' })
+  await bookForm2.locator('select[name="workerId"]').selectOption({ label: 'Dana D' })
+  await bookForm2.locator('input[name="start"]').fill(`${dateStr}T20:00`)
+  // Wait on the POST response itself (per CLAUDE.md's documented gotcha) —
+  // a bare click + immediate navigation elsewhere can race the in-flight
+  // write and check charlie's list before this booking actually lands.
+  const booked = page.waitForResponse((r) => r.request().method() === 'POST')
+  await bookForm2.getByRole('button', { name: 'Book', exact: true }).click()
+  await booked
+  await expect(page.getByRole('heading', { name: 'Something went wrong' })).not.toBeVisible()
+
+  await signIn(page, 'charlie@demo.local')
+  await page.goto('/o/demo-salon/m/nail-salon')
+  // The seed already books charlie one Manicure (today); this adds a second.
+  await expect(page.locator('li').filter({ hasText: 'Manicure' })).toHaveCount(2)
+})
+
 test('nail-salon module: worker sees only their assigned chairs', async ({ page }) => {
   // dana is the salon worker; the seeded appointment is assigned to her.
   await signIn(page, 'dana@demo.local')
