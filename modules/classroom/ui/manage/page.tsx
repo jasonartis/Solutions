@@ -7,7 +7,9 @@ import {
   createExam,
   createHomework,
   createSurvey,
+  enrollClassMember,
   postAnnouncement,
+  removeClassMember,
   setSubmissionsHiddenFrom,
   setSurveyResultsVisible,
 } from './actions'
@@ -230,7 +232,7 @@ export default async function ManagePage(props: { params: Promise<{ orgSlug: str
               <h3 className="mb-2 text-sm font-medium uppercase tracking-wide text-gray-500">
                 Roster ({roster.length})
               </h3>
-              <ul className="space-y-1 text-sm text-gray-700">
+              <ul className="mb-3 space-y-1 text-sm text-gray-700">
                 {roster.map((m) => {
                   const p = profileById.get(m.user_id)
                   const preferred = [m.preferred_first_name, m.preferred_last_name]
@@ -240,10 +242,39 @@ export default async function ManagePage(props: { params: Promise<{ orgSlug: str
                     <li key={m.user_id} className="flex items-center gap-3">
                       <span>{preferred || p?.display_name || p?.email || m.user_id}</span>
                       <span className="text-xs uppercase text-gray-400">{m.role}</span>
+                      {canManage && (
+                        <form action={removeClassMember.bind(null, orgSlug, klass.id, m.user_id)}>
+                          <button className="text-xs text-red-600 hover:underline">Remove</button>
+                        </form>
+                      )}
                     </li>
                   )
                 })}
+                {roster.length === 0 && <li className="text-gray-400">No one enrolled yet.</li>}
               </ul>
+              {canManage && (
+                <form
+                  action={enrollClassMember.bind(null, orgSlug, klass.id)}
+                  className="flex flex-wrap items-center gap-2 text-sm"
+                >
+                  <input
+                    name="email"
+                    type="email"
+                    required
+                    placeholder="email@example.com"
+                    className={`${inputCls} min-w-48`}
+                  />
+                  <select name="role" defaultValue="student" className={inputCls}>
+                    <option value="student">Student</option>
+                    <option value="ga">GA</option>
+                    <option value="professor">Professor</option>
+                  </select>
+                  <button className={btnCls}>Enroll in this class</button>
+                  <span className="text-xs text-gray-400">
+                    (must already be a member of this organization)
+                  </span>
+                </form>
+              )}
             </section>
           )
         })}

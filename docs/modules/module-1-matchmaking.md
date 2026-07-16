@@ -138,36 +138,25 @@ Charlie↔Dana mutual, Eve→Charlie one-sided. e2e drives the full live chain
 (express → nothing revealed → reciprocate → both revealed → withdraw →
 reveal gone).
 
-**OPEN QUESTION for the founder (recorded 2026-07-12, design sketched
-2026-07-16, still DEFERRED — no decision yet, don't build):** on a mutual
-match, the current design reveals each side's email directly to the other.
-The alternative is routing introductions exclusively through a matchmaker.
-Sketch of what that would look like if chosen:
+**DECIDED (founder, 2026-07-16):** on a mutual match, reveal name + email
+directly to both sides, plus whatever else each side flagged to share —
+**no matchmaker routing.** This closes the open question recorded
+2026-07-12/sketched 2026-07-16 (the matchmaker-only alternative below is
+kept only as a record of what was considered, not something to build):
 
-- **Single's view** (`mm_mutual_matches()`): drop the `email` column (keep
-  `display_name`) and show "You have a mutual match! Your matchmaker will
-  reach out" instead of a contact link. No contact info would cross directly
-  between the two singles at all.
-- **Matchmaker/admin's view**: no change needed — `mm_mutual_pairs(org)`
-  already exists and already shows facilitators the pair; that view becomes
-  the ONLY place contact info surfaces, and the matchmaker reaches out to
-  both sides manually (outside the platform), same as any non-mutual
-  introduction today.
-- **Real gap this would create**: a mutual pair with no assigned matchmaker
-  becomes a dead end — `mm_mutual_pairs` only returns pairs where a
-  matchmaker is assigned (or the caller is admin), so nobody would ever see
-  an unassigned pair. Admins are a fallback (they see all pairs), but there's
-  no notification today telling a matchmaker/admin "a new mutual pair just
-  formed" — they'd have to keep checking Manage. Should pair with some kind
-  of "new" flag/notification if built, so introductions don't silently stall.
-- **Suggested shape**: an org-level toggle
-  (`org_modules.settings.introductionMode: 'direct' | 'matchmaker'`) rather
-  than a global behavior change — this is a per-community judgment call, and
-  module settings are already org self-serve (see the settings section
-  above), so it fits the existing pattern.
-
-Both halves exist today (direct reveal + matchmaker facilitation view) —
-this stays a documentation-only sketch until the founder actually decides.
+- The matchmaker-only alternative would have dropped `email` from
+  `mm_mutual_matches()` and routed every introduction through
+  `mm_mutual_pairs()` instead — rejected in favor of the current direct-reveal
+  design, which is already live and needs no change.
+- **Live behavior already matches this decision** — no rebuild needed.
+- **One loose end from the decision's exact wording** ("whatever other info
+  is selected to be shared... which the other also selected to share"): the
+  share-flagged answers (`mm_shared_answers()`) already surface on a
+  single's regular **matches list** (visible to anyone who scores as a
+  match, independent of mutual interest) — they are NOT currently
+  duplicated into the "It's a match!" panel itself, which today shows only
+  name + email. Flagged for the founder to confirm whether that's wanted
+  too, or whether having it on the matches list above is sufficient.
 
 **Module 1's only remaining gap is the platform-wide conversations
 primitive** (users→admin messaging, still deferred — no second module has

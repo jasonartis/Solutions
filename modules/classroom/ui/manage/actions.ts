@@ -30,6 +30,50 @@ export async function createCourse(orgSlug: string, formData: FormData) {
   revalidatePath(`/o/${orgSlug}/m/classroom/manage`)
 }
 
+// Founder feedback (2026-07-16): "as a student, [bob] says he is not
+// enrolled in any class. How does he enroll or get enrolled?" — there was
+// no UI anywhere to write cls_class_members (only ever read). RLS already
+// permits it (cls_class_members is in the generic staff-write loop, gated
+// on cls_can_manage — org-wide, not scoped to a specific course/class; see
+// the founder's separate question about whether professor should scope
+// per-course, still undecided). The target must already be an org member
+// (added via the org's Members page) — this looks them up via the
+// existing shares_org_with-gated profiles read, not a new definer
+// function. Explicit onConflict: cls_class_members' primary key is a
+// synthetic `id`, not (class_id, user_id) — a bare .upsert() would target
+// the wrong constraint and error on a re-enroll instead of updating the role.
+export async function enrollClassMember(orgSlug: string, classId: string, formData: FormData) {
+  const email = String(formData.get('email') ?? '').trim().toLowerCase()
+  const role = String(formData.get('role') ?? 'student')
+  if (!email) throw new Error('Email is required')
+  if (!['student', 'ga', 'professor'].includes(role)) throw new Error('Unknown role')
+
+  const supabase = await createClient()
+  const { data: profile } = await supabase.from('profiles').select('user_id').eq('email', email).maybeSingle()
+  if (!profile) {
+    throw new Error(`No user found with email ${email} in this organization — add them as an org member first`)
+  }
+
+  const { error } = await supabase.from('cls_class_members').upsert(
+    {
+      org_id: DERIVED_SCOPE_PLACEHOLDER, // derived by cls_class_members_scope trigger from class_id
+      class_id: classId,
+      user_id: profile.user_id,
+      role,
+    },
+    { onConflict: 'class_id,user_id' },
+  )
+  fail(error, 'Enroll failed')
+  revalidatePath(`/o/${orgSlug}/m/classroom/manage`)
+}
+
+export async function removeClassMember(orgSlug: string, classId: string, userId: string) {
+  const supabase = await createClient()
+  const { error } = await supabase.from('cls_class_members').delete().eq('class_id', classId).eq('user_id', userId)
+  fail(error, 'Remove from class failed')
+  revalidatePath(`/o/${orgSlug}/m/classroom/manage`)
+}
+
 export async function createClass(orgSlug: string, courseId: string, formData: FormData) {
   const name = String(formData.get('name') ?? '').trim()
   const term = String(formData.get('term') ?? '').trim()

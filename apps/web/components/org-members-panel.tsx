@@ -33,6 +33,18 @@ export default function OrgMembersPanel(props: {
 
   return (
     <div>
+      {/* Founder feedback (2026-07-16): "What is Admin vs Owner? Which one is
+          above the other?" — no explanation existed anywhere. Owner/Admin are
+          functionally IDENTICAL today (is_org_admin() treats them the same
+          everywhere) — Owner is just the conventional label for whoever
+          founded the org. Worth a plain-language note rather than silence. */}
+      <p className="mb-3 max-w-xl text-xs text-gray-500">
+        <span className="font-medium">Owner</span> and <span className="font-medium">Admin</span> can
+        both fully manage this organization (members, roles, settings) — Owner is just the
+        conventional label for whoever the org started with; neither outranks the other.{' '}
+        <span className="font-medium">Member</span> has no management access. An org can never be left
+        with zero Owner/Admin.
+      </p>
       <ul className="mb-4 space-y-2">
         {props.members.map((m) => (
           <li key={m.userId} className="rounded border border-gray-200 bg-white p-3">

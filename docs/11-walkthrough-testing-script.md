@@ -64,9 +64,12 @@ in a repo terminal — each ⚙ chapter repeats this reminder in place.
    should get a 404 — bob cannot reach an org he isn't in, even by URL.
 3. Sign out (top right). The superadmin view: **locally** sign in as
    **owner**; **on production** use YOUR real account (the demo owner is
-   deliberately not a superadmin there). You see every org plus the
-   **Owner Console** link (create orgs, toggle modules). Look, don't
-   change anything.
+   deliberately not a superadmin there). Your **Dashboard** still only shows
+   orgs you're personally a *member* of (that's by design, not a superadmin
+   perk) — the **Owner Console** link is what shows every org platform-wide
+   (create orgs, toggle modules, all members). If your Dashboard shows just
+   one org, that's expected; click into **Owner Console** to see everything.
+   Look, don't change anything.
 4. Sign in as **alice**. This is the view you'll use most: each org card has
    its module buttons plus **Help** and **Export data**. Click **Help** on
    Demo Org A and skim the index — as staff, alice sees every guide.

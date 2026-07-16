@@ -167,6 +167,55 @@ test('classroom module: professor sees the seeded class, student view is scoped'
   await expect(page.getByText('Advanced Statistics — Spring')).toBeVisible()
 })
 
+test('classroom module: professor enrolls a member into a class roster', async ({ page }) => {
+  // Founder feedback (2026-07-16): granting someone the classroom "student"
+  // module role didn't put them on any class's actual roster — there was no
+  // enrollment UI. bob must first be an org member of demo-a (org
+  // self-management, already covered elsewhere) before he can be enrolled.
+  await signIn(page, 'alice@demo.local')
+  await page.goto('/o/demo-a/members')
+  await page.getByPlaceholder('email@example.com').fill('bob@demo.local')
+  const added = page.waitForResponse((r) => r.request().method() === 'POST')
+  await page.getByRole('button', { name: 'Add', exact: true }).click()
+  await added
+
+  await page.goto('/o/demo-a/m/classroom/manage')
+  const rosterSection = page.locator('section').filter({ hasText: 'Statistics 101 — Fall' })
+  await rosterSection.getByPlaceholder('email@example.com').fill('bob@demo.local')
+  await rosterSection.locator('select[name="role"]').selectOption('student')
+  const enrolled = page.waitForResponse((r) => r.request().method() === 'POST')
+  await rosterSection.getByRole('button', { name: 'Enroll in this class' }).click()
+  await enrolled
+  await expect(rosterSection.getByText('Roster (4)')).toBeVisible()
+  await expect(rosterSection.locator('li').filter({ hasText: /bob|Bob/i })).toContainText('student')
+
+  // bob now sees the class in his own Classroom view, correctly labeled.
+  await signIn(page, 'bob@demo.local')
+  await page.goto('/o/demo-a/m/classroom')
+  await expect(page.getByText('Statistics 101 — Fall')).toBeVisible()
+  const classCard = page.locator('section').filter({ hasText: 'Statistics 101 — Fall' })
+  await expect(classCard).toContainText('student')
+
+  // cleanup: remove bob from the class and the org so other tests' roster
+  // counts (e.g. "Roster (3)") aren't affected by this test running first.
+  await signIn(page, 'alice@demo.local')
+  await page.goto('/o/demo-a/m/classroom/manage')
+  const cleanupSection = page.locator('section').filter({ hasText: 'Statistics 101 — Fall' })
+  const removed = page.waitForResponse((r) => r.request().method() === 'POST')
+  await cleanupSection.locator('li').filter({ hasText: /bob|Bob/i }).getByRole('button', { name: 'Remove' }).click()
+  await removed
+  await page.goto('/o/demo-a/members')
+  const bobRow = page.locator('li').filter({ hasText: 'bob@demo.local' })
+  const bobRemoved = page.waitForResponse((r) => r.request().method() === 'POST')
+  await bobRow.getByRole('button', { name: 'Remove' }).click()
+  await bobRemoved
+  // Confirm the removal actually landed before the test ends — other tests
+  // (the RLS tenancy-isolation suite in particular) depend on bob having no
+  // membership in demo-a at all.
+  await page.reload()
+  await expect(page.locator('li').filter({ hasText: 'bob@demo.local' })).not.toBeVisible()
+})
+
 test('classroom module: student sees published materials and can submit homework files', async ({ page }) => {
   await signIn(page, 'charlie@demo.local')
   await page.getByRole('link', { name: 'Classroom' }).click()
