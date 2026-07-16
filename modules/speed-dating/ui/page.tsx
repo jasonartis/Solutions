@@ -64,13 +64,30 @@ export default async function SpeedDatingPage(props: { params: Promise<{ orgSlug
       {canOrganize && (
         <section className="mb-8 rounded-lg border border-gray-200 bg-white p-5">
           <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-gray-500">Create event</h2>
-          <form action={createEvent.bind(null, orgSlug)} className="flex flex-wrap items-center gap-2">
-            <input name="name" required placeholder="Event name" className={`${inputCls} min-w-56`} />
-            <input name="scheduledAt" type="datetime-local" className={inputCls} />
-            <label className="flex items-center gap-1 text-sm text-gray-600">
-              <input type="checkbox" name="resumeReview" />
-              Resume-review (participants see profile cards)
-            </label>
+          <form action={createEvent.bind(null, orgSlug)} className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <input name="name" required placeholder="Event name" className={`${inputCls} min-w-56`} />
+              <input name="scheduledAt" type="datetime-local" className={inputCls} />
+              <label className="flex items-center gap-1 text-sm text-gray-600">
+                <input type="checkbox" name="resumeReview" />
+                Resume-review (participants see profile cards)
+              </label>
+            </div>
+            <details className="rounded border border-gray-100 p-2">
+              <summary className="cursor-pointer text-sm text-gray-600">
+                Two sides (e.g. Men/Women) — optional, sets a capacity + waitlist per side
+              </summary>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <label className="flex items-center gap-1 text-sm text-gray-600">
+                  <input type="checkbox" name="sidesEnabled" />
+                  Enable two sides
+                </label>
+                <input name="sideALabel" placeholder="Side A label (e.g. Men)" className={`${inputCls} w-40`} />
+                <input name="sideACapacity" type="number" min="1" placeholder="Side A capacity (blank = unlimited)" className={`${inputCls} w-56`} />
+                <input name="sideBLabel" placeholder="Side B label (e.g. Women)" className={`${inputCls} w-40`} />
+                <input name="sideBCapacity" type="number" min="1" placeholder="Side B capacity (blank = unlimited)" className={`${inputCls} w-56`} />
+              </div>
+            </details>
             <button className={btnCls}>Create (draft)</button>
           </form>
         </section>

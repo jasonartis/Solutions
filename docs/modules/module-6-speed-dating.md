@@ -155,5 +155,71 @@ now" panel and its countdown text; the organizer's summary line assertion
 extended to check for the countdown too.
 
 **Still remaining:** Jitsi video (needs the VPS decision), resume-review
-profiles beyond the profile card already shipped, waitlist auto-promotion,
-contact-share population on reveal.
+profiles beyond the profile card already shipped, contact-share population
+on reveal.
+
+## Two-sided capacity + waitlist (2026-07-16, base built on Sonnet — capacity check needs Opus)
+
+Founder-directed follow-up after discovering, mid-scope, that "waitlist
+auto-promotion" depended on a feature that didn't exist yet: **pool sides
+were never actually used anywhere in the app** — `pool_side` was never set
+by any registration flow, so every real event ran as a single undifferentiated
+pool regardless of the schema's two-sided support. Rather than build waitlist
+promotion in a vacuum, this pass built the side-selection feature it actually
+depends on, with the founder's explicit answers to four design questions:
+
+1. **Side assignment**: participant self-selects at registration (not
+   organizer-assigned).
+2. **Opt-in per event**: single-pool stays the default (unchanged); an
+   organizer can enable "two sides" with custom labels + optional
+   per-side capacity at event creation (a `<details>` disclosure on the
+   create-event form, collapsed by default).
+3. **Labels**: fully custom text (not hard-coded Men/Women) — matches the
+   schema's existing support for other pool shapes (e.g. mentor/mentee).
+4. **Capacity lowered after registration**: already-registered people are
+   grandfathered in; a new lower cap only affects future registrations.
+
+**Concrete failure mode this replaces** (walked through with the founder
+before building): with a single overall cap and no side awareness, a real
+event could accept, say, 5 women and 0 men purely by whoever clicked
+register first — unusable for hetero pairing, since the rotation engine
+needs both sides present to form any pairing at all. Per-side capacity
+guarantees the accepted pool always matches the organizer's intended split
+regardless of registration order. (A genuinely uneven but *accepted* pool,
+e.g. 4 men/2 women both within cap, is a *different*, already-solved
+problem — the rotation engine already pads the smaller side with byes and
+rotates, unit-tested since 2026-07-09. Per-side capacity only prevents
+over-acceptance; it doesn't manufacture participants.)
+
+**Shipped** (`modules/speed-dating/ui/event-format.ts`, no migration — format
+is Zod-validated-at-write-site jsonb, docs/03 rule #7): event creation's
+optional two-sides config; a side selector on registration; per-side
+registered/waitlisted counts + labels in the staff roster; a
+`promoteNextWaitlisted` action.
+
+**Real bug caught by e2e before shipping as working, same shape as the
+nail-salon customer/time-off gap (2026-07-16)**: a plain participant cannot
+write another participant's row (`sd_participants_update_self` is
+`user_id = auth.uid()` only) — so promotion CANNOT be triggered from the
+withdrawing participant's own action; it's staff/organizer-triggered instead
+(mirroring the module's existing manual-round-advance-stands-in-for-worker
+pattern). **A second, deeper bug of the identical shape was then found by
+e2e for the capacity check itself**: `registerForEvent`'s per-side capacity
+count runs under the REGISTERING PARTICIPANT's own session, and
+`sd_participants_select` only lets a participant see their own row (or
+staff, or someone they've actually been paired with — neither applies to a
+fresh registrant). The count therefore always sees zero other registrants,
+and capacity enforcement silently never triggers for the only caller that
+uses it — confirmed live when a second registrant on a size-1-capacity side
+was wrongly accepted as `'registered'` instead of `'waitlisted'`.
+
+**Fix needs a migration** (a `SECURITY DEFINER` function returning just a
+count/boolean, matching the `sal_worker_has_time_off` / `mm_shared_answers`
+pattern — NOT a widened read policy), so it's deliberately not pushed
+through on Sonnet, queued for an Opus session per docs/03 #12. The intended
+end-to-end behavior is captured as a `test.fixme(...)` in the e2e suite
+(un-skip in the same commit as the migration); a separate, real,
+currently-passing test covers what genuinely works today (side selection at
+registration, roster label/status display, no stray promote button when
+nothing's waitlisted). The promotion mechanism itself (`promoteNextWaitlisted`)
+is correct and staff-safe already — only the capacity *count* is broken.

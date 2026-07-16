@@ -59,9 +59,20 @@ export const speedDatingHelp: ModuleHelp = {
 
 1. Open **Speed Dating**, fill **Create event** (name + date/time), check
    **Resume-review** if you want participants to see each other's profile
-   cards instead of going in blind, then click **Create (draft)**.
+   cards instead of going in blind. **Two sides** (expand it) is optional —
+   turn it on and give each side a label (e.g. "Men"/"Women") plus an
+   optional capacity if you want participants split into two groups with
+   their own waitlist; leave it off for one open pool (the default). Click
+   **Create (draft)**.
 2. Open the event and click **Open registration** — participants can now
-   register. The roster shows who's in.
+   register (choosing a side first, if you set up two sides). The roster
+   shows who's in, and — for a two-sided event — each side's count against
+   its capacity and anyone waitlisted.
+2a. **Known limitation**: per-side capacity is currently soft — registering
+   past a side's capacity doesn't yet actually land someone on the waitlist
+   (a real bug the team caught before calling it done; fix in progress).
+   The roster, labels, and **Promote next waitlisted** button all work
+   correctly once a waitlisted row exists.
 
 ## Run the rounds
 
@@ -78,6 +89,9 @@ export const speedDatingHelp: ModuleHelp = {
 6. **Roster & reports** (below the console) shows who's registered and every
    safety report filed for this event — **Mark reviewed / actioned /
    dismiss** to triage. The reported person is never told they were reported.
+   For a two-sided event, **Promote next waitlisted** moves the
+   longest-waiting person on that side into a seat that's opened up
+   (organizer-only — a host can remove a participant but can't promote one).
 
 ## Finish and reveal
 

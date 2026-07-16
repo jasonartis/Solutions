@@ -5,6 +5,7 @@ import {
   blockUser,
   fileReport,
   markInterest,
+  promoteNextWaitlisted,
   registerForEvent,
   revealMatches,
   reviewReport,
@@ -14,6 +15,7 @@ import {
   setEventState,
   withdrawFromEvent,
 } from '../../actions'
+import { getEventSides, type SideKey } from '../../event-format'
 import LiveRoundRefresh from './live-round-refresh'
 
 function formatCountdown(ms: number): string {
@@ -38,10 +40,11 @@ export default async function EventPage(props: {
 
   const { data: event } = await supabase
     .from('sd_events')
-    .select('id, name, state, scheduled_at, resume_review_enabled, round_duration_seconds, break_duration_seconds, lobby_opens_at')
+    .select('id, name, state, scheduled_at, resume_review_enabled, round_duration_seconds, break_duration_seconds, lobby_opens_at, format')
     .eq('id', eventId)
     .maybeSingle()
   if (!event) notFound()
+  const sides = getEventSides(event.format)
 
   const [{ data: canOrganize }, { data: canStaffEvent }, { data: me }] = await Promise.all([
     supabase.rpc('sd_can_organize', { check_org_id: org.id }),
@@ -64,7 +67,7 @@ export default async function EventPage(props: {
     { data: reports },
     { data: myNotes },
   ] = await Promise.all([
-    supabase.from('sd_participants').select('id, user_id, status, seat_type, checked_in, profile_card').eq('event_id', eventId),
+    supabase.from('sd_participants').select('id, user_id, status, seat_type, checked_in, profile_card, pool_side').eq('event_id', eventId),
     supabase.from('sd_pairings').select('id, round_id, participant_a_id, participant_b_id').eq('event_id', eventId),
     supabase.from('sd_interest').select('rater_participant_id, target_participant_id, verdict').eq('event_id', eventId),
     supabase.from('sd_matches').select('participant_a_id, participant_b_id, revealed').eq('event_id', eventId),
@@ -208,10 +211,41 @@ export default async function EventPage(props: {
                 <span className="text-xs uppercase text-gray-400">
                   {p.status}
                   {p.seat_type !== 'participant' ? ` · ${p.seat_type}` : ''}
+                  {sides && p.pool_side ? ` · ${sides[p.pool_side as SideKey]?.label ?? p.pool_side}` : ''}
                 </span>
               </li>
             ))}
           </ul>
+
+          {sides && (
+            <>
+              <h3 className="mb-1 text-xs uppercase tracking-wide text-gray-400">Waitlist by side</h3>
+              <ul className="mb-4 space-y-1 text-sm">
+                {(['a', 'b'] as const).map((key) => {
+                  const side = sides[key]
+                  const registeredCount = (participants ?? []).filter((p) => p.pool_side === key && p.status === 'registered').length
+                  const waitlistedCount = (participants ?? []).filter((p) => p.pool_side === key && p.status === 'waitlisted').length
+                  return (
+                    <li key={key} className="flex items-center justify-between">
+                      <span>
+                        {side.label}: {registeredCount}
+                        {side.capacity !== null ? ` / ${side.capacity}` : ''} registered
+                        {waitlistedCount > 0 ? `, ${waitlistedCount} waitlisted` : ''}
+                      </span>
+                      {/* Promotion needs organizer tier specifically — the pin
+                          trigger only lets a plain host REMOVE someone else's
+                          seat, not change their status to 'registered'. */}
+                      {canOrganize && waitlistedCount > 0 && (
+                        <form action={promoteNextWaitlisted.bind(null, orgSlug, eventId, key)}>
+                          <button className={linkBtn}>Promote next waitlisted</button>
+                        </form>
+                      )}
+                    </li>
+                  )
+                })}
+              </ul>
+            </>
+          )}
 
           <h3 className="mb-1 text-xs uppercase tracking-wide text-gray-400">
             Safety reports ({openReportCount} open)
@@ -266,7 +300,17 @@ export default async function EventPage(props: {
       )}
 
       {!mySeat && !canOrganize && event.state === 'open' && (
-        <form action={registerForEvent.bind(null, orgSlug, eventId)}>
+        <form action={registerForEvent.bind(null, orgSlug, eventId)} className="flex flex-wrap items-center gap-2">
+          {sides && (
+            <label className="text-sm text-gray-600">
+              I&apos;m registering as:{' '}
+              <select name="side" required defaultValue="" className="rounded border border-gray-300 px-2 py-1 text-sm">
+                <option value="" disabled>Choose…</option>
+                <option value="a">{sides.a.label}</option>
+                <option value="b">{sides.b.label}</option>
+              </select>
+            </label>
+          )}
           <button className={btnCls}>Register for this event</button>
         </form>
       )}

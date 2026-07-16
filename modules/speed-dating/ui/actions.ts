@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { DERIVED_SCOPE_PLACEHOLDER } from '@platform/core'
 import { buildNextRound } from '@modules/speed-dating'
 import { createClient } from '@/lib/supabase/server'
+import { getEventSides, parseEventFormat, type SideKey } from './event-format'
 
 // Speed-dating actions. RLS + the sd_ guard triggers are the enforcement
 // layer (organize-write for event control, insert-self/pins for participants,
@@ -28,6 +29,7 @@ export async function createEvent(orgSlug: string, formData: FormData) {
   const scheduledAt = String(formData.get('scheduledAt') ?? '').trim()
   const resumeReview = formData.get('resumeReview') === 'on'
   if (!name) throw new Error('Event name is required')
+  const format = parseEventFormat(formData)
 
   const supabase = await createClient()
   const orgId = await resolveOrgId(supabase, orgSlug)
@@ -40,6 +42,7 @@ export async function createEvent(orgSlug: string, formData: FormData) {
     name,
     scheduled_at: scheduledAt ? new Date(scheduledAt).toISOString() : null,
     resume_review_enabled: resumeReview,
+    format,
     created_by: user?.id ?? null,
   })
   fail(error, 'Create event failed')
@@ -67,17 +70,65 @@ export async function setEventState(orgSlug: string, eventId: string, state: str
   revalidatePath(`/o/${orgSlug}/m/speed-dating/events/${eventId}`)
 }
 
-export async function registerForEvent(orgSlug: string, eventId: string) {
+// Two-sided events (opt-in, set at event creation — see event-format.ts):
+// the participant picks their side; capacity is *meant* to be checked per
+// side, landing a registration past capacity as 'waitlisted' instead of
+// 'registered' (both allowed by sd_participants_insert_self's WITH CHECK —
+// RLS trusts the app to compute the right status, per that policy's own
+// INTEGRATION NOTE). Single-pool events (no sides configured) are
+// unaffected: no side param, always 'registered', matching the previous
+// behavior exactly.
+//
+// KNOWN GAP, caught by e2e before shipping as working (2026-07-16, needs
+// Opus — do not fix on Sonnet): the count query below runs under the
+// REGISTERING PARTICIPANT's own session, and sd_participants_select only
+// lets a participant see their OWN row (or staff, or someone they've
+// actually been paired with in a round — neither applies to a fresh
+// registrant). So this count always sees 0 other registrants, and the
+// capacity check silently never triggers for the only caller that uses it.
+// Same shape as the nail-salon customer/time-off gap: fix is a SECURITY
+// DEFINER function returning just a count/boolean (not the rows), matching
+// the mm_shared_answers / sal_worker_has_time_off pattern — NOT a widened
+// read policy. Until that migration exists, every registration on a
+// capacity-limited side lands 'registered' regardless of capacity; the
+// waitlist/promotion machinery built on top (roster counts, "Promote next
+// waitlisted") is otherwise correct and works once real waitlisted rows
+// exist (e.g. seeded directly, or once the count is fixed).
+export async function registerForEvent(orgSlug: string, eventId: string, formData: FormData) {
   const supabase = await createClient()
   const {
     data: { user },
   } = await supabase.auth.getUser()
   if (!user) throw new Error('Not signed in')
 
+  const { data: event } = await supabase.from('sd_events').select('format').eq('id', eventId).single()
+  const sides = getEventSides(event?.format)
+
+  let poolSide: SideKey | null = null
+  let status: 'registered' | 'waitlisted' = 'registered'
+
+  if (sides) {
+    const chosen = String(formData.get('side') ?? '')
+    if (chosen !== 'a' && chosen !== 'b') throw new Error('Choose a side to register for')
+    poolSide = chosen
+    const capacity = sides[chosen].capacity
+    if (capacity !== null) {
+      const { count } = await supabase
+        .from('sd_participants')
+        .select('id', { count: 'exact', head: true })
+        .eq('event_id', eventId)
+        .eq('pool_side', chosen)
+        .eq('status', 'registered')
+      if ((count ?? 0) >= capacity) status = 'waitlisted'
+    }
+  }
+
   const { error } = await supabase.from('sd_participants').insert({
     org_id: DERIVED_SCOPE_PLACEHOLDER, // derived by trigger
     event_id: eventId,
     user_id: user.id,
+    pool_side: poolSide,
+    status,
   })
   fail(error, 'Registration failed')
   revalidatePath(`/o/${orgSlug}/m/speed-dating/events/${eventId}`)
@@ -90,6 +141,48 @@ export async function withdrawFromEvent(orgSlug: string, participantId: string, 
     .update({ status: 'withdrawn' })
     .eq('id', participantId)
   fail(error, 'Withdraw failed')
+  // Promotion needs staff-level write (RLS: a participant can only update
+  // their OWN row — sd_participants_update_self is `user_id = auth.uid()`,
+  // so a withdrawing participant cannot write a different waitlisted
+  // person's row). Automatic promotion is staff-button/worker-tick driven
+  // (promoteNextWaitlisted below), not triggered from here.
+  revalidatePath(`/o/${orgSlug}/m/speed-dating/events/${eventId}`)
+}
+
+// Staff action: promote the longest-waiting person on a side into the seat
+// a withdrawal/removal just freed. Re-checks capacity itself (rather than
+// trusting the caller that a slot is actually open) so it's safe to call at
+// any time, including from a future automatic worker tick using the exact
+// same function shape as speed-dating-orchestrator.ts.
+export async function promoteNextWaitlisted(orgSlug: string, eventId: string, poolSide: SideKey) {
+  const supabase = await createClient()
+  const { data: event } = await supabase.from('sd_events').select('format').eq('id', eventId).single()
+  const sides = getEventSides(event?.format)
+  const capacity = sides?.[poolSide]?.capacity ?? null
+
+  if (capacity !== null) {
+    const { count } = await supabase
+      .from('sd_participants')
+      .select('id', { count: 'exact', head: true })
+      .eq('event_id', eventId)
+      .eq('pool_side', poolSide)
+      .eq('status', 'registered')
+    if ((count ?? 0) >= capacity) return // no room; nothing to do
+  }
+
+  const { data: next } = await supabase
+    .from('sd_participants')
+    .select('id')
+    .eq('event_id', eventId)
+    .eq('pool_side', poolSide)
+    .eq('status', 'waitlisted')
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle()
+  if (!next) return
+
+  const { error } = await supabase.from('sd_participants').update({ status: 'registered' }).eq('id', next.id)
+  fail(error, 'Promote from waitlist failed')
   revalidatePath(`/o/${orgSlug}/m/speed-dating/events/${eventId}`)
 }
 

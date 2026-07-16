@@ -794,6 +794,116 @@ test('speed-dating module: resume-review profile card is self-write and gated by
   await expect(page.getByPlaceholder(/A short line about you/)).toHaveValue('Loves hiking and board games')
 })
 
+test('speed-dating module: two-sided event lets a participant pick a side at registration', async ({ page }) => {
+  // Covers what genuinely works today: creating a two-sided event, choosing
+  // a side at registration, and the roster reflecting side/label/counts.
+  // Does NOT assert capacity/waitlisting itself — see the KNOWN GAP comment
+  // on registerForEvent (modules/speed-dating/ui/actions.ts): the capacity
+  // count runs under the registering participant's own RLS-scoped session,
+  // which can't see other participants' rows, so it never actually
+  // triggers yet. The fixme test below encodes the intended behavior.
+  await signIn(page, 'alice@demo.local')
+  await page.goto('/o/demo-dating/m/speed-dating')
+  const eventName = 'Two Sided Event ' + Date.now()
+  await page.getByPlaceholder('Event name').fill(eventName)
+  await page.getByText('Two sides (e.g. Men/Women)', { exact: false }).click() // expand the <details>
+  await page.getByLabel('Enable two sides').check()
+  await page.getByPlaceholder('Side A label (e.g. Men)').fill('Men')
+  await page.getByPlaceholder('Side B label (e.g. Women)').fill('Women')
+  await page.getByRole('button', { name: 'Create (draft)' }).click()
+  await page.getByRole('link', { name: eventName }).click()
+  await page.getByRole('button', { name: 'Open registration' }).click()
+
+  await signIn(page, 'charlie@demo.local')
+  await page.goto('/o/demo-dating/m/speed-dating')
+  await page.getByRole('link', { name: eventName }).click()
+  await page.locator('select[name="side"]').selectOption({ label: 'Men' })
+  const posted = page.waitForResponse((r) => r.request().method() === 'POST')
+  await page.getByRole('button', { name: 'Register for this event' }).click()
+  await posted
+  await expect(page.getByText('You are')).toContainText('registered')
+
+  await signIn(page, 'alice@demo.local')
+  await page.goto('/o/demo-dating/m/speed-dating')
+  await page.getByRole('link', { name: eventName }).click()
+  await expect(page.getByText('Charlie C')).toContainText('Men')
+  // No waitlist yet -> no promote button for either side.
+  await expect(page.getByRole('button', { name: 'Promote next waitlisted' })).not.toBeVisible()
+})
+
+// Intended behavior once the KNOWN GAP is fixed (a SECURITY DEFINER count
+// function, per the actions.ts comment — needs an Opus session, not built
+// on Sonnet). Un-skip this test in the same commit as that migration.
+test.fixme('speed-dating module: two-sided event enforces per-side capacity and waitlist promotion', async ({ page }) => {
+  // Organizer creates a two-sided event with a tiny capacity (1 per side) so
+  // a second registrant on the same side is trivially forced to waitlist.
+  await signIn(page, 'alice@demo.local')
+  await page.goto('/o/demo-dating/m/speed-dating')
+  const eventName = 'Waitlist Test ' + Date.now()
+  await page.getByPlaceholder('Event name').fill(eventName)
+  await page.getByText('Two sides (e.g. Men/Women)', { exact: false }).click() // expand the <details>
+  await page.getByLabel('Enable two sides').check()
+  await page.getByPlaceholder('Side A label (e.g. Men)').fill('Men')
+  await page.getByPlaceholder('Side A capacity (blank = unlimited)').fill('1')
+  await page.getByPlaceholder('Side B label (e.g. Women)').fill('Women')
+  await page.getByPlaceholder('Side B capacity (blank = unlimited)').fill('1')
+  await page.getByRole('button', { name: 'Create (draft)' }).click()
+  await page.getByRole('link', { name: eventName }).click()
+  await page.getByRole('button', { name: 'Open registration' }).click()
+
+  // Charlie takes the only Men seat.
+  await signIn(page, 'charlie@demo.local')
+  await page.goto('/o/demo-dating/m/speed-dating')
+  await page.getByRole('link', { name: eventName }).click()
+  await page.locator('select[name="side"]').selectOption({ label: 'Men' })
+  let posted = page.waitForResponse((r) => r.request().method() === 'POST')
+  await page.getByRole('button', { name: 'Register for this event' }).click()
+  await posted
+  await expect(page.getByText('You are')).toContainText('registered')
+
+  // Frank also registers for Men — capacity is already met, so he waitlists.
+  await signIn(page, 'frank@demo.local')
+  await page.goto('/o/demo-dating/m/speed-dating')
+  await page.getByRole('link', { name: eventName }).click()
+  await page.locator('select[name="side"]').selectOption({ label: 'Men' })
+  posted = page.waitForResponse((r) => r.request().method() === 'POST')
+  await page.getByRole('button', { name: 'Register for this event' }).click()
+  await posted
+  await expect(page.getByText('You are')).toContainText('waitlisted')
+
+  // Organizer's roster reflects the capacity + waitlist, and offers Promote.
+  await signIn(page, 'alice@demo.local')
+  await page.goto('/o/demo-dating/m/speed-dating')
+  await page.getByRole('link', { name: eventName }).click()
+  await expect(page.getByText('Men: 1 / 1 registered, 1 waitlisted')).toBeVisible()
+  const menRow = page.locator('li').filter({ hasText: /^Men:/ })
+  await expect(menRow.getByRole('button', { name: 'Promote next waitlisted' })).toBeVisible()
+
+  // Charlie withdraws, freeing his seat — organizer promotes the next
+  // waitlisted (Frank) into it.
+  await signIn(page, 'charlie@demo.local')
+  await page.goto('/o/demo-dating/m/speed-dating')
+  await page.getByRole('link', { name: eventName }).click()
+  posted = page.waitForResponse((r) => r.request().method() === 'POST')
+  await page.getByRole('button', { name: 'Withdraw' }).click()
+  await posted
+  await expect(page.getByText('You are')).toContainText('withdrawn')
+
+  await signIn(page, 'alice@demo.local')
+  await page.goto('/o/demo-dating/m/speed-dating')
+  await page.getByRole('link', { name: eventName }).click()
+  await expect(page.getByText('Men: 0 / 1 registered, 1 waitlisted')).toBeVisible()
+  const promoted = page.waitForResponse((r) => r.request().method() === 'POST')
+  await page.locator('li').filter({ hasText: /^Men:/ }).getByRole('button', { name: 'Promote next waitlisted' }).click()
+  await promoted
+  await expect(page.getByText('Men: 1 / 1 registered')).toBeVisible()
+
+  await signIn(page, 'frank@demo.local')
+  await page.goto('/o/demo-dating/m/speed-dating')
+  await page.getByRole('link', { name: eventName }).click()
+  await expect(page.getByText('You are')).toContainText('registered')
+})
+
 test('sample module (module 0 template): staff creates, member contributes', async ({ page }) => {
   // Proves the living template stays green: module UI physically inside
   // modules/sample/ui, mounted by a thin wrapper (docs/03 composition).
