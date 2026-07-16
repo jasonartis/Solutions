@@ -105,3 +105,35 @@ grading console (`setRevealUntil`, `modules/classroom/ui/manage/grading/
 
 **Grades-export decision (founder, 2026-07-09):** the authorship rule stands with
 no exception — students cannot export grades about them (professor/GA-entered).
+
+## GA grade visibility (founder, 2026-07-12; built 2026-07-12, UI 2026-07-16)
+
+Founder rule from the testing round: **"a GA must not see any grade — or any
+calculated grade — they did not enter themselves."** Previously the
+`cls_grades_select` policy gave any GA (`cls_is_ga`) a blanket read on every
+grade row in the org: other GAs' grades, instructor grades, peer aggregates,
+computed combinations, published finals. (The per-reviewer peer matrix in
+`cls_review_assignments` was already GA-invisible.)
+
+Migration `20260712020000_classroom_ga_grade_visibility.sql`:
+- `cls_grades.graded_by` (who entered the row) + `cls_pin_grade_author`
+  trigger: a GA's insert is stamped `graded_by = auth.uid()`; non-staff can
+  never reassign authorship on update.
+- `cls_grades_select` rewritten: a GA reads ONLY `source='ga' AND
+  graded_by = auth.uid()`. Professors/org-admins (`cls_can_manage`) keep full
+  visibility — the combination/finalize/publish logic runs as the professor
+  and is unaffected. Students unchanged (own final+visible row only).
+- `cls_grades_write_ga` tightened to rows attributed to the caller.
+
+Live-verified 5/5 as real users (GA sees none of the professor's rows, sees
+exactly their own insert, cannot spoof authorship).
+
+UI (2026-07-16): the Manage console's gate — which an earlier commit had
+narrowed to `cls_can_manage`, accidentally locking GAs out entirely — is now
+staff-OR-GA, with every create/config form (courses, classes, homework,
+exams, surveys, announcements, retention, Materials link) wrapped in
+professor-only `canManage`. The grading console hides the **Peer reviews**
+and **Final** columns and all workflow buttons from non-professors, matching
+what RLS returns. GA walkthrough guide updated to say "you see only the
+grades you entered yourself." e2e: GA reaches Manage + grading with no
+professor controls or peer/final columns visible.

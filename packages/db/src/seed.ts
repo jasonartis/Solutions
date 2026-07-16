@@ -425,6 +425,7 @@ async function main() {
   ])
 
   // Idempotent: wipe module data for this org and rebuild.
+  await admin.from('mm_interests').delete().eq('org_id', match)
   await admin.from('mm_pair_scores').delete().eq('org_id', match)
   await admin.from('mm_answers').delete().eq('org_id', match)
   await admin.from('mm_questions').delete().eq('org_id', match)
@@ -486,6 +487,15 @@ async function main() {
   // this; none runs during seed). Read back the materialized answers so locked
   // fields (gender care/dealbreaker) reflect what the trigger actually wrote.
   await seedMatchmakingScores(match, questionIds)
+
+  // Demo interest: Charlie↔Dana are MUTUAL (each sees "It's a match!" with the
+  // other's contact; Mel sees the pair to facilitate). Eve→Charlie is
+  // one-sided — Charlie sees nothing about it, the privacy invariant.
+  await admin.from('mm_interests').insert([
+    { org_id: match, user_id: charlieId, target_user_id: danaId },
+    { org_id: match, user_id: danaId, target_user_id: charlieId },
+    { org_id: match, user_id: eveId, target_user_id: charlieId },
+  ])
 
   // --- Demo nail salon for module 5 ----------------------------------------
   // alice = manager, eve = cashier, dana = worker, charlie = customer.

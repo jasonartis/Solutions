@@ -111,4 +111,41 @@ matchmakers/singles instead of blind free-text. Also confirmed: there is
 still no UI for GRANTING the matchmaker/single module roles themselves
 (only for assigning an *existing* matchmaker to an *existing* single/group)
 — that's the same "no self-serve org-admin management" gap recorded in
-CLAUDE.md's 2026-07-12 entry, not specific to this module.
+CLAUDE.md's 2026-07-12 entry, not specific to this module. (Role granting
+shipped later that day as the platform-wide `/o/<slug>/members` page.)
+
+## Mutual agreement → introduction (2026-07-12 schema, 2026-07-16 UI)
+
+The spec line "Mutual agreement → introduction … One-sided interest reveals
+nothing" (line 37) is now BUILT — this was the module's last real gap.
+Migration `20260712040000_matchmaking_interests.sql`: `mm_interests` records
+a single's directional interest in one specific match (insertable only for
+real non-excluded scored pairs, RLS-enforced); interest is private to its
+author — the SELECT policy never exposes incoming interest, so a one-sided
+crush is invisible to its target, and matchmakers can't read raw rows either.
+The reveal is two definer functions: `mm_mutual_matches()` (for the calling
+single: every reciprocal interest, with display name + email — that IS the
+introduction) and `mm_mutual_pairs(org)` (facilitation view: admins see all
+mutual pairs, matchmakers only pairs involving an assigned single).
+Live-verified 12/12 as real users (one-sided invisible in every direction,
+mutual reveals both ways, uninvolved/excluded/impersonation all rejected).
+
+UI (2026-07-16): each match row in the single view gets **Express interest**
+/ **Withdraw interest**; an **It's a match!** section lists mutual reveals
+with contact info. Matchmaker view gains **Mutual interest — make the
+introduction**; the admin Manage console gains the same list. Demo seed:
+Charlie↔Dana mutual, Eve→Charlie one-sided. e2e drives the full live chain
+(express → nothing revealed → reciprocate → both revealed → withdraw →
+reveal gone).
+
+**OPEN QUESTION for the founder (recorded 2026-07-12, still open):** on a
+mutual match, the current design reveals each side's email directly to the
+other. The alternative is routing introductions exclusively through a
+matchmaker (contact never auto-revealed). Both halves exist today (direct
+reveal + matchmaker facilitation view); if the founder prefers
+matchmaker-only, the change is removing the email column from
+`mm_mutual_matches()`.
+
+**Module 1's only remaining gap is the platform-wide conversations
+primitive** (users→admin messaging, still deferred — no second module has
+forced it yet).

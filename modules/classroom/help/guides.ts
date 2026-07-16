@@ -76,23 +76,24 @@ workflow between stages and publishing finals are professor actions.)
 ## Grade homework
 
 1. Open **Classroom → Manage** and click a homework's name to open its
-   grading console.
+   grading console. (The Manage page also lists courses, exams, and rosters;
+   creating or configuring any of those is professor-only, so you won't see
+   those forms.)
 2. Each student row shows their state. When a row is in **ga_grading**, enter
    a number in the **GA grade** box and click **Save**.
-3. The **Peer reviews** column fills in as students complete their reviews —
-   read-only context for you.
 
 ## Grade an exam by subproblem
 
-4. From **Manage**, click an exam under **Exams**.
-5. Per student: click **Upload scan** to attach the paper's scan (repeat for
+3. From **Manage**, click an exam under **Exams**.
+4. Per student: click **Upload scan** to attach the paper's scan (repeat for
    multiple pages), then enter points per subproblem (each box shows its
    maximum) and click **Save scores**. The total computes automatically.
 
 ## Notes
 
-- You always see the whole grading picture, but only the **GA** column is
-  yours to write.
+- **You see only the grades you entered yourself.** Other GAs' grades, peer
+  reviews, and the professor's finals never appear in your view — the
+  GA-grade column is your whole picture, by design.
 - After the class's retention date, student submissions hide from your view
   too — the professor retains access.
 `,

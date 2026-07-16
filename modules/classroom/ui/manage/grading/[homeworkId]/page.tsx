@@ -127,14 +127,16 @@ export default async function GradingPage(props: {
       )}
 
       <div className="overflow-x-auto">
-      <table className="w-full min-w-[640px] text-sm">
+      <table className={`w-full ${isProfessor ? 'min-w-[640px]' : 'min-w-[420px]'} text-sm`}>
         <thead>
           <tr className="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-500">
             <th className="py-2 pr-3">Student</th>
             <th className="py-2 pr-3">State</th>
             <th className="py-2 pr-3">GA grade</th>
-            <th className="py-2 pr-3">Peer reviews</th>
-            <th className="py-2 pr-3">Final</th>
+            {/* Peer/Final are professor work product — a GA sees only grades
+                they entered themselves (RLS returns nothing here anyway). */}
+            {isProfessor && <th className="py-2 pr-3">Peer reviews</th>}
+            {isProfessor && <th className="py-2 pr-3">Final</th>}
           </tr>
         </thead>
         <tbody>
@@ -181,15 +183,17 @@ export default async function GradingPage(props: {
                     <span className="text-gray-300">—</span>
                   )}
                 </td>
-                <td className="py-2 pr-3 text-xs text-gray-500">
-                  {reviews.length === 0
-                    ? '—'
-                    : reviews
-                        .map((r) => `${nameOf(r.reviewer_id)}: ${r.grade ?? 'pending'}`)
-                        .join(', ')}
-                </td>
-                <td className="py-2 pr-3">
-                  {isProfessor ? (
+                {isProfessor && (
+                  <td className="py-2 pr-3 text-xs text-gray-500">
+                    {reviews.length === 0
+                      ? '—'
+                      : reviews
+                          .map((r) => `${nameOf(r.reviewer_id)}: ${r.grade ?? 'pending'}`)
+                          .join(', ')}
+                  </td>
+                )}
+                {isProfessor && (
+                  <td className="py-2 pr-3">
                     <form action={publishFinalGrade.bind(null, orgSlug, homeworkId)} className="flex items-center gap-1">
                       <input type="hidden" name="studentId" value={s.student_id} />
                       <input type="hidden" name="classId" value={homework.class_id} />
@@ -204,16 +208,14 @@ export default async function GradingPage(props: {
                         {finalGrade ? 'Update' : 'Publish'}
                       </button>
                     </form>
-                  ) : (
-                    (finalGrade?.score ?? '—')
-                  )}
-                </td>
+                  </td>
+                )}
               </tr>
             )
           })}
           {(submissions ?? []).length === 0 && (
             <tr>
-              <td colSpan={5} className="py-4 text-center text-gray-400">
+              <td colSpan={isProfessor ? 5 : 3} className="py-4 text-center text-gray-400">
                 No submissions yet.
               </td>
             </tr>

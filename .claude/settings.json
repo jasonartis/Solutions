@@ -1,7 +1,4 @@
 {
-  "sandbox": {
-    "autoAllowBashIfSandboxed": true
-  },
   "permissions": {
     "allow": [
       "PowerShell(pnpm *)",
@@ -34,7 +31,40 @@
       "Bash(npx *)",
       "Bash(npm *)",
       "Bash(tsx *)",
-      "Bash(supabase *)"
+      "Bash(supabase *)",
+      "Bash(CI=1 pnpm test:e2e)",
+      "Bash(pnpm db:reset)",
+      "Bash(docker restart *)",
+      "Bash(pnpm seed *)",
+      "Bash(git add *)",
+      "Bash(git push *)",
+      "Bash(git credential *)",
+      "Read(//tmp/**)",
+      "Bash(curl -s -H 'Authorization: token __TRACKED_VAR__' 'https://api.github.com/repos/jasonartis/Solutions/actions/runs?branch=master&per_page=1')",
+      "Bash(node -e ' *)",
+      "Bash(curl -s -H 'Authorization: token __CMDSUB_OUTPUT__' 'https://api.github.com/repos/jasonartis/Solutions/actions/runs?branch=master&per_page=1')",
+      "Bash(pnpm --filter @platform/core typecheck)",
+      "Bash(pnpm --filter web typecheck)",
+      "Bash(pnpm --filter matchmaking test)",
+      "Bash(pnpm --filter web build)",
+      "Bash(git commit -m ' *)",
+      "Bash(curl -s -H 'Authorization: token __CMDSUB_OUTPUT__' https://api.github.com/repos/jasonartis/Solutions/actions/runs/28916557427/jobs)",
+      "Bash(pnpm --filter @platform/db typecheck)",
+      "Bash(curl -s -H 'Authorization: token __CMDSUB_OUTPUT__' 'https://api.github.com/repos/jasonartis/Solutions/actions/runs?branch=master&per_page=3')",
+      "Bash(grep -c '\\\\\\\\$\\\\\\\\$' schema-draft.sql)",
+      "Bash(echo \"dollar blocks: $\\(grep -c '\\\\\\\\$\\\\\\\\$' schema-draft.sql\\)\")",
+      "Bash(powershell -NoProfile -Command \"Get-Process 'Docker Desktop' -ErrorAction SilentlyContinue | Select-Object Id, ProcessName\")",
+      "Bash(CI=1 pnpm test:e2e --grep \"back-office\")",
+      "Bash(pnpm --filter worker build)",
+      "Bash(node -e \"console.log\\('entry exists:', require\\('node:fs'\\).existsSync\\('apps/worker/dist/apps/worker/src/index.js'\\)\\)\")",
+      "Bash(docker compose *)",
+      "Bash(cp deploy/worker/worker.env.example deploy/worker/worker.env)",
+      "Bash(pnpm --filter worker typecheck)",
+      "Bash(pnpm worker:prod)",
+      "Bash(curl -s http://localhost:8902/healthz)"
     ]
+  },
+  "sandbox": {
+    "autoAllowBashIfSandboxed": true
   }
 }

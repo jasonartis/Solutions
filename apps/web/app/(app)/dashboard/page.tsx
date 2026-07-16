@@ -36,9 +36,14 @@ export default async function DashboardPage() {
               </div>
               <span className="flex items-baseline gap-3">
                 {(org.role === 'owner' || org.role === 'admin') && (
-                  <Link href={`/o/${org.slug}/members`} className="text-xs text-blue-600 hover:underline">
-                    Members
-                  </Link>
+                  <>
+                    <Link href={`/o/${org.slug}/members`} className="text-xs text-blue-600 hover:underline">
+                      Members
+                    </Link>
+                    <Link href={`/o/${org.slug}/settings`} className="text-xs text-blue-600 hover:underline">
+                      Settings
+                    </Link>
+                  </>
                 )}
                 <Link href={`/o/${org.slug}/help`} className="text-xs text-blue-600 hover:underline">
                   Help

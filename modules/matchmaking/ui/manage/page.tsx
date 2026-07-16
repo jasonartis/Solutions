@@ -56,6 +56,11 @@ export default async function MatchmakingManagePage(props: {
     supabase.from('profiles').select('user_id, display_name, email'),
   ])
 
+  // Mutual interest among singles (admins see every pair in the org via the
+  // definer function; one-sided interest is invisible to everyone).
+  const { data: mutualPairs } = await supabase.rpc('mm_mutual_pairs', { check_org_id: org.id })
+  const mutual = (mutualPairs ?? []) as { user_a: string; user_b: string }[]
+
   const pending = (questions ?? []).filter((q) => q.status === 'pending')
   const approved = (questions ?? []).filter((q) => q.status === 'approved')
   const singleCount = new Set((singles ?? []).map((s) => s.user_id)).size
@@ -90,6 +95,24 @@ export default async function MatchmakingManagePage(props: {
             <button className={btnCls}>Recompute all matches</button>
           </form>
         </div>
+      </section>
+
+      <section className="mb-8">
+        <h2 className="mb-3 text-lg font-medium">Mutual interest ({mutual.length})</h2>
+        {mutual.length === 0 ? (
+          <p className="text-sm text-gray-500">
+            No mutual interest yet. When two singles both express interest in each other, the pair
+            appears here so you can facilitate the introduction.
+          </p>
+        ) : (
+          <ul className="space-y-1 text-sm">
+            {mutual.map((p, i) => (
+              <li key={i} className="rounded border border-green-200 bg-green-50 px-3 py-2">
+                {nameOf(p.user_a)} &harr; {nameOf(p.user_b)} — both said yes.
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
 
       <section className="mb-8">

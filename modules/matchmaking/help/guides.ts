@@ -19,7 +19,15 @@ match, then see your top matches by compatibility.
    their name marked *(shared with you)* — you control the same for them
    with each question's share checkbox. *(recompute pending)* next to a match means your
    recent answers haven't been rescored yet — an admin runs the recompute.
-3. Under **Your answers**, every approved question shows:
+3. **Express interest** on a match tells the platform — and ONLY the
+   platform — that you'd pursue this. The other person is never shown your
+   interest on its own: if they never reciprocate, they never know.
+   **Withdraw interest** un-says it at any time.
+4. When you express interest in someone who expressed interest in you, an
+   **It's a match!** section appears for both of you with each other's
+   contact info — that's your introduction; reach out directly. (Your
+   matchmaker can also see mutual pairs, so they may reach out to help.)
+5. Under **Your answers**, every approved question shows:
    - **Your answer** — pick the option that describes you.
    - **The care slider** — how much your match's answer matters to you:
      **+10** = they should answer like you, **0** = don't care,
@@ -28,10 +36,10 @@ match, then see your top matches by compatibility.
      question entirely.
    - **Share this answer with a potential match** — whether a match may see
      this answer about you.
-4. Click **Save** on each question you change. Questions marked
+6. Click **Save** on each question you change. Questions marked
    *(not yet answered — default)* still count with a neutral middle answer
    until you set them.
-5. Some questions show **Locked by admin** — the community fixed that answer
+7. Some questions show **Locked by admin** — the community fixed that answer
    or care level for everyone (e.g. gender matching); you can't change it.
 `,
     },
@@ -42,8 +50,12 @@ match, then see your top matches by compatibility.
 1. Open **Make-a-Match**. As a matchmaker you see **Matches for your
    assigned singles**: every scored pair involving someone assigned to you,
    best first.
-2. Use the percentages to decide who to introduce. (The introduction /
-   mutual-agreement flow is coming; today you contact people directly.)
+2. Use the percentages to decide who to introduce and encourage.
+3. When two of your singles both express interest in each other, the pair
+   appears under **Mutual interest — make the introduction** — both said
+   yes, so reach out and help them connect. One-sided interest is never
+   shown to anyone (you included): a single who wasn't picked never finds
+   out, and you only ever see agreed pairs.
 `,
     },
     {
@@ -62,11 +74,15 @@ match, then see your top matches by compatibility.
    an answer, percentages refresh and *(recompute pending)* flags clear
    (wherever the platform worker is running). **Recompute all matches**
    forces an instant refresh.
-5. **Groups**: create a group (e.g. "Cohort 2026") and **Add to group** by
+5. **Mutual interest** lists every pair of singles who both expressed
+   interest in each other (with contact revealed to the pair themselves) —
+   facilitate the introduction if it hasn't happened. One-sided interest is
+   private to whoever expressed it and never appears here.
+6. **Groups**: create a group (e.g. "Cohort 2026") and **Add to group** by
    email — useful when one matchmaker serves several singles at once. A
    group is purely an assignment bucket; it has no effect on match scoring
    itself.
-6. **Matchmaker assignments**: assign a matchmaker (by email) to either an
+7. **Matchmaker assignments**: assign a matchmaker (by email) to either an
    **Individual single** (their email) or a **Group** — this is what
    determines whose matches that matchmaker sees. A matchmaker with no
    assignment sees nothing.

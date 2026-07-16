@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { requireOrgModule } from '@/lib/module-gate'
-import { saveAnswer } from './actions'
+import { expressInterest, saveAnswer, withdrawInterest } from './actions'
 
 const inputCls = 'rounded border border-gray-300 px-2 py-1 text-sm'
 const btnCls = 'rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700'
@@ -124,8 +124,40 @@ async function SingleView(props: { orgSlug: string; orgId: string; userId: strin
     if (shared && shared.length > 0) sharedByUser.set(other, shared as SharedAnswer[])
   }
 
+  // Mutual-agreement → introduction: my own outgoing interest (RLS shows only
+  // mine — never who's interested in me), and the mutual reveals (the definer
+  // function returns contact info only when BOTH sides expressed interest).
+  const [{ data: myInterests }, { data: mutual }] = await Promise.all([
+    supabase.from('mm_interests').select('target_user_id').eq('org_id', props.orgId).eq('user_id', props.userId),
+    supabase.rpc('mm_mutual_matches'),
+  ])
+  const interestedIn = new Set((myInterests ?? []).map((i) => i.target_user_id as string))
+  const mutualMatches = (mutual ?? []) as { matched_user: string; display_name: string | null; email: string | null }[]
+
   return (
     <div className="space-y-8">
+      {mutualMatches.length > 0 && (
+        <section>
+          <h2 className="mb-3 text-lg font-medium">It&apos;s a match! 🎉</h2>
+          <ul className="space-y-1 text-sm">
+            {mutualMatches.map((m) => (
+              <li key={m.matched_user} className="rounded border border-green-200 bg-green-50 px-3 py-2">
+                <span className="font-medium">{m.display_name || m.email || 'Someone'}</span> is interested in you
+                too{m.email && (
+                  <>
+                    {' — reach out at '}
+                    <a href={`mailto:${m.email}`} className="text-blue-600 hover:underline">
+                      {m.email}
+                    </a>
+                  </>
+                )}
+                .
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       <section>
         <h2 className="mb-3 text-lg font-medium">Your matches</h2>
         {(scores ?? []).length === 0 ? (
@@ -137,13 +169,29 @@ async function SingleView(props: { orgSlug: string; orgId: string; userId: strin
             {(scores ?? []).map((s, i) => {
               const other = s.user_a === props.userId ? s.user_b : s.user_a
               const shared = sharedByUser.get(other)
+              const interested = interestedIn.has(other)
               return (
                 <li key={i} className="rounded border border-gray-100 bg-white px-3 py-2">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <span>{nameOf(other)}</span>
-                    <span className="flex items-center gap-2">
+                    <span className="flex flex-wrap items-center gap-2">
                       <span className="font-semibold">{s.percent}%</span>
                       {s.stale && <span className="text-xs text-amber-600">(recompute pending)</span>}
+                      {/* Directional + private: the other person never sees
+                          this unless they express interest too. */}
+                      {interested ? (
+                        <form action={withdrawInterest.bind(null, props.orgSlug, props.orgId, other)}>
+                          <button className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-600 hover:bg-gray-50">
+                            Withdraw interest
+                          </button>
+                        </form>
+                      ) : (
+                        <form action={expressInterest.bind(null, props.orgSlug, props.orgId, other)}>
+                          <button className="rounded border border-blue-300 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100">
+                            Express interest
+                          </button>
+                        </form>
+                      )}
                     </span>
                   </div>
                   {shared && (
@@ -264,29 +312,50 @@ async function MatchmakerView(props: {
   const supabase = await createClient()
 
   // RLS shows a matchmaker only the pairs involving singles they're assigned to.
-  const { data: scores } = await supabase
-    .from('mm_pair_scores')
-    .select('user_a, user_b, percent')
-    .eq('org_id', props.orgId)
-    .order('percent', { ascending: false })
+  const [{ data: scores }, { data: mutualPairs }] = await Promise.all([
+    supabase
+      .from('mm_pair_scores')
+      .select('user_a, user_b, percent')
+      .eq('org_id', props.orgId)
+      .order('percent', { ascending: false }),
+    // Mutual interest among assigned singles (the definer function scopes a
+    // matchmaker to pairs involving someone they're assigned to). One-sided
+    // interest is never visible to anyone, matchmakers included.
+    supabase.rpc('mm_mutual_pairs', { check_org_id: props.orgId }),
+  ])
 
   return (
-    <section>
-      <h2 className="mb-3 text-lg font-medium">Matches for your assigned singles</h2>
-      {(scores ?? []).length === 0 ? (
-        <p className="text-sm text-gray-500">No matches to show yet.</p>
-      ) : (
-        <ul className="space-y-1 text-sm">
-          {(scores ?? []).map((s, i) => (
-            <li key={i} className="flex items-center justify-between rounded border border-gray-100 bg-white px-3 py-2">
-              <span>
-                {props.nameOf(s.user_a)} &harr; {props.nameOf(s.user_b)}
-              </span>
-              <span className="font-semibold">{s.percent}%</span>
-            </li>
-          ))}
-        </ul>
+    <div className="space-y-8">
+      {((mutualPairs ?? []) as { user_a: string; user_b: string }[]).length > 0 && (
+        <section>
+          <h2 className="mb-3 text-lg font-medium">Mutual interest — make the introduction</h2>
+          <ul className="space-y-1 text-sm">
+            {((mutualPairs ?? []) as { user_a: string; user_b: string }[]).map((p, i) => (
+              <li key={i} className="rounded border border-green-200 bg-green-50 px-3 py-2">
+                {props.nameOf(p.user_a)} &harr; {props.nameOf(p.user_b)} — both said yes; help them connect.
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
-    </section>
+
+      <section>
+        <h2 className="mb-3 text-lg font-medium">Matches for your assigned singles</h2>
+        {(scores ?? []).length === 0 ? (
+          <p className="text-sm text-gray-500">No matches to show yet.</p>
+        ) : (
+          <ul className="space-y-1 text-sm">
+            {(scores ?? []).map((s, i) => (
+              <li key={i} className="flex items-center justify-between rounded border border-gray-100 bg-white px-3 py-2">
+                <span>
+                  {props.nameOf(s.user_a)} &harr; {props.nameOf(s.user_b)}
+                </span>
+                <span className="font-semibold">{s.percent}%</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </div>
   )
 }

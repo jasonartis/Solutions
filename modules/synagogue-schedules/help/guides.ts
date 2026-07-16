@@ -33,12 +33,15 @@ export const synagogueSchedulesHelp: ModuleHelp = {
 ## Before you start
 
 Your synagogue is an **organization** with a name, a short **slug** (used in
-web addresses and the public link), and a location (address/timezone that
-zmanim are computed from). That part — and adding people to the
-organization — is done by the **platform owner**, not by an org admin or
-maker from inside the module; if you need someone added or a role changed
-(maker can edit schedules; viewer can only look; congregants who just check
-times need no account at all), ask the platform owner directly.
+web addresses and the public link), and a location (latitude/longitude,
+timezone, and myzmanim location ID that zmanim are computed from). An **org
+owner/admin** can edit the location themselves: from the dashboard, click
+**Settings** on the organization card and fill in the synagogue location
+form. Creating the organization and enabling this module is done by the
+**platform owner**. Adding people or changing roles (maker can edit
+schedules; viewer can only look; congregants who just check times need no
+account at all) is done by an org owner/admin from the dashboard's
+**Members** link.
 
 ## One-time setup: the rule builder
 

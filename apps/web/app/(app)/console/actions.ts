@@ -10,6 +10,7 @@ import {
   upsertModuleRole,
   upsertOrgMember,
 } from '@/lib/org-members'
+import { parseSynagogueSettingsForm } from '@/lib/synagogue-settings'
 
 // Owner-console server actions. RLS already restricts writes on these tables
 // to superadmins, but each action also verifies explicitly so failures are
@@ -111,18 +112,13 @@ export async function removeModuleRoleAction(orgId: string, userId: string, modu
 // toggleModule already uses); this is purely a missing form.
 export async function updateSynagogueSettings(orgId: string, formData: FormData) {
   const supabase = await requireSuperadmin()
-  const latitude = Number(formData.get('latitude'))
-  const longitude = Number(formData.get('longitude'))
-  const timezone = String(formData.get('timezone') ?? '').trim()
-  const myzmanimLocationId = String(formData.get('myzmanimLocationId') ?? '').trim()
-  const israel = formData.get('israel') === 'on'
-  if (!timezone || Number.isNaN(latitude) || Number.isNaN(longitude)) {
-    throw new Error('Latitude, longitude, and timezone are required')
-  }
+  const settings = parseSynagogueSettingsForm(formData)
 
-  const { error } = await supabase.from('org_modules').update({
-    settings: { latitude, longitude, timezone, israel, myzmanimLocationId: myzmanimLocationId || null },
-  }).eq('org_id', orgId).eq('module_key', 'synagogue-schedules')
+  const { error } = await supabase
+    .from('org_modules')
+    .update({ settings })
+    .eq('org_id', orgId)
+    .eq('module_key', 'synagogue-schedules')
   if (error) throw new Error(error.message)
   revalidatePath('/console')
 }

@@ -122,11 +122,20 @@ tiers, so higher always controls lower).
 caller is owner/admin) lets an org owner/admin add/remove their own org's
 members, change org roles, and grant/revoke module-specific roles (`module_roles`)
 for modules already enabled there — everything an org runs day-to-day short of
-deciding WHICH modules it has access to. `org_modules` (module enablement)
-deliberately stayed superadmin-only (`20260712010000_org_self_management.sql`
-is additive-only RLS, never touches `org_modules`) — the founder's explicit
-call: some orgs shouldn't have access to some modules, and that's a platform-owner
-business decision, not something an org can grant itself. A "last-admin-standing"
+deciding WHICH modules it has access to. **Module SETTINGS are level-2
+self-serve too** (founder, 2026-07-12: "whoever fills in the synagogue info
+should enter it"): `/o/[orgSlug]/settings` lets an org owner/admin edit
+`org_modules.settings` for their own org
+(`20260712030000_org_settings_self_serve.sql` — an org-admin UPDATE policy
+plus an `org_modules_pin_enablement` trigger pinning
+`enabled`/`org_id`/`module_key` for non-superadmins, because RLS alone can't
+protect one column of a row it allows updates on). Module ENABLEMENT
+(`org_modules.enabled` — WHICH modules an org may use) stays superadmin-only
+(`20260712010000_org_self_management.sql` is additive-only RLS and never
+touches enablement; neither does the settings policy, thanks to the pin) —
+the founder's explicit call: some orgs shouldn't have access to some modules,
+and that's a platform-owner business decision, not something an org can
+grant itself. A "last-admin-standing"
 guard trigger (mirroring the visual-messaging conversation-admin pattern) stops
 an org from ever being left with zero owner/admin. The superadmin Owner Console
 (`/console`) and the new org page share one component

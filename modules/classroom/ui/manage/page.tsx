@@ -15,15 +15,20 @@ import {
 const inputCls = 'rounded border border-gray-300 px-2 py-1 text-sm'
 const btnCls = 'rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700'
 
-// Professor console: roster, announcements, homework per class.
+// Staff console: roster, announcements, homework per class. GAs get the
+// read/navigate view (homework → grading, exams); creating and configuring
+// anything stays professor/admin-only (canManage), matching the RLS.
 export default async function ManagePage(props: { params: Promise<{ orgSlug: string }> }) {
   const { orgSlug } = await props.params
   const { supabase, org } = await requireOrgModule(orgSlug, 'classroom')
 
   // Explicit staff check (not "does a course already exist" — that broke the
   // very first course/class an org creates, a chicken-and-egg 404).
-  const { data: canManage } = await supabase.rpc('cls_can_manage', { check_org_id: org.id })
-  if (!canManage) notFound()
+  const [{ data: canManage }, { data: isGa }] = await Promise.all([
+    supabase.rpc('cls_can_manage', { check_org_id: org.id }),
+    supabase.rpc('cls_is_ga', { check_org_id: org.id }),
+  ])
+  if (!canManage && !isGa) notFound()
 
   const { data: courses } = await supabase.from('cls_courses').select('id, name').eq('org_id', org.id)
 
@@ -49,9 +54,11 @@ export default async function ManagePage(props: { params: Promise<{ orgSlug: str
       <p className="mb-1 text-sm text-gray-400">{org.name}</p>
       <div className="mb-6 flex items-baseline gap-4">
         <h1 className="text-2xl font-semibold">Classroom — Manage</h1>
-        <Link href={`/o/${orgSlug}/m/classroom/manage/materials`} className="text-sm text-blue-600 hover:underline">
-          Materials
-        </Link>
+        {canManage && (
+          <Link href={`/o/${orgSlug}/m/classroom/manage/materials`} className="text-sm text-blue-600 hover:underline">
+            Materials
+          </Link>
+        )}
       </div>
 
       <section className="mb-8 rounded-lg border border-gray-200 bg-white p-5">
@@ -60,28 +67,32 @@ export default async function ManagePage(props: { params: Promise<{ orgSlug: str
           {(courses ?? []).map((c) => (
             <li key={c.id}>{c.name}</li>
           ))}
-          {(courses ?? []).length === 0 && <li className="text-gray-400">No courses yet — create one below.</li>}
+          {(courses ?? []).length === 0 && <li className="text-gray-400">No courses yet{canManage ? ' — create one below.' : '.'}</li>}
         </ul>
-        <form action={createCourse.bind(null, orgSlug)} className="flex flex-wrap items-center gap-2">
-          <input name="name" required placeholder="New course name" className={`${inputCls} min-w-64`} />
-          <button className={btnCls}>Create course</button>
-        </form>
+        {canManage && (
+          <form action={createCourse.bind(null, orgSlug)} className="flex flex-wrap items-center gap-2">
+            <input name="name" required placeholder="New course name" className={`${inputCls} min-w-64`} />
+            <button className={btnCls}>Create course</button>
+          </form>
+        )}
       </section>
 
-      <div className="space-y-8">
-        {(courses ?? []).map((course) => (
-          <form
-            key={course.id}
-            action={createClass.bind(null, orgSlug, course.id)}
-            className="flex flex-wrap items-center gap-2 text-sm"
-          >
-            <span className="text-gray-400">New class under {course.name}:</span>
-            <input name="name" required placeholder="Class name" className={`${inputCls} min-w-48`} />
-            <input name="term" placeholder="Term (optional)" className={`${inputCls} w-32`} />
-            <button className={btnCls}>Create class</button>
-          </form>
-        ))}
-      </div>
+      {canManage && (
+        <div className="space-y-8">
+          {(courses ?? []).map((course) => (
+            <form
+              key={course.id}
+              action={createClass.bind(null, orgSlug, course.id)}
+              className="flex flex-wrap items-center gap-2 text-sm"
+            >
+              <span className="text-gray-400">New class under {course.name}:</span>
+              <input name="name" required placeholder="Class name" className={`${inputCls} min-w-48`} />
+              <input name="term" placeholder="Term (optional)" className={`${inputCls} w-32`} />
+              <button className={btnCls}>Create class</button>
+            </form>
+          ))}
+        </div>
+      )}
 
       <div className="mt-8 space-y-8">
         {(classes ?? []).map((klass) => {
@@ -96,35 +107,39 @@ export default async function ManagePage(props: { params: Promise<{ orgSlug: str
                 <span className="text-xs text-gray-400">{klass.term}</span>
               </div>
 
-              <form
-                action={setSubmissionsHiddenFrom.bind(null, orgSlug, klass.id)}
-                className="mb-5 flex flex-wrap items-center gap-2 text-sm text-gray-500"
-              >
-                <label>
-                  Hide submissions from{' '}
-                  <input
-                    name="hiddenFrom"
-                    type="date"
-                    defaultValue={klass.submissions_hidden_from ?? ''}
-                    className={inputCls}
-                  />
-                </label>
-                <button className={btnCls}>Save retention</button>
-                <span className="text-xs text-gray-400">
-                  (never deleted — hidden from students &amp; GAs; blank = never)
-                </span>
-              </form>
+              {canManage && (
+                <>
+                  <form
+                    action={setSubmissionsHiddenFrom.bind(null, orgSlug, klass.id)}
+                    className="mb-5 flex flex-wrap items-center gap-2 text-sm text-gray-500"
+                  >
+                    <label>
+                      Hide submissions from{' '}
+                      <input
+                        name="hiddenFrom"
+                        type="date"
+                        defaultValue={klass.submissions_hidden_from ?? ''}
+                        className={inputCls}
+                      />
+                    </label>
+                    <button className={btnCls}>Save retention</button>
+                    <span className="text-xs text-gray-400">
+                      (never deleted — hidden from students &amp; GAs; blank = never)
+                    </span>
+                  </form>
 
-              <h3 className="mb-2 text-sm font-medium uppercase tracking-wide text-gray-500">
-                Post announcement
-              </h3>
-              <form
-                action={postAnnouncement.bind(null, orgSlug, klass.id)}
-                className="mb-5 flex flex-wrap items-center gap-2"
-              >
-                <input name="body" required placeholder="Announcement…" className={`${inputCls} w-full flex-1 sm:min-w-96 sm:w-auto`} />
-                <button className={btnCls}>Post</button>
-              </form>
+                  <h3 className="mb-2 text-sm font-medium uppercase tracking-wide text-gray-500">
+                    Post announcement
+                  </h3>
+                  <form
+                    action={postAnnouncement.bind(null, orgSlug, klass.id)}
+                    className="mb-5 flex flex-wrap items-center gap-2"
+                  >
+                    <input name="body" required placeholder="Announcement…" className={`${inputCls} w-full flex-1 sm:min-w-96 sm:w-auto`} />
+                    <button className={btnCls}>Post</button>
+                  </form>
+                </>
+              )}
 
               <h3 className="mb-2 text-sm font-medium uppercase tracking-wide text-gray-500">
                 Homework ({classHomeworks.length})
@@ -144,14 +159,16 @@ export default async function ManagePage(props: { params: Promise<{ orgSlug: str
                   </li>
                 ))}
               </ul>
-              <form
-                action={createHomework.bind(null, orgSlug, klass.id)}
-                className="mb-5 flex flex-wrap items-center gap-2"
-              >
-                <input name="title" required placeholder="New homework title" className={`${inputCls} min-w-64`} />
-                <input name="dueAt" type="datetime-local" className={inputCls} />
-                <button className={btnCls}>Add homework</button>
-              </form>
+              {canManage && (
+                <form
+                  action={createHomework.bind(null, orgSlug, klass.id)}
+                  className="mb-5 flex flex-wrap items-center gap-2"
+                >
+                  <input name="title" required placeholder="New homework title" className={`${inputCls} min-w-64`} />
+                  <input name="dueAt" type="datetime-local" className={inputCls} />
+                  <button className={btnCls}>Add homework</button>
+                </form>
+              )}
 
               <h3 className="mb-2 text-sm font-medium uppercase tracking-wide text-gray-500">
                 Exams ({classExams.length})
@@ -168,18 +185,20 @@ export default async function ManagePage(props: { params: Promise<{ orgSlug: str
                   </li>
                 ))}
               </ul>
-              <form
-                action={createExam.bind(null, orgSlug, klass.id)}
-                className="mb-5 flex flex-wrap items-center gap-2"
-              >
-                <input name="title" required placeholder="New exam title" className={`${inputCls} min-w-48`} />
-                <input
-                  name="structure"
-                  placeholder="Problems, e.g. 1a:10, 1b:5, 2:20"
-                  className={`${inputCls} min-w-64`}
-                />
-                <button className={btnCls}>Add exam</button>
-              </form>
+              {canManage && (
+                <form
+                  action={createExam.bind(null, orgSlug, klass.id)}
+                  className="mb-5 flex flex-wrap items-center gap-2"
+                >
+                  <input name="title" required placeholder="New exam title" className={`${inputCls} min-w-48`} />
+                  <input
+                    name="structure"
+                    placeholder="Problems, e.g. 1a:10, 1b:5, 2:20"
+                    className={`${inputCls} min-w-64`}
+                  />
+                  <button className={btnCls}>Add exam</button>
+                </form>
+              )}
 
               <h3 className="mb-2 text-sm font-medium uppercase tracking-wide text-gray-500">
                 Surveys ({classSurveys.length})
@@ -188,21 +207,25 @@ export default async function ManagePage(props: { params: Promise<{ orgSlug: str
                 {classSurveys.map((s) => (
                   <li key={s.id} className="flex items-center justify-between">
                     <span>{s.question}</span>
-                    <form action={setSurveyResultsVisible.bind(null, orgSlug, s.id, !s.results_visible)}>
-                      <button className="text-xs text-blue-600 hover:underline">
-                        {s.results_visible ? 'Hide results' : 'Show results to class'}
-                      </button>
-                    </form>
+                    {canManage && (
+                      <form action={setSurveyResultsVisible.bind(null, orgSlug, s.id, !s.results_visible)}>
+                        <button className="text-xs text-blue-600 hover:underline">
+                          {s.results_visible ? 'Hide results' : 'Show results to class'}
+                        </button>
+                      </form>
+                    )}
                   </li>
                 ))}
               </ul>
-              <form
-                action={createSurvey.bind(null, orgSlug, klass.id)}
-                className="mb-5 flex flex-wrap items-center gap-2"
-              >
-                <input name="question" required placeholder="New survey question" className={`${inputCls} min-w-64 flex-1`} />
-                <button className={btnCls}>Add survey</button>
-              </form>
+              {canManage && (
+                <form
+                  action={createSurvey.bind(null, orgSlug, klass.id)}
+                  className="mb-5 flex flex-wrap items-center gap-2"
+                >
+                  <input name="question" required placeholder="New survey question" className={`${inputCls} min-w-64 flex-1`} />
+                  <button className={btnCls}>Add survey</button>
+                </form>
+              )}
 
               <h3 className="mb-2 text-sm font-medium uppercase tracking-wide text-gray-500">
                 Roster ({roster.length})

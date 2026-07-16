@@ -3,6 +3,7 @@ import { moduleRegistry } from '@platform/core'
 import { createClient } from '@/lib/supabase/server'
 import { getProfile } from '@/lib/platform'
 import OrgMembersPanel, { type OrgMemberRow } from '@/components/org-members-panel'
+import SynagogueLocationFields, { type SynagogueSettings } from '@/components/synagogue-location-fields'
 import {
   addMember,
   addModuleRole,
@@ -13,8 +14,6 @@ import {
   toggleModule,
   updateSynagogueSettings,
 } from './actions'
-
-const inputCls = 'rounded border border-gray-300 px-2 py-1 text-sm'
 
 export default async function ConsolePage() {
   const profile = await getProfile()
@@ -63,9 +62,7 @@ export default async function ConsolePage() {
           )
           const synSettings = (entitlements ?? []).find(
             (e) => e.org_id === org.id && e.module_key === 'synagogue-schedules',
-          )?.settings as
-            | { latitude?: number; longitude?: number; timezone?: string; israel?: boolean; myzmanimLocationId?: string }
-            | undefined
+          )?.settings as SynagogueSettings | undefined
           return (
             <section key={org.id} className="rounded-lg border border-gray-200 bg-white p-5">
               <div className="mb-4 flex items-baseline justify-between">
@@ -108,51 +105,7 @@ export default async function ConsolePage() {
                     action={updateSynagogueSettings.bind(null, org.id)}
                     className="mb-4 flex flex-wrap items-end gap-2"
                   >
-                    <label className="text-xs text-gray-500">
-                      Latitude
-                      <input
-                        name="latitude"
-                        type="number"
-                        step="any"
-                        required
-                        defaultValue={synSettings?.latitude}
-                        className={`${inputCls} block w-28`}
-                      />
-                    </label>
-                    <label className="text-xs text-gray-500">
-                      Longitude
-                      <input
-                        name="longitude"
-                        type="number"
-                        step="any"
-                        required
-                        defaultValue={synSettings?.longitude}
-                        className={`${inputCls} block w-28`}
-                      />
-                    </label>
-                    <label className="text-xs text-gray-500">
-                      Timezone
-                      <input
-                        name="timezone"
-                        required
-                        defaultValue={synSettings?.timezone}
-                        placeholder="America/New_York"
-                        className={`${inputCls} block w-40`}
-                      />
-                    </label>
-                    <label className="text-xs text-gray-500">
-                      myzmanim location ID
-                      <input
-                        name="myzmanimLocationId"
-                        defaultValue={synSettings?.myzmanimLocationId ?? ''}
-                        placeholder="US11210"
-                        className={`${inputCls} block w-32`}
-                      />
-                    </label>
-                    <label className="flex items-center gap-1 text-xs text-gray-500">
-                      <input type="checkbox" name="israel" defaultChecked={synSettings?.israel === true} />
-                      In Israel
-                    </label>
+                    <SynagogueLocationFields settings={synSettings} />
                     <button className="rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700">
                       Save location
                     </button>

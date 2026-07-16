@@ -86,3 +86,27 @@ grants, not settings. **Module 3 has no other known remaining gaps** short
 of the parked myzmanim live-auth item and the explicitly-future items
 (subscriptions/reminders, extra layout templates, distribution) already
 listed above. e2e coverage added to the existing console test.
+
+## 2026-07-16 — location settings became org-admin self-serve
+
+Supersedes the "deliberately superadmin-only" call above: later on
+2026-07-12 the founder decided module CONFIG should be self-serve after all
+— **"whoever fills in the synagogue info should enter it"** — while module
+ENABLEMENT stays superadmin-only forever. Migration
+`20260712030000_org_settings_self_serve.sql` (live-verified 4/4): a new
+`org_modules_update_org_admin` UPDATE policy lets an org owner/admin edit
+their own org's `settings`, and the `org_modules_pin_enablement` BEFORE
+UPDATE trigger pins `enabled`/`org_id`/`module_key` for non-superadmins —
+so a settings edit can never self-enable a module (the escalation RLS alone
+can't block, since both columns live in one row).
+
+UI (2026-07-16): new org-admin **`/o/<slug>/settings`** page
+(`requireOrgAdmin`-gated, linked as "Settings" on the dashboard card next
+to "Members") with the synagogue location form. The form fields are one
+shared component (`apps/web/components/synagogue-location-fields.tsx`) and
+one shared parser (`apps/web/lib/synagogue-settings.ts`) reused by BOTH the
+org-admin page and the superadmin Owner Console form — per the founder's
+reuse rule. Each caller keeps its own authorization gate; RLS is the real
+ceiling either way. Maker walkthrough updated (org admins edit location via
+dashboard → Settings). e2e: admin round-trips a save; plain member and
+non-member both 404.

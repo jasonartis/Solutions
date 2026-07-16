@@ -98,6 +98,32 @@ test('org self-management: admin adds/removes members, changes roles, grants/rev
   await expect(page.getByText('bob@demo.local')).not.toBeVisible()
 })
 
+test('org settings: org admin edits module settings; non-admins are locked out', async ({ page }) => {
+  // Alice (admin of Demo Synagogue) edits the synagogue location herself —
+  // module CONFIG is org self-serve; module ENABLEMENT stays superadmin-only.
+  await signIn(page, 'alice@demo.local')
+  await page.goto('/o/demo-shul/settings')
+  await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Synagogue Schedules — location' })).toBeVisible()
+  const zipInput = page.getByLabel('myzmanim location ID')
+  await expect(zipInput).toHaveValue('US11210')
+  // Save the same values round-trip (no demo-data drift on re-runs).
+  const saved = page.waitForResponse((r) => r.request().method() === 'POST')
+  await page.getByRole('button', { name: 'Save location' }).click()
+  await saved
+  await expect(page.getByLabel('myzmanim location ID')).toHaveValue('US11210')
+
+  // A plain member (not org admin) of their own org gets a 404.
+  await signIn(page, 'orgtest@demo.local')
+  await page.goto('/o/platform-self-test/settings')
+  await expect(page.getByText('404')).toBeVisible()
+
+  // A non-member can't even see the org exists.
+  await signIn(page, 'bob@demo.local')
+  await page.goto('/o/demo-shul/settings')
+  await expect(page.getByText('404')).toBeVisible()
+})
+
 test('alice sees a generated week in the synagogue schedules module', async ({ page }) => {
   await signIn(page, 'alice@demo.local')
   await expect(page.getByText('Demo Synagogue')).toBeVisible()
@@ -326,6 +352,28 @@ test('classroom module: professor creates an exam, grades by subproblem, publish
   await expect(gradesList2).toContainText('27')
 })
 
+test('classroom module: GA reaches the manage console but sees no professor controls', async ({ page }) => {
+  // gabe is a classroom GA (module role) and NOT an org admin. The manage
+  // gate is staff-or-GA; creating/configuring anything stays professor-only.
+  await signIn(page, 'gabe@demo.local')
+  await page.goto('/o/demo-a/m/classroom/manage')
+  await expect(page.getByRole('heading', { name: 'Classroom — Manage' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Create course' })).not.toBeVisible()
+  await expect(page.getByRole('button', { name: 'Add homework' })).not.toBeVisible()
+  await expect(page.getByRole('link', { name: 'Materials' })).not.toBeVisible()
+
+  // The grading console shows the GA-grade column but hides the professor's
+  // peer/final columns and workflow buttons ("a GA must not see any grade
+  // they didn't enter" — RLS enforces the data side, the UI matches it).
+  await page.getByRole('link', { name: 'Homework 1 — Descriptive statistics' }).click()
+  await expect(page.getByRole('heading', { name: /^Grading — Homework 1/ })).toBeVisible()
+  await expect(page.getByRole('columnheader', { name: 'GA grade' })).toBeVisible()
+  await expect(page.getByRole('columnheader', { name: 'Peer reviews' })).not.toBeVisible()
+  await expect(page.getByRole('columnheader', { name: 'Final' })).not.toBeVisible()
+  await expect(page.getByRole('button', { name: /Move submitted/ })).not.toBeVisible()
+  await expect(page.getByRole('button', { name: 'Compute finals' })).not.toBeVisible()
+})
+
 test('matchmaking module: single sees seeded matches and can answer; admin recomputes', async ({ page }) => {
   // Dana shares one answer with her matches (wait on the POST per CLAUDE.md).
   await signIn(page, 'dana@demo.local')
@@ -350,6 +398,16 @@ test('matchmaking module: single sees seeded matches and can answer; admin recom
   await expect(matches).toContainText('I want children: Yes')
   await expect(matches).toContainText('(shared with you)')
 
+  // Mutual-agreement → introduction: Charlie↔Dana are seeded MUTUAL, so
+  // Charlie sees the reveal with Dana's contact info. Eve's seeded ONE-SIDED
+  // interest in Charlie reveals nothing to him (the privacy invariant).
+  const mutualList = page
+    .locator('h2', { hasText: "It's a match!" })
+    .locator('xpath=following-sibling::ul[1]')
+  await expect(mutualList).toContainText('Dana D')
+  await expect(mutualList).toContainText('dana@demo.local')
+  await expect(mutualList).not.toContainText('Eve E')
+
   // Answer the open exercise question (radio + save).
   const exercise = page.locator('form').filter({ hasText: 'I exercise' })
   await exercise.getByRole('radio').first().check() // "Never"
@@ -363,6 +421,14 @@ test('matchmaking module: single sees seeded matches and can answer; admin recom
   await page.getByRole('button', { name: 'Recompute all matches' }).click()
   // Page reloads with the recompute done (no error surfaced).
   await expect(page.getByRole('heading', { name: 'Make-a-Match — Manage' })).toBeVisible()
+
+  // The admin console lists the seeded Charlie↔Dana mutual pair (pair order
+  // is canonical by user id, so either name may come first).
+  await expect(page.getByText('Mutual interest (1)')).toBeVisible()
+  const adminMutual = page
+    .locator('h2', { hasText: 'Mutual interest (1)' })
+    .locator('xpath=following-sibling::ul[1]')
+  await expect(adminMutual).toContainText(/Charlie C ↔ Dana D|Dana D ↔ Charlie C/)
 
   // Groups + matchmaker assignments: a matchmaker's own view relies entirely
   // on these rows existing (RLS scopes their matches to assigned singles),
@@ -395,6 +461,58 @@ test('matchmaking module: single sees seeded matches and can answer; admin recom
   await assignmentLi.getByRole('button', { name: 'Remove' }).click()
   await removed
   await expect(page.locator('li').filter({ hasText: `Mel M → ${groupName}` })).not.toBeVisible()
+
+  // Express/withdraw + the live mutual reveal: Eve expresses interest in
+  // Frank (one-sided — Frank sees nothing), Frank reciprocates (mutual —
+  // contact revealed), then both withdraw so the demo world ends as seeded.
+  await signIn(page, 'eve@demo.local')
+  await page.goto('/o/demo-match/m/matchmaking')
+  // Eve's own seeded one-sided interest in Charlie reveals nothing to HER either.
+  await expect(page.locator('h2', { hasText: "It's a match!" })).not.toBeVisible()
+  const eveMatches = page.locator('h2', { hasText: 'Your matches' }).locator('xpath=following-sibling::ul[1]')
+  const frankRow = eveMatches.locator('> li').filter({ hasText: 'Frank F' })
+  let posted = page.waitForResponse((r) => r.request().method() === 'POST')
+  await frankRow.getByRole('button', { name: 'Express interest' }).click()
+  await posted
+  await expect(frankRow.getByRole('button', { name: 'Withdraw interest' })).toBeVisible()
+
+  // Frank sees no sign of Eve's interest until he reciprocates.
+  await signIn(page, 'frank@demo.local')
+  await page.goto('/o/demo-match/m/matchmaking')
+  await expect(page.locator('h2', { hasText: "It's a match!" })).not.toBeVisible()
+  const frankMatches = page.locator('h2', { hasText: 'Your matches' }).locator('xpath=following-sibling::ul[1]')
+  const eveRow = frankMatches.locator('> li').filter({ hasText: 'Eve E' })
+  posted = page.waitForResponse((r) => r.request().method() === 'POST')
+  await eveRow.getByRole('button', { name: 'Express interest' }).click()
+  await posted
+  // Mutual now — the reveal appears with Eve's contact info.
+  await expect(page.locator('h2', { hasText: "It's a match!" })).toBeVisible()
+  await expect(page.getByText('eve@demo.local')).toBeVisible()
+  // Withdrawing breaks the mutual pair and removes the reveal.
+  posted = page.waitForResponse((r) => r.request().method() === 'POST')
+  await eveRow.getByRole('button', { name: 'Withdraw interest' }).click()
+  await posted
+  await expect(page.locator('h2', { hasText: "It's a match!" })).not.toBeVisible()
+
+  // Eve withdraws too, restoring the seeded state for re-runs.
+  await signIn(page, 'eve@demo.local')
+  await page.goto('/o/demo-match/m/matchmaking')
+  const eveMatches2 = page.locator('h2', { hasText: 'Your matches' }).locator('xpath=following-sibling::ul[1]')
+  const frankRow2 = eveMatches2.locator('> li').filter({ hasText: 'Frank F' })
+  posted = page.waitForResponse((r) => r.request().method() === 'POST')
+  await frankRow2.getByRole('button', { name: 'Withdraw interest' }).click()
+  await posted
+  await expect(frankRow2.getByRole('button', { name: 'Express interest' })).toBeVisible()
+
+  // Matchmaker Mel (assigned to Charlie and Dana) sees their mutual pair.
+  // Scope to the mutual-interest section's list — the regular matches list
+  // below renders the same "A ↔ B" names and would collide in strict mode.
+  await signIn(page, 'mel@demo.local')
+  await page.goto('/o/demo-match/m/matchmaking')
+  const melMutual = page
+    .locator('h2', { hasText: 'Mutual interest — make the introduction' })
+    .locator('xpath=following-sibling::ul[1]')
+  await expect(melMutual).toContainText(/Charlie C ↔ Dana D|Dana D ↔ Charlie C/)
 })
 
 test('nail-salon module: operator runs an appointment from booked to paid', async ({ page }) => {
