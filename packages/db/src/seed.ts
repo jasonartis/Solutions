@@ -100,7 +100,7 @@ async function main() {
   const orgB = await ensureOrg('Demo Org B', 'demo-b')
 
   await admin.from('org_members').upsert([
-    { org_id: orgA, user_id: aliceId, role: 'admin' },
+    { org_id: orgA, user_id: aliceId, role: 'owner' },
     { org_id: orgB, user_id: bobId, role: 'admin' },
   ])
 
@@ -112,7 +112,7 @@ async function main() {
   // its own dedicated org so Demo Org A stays clean for actual walkthrough
   // testing, without weakening the original M0 acceptance proof.
   const platformSelfTest = await ensureOrg('Platform Self-Test', 'platform-self-test')
-  await admin.from('org_members').upsert({ org_id: platformSelfTest, user_id: aliceId, role: 'admin' })
+  await admin.from('org_members').upsert({ org_id: platformSelfTest, user_id: aliceId, role: 'owner' })
   await admin.from('org_modules').upsert({ org_id: platformSelfTest, module_key: 'stub', enabled: true })
   await admin.from('module_roles').upsert({
     org_id: platformSelfTest,
@@ -130,7 +130,7 @@ async function main() {
 
   // --- Demo synagogue for module 3 -----------------------------------------
   const shul = await ensureOrg('Demo Synagogue', 'demo-shul')
-  await admin.from('org_members').upsert({ org_id: shul, user_id: aliceId, role: 'admin' })
+  await admin.from('org_members').upsert({ org_id: shul, user_id: aliceId, role: 'owner' })
   await admin.from('org_modules').upsert({
     org_id: shul,
     module_key: 'synagogue-schedules',
@@ -402,7 +402,7 @@ async function main() {
   const melId = await ensureUser('mel@demo.local', DEMO_PASSWORD, 'Mel M')
 
   await admin.from('org_members').upsert([
-    { org_id: match, user_id: aliceId, role: 'admin' },
+    { org_id: match, user_id: aliceId, role: 'owner' },
     { org_id: match, user_id: charlieId, role: 'member' },
     { org_id: match, user_id: danaId, role: 'member' },
     { org_id: match, user_id: eveId, role: 'member' },
@@ -503,7 +503,7 @@ async function main() {
   // appointment for today so the day-board has something to show.
   const salon = await ensureOrg('Demo Salon', 'demo-salon')
   await admin.from('org_members').upsert([
-    { org_id: salon, user_id: aliceId, role: 'admin' },
+    { org_id: salon, user_id: aliceId, role: 'owner' },
     { org_id: salon, user_id: eveId, role: 'member' },
     { org_id: salon, user_id: danaId, role: 'member' },
     { org_id: salon, user_id: charlieId, role: 'member' },
@@ -594,7 +594,7 @@ async function main() {
   // starts from a clean, meaningful state.
   const dating = await ensureOrg('Demo Dating', 'demo-dating')
   await admin.from('org_members').upsert([
-    { org_id: dating, user_id: aliceId, role: 'admin' },
+    { org_id: dating, user_id: aliceId, role: 'owner' },
     { org_id: dating, user_id: charlieId, role: 'member' },
     { org_id: dating, user_id: danaId, role: 'member' },
     { org_id: dating, user_id: eveId, role: 'member' },
@@ -641,7 +641,7 @@ async function main() {
   // the UI (the e2e uploads a real image), so no content is seeded.
   const visual = await ensureOrg('Demo Visual', 'demo-visual')
   await admin.from('org_members').upsert([
-    { org_id: visual, user_id: aliceId, role: 'admin' },
+    { org_id: visual, user_id: aliceId, role: 'owner' },
     { org_id: visual, user_id: charlieId, role: 'member' },
     { org_id: visual, user_id: danaId, role: 'member' },
   ])

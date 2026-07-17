@@ -3,6 +3,12 @@ import ModuleRoleForm from './module-role-form'
 const inputCls = 'rounded border border-gray-300 px-2 py-1 text-sm'
 const btnCls = 'rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700'
 
+// Org role ranks mirror org_role_rank() in the DB (migration 20260717010000).
+// superadmin = 4 is the caller-rank the console passes; it isn't an org role.
+const ORG_ROLES = ['member', 'admin', 'owner'] as const
+const ORG_ROLE_RANK: Record<string, number> = { member: 1, admin: 2, owner: 3 }
+export const SUPERADMIN_RANK = 4
+
 export type OrgMemberRow = {
   userId: string
   displayName: string | null
@@ -28,32 +34,37 @@ export default function OrgMembersPanel(props: {
   removeMemberAction: (userId: string) => Promise<void>
   addModuleRoleAction: (formData: FormData) => Promise<void>
   removeModuleRoleAction: (userId: string, moduleKey: string, role: string) => Promise<void>
-  // When set to the caller's own userId, that row's org-role change + remove
-  // controls are hidden — an org admin can't demote or remove their OWN seat
-  // (enforced for real by the org_members_guard_self_admin trigger; this just
-  // avoids showing a control that would only error). Left undefined by the
-  // superadmin Owner Console, where the superadmin is exempt and keeps full
-  // control of every row including their own.
-  lockSelfUserId?: string
+  // The caller's own rank in this org (owner=3, admin=2; the superadmin
+  // console passes SUPERADMIN_RANK=4). Drives which rows are manageable and
+  // which target roles are offerable — you can only manage a seat you
+  // strictly outrank, and only assign roles below your own. This mirrors the
+  // org_members_guard_hierarchy trigger (20260717010000) so the UI never
+  // shows a control that would only error.
+  callerRank: number
 }) {
   const nameOf = (m: OrgMemberRow) => m.displayName || m.email || m.userId
+  // Roles the caller may assign: strictly below their own rank.
+  const assignableRoles = ORG_ROLES.filter((r) => ORG_ROLE_RANK[r] < props.callerRank)
 
   return (
     <div>
-      {/* Founder feedback (2026-07-16): "What is Admin vs Owner? Which one is
-          above the other?" — no explanation existed anywhere. Owner/Admin are
-          functionally IDENTICAL today (is_org_admin() treats them the same
-          everywhere) — Owner is just the conventional label for whoever
-          founded the org. Worth a plain-language note rather than silence. */}
+      {/* Founder decision (2026-07-17): a real rank ladder now. */}
       <p className="mb-3 max-w-xl text-xs text-gray-500">
-        <span className="font-medium">Owner</span> and <span className="font-medium">Admin</span> can
-        both fully manage this organization (members, roles, settings) — Owner is just the
-        conventional label for whoever the org started with; neither outranks the other.{' '}
-        <span className="font-medium">Member</span> has no management access. An org can never be left
-        with zero Owner/Admin.
+        Organization roles form a ladder: <span className="font-medium">Owner</span> &gt;{' '}
+        <span className="font-medium">Admin</span> &gt; <span className="font-medium">Member</span>. Each
+        level manages the levels below it — an owner manages admins and members, an admin manages
+        members. You can&apos;t change your own role or anyone at or above your level (only a higher
+        level, or the platform owner, can). An org can never be left with zero owner/admin.
       </p>
       <ul className="mb-4 space-y-2">
-        {props.members.map((m) => (
+        {props.members.map((m) => {
+          // You may manage this row only if you strictly outrank it. Your own
+          // row (equal rank) is never manageable — self-demote/remove is
+          // blocked (org_members_guard_hierarchy). The assignable-roles list
+          // is already capped below your rank, so a manageable row's current
+          // role is always in it.
+          const canManage = props.callerRank > (ORG_ROLE_RANK[m.orgRole] ?? 0)
+          return (
           <li key={m.userId} className="rounded border border-gray-200 bg-white p-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-sm">
@@ -61,18 +72,14 @@ export default function OrgMembersPanel(props: {
                 {m.email && <span className="ml-2 text-xs text-gray-400">{m.email}</span>}
               </span>
               <span className="flex items-center gap-2">
-                {props.lockSelfUserId === m.userId ? (
-                  <span className="text-xs text-gray-400">
-                    (you) — another owner/admin can change your role
-                  </span>
-                ) : (
+                {canManage ? (
                   <>
                     <form action={props.changeRoleAction} className="flex items-center gap-1">
                       <input type="hidden" name="userId" value={m.userId} />
                       <select name="role" defaultValue={m.orgRole} className={`${inputCls} text-xs`}>
-                        <option value="member">member</option>
-                        <option value="admin">admin</option>
-                        <option value="owner">owner</option>
+                        {assignableRoles.map((r) => (
+                          <option key={r} value={r}>{r}</option>
+                        ))}
                       </select>
                       <button className="text-xs text-blue-600 hover:underline">Update</button>
                     </form>
@@ -80,6 +87,8 @@ export default function OrgMembersPanel(props: {
                       <button className="px-1 py-1.5 text-xs text-red-600 hover:underline">Remove</button>
                     </form>
                   </>
+                ) : (
+                  <span className="text-xs uppercase text-gray-400">{m.orgRole}</span>
                 )}
               </span>
             </div>
@@ -101,7 +110,8 @@ export default function OrgMembersPanel(props: {
               </ul>
             )}
           </li>
-        ))}
+          )
+        })}
         {props.members.length === 0 && <li className="text-sm text-gray-400">No members yet.</li>}
       </ul>
 
@@ -109,9 +119,9 @@ export default function OrgMembersPanel(props: {
       <form action={props.addMemberAction} className="mb-6 flex flex-wrap items-center gap-2">
         <input name="email" type="email" required placeholder="email@example.com" className={`${inputCls} w-56`} />
         <select name="role" className={inputCls} defaultValue="member">
-          <option value="member">member</option>
-          <option value="admin">admin</option>
-          <option value="owner">owner</option>
+          {assignableRoles.map((r) => (
+            <option key={r} value={r}>{r}</option>
+          ))}
         </select>
         <button className={btnCls}>Add</button>
       </form>

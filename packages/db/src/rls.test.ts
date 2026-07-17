@@ -119,7 +119,7 @@ describe('org self-management', () => {
     await alice.from('org_members').delete().eq('org_id', orgId).eq('user_id', bobUserId)
   })
 
-  it('alice can promote and demote orgtest within an org she admins', async () => {
+  it('an owner can promote a member to admin and demote back', async () => {
     const orgId = await selfTestOrgId(alice)
     const { data: orgtestProfile } = await alice
       .from('profiles')
@@ -149,7 +149,7 @@ describe('org self-management', () => {
     expect(error).not.toBeNull()
   })
 
-  it('a plain member cannot demote the admin of their own org', async () => {
+  it('a plain member cannot demote the owner of their own org', async () => {
     const orgId = await selfTestOrgId(alice)
     const { data: aliceUser } = await alice.auth.getUser()
     // Postgres RLS quirk: an UPDATE whose USING clause excludes every
@@ -161,16 +161,16 @@ describe('org self-management', () => {
       .update({ role: 'member' })
       .eq('org_id', orgId)
       .eq('user_id', aliceUser.user!.id)
-    const { data: stillAdmin } = await alice
+    const { data: stillOwner } = await alice
       .from('org_members')
       .select('role')
       .eq('org_id', orgId)
       .eq('user_id', aliceUser.user!.id)
       .single()
-    expect(stillAdmin?.role).toBe('admin')
+    expect(stillOwner?.role).toBe('owner')
   })
 
-  it('the last admin of an org cannot be demoted or removed', async () => {
+  it('the sole owner of an org cannot demote or remove themselves', async () => {
     const orgId = await selfTestOrgId(alice)
     const { data: aliceUser } = await alice.auth.getUser()
     const { error: demoteErr } = await alice
@@ -188,10 +188,8 @@ describe('org self-management', () => {
     expect(deleteErr).not.toBeNull()
   })
 
-  it('an admin cannot demote or remove their OWN seat even when another admin exists', async () => {
-    // Isolates the self-seat guard (20260716030000) from the last-admin
-    // guard: with orgtest ALSO an admin, the org would still have an admin
-    // if alice demoted herself — so any block here must be the self-guard.
+  it('org role hierarchy: each level manages only strictly-below levels (20260717010000)', async () => {
+    // Fixture: alice = OWNER, orgtest = member of platform-self-test.
     const orgId = await selfTestOrgId(alice)
     const { data: aliceUser } = await alice.auth.getUser()
     const { data: orgtestProfile } = await alice
@@ -200,44 +198,57 @@ describe('org self-management', () => {
       .eq('email', 'orgtest@demo.local')
       .single()
     const orgtestId = orgtestProfile!.user_id as string
+    // bob's id via the admin-only email resolver (alice & bob share no org
+    // otherwise, so a plain profiles read wouldn't see him).
+    const { data: found } = await alice.rpc('org_find_user_by_email', {
+      check_org_id: orgId,
+      target_email: 'bob@demo.local',
+    })
+    const bobId = found![0]!.user_id as string
 
-    // Promote orgtest to a second admin.
-    await alice.from('org_members').update({ role: 'admin' }).eq('org_id', orgId).eq('user_id', orgtestId)
+    // Owner can create an admin (member -> admin).
+    expect(
+      (await alice.from('org_members').update({ role: 'admin' }).eq('org_id', orgId).eq('user_id', orgtestId)).error,
+    ).toBeNull()
+    // Owner CANNOT create an owner — only a superadmin can (3 not > 3).
+    expect(
+      (await alice.from('org_members').update({ role: 'owner' }).eq('org_id', orgId).eq('user_id', orgtestId)).error,
+    ).not.toBeNull()
 
-    // Alice still cannot demote or remove her own admin seat.
-    const { error: selfDemote } = await alice
-      .from('org_members')
-      .update({ role: 'member' })
-      .eq('org_id', orgId)
-      .eq('user_id', aliceUser.user!.id)
-    expect(selfDemote).not.toBeNull()
-    const { error: selfRemove } = await alice
-      .from('org_members')
-      .delete()
-      .eq('org_id', orgId)
-      .eq('user_id', aliceUser.user!.id)
-    expect(selfRemove).not.toBeNull()
-    // She's still an admin.
-    const { data: stillAdmin } = await alice
+    // Add bob as a plain member (owner adding a member).
+    expect((await alice.from('org_members').upsert({ org_id: orgId, user_id: bobId, role: 'member' })).error).toBeNull()
+
+    // Admin (orgtest) CANNOT promote a member up to admin (can't mint a peer).
+    expect(
+      (await orgtest.from('org_members').update({ role: 'admin' }).eq('org_id', orgId).eq('user_id', bobId)).error,
+    ).not.toBeNull()
+
+    // Admin CANNOT demote/remove the owner above them (alice stays owner).
+    await orgtest.from('org_members').update({ role: 'member' }).eq('org_id', orgId).eq('user_id', aliceUser.user!.id)
+    const { data: aliceRow } = await alice
       .from('org_members')
       .select('role')
       .eq('org_id', orgId)
       .eq('user_id', aliceUser.user!.id)
       .single()
-    expect(stillAdmin?.role).toBe('admin')
+    expect(aliceRow?.role).toBe('owner')
 
-    // But a co-admin CAN demote a DIFFERENT admin (the handoff path).
-    const { error: otherDemote } = await orgtest
-      .from('org_members')
-      .update({ role: 'member' })
-      .eq('org_id', orgId)
-      .eq('user_id', aliceUser.user!.id)
-    expect(otherDemote).toBeNull()
+    // Admin cannot touch ANOTHER admin: promote bob to admin (owner action),
+    // then orgtest (admin) can't demote bob (admin) — the equal-rank block
+    // that answers "can an admin touch another admin?" = no.
+    await alice.from('org_members').update({ role: 'admin' }).eq('org_id', orgId).eq('user_id', bobId)
+    expect(
+      (await orgtest.from('org_members').update({ role: 'member' }).eq('org_id', orgId).eq('user_id', bobId)).error,
+    ).not.toBeNull()
 
-    // Restore the fixture (alice=admin, orgtest=member). Alice is now a
-    // member, so orgtest (still admin) must promote her back first; then
-    // alice — admin again — demotes orgtest (orgtest can't self-demote).
-    await orgtest.from('org_members').update({ role: 'admin' }).eq('org_id', orgId).eq('user_id', aliceUser.user!.id)
+    // Owner's OWN seat is blocked even though a second manager (orgtest) exists
+    // — proves the self-block is the hierarchy rule, not the last-admin floor.
+    expect(
+      (await alice.from('org_members').update({ role: 'admin' }).eq('org_id', orgId).eq('user_id', aliceUser.user!.id)).error,
+    ).not.toBeNull()
+
+    // Restore the fixture: remove bob, orgtest back to member.
+    await alice.from('org_members').delete().eq('org_id', orgId).eq('user_id', bobId)
     await alice.from('org_members').update({ role: 'member' }).eq('org_id', orgId).eq('user_id', orgtestId)
   })
 

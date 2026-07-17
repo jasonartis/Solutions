@@ -117,6 +117,23 @@ owner/admin** (`is_org_admin()`, everything in their own org) → **module role 
 (tiers compose downward via the `_can_*` helpers — each tier includes all higher
 tiers, so higher always controls lower).
 
+**Org roles are a real RANK ladder (founder decision, 2026-07-17):**
+superadmin(4) > owner(3) > admin(2) > member(1). A caller may create/change/
+remove an `org_members` seat only if they STRICTLY outrank both its current
+and target role (`org_members_guard_hierarchy`, `20260717010000`). So only a
+superadmin creates owners; an owner manages admins+members (not other owners);
+an admin manages members only (can't mint/touch admins or owners); a member
+manages no one; and nobody can act on their OWN seat (equal rank — this
+subsumed and replaced the earlier self-seat guard). The retained last-admin
+guard still enforces the zero-owner/admin floor. NOTE the rank ladder governs
+ONLY who-manages-whom in `org_members`; `is_org_admin()` is UNCHANGED (owner
+OR admin), so both keep full ORG management (settings, module-role grants) —
+the founder's "admins keep full powers" call. Two intended consequences: an
+owner can't self-toggle owner↔admin (any self-action is blocked), and an
+all-admin org with no owner can't self-manage admins (only a superadmin can
+create/manage an owner). "Owners-only settings" is a possible future
+refinement, deliberately not built.
+
 **Level 2 is now self-serve**, not superadmin-only: `/o/[orgSlug]/members`
 (gated `requireOrgAdmin`, linked from the dashboard's org card whenever the
 caller is owner/admin) lets an org owner/admin add/remove their own org's
@@ -137,16 +154,11 @@ the founder's explicit call: some orgs shouldn't have access to some modules,
 and that's a platform-owner business decision, not something an org can
 grant itself. A "last-admin-standing"
 guard trigger (mirroring the visual-messaging conversation-admin pattern) stops
-an org from ever being left with zero owner/admin. A companion **self-seat
-guard** (`20260716030000_org_self_seat_guard.sql`, founder feedback
-2026-07-16) additionally stops a NON-superadmin from demoting or removing
-their OWN owner/admin seat even when other admins remain — self-lockout
-protection the last-admin guard didn't cover (it only guards the ZERO-admin
-floor). Escape hatches preserved: a co-admin or a superadmin can always act
-on that seat; owner↔admin lateral self-changes stay allowed. Deliberately
-NOT extended to "an admin can't demote OTHER admins" (the founder mused it
-but it conflicts with owner=admin identity and with org self-management
-itself — flagged back as a separate open question). The superadmin Owner Console
+an org from ever being left with zero owner/admin. (A short-lived self-seat
+guard, `20260716030000`, blocked only self-demote/remove; it was superseded
+2026-07-17 by the rank ladder above — which subsumes it AND answers the
+"can an admin touch another admin?" question: no, equal rank — and the
+`20260717010000` migration drops it.) The superadmin Owner Console
 (`/console`) and the new org page share one component
 (`apps/web/components/org-members-panel.tsx`) and one set of data-operation
 helpers (`apps/web/lib/org-members.ts`) — one place to change either surface,

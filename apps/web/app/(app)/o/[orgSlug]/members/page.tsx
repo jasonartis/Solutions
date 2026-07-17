@@ -29,6 +29,13 @@ export default async function MembersPage(props: { params: Promise<{ orgSlug: st
     .filter((m): m is (typeof moduleRegistry)[number] => Boolean(m))
     .map((m) => ({ key: m.key, name: m.name, roles: m.roles }))
 
+  // The caller's own rank drives which rows/roles they can manage (mirrors
+  // org_members_guard_hierarchy). requireOrgAdmin already guaranteed owner
+  // or admin; a superadmin who isn't a member still sees this page via that
+  // gate, so fall back to owner-level (3) for them.
+  const myRole = (members ?? []).find((mem) => mem.user_id === user?.id)?.role
+  const callerRank = myRole === 'owner' ? 3 : myRole === 'admin' ? 2 : 3
+
   const rows: OrgMemberRow[] = (members ?? []).map((mem) => {
     const profile = (profiles ?? []).find((p) => p.user_id === mem.user_id)
     const myModuleRoles = (moduleRoles ?? [])
@@ -70,7 +77,7 @@ export default async function MembersPage(props: { params: Promise<{ orgSlug: st
         removeMemberAction={removeMember.bind(null, orgSlug)}
         addModuleRoleAction={addModuleRole.bind(null, orgSlug)}
         removeModuleRoleAction={removeModuleRoleAction.bind(null, orgSlug)}
-        lockSelfUserId={user?.id}
+        callerRank={callerRank}
       />
     </div>
   )

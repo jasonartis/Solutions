@@ -44,5 +44,6 @@ backups/
 # Founder/session scratch — personal, evolving notes and one-off verify
 # scripts, deliberately kept out of the repo (CLAUDE.md convention)
 /founder-feedback.md
+/founder-todo.md
 /TESTING-TODO-2DAYS.md
 /verify-*.mjs

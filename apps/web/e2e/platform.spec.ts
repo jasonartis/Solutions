@@ -65,16 +65,15 @@ test('org self-management: admin adds/removes members, changes roles, grants/rev
   await expect(page.getByRole('heading', { name: 'Members' })).toBeVisible()
   await expect(page.getByText('orgtest@demo.local')).toBeVisible()
 
-  // Self-seat guard (2026-07-16): alice's OWN row shows a "(you)" note
-  // instead of role-change/remove controls — she can't demote or remove
-  // herself (the org_members_guard_self_admin trigger enforces it; the UI
-  // just doesn't offer a control that would only error).
+  // Org role hierarchy (2026-07-17): alice is the OWNER of this org. You can
+  // never manage a seat you don't strictly outrank — including your own — so
+  // alice's row shows her role as static text, with no Update/Remove controls.
   const aliceRow = page.locator('li', { has: page.getByText('alice@demo.local') })
-  await expect(aliceRow.getByText('(you)', { exact: false })).toBeVisible()
-  // The member-level "Remove" button is gone (exact match — alice's seeded
-  // module-role chip has its own "Remove this role" ×, which is unrelated).
-  await expect(aliceRow.getByRole('button', { name: 'Remove', exact: true })).not.toBeVisible()
   await expect(aliceRow.getByRole('button', { name: 'Update' })).not.toBeVisible()
+  // exact match — alice's seeded module-role chip has its own "Remove this
+  // role" ×, which is unrelated to the member-level Remove.
+  await expect(aliceRow.getByRole('button', { name: 'Remove', exact: true })).not.toBeVisible()
+  await expect(aliceRow.getByText('owner', { exact: true })).toBeVisible()
 
   // Add bob as a new member by email.
   await page.getByPlaceholder('email@example.com').fill('bob@demo.local')

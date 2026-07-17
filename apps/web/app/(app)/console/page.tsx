@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation'
 import { moduleRegistry } from '@platform/core'
 import { createClient } from '@/lib/supabase/server'
 import { getProfile } from '@/lib/platform'
-import OrgMembersPanel, { type OrgMemberRow } from '@/components/org-members-panel'
+import OrgMembersPanel, { SUPERADMIN_RANK, type OrgMemberRow } from '@/components/org-members-panel'
 import SynagogueLocationFields, { type SynagogueSettings } from '@/components/synagogue-location-fields'
 import {
   addMember,
@@ -159,6 +159,7 @@ export default async function ConsolePage() {
                 removeMemberAction={removeMember.bind(null, org.id)}
                 addModuleRoleAction={addModuleRole.bind(null, org.id)}
                 removeModuleRoleAction={removeModuleRoleAction.bind(null, org.id)}
+                callerRank={SUPERADMIN_RANK}
               />
             </section>
           )
