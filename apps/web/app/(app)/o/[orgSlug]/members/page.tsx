@@ -13,6 +13,9 @@ import { addMember, addModuleRole, changeRole, removeMember, removeModuleRoleAct
 export default async function MembersPage(props: { params: Promise<{ orgSlug: string }> }) {
   const { orgSlug } = await props.params
   const { supabase, org } = await requireOrgAdmin(orgSlug)
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
   const [{ data: members }, { data: profiles }, { data: entitlements }, { data: moduleRoles }] = await Promise.all([
     supabase.from('org_members').select('user_id, role').eq('org_id', org.id),
@@ -67,6 +70,7 @@ export default async function MembersPage(props: { params: Promise<{ orgSlug: st
         removeMemberAction={removeMember.bind(null, orgSlug)}
         addModuleRoleAction={addModuleRole.bind(null, orgSlug)}
         removeModuleRoleAction={removeModuleRoleAction.bind(null, orgSlug)}
+        lockSelfUserId={user?.id}
       />
     </div>
   )

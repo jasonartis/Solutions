@@ -188,6 +188,59 @@ describe('org self-management', () => {
     expect(deleteErr).not.toBeNull()
   })
 
+  it('an admin cannot demote or remove their OWN seat even when another admin exists', async () => {
+    // Isolates the self-seat guard (20260716030000) from the last-admin
+    // guard: with orgtest ALSO an admin, the org would still have an admin
+    // if alice demoted herself — so any block here must be the self-guard.
+    const orgId = await selfTestOrgId(alice)
+    const { data: aliceUser } = await alice.auth.getUser()
+    const { data: orgtestProfile } = await alice
+      .from('profiles')
+      .select('user_id')
+      .eq('email', 'orgtest@demo.local')
+      .single()
+    const orgtestId = orgtestProfile!.user_id as string
+
+    // Promote orgtest to a second admin.
+    await alice.from('org_members').update({ role: 'admin' }).eq('org_id', orgId).eq('user_id', orgtestId)
+
+    // Alice still cannot demote or remove her own admin seat.
+    const { error: selfDemote } = await alice
+      .from('org_members')
+      .update({ role: 'member' })
+      .eq('org_id', orgId)
+      .eq('user_id', aliceUser.user!.id)
+    expect(selfDemote).not.toBeNull()
+    const { error: selfRemove } = await alice
+      .from('org_members')
+      .delete()
+      .eq('org_id', orgId)
+      .eq('user_id', aliceUser.user!.id)
+    expect(selfRemove).not.toBeNull()
+    // She's still an admin.
+    const { data: stillAdmin } = await alice
+      .from('org_members')
+      .select('role')
+      .eq('org_id', orgId)
+      .eq('user_id', aliceUser.user!.id)
+      .single()
+    expect(stillAdmin?.role).toBe('admin')
+
+    // But a co-admin CAN demote a DIFFERENT admin (the handoff path).
+    const { error: otherDemote } = await orgtest
+      .from('org_members')
+      .update({ role: 'member' })
+      .eq('org_id', orgId)
+      .eq('user_id', aliceUser.user!.id)
+    expect(otherDemote).toBeNull()
+
+    // Restore the fixture (alice=admin, orgtest=member). Alice is now a
+    // member, so orgtest (still admin) must promote her back first; then
+    // alice — admin again — demotes orgtest (orgtest can't self-demote).
+    await orgtest.from('org_members').update({ role: 'admin' }).eq('org_id', orgId).eq('user_id', aliceUser.user!.id)
+    await alice.from('org_members').update({ role: 'member' }).eq('org_id', orgId).eq('user_id', orgtestId)
+  })
+
   it('alice can grant a module role to orgtest for a module enabled on her org', async () => {
     const orgId = await selfTestOrgId(alice)
     const { data: orgtestProfile } = await alice

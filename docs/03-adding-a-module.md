@@ -137,7 +137,16 @@ the founder's explicit call: some orgs shouldn't have access to some modules,
 and that's a platform-owner business decision, not something an org can
 grant itself. A "last-admin-standing"
 guard trigger (mirroring the visual-messaging conversation-admin pattern) stops
-an org from ever being left with zero owner/admin. The superadmin Owner Console
+an org from ever being left with zero owner/admin. A companion **self-seat
+guard** (`20260716030000_org_self_seat_guard.sql`, founder feedback
+2026-07-16) additionally stops a NON-superadmin from demoting or removing
+their OWN owner/admin seat even when other admins remain — self-lockout
+protection the last-admin guard didn't cover (it only guards the ZERO-admin
+floor). Escape hatches preserved: a co-admin or a superadmin can always act
+on that seat; owner↔admin lateral self-changes stay allowed. Deliberately
+NOT extended to "an admin can't demote OTHER admins" (the founder mused it
+but it conflicts with owner=admin identity and with org self-management
+itself — flagged back as a separate open question). The superadmin Owner Console
 (`/console`) and the new org page share one component
 (`apps/web/components/org-members-panel.tsx`) and one set of data-operation
 helpers (`apps/web/lib/org-members.ts`) — one place to change either surface,

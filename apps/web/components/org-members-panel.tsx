@@ -28,6 +28,13 @@ export default function OrgMembersPanel(props: {
   removeMemberAction: (userId: string) => Promise<void>
   addModuleRoleAction: (formData: FormData) => Promise<void>
   removeModuleRoleAction: (userId: string, moduleKey: string, role: string) => Promise<void>
+  // When set to the caller's own userId, that row's org-role change + remove
+  // controls are hidden — an org admin can't demote or remove their OWN seat
+  // (enforced for real by the org_members_guard_self_admin trigger; this just
+  // avoids showing a control that would only error). Left undefined by the
+  // superadmin Owner Console, where the superadmin is exempt and keeps full
+  // control of every row including their own.
+  lockSelfUserId?: string
 }) {
   const nameOf = (m: OrgMemberRow) => m.displayName || m.email || m.userId
 
@@ -54,18 +61,26 @@ export default function OrgMembersPanel(props: {
                 {m.email && <span className="ml-2 text-xs text-gray-400">{m.email}</span>}
               </span>
               <span className="flex items-center gap-2">
-                <form action={props.changeRoleAction} className="flex items-center gap-1">
-                  <input type="hidden" name="userId" value={m.userId} />
-                  <select name="role" defaultValue={m.orgRole} className={`${inputCls} text-xs`}>
-                    <option value="member">member</option>
-                    <option value="admin">admin</option>
-                    <option value="owner">owner</option>
-                  </select>
-                  <button className="text-xs text-blue-600 hover:underline">Update</button>
-                </form>
-                <form action={props.removeMemberAction.bind(null, m.userId)}>
-                  <button className="px-1 py-1.5 text-xs text-red-600 hover:underline">Remove</button>
-                </form>
+                {props.lockSelfUserId === m.userId ? (
+                  <span className="text-xs text-gray-400">
+                    (you) — another owner/admin can change your role
+                  </span>
+                ) : (
+                  <>
+                    <form action={props.changeRoleAction} className="flex items-center gap-1">
+                      <input type="hidden" name="userId" value={m.userId} />
+                      <select name="role" defaultValue={m.orgRole} className={`${inputCls} text-xs`}>
+                        <option value="member">member</option>
+                        <option value="admin">admin</option>
+                        <option value="owner">owner</option>
+                      </select>
+                      <button className="text-xs text-blue-600 hover:underline">Update</button>
+                    </form>
+                    <form action={props.removeMemberAction.bind(null, m.userId)}>
+                      <button className="px-1 py-1.5 text-xs text-red-600 hover:underline">Remove</button>
+                    </form>
+                  </>
+                )}
               </span>
             </div>
             {m.moduleRoles.length > 0 && (
