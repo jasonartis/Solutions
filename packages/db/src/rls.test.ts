@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeAll } from 'vitest'
+import { describe, expect, it, beforeAll, afterAll } from 'vitest'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 
 // RLS isolation test (M0 acceptance, docs/04): a user in org B must see
@@ -375,5 +375,165 @@ describe('speed-dating side capacity RPC', () => {
     expect(nonMemberCount).toBe(0)
 
     await alice.from('sd_events').delete().eq('id', event!.id) // cleanup
+  })
+})
+
+// Module grants scope — slice 1 (2026-07-20, 20260720010000_module_grants_scope).
+// Generalizes module_roles into SCOPED grants (user, position, scope) with a
+// per-module entity tree and the ported two-branch hierarchy guard (docs/15
+// §4/§4.1). The security properties CI must protect, all exercised as real
+// users under RLS on the Platform Self-Test org + a dedicated 'usermodel-test'
+// module_key so nothing collides with the shipped modules' seeded grants.
+describe('module grants scope (slice 1)', () => {
+  const MOD = 'usermodel-test'
+  let orgId: string
+  let demoBId: string
+  const uid: Record<string, string> = {}
+  const node: Record<string, string> = {}
+  let charlie: SupabaseClient
+  let dana: SupabaseClient
+  let eve: SupabaseClient
+  let frank: SupabaseClient
+
+  const errored = (r: { error: unknown }) => r.error != null
+  const okWrite = (r: { error: unknown }) => r.error == null
+  // Params accept `undefined` because the fixture records are typed
+  // Record<string,string> and tsconfig has noUncheckedIndexedAccess on; the
+  // values are always present after beforeAll runs.
+  const grant = (c: SupabaseClient, user: string | undefined, role: string, scope: string | null | undefined) =>
+    c.from('module_roles').insert({ org_id: orgId, module_key: MOD, user_id: user, role, scope_ref: scope })
+
+  beforeAll(async () => {
+    charlie = await signIn('charlie@demo.local')
+    dana = await signIn('dana@demo.local')
+    eve = await signIn('eve@demo.local')
+    frank = await signIn('frank@demo.local')
+
+    orgId = (await alice.from('orgs').select('id').eq('slug', 'platform-self-test').single()).data!.id
+    demoBId = (await bob.from('orgs').select('id').eq('slug', 'demo-b').single()).data!.id
+    uid.alice = (await alice.auth.getUser()).data.user!.id
+    for (const e of ['bob', 'charlie', 'dana', 'eve', 'frank']) {
+      const { data } = await alice.rpc('org_find_user_by_email', {
+        check_org_id: orgId,
+        target_email: `${e}@demo.local`,
+      })
+      uid[e] = data![0].user_id as string
+      await alice.from('org_members').upsert({ org_id: orgId, user_id: uid[e], role: 'member' })
+    }
+    // Clean fixtures then build the tree: STEM{Math,CS}, Humanities.
+    await alice.from('module_roles').delete().eq('org_id', orgId).eq('module_key', MOD)
+    await alice.from('module_scope_nodes').delete().eq('org_id', orgId)
+    const mk = async (name: string, parent: string | null | undefined) =>
+      (await alice
+        .from('module_scope_nodes')
+        .insert({ org_id: orgId, module_key: MOD, name, parent_id: parent })
+        .select('id')
+        .single()).data!.id as string
+    node.stem = await mk('STEM', null)
+    node.math = await mk('Math', node.stem)
+    node.cs = await mk('CS', node.stem)
+    node.humanities = await mk('Humanities', null)
+  })
+
+  afterAll(async () => {
+    await alice.from('module_roles').delete().eq('org_id', orgId).eq('module_key', MOD)
+    await alice.from('module_scope_nodes').delete().eq('org_id', orgId)
+    await bob.from('module_scope_nodes').delete().eq('org_id', demoBId).eq('module_key', MOD)
+    for (const e of ['bob', 'charlie', 'dana', 'eve', 'frank']) {
+      await alice.from('org_members').delete().eq('org_id', orgId).eq('user_id', uid[e])
+    }
+  })
+
+  it('path is trigger-computed (client value ignored) and re-parenting is blocked', async () => {
+    const { data: injected } = await alice
+      .from('module_scope_nodes')
+      .insert({ org_id: orgId, module_key: MOD, name: 'Injected', parent_id: node.stem, path: 'HACKED/' })
+      .select('id, path')
+      .single()
+    const { data: stemRow } = await alice.from('module_scope_nodes').select('path').eq('id', node.stem).single()
+    expect(injected!.path.startsWith(stemRow!.path)).toBe(true)
+    expect(injected!.path.includes('HACKED')).toBe(false)
+    // Re-parenting / re-keying is deferred to slice 2 and rejected.
+    expect(errored(await alice.from('module_scope_nodes').update({ parent_id: node.humanities }).eq('id', node.math))).toBe(true)
+    expect(errored(await alice.from('module_scope_nodes').update({ module_key: 'x' }).eq('id', node.math))).toBe(true)
+    await alice.from('module_scope_nodes').delete().eq('id', injected!.id)
+  })
+
+  it('scope-node tenancy is validated unconditionally (even for an org admin)', async () => {
+    // A node in ANOTHER org, created by that org's own admin.
+    const { data: bNode } = await bob
+      .from('module_scope_nodes')
+      .insert({ org_id: demoBId, module_key: MOD, name: 'B-root' })
+      .select('id')
+      .single()
+    expect(errored(await grant(alice, uid.charlie, 'lead', bNode!.id))).toBe(true) // cross-org pointer
+    // A node in a DIFFERENT module of the SAME org.
+    const { data: omNode } = await alice
+      .from('module_scope_nodes')
+      .insert({ org_id: orgId, module_key: 'other-module', name: 'OM' })
+      .select('id')
+      .single()
+    expect(errored(await grant(alice, uid.charlie, 'lead', omNode!.id))).toBe(true) // cross-module pointer
+    expect(errored(await grant(alice, uid.charlie, 'lead', '00000000-0000-0000-0000-000000000000'))).toBe(true) // non-existent
+  })
+
+  it('two-branch guard: a non-admin coordinator manages only inside its scope', async () => {
+    // Setup (via alice, who bypasses the ladder as org owner).
+    expect(okWrite(await grant(alice, uid.eve, 'director', null))).toBe(true)
+    expect(okWrite(await grant(alice, uid.bob, 'coordinator', node.stem))).toBe(true)
+
+    // Branch A: director@global appoints coordinator@STEM.
+    expect(okWrite(await grant(eve, uid.charlie, 'coordinator', node.stem))).toBe(true)
+    // Branch A: coordinator@STEM appoints lead@Math (strictly outranks + covers).
+    expect(okWrite(await grant(bob, uid.dana, 'lead', node.math))).toBe(true)
+    // Branch A fails: STEM does not cover Humanities.
+    expect(errored(await grant(bob, uid.frank, 'lead', node.humanities))).toBe(true)
+    // Branch B: coordinator@STEM appoints coordinator@Math (same position, strictly inside).
+    expect(okWrite(await grant(bob, uid.frank, 'coordinator', node.math))).toBe(true)
+    // Peers: coordinator@STEM cannot appoint coordinator@STEM (same scope not strictly inside; equal rank).
+    expect(errored(await grant(bob, uid.eve, 'coordinator', node.stem))).toBe(true)
+    // Cannot exceed own rank; a node scope can never cover global.
+    expect(errored(await grant(bob, uid.dana, 'director', null))).toBe(true)
+    // Own-seat is untouchable.
+    expect(
+      errored(await bob.from('module_roles').update({ role: 'director' }).eq('org_id', orgId).eq('module_key', MOD).eq('user_id', uid.bob)),
+    ).toBe(true)
+    // Sibling non-touch: coordinator@Math (frank) cannot remove coordinator@STEM (charlie, its parent).
+    expect(
+      errored(await frank.from('module_roles').delete().eq('org_id', orgId).eq('module_key', MOD).eq('user_id', uid.charlie).eq('role', 'coordinator')),
+    ).toBe(true)
+  })
+
+  it('re-point escalation defense: UPDATE checks BOTH old and new scope (docs/15 §4.1 item 1)', async () => {
+    // dana holds lead@Math, granted by bob (coordinator@STEM) in the prior test.
+    const repoint = (scope: string | null | undefined) =>
+      bob.from('module_roles').update({ scope_ref: scope }).eq('org_id', orgId).eq('module_key', MOD).eq('user_id', uid.dana).eq('role', 'lead')
+    expect(errored(await repoint(null))).toBe(true) // -> global: rejected
+    expect(errored(await repoint(node.humanities))).toBe(true) // -> outside STEM: rejected
+    expect(okWrite(await repoint(node.cs))).toBe(true) // Math -> CS, both inside STEM: allowed
+    await repoint(node.math) // restore
+  })
+
+  it('a scoped grant confers no GLOBAL authority through has_module_role', async () => {
+    // dana holds only lead@Math (scoped); eve holds director@global.
+    const danaScoped = await dana.rpc('has_module_role', { check_org_id: orgId, check_module_key: MOD, check_role: 'lead' })
+    expect(danaScoped.data).toBe(false)
+    const eveGlobal = await eve.rpc('has_module_role', { check_org_id: orgId, check_module_key: MOD, check_role: 'director' })
+    expect(eveGlobal.data).toBe(true)
+    // Additive: an ordinary global grant still resolves TRUE (unchanged behavior).
+    await alice.from('module_roles').upsert({ org_id: orgId, user_id: uid.frank, module_key: 'stub', role: 'user' })
+    const frankStub = await frank.rpc('has_module_role', { check_org_id: orgId, check_module_key: 'stub', check_role: 'user' })
+    expect(frankStub.data).toBe(true)
+    await alice.from('module_roles').delete().eq('org_id', orgId).eq('user_id', uid.frank).eq('module_key', 'stub').eq('role', 'user')
+  })
+
+  it('last-Director escape hatch: an org admin can empty the sole Director; a non-admin cannot', async () => {
+    // eve is the sole director@global. A non-admin cannot remove her; the org owner can.
+    expect(
+      errored(await bob.from('module_roles').delete().eq('org_id', orgId).eq('module_key', MOD).eq('user_id', uid.eve).eq('role', 'director')),
+    ).toBe(true)
+    expect(
+      okWrite(await alice.from('module_roles').delete().eq('org_id', orgId).eq('module_key', MOD).eq('user_id', uid.eve).eq('role', 'director')),
+    ).toBe(true)
   })
 })
