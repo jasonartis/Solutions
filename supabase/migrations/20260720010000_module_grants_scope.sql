@@ -190,6 +190,19 @@ $$;
 --    of arbitrary labels. Definer so they read the tree regardless of caller RLS.
 -- ---------------------------------------------------------------------------
 -- Does `ancestor` (a scope) COVER `descendant` (a scope)?  covers = self-or-under.
+-- Fable re-review, 2026-07-20 (pre-push): NOT granted to `authenticated`
+-- (below) — these are boolean-oracle definer functions with no membership
+-- gate of their own (they only take two node ids, no org context to check
+-- membership against). Called ONLY internally by module_caller_can_manage_seat
+-- (itself security definer, so the internal call succeeds via ownership
+-- regardless of grants) — never referenced by an RLS policy body or invoked
+-- directly via .rpc() anywhere in the app/tests (verified by grep). Direct
+-- client access would let any authenticated user learn a true ancestry fact
+-- about two node ids they already hold, breaking this codebase's convention
+-- that boolean-reveal definer functions still gate on org membership
+-- (mm_shared_answers, sal_worker_has_time_off, sd_side_registered_count) —
+-- low practical severity (needs pre-known UUIDs, which are themselves only
+-- readable by org members) but an easy, worthwhile close.
 create function public.module_scope_covers(ancestor uuid, descendant uuid)
 returns boolean
 language sql
@@ -289,8 +302,24 @@ as $$
 $$;
 
 grant execute on function public.module_position_rank(text) to authenticated, service_role;
-grant execute on function public.module_scope_covers(uuid, uuid) to authenticated, service_role;
-grant execute on function public.module_scope_strictly_contains(uuid, uuid) to authenticated, service_role;
+-- module_scope_covers / module_scope_strictly_contains deliberately NOT
+-- reachable by `authenticated` (see the comment above their definitions) —
+-- and PostgreSQL grants EXECUTE to PUBLIC on every function by default at
+-- CREATE time, so merely omitting an explicit `grant ... to authenticated`
+-- changes NOTHING: PUBLIC already covers every role, including the fully
+-- unauthenticated `anon` role. These two are the one pair in this migration
+-- where that default actually matters — unlike every other definer function
+-- in this codebase (which keys on auth.uid(), NULL for an anon caller, and
+-- so fails closed regardless of the grant) these take two bare node ids with
+-- NO identity check, so the implicit PUBLIC grant would let a fully
+-- unauthenticated caller learn a true ancestry fact. Revoke PUBLIC
+-- explicitly, then grant back only to service_role (harmless — needed for no
+-- current caller, since owners always retain implicit rights on their own
+-- functions for internal calls, but explicit for symmetry/documentation).
+revoke execute on function public.module_scope_covers(uuid, uuid) from public;
+revoke execute on function public.module_scope_strictly_contains(uuid, uuid) from public;
+grant execute on function public.module_scope_covers(uuid, uuid) to service_role;
+grant execute on function public.module_scope_strictly_contains(uuid, uuid) to service_role;
 grant execute on function public.module_caller_can_manage_seat(uuid, text, text, uuid) to authenticated, service_role;
 grant execute on function public.module_has_manager_grant(uuid, text) to authenticated, service_role;
 
@@ -324,6 +353,23 @@ begin
     end if;
   end if;
 
+  -- (1b) UNCONDITIONAL structural pin (Fable re-review, 2026-07-20, pre-push):
+  --      org_id and module_key never move on UPDATE, for ANYONE — including
+  --      an admin of both the old and new org. No legitimate operation needs
+  --      this: the app's upsert path can only touch non-PK columns (it
+  --      upserts on the full composite key), and the §2.2 Director-
+  --      reassignment escape hatch only ever changes user_id. An earlier
+  --      version of this guard pinned org_id/module_key only inside the
+  --      NON-admin branch below (3), so an admin who happened to administer
+  --      two orgs could move a grant's org_id between them via one UPDATE —
+  --      not a privilege escalation (they already control both orgs; the
+  --      same move is reachable via delete+insert) but a real gap between
+  --      this migration's own stated intent and what it enforced. Closed
+  --      here, unconditionally, before the admin bypass.
+  if tg_op = 'UPDATE' and (new.org_id <> old.org_id or new.module_key <> old.module_key) then
+    raise exception 'A module grant cannot be reassigned to a different org or module';
+  end if;
+
   -- (2) Bypass the RANK rules for parties ABOVE every module ladder: the
   --     service role (auth.uid() null — seed/worker), a superadmin, and — the
   --     legacy coupling docs/15 §9 unwinds later — an org owner/admin, who
@@ -333,11 +379,8 @@ begin
   -- The admin bypass is evaluated on the row's EXISTING org for UPDATE/DELETE
   -- (old.org_id) and on the new org only for INSERT. Symmetric with the RLS
   -- USING clauses (which gate UPDATE/DELETE on the old row), so an admin of
-  -- org B can never bypass by relabeling an org-A row to org B — defense in
-  -- depth even though RLS already blocks reaching such a row. The non-admin
-  -- org-immutability pin in step (3) keeps new.org_id = old.org_id anyway; the
-  -- §2.2 escape hatch only ever changes user_id, never org_id, so no legitimate
-  -- admin reassignment is affected.
+  -- org B can never bypass by relabeling an org-A row to org B — moot anyway
+  -- now that step (1b) pins org_id/module_key unconditionally for everyone.
   if auth.uid() is null
      or public.is_superadmin()
      or public.is_org_admin(case when tg_op = 'INSERT' then new.org_id else old.org_id end) then
@@ -359,9 +402,10 @@ begin
     if old.user_id = auth.uid() or new.user_id = auth.uid() then
       raise exception 'You cannot change your own module seat';
     end if;
-    -- A grant may never be moved to a different user / org / module.
-    if new.user_id <> old.user_id or new.org_id <> old.org_id or new.module_key <> old.module_key then
-      raise exception 'A module grant cannot be reassigned to a different user, org, or module';
+    -- A grant may never be moved to a different user (org_id/module_key are
+    -- already pinned UNCONDITIONALLY in step (1b) above, for every caller).
+    if new.user_id <> old.user_id then
+      raise exception 'A module grant cannot be reassigned to a different user';
     end if;
     -- Re-point defense (item 1): the caller must have authority over BOTH the
     -- seat as it stands AND the seat it would become. Otherwise a Math

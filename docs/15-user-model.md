@@ -542,8 +542,60 @@ vocabulary gets locked.
     sub-scope, or restrict branch B to management tiers. (N2) the coarse RLS gate
     `module_has_manager_grant` (rank ≥ coordinator) will UNDER-permit Entity Leads
     (rank 2) who §2.2 says appoint their own entity's staff/end-users — fail-safe
-    (restrictive) for now, but slice 2 must lower/adjust the gate. Both are
-    unreachable in slice 1.
+    (restrictive) for now, but slice 2 must lower/adjust the gate.
+    **Correction (2026-07-20, second review below): N1 is NOT unreachable in
+    slice 1** as first recorded — nothing in the SQL prevents an org owner/admin
+    from creating a global `director` grant for an ordinary member RIGHT NOW
+    (the app's `upsertModuleRole` already supports it), and once one exists,
+    that plain member — not an admin — can independently mint further
+    director-position grants at sub-scopes via branch B with zero further admin
+    involvement, per §2.2's model where Director is meant to be
+    admin-appointed only. Bounded (stays inside one org+module; the admin
+    escape hatch can always reassign/revoke) but real and open — see the next
+    log entry.
+- **2026-07-20 (slice 1 re-reviewed on Fable, pre-push — two fixes applied, one open question):**
+  A dedicated Fable-tier adversarial pass on the checked-in-but-unpushed
+  migration (the earlier build-time review ran on a cheaper model; this is
+  the first time the SQL itself got the top-tier review the novel-mechanism
+  rule calls for). Verdict: SHIP WITH CHANGES. Two findings verified and
+  fixed directly in `20260720010000` (safe, mechanical, no design change):
+  - **org_id/module_key immutability was admin-exempt.** The UPDATE pin
+    against reassigning a grant to a different org/module only fired inside
+    the non-admin branch — an admin of TWO orgs could move a grant's org_id
+    between them (not a privilege escalation, since they already control
+    both; but a real gap against the migration's own stated intent). Moved
+    the pin to run unconditionally, before the admin bypass. No legitimate
+    op needs this: the app's upsert can't touch PK columns, and the §2.2
+    Director-reassignment escape hatch only ever changes `user_id`.
+  - **`module_scope_covers`/`module_scope_strictly_contains` were reachable by
+    a fully UNAUTHENTICATED caller.** These take two bare node ids with no
+    identity check baked in — unlike every other definer function in this
+    codebase (which keys on `auth.uid()`, NULL for `anon`, and so fails
+    closed) — and PostgreSQL grants EXECUTE to PUBLIC on every function by
+    default at CREATE time, so the original `grant ... to authenticated,
+    service_role` line never actually restricted anything (PUBLIC already
+    covered `anon`). Fixed with an explicit `revoke ... from public`. **This
+    default-PUBLIC-grant behavior is true of every security-definer function
+    ever shipped on this platform** — verified via `has_function_privilege`
+    against `pg_proc`, `anon` has EXECUTE on all of them. Not an emergency
+    (nearly all of them fail closed on `auth.uid() is null`) but a real gap
+    between the `grant ... to authenticated` lines' apparent intent and what
+    Postgres actually enforces — **flagged, not fixed platform-wide**; a
+    dedicated pass revoking PUBLIC explicitly wherever a function doesn't
+    already fail closed on identity is a separate, founder-scoped piece of
+    work, not bundled into this slice.
+  - **Open question, NOT decided by this review (founder's call before
+    slice 2):** should branch B require the caller to hold at least
+    lead-or-above rank, rather than being rank-agnostic? As found above,
+    it currently lets a plain `director`-holder mint sub-scoped directors
+    with no further admin involvement — which may be intended flexibility
+    (mirrors the STEM→Math coordinator-chain pattern the model explicitly
+    wants) or may need restricting once real module vocabularies make
+    "Director" mean something more singular per module. Recorded here
+    rather than decided unilaterally.
+  - Re-verified after both fixes: 21 + 8 = 29 live assertions as real users
+    (full guard re-check + both fixes specifically), RLS 23/23, typecheck +
+    build clean (cached — no app code touched, only the migration SQL).
 - **2026-07-20 (round 3 — three independent Fable red-teams, pre-build):** With
   Fable access expiring, every novel security design got its adversarial review
   BEFORE implementation: (1) the §4 guard/scope model → §4.1 binding hardening
