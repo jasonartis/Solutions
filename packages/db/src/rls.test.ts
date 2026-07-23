@@ -504,6 +504,20 @@ describe('module grants scope (slice 1)', () => {
     ).toBe(true)
   })
 
+  it('branch B is Coordinator-tier only: a non-admin director cannot self-replicate directors (branch A still works) — founder 2026-07-22', async () => {
+    // eve holds director@global (a non-admin org member, set up above). Branch
+    // B once let a director mint another director at a sub-scope (global
+    // strictly contains STEM); restricting branch B to the Coordinator tier
+    // (rank 3) removes that self-replication — a Director must be org-appointed
+    // (§2.2), not spawned by another Director. charlie's 'director' slot is free
+    // (he only holds coordinator@STEM), so this reaches the guard, not the PK.
+    expect(errored(await grant(eve, uid.charlie, 'director', node.stem))).toBe(true)
+    // Branch A is untouched: a director still appoints the tier below it.
+    // dana's 'coordinator' slot is free (she only holds lead@Math).
+    expect(okWrite(await grant(eve, uid.dana, 'coordinator', node.humanities))).toBe(true)
+    await alice.from('module_roles').delete().eq('org_id', orgId).eq('module_key', MOD).eq('user_id', uid.dana).eq('role', 'coordinator')
+  })
+
   it('re-point escalation defense: UPDATE checks BOTH old and new scope (docs/15 §4.1 item 1)', async () => {
     // dana holds lead@Math, granted by bob (coordinator@STEM) in the prior test.
     const repoint = (scope: string | null | undefined) =>

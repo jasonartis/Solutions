@@ -502,6 +502,27 @@ vocabulary gets locked.
 
 ## Decisions log
 
+- **2026-07-22 (DECIDED — branch B restricted to the Coordinator tier, Opus session):**
+  Resolves the open question the 2026-07-20 Fable re-review left for the founder
+  (below). **Branch B of the two-branch guard (same-position + strict-scope
+  containment) is now gated to the Coordinator tier only** — `module_position_rank(seat_role) = 3`
+  added to branch B in `module_caller_can_manage_seat` (still-unpushed
+  `20260720010000`). Keyed on the rank NUMBER, not the literal `'coordinator'`,
+  so it automatically covers whatever real per-module role slice 2 maps to that
+  tier. **Reasoning:** a Director (rank 4) already dominates any Coordinator via
+  branch A (strict rank + scope coverage), so gating branch B on rank 3 costs
+  Director no real capability — it only removes Director SELF-REPLICATION (a
+  non-admin Director independently minting more Directors at sub-scopes, the
+  exact gap the re-review surfaced). Per §2.2 a Director is meant to be
+  org-appointed (the org owner/admin escape hatch), not spawned by another
+  Director. Coordinator→Coordinator sub-scope chains (STEM→Math) — the pattern
+  the model explicitly wants — are unaffected. Lead/position tiers (ranks 2/1)
+  are unmapped in slice 1 so this changes nothing there today; slice 2 decides
+  per-module whether those tiers ever want branch-B self-nesting. Regression
+  tests added to `packages/db/src/rls.test.ts` (a non-admin director is REJECTED
+  minting a director via branch B, still SUCCEEDS appointing a coordinator via
+  branch A); the existing coordinator→coordinator branch-B test is unchanged.
+  Full docs/03 #12 rhythm re-run. Still unpushed/unmigrated to prod.
 - **2026-07-20 (slice 1 BUILT — module grants generalization, Opus session):**
   `20260720010000_module_grants_scope.sql` ships §11 slice 1 (see the [BUILT]
   note there for the object inventory). Design calls made during the build,
@@ -551,8 +572,9 @@ vocabulary gets locked.
     director-position grants at sub-scopes via branch B with zero further admin
     involvement, per §2.2's model where Director is meant to be
     admin-appointed only. Bounded (stays inside one org+module; the admin
-    escape hatch can always reassign/revoke) but real and open — see the next
-    log entry.
+    escape hatch can always reassign/revoke) but real — flagged to the founder
+    and now CLOSED by the 2026-07-22 decision (branch B gated to Coordinator
+    tier; see the top of this log).
 - **2026-07-20 (slice 1 re-reviewed on Fable, pre-push — two fixes applied, one open question):**
   A dedicated Fable-tier adversarial pass on the checked-in-but-unpushed
   migration (the earlier build-time review ran on a cheaper model; this is
@@ -584,15 +606,15 @@ vocabulary gets locked.
     dedicated pass revoking PUBLIC explicitly wherever a function doesn't
     already fail closed on identity is a separate, founder-scoped piece of
     work, not bundled into this slice.
-  - **Open question, NOT decided by this review (founder's call before
-    slice 2):** should branch B require the caller to hold at least
-    lead-or-above rank, rather than being rank-agnostic? As found above,
-    it currently lets a plain `director`-holder mint sub-scoped directors
-    with no further admin involvement — which may be intended flexibility
-    (mirrors the STEM→Math coordinator-chain pattern the model explicitly
-    wants) or may need restricting once real module vocabularies make
-    "Director" mean something more singular per module. Recorded here
-    rather than decided unilaterally.
+  - **Open question surfaced here — DECIDED 2026-07-22 (see the top of this
+    log).** The review flagged that branch B was rank-agnostic, so a plain
+    non-admin `director`-holder could mint sub-scoped directors with no further
+    admin involvement. Founder call: **restrict branch B to the Coordinator
+    tier (rank 3).** Director keeps every branch-A capability (it already
+    dominates Coordinator via rank + coverage); only Director self-replication
+    is removed, matching §2.2's "Director is org-appointed, not
+    Director-spawned". The STEM→Math coordinator-chain pattern the model wants
+    is untouched.
   - Re-verified after both fixes: 21 + 8 = 29 live assertions as real users
     (full guard re-check + both fixes specifically), RLS 23/23, typecheck +
     build clean (cached — no app code touched, only the migration SQL).

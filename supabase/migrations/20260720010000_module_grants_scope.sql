@@ -248,8 +248,17 @@ $$;
 --    seat (position=seat_role, scope=seat_scope) iff SOME grant they hold in
 --    this (org, module) satisfies branch A OR branch B:
 --      A. strictly OUTRANKS the seat AND covers its scope; OR
---      B. is the SAME position with the seat's scope STRICTLY INSIDE the grant's.
+--      B. is the SAME position, at the COORDINATOR tier (rank 3) only, with the
+--         seat's scope STRICTLY INSIDE the grant's.
 --    Branch B is what lets equal-rank coordinator chains nest (STEM→Math).
+--    DECISION (founder, 2026-07-22): branch B is RESTRICTED to the Coordinator
+--    tier. A Director (rank 4) already dominates any Coordinator via branch A
+--    (rank+coverage), so gating branch B on rank 3 costs Director no real
+--    capability — it only removes Director SELF-REPLICATION (a Director minting
+--    more Directors at sub-scopes on its own). Per §2.2 a Director is meant to
+--    be org-appointed, not spawned by another Director. Keyed on the rank
+--    NUMBER (= 3), not the literal 'coordinator', so it automatically covers
+--    whatever real per-module role slice 2 maps to that tier.
 --    Definer so it reads the caller's grants regardless of RLS.
 -- ---------------------------------------------------------------------------
 create function public.module_caller_can_manage_seat(
@@ -274,8 +283,12 @@ as $$
         -- Branch A: strictly outrank + scope coverage.
         (public.module_position_rank(g.role) > public.module_position_rank(seat_role)
            and public.module_scope_covers(g.scope_ref, seat_scope))
-        -- Branch B: same position + strict scope containment.
+        -- Branch B: same position + strict scope containment, COORDINATOR
+        -- tier ONLY (rank 3 — founder decision 2026-07-22; see header). The
+        -- rank check is on the NUMBER, not the string 'coordinator', so slice
+        -- 2's per-module vocabulary at that tier is covered automatically.
         or (g.role = seat_role
+           and public.module_position_rank(seat_role) = 3
            and public.module_scope_strictly_contains(g.scope_ref, seat_scope))
       )
   );
