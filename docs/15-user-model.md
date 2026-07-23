@@ -522,7 +522,29 @@ vocabulary gets locked.
   tests added to `packages/db/src/rls.test.ts` (a non-admin director is REJECTED
   minting a director via branch B, still SUCCEEDS appointing a coordinator via
   branch A); the existing coordinator→coordinator branch-B test is unchanged.
-  Full docs/03 #12 rhythm re-run. Still unpushed/unmigrated to prod.
+  Full docs/03 #12 rhythm re-run (RLS 24/24, 4/4 live, typecheck+build+e2e clean).
+  **PUSHED to prod this session** (backup first → `migrate:prod`) — the whole
+  of slice 1 (`20260720010000` + this refinement) is now live on prod.
+- **2026-07-22 (prod-only ACL gap found in post-migrate verification → fix-forward
+  `20260722010000`):** Verifying slice 1 on prod (not just local) surfaced that the
+  2026-07-20 Fable "revoke PUBLIC" fix on the two ancestry oracles
+  (`module_scope_covers`/`module_scope_strictly_contains`) **did not actually close
+  the gap on prod.** Prod's `ALTER DEFAULT PRIVILEGES FOR ROLE postgres` grants
+  `EXECUTE` **directly** to `anon`/`authenticated` on new functions; `revoke ... from
+  public` doesn't touch a direct grant, so both oracles stayed anon-executable on prod
+  (proacl `{postgres, anon, authenticated, service_role}`), while local — lacking that
+  default — showed them correctly closed. The local RLS suite structurally cannot catch
+  this (it runs against local defaults). Fixed with an explicit `revoke ... from public,
+  anon, authenticated`; applied local + prod; re-verified live (prod proacl now
+  `{postgres, service_role}`, `has_function_privilege('anon'/'authenticated', …)` =
+  false; guard suite still 24/24 since the sole caller is the definer running as
+  postgres). Low practical severity (a boolean ancestry oracle over node UUIDs only org
+  members can read) but exactly the defense-in-depth closure the earlier fix intended.
+  **Two conventions added to docs/03 #1 from this:** (a) state the FULL intended ACL on
+  functions explicitly — never rely on a default for a security boundary; (b) verify
+  security-sensitive ACLs against PROD, not only local. The still-open platform-wide
+  "revoke PUBLIC on definer functions" pass (2026-07-20) must therefore revoke from
+  `public, anon, authenticated` and be verified against prod.
 - **2026-07-20 (slice 1 BUILT — module grants generalization, Opus session):**
   `20260720010000_module_grants_scope.sql` ships §11 slice 1 (see the [BUILT]
   note there for the object inventory). Design calls made during the build,

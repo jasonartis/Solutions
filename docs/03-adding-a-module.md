@@ -24,10 +24,27 @@ modules/<module-key>/
 `modules/synagogue-schedules` is the **canonical exemplar** — copy its structure. The
 hard-won specifics every new module must follow:
 
-1. **Migrations grant explicitly** — tables created in CLI migrations do NOT inherit
-   Supabase's API-role grants. Every migration: `grant select, insert, update, delete on
-   <tables> to authenticated, service_role;` then RLS restricts rows (see
-   `20260707030000_synagogue_schedules.sql`).
+1. **Migrations grant explicitly — for tables AND functions — and never rely on a
+   default privilege for a security boundary.** Tables created in CLI migrations do NOT
+   inherit Supabase's API-role grants: every migration `grant select, insert, update,
+   delete on <tables> to authenticated, service_role;` then RLS restricts rows (see
+   `20260707030000_synagogue_schedules.sql`). For **functions** the trap is the
+   opposite and environment-dependent, so state the FULL intended ACL explicitly
+   (`revoke execute ... from public, anon, authenticated;` then `grant execute ... to
+   <exactly the roles that need it>;`) rather than trusting defaults:
+   - Postgres grants `EXECUTE` to `PUBLIC` on every function at CREATE time, so omitting
+     a grant does NOT restrict anything — `PUBLIC` already covers `anon`.
+   - On the **hosted (prod) stack**, `ALTER DEFAULT PRIVILEGES FOR ROLE postgres` also
+     grants `EXECUTE` **directly** to `anon`/`authenticated`. A `revoke ... from public`
+     does not touch a direct grant, so it is a no-op there. The **local** stack lacks
+     this default, so a function locked down with `revoke ... from public` looks closed
+     locally but is still open on prod (the 2026-07-22 `module_scope_covers` gap —
+     `20260722010000`). Only functions that DON'T fail closed on `auth.uid()` (i.e. take
+     bare ids with no identity check) actually need the tight ACL; state it explicitly
+     regardless so the migration is environment-independent.
+   - **Verify security-sensitive ACLs against PROD, not only local** — the RLS suite runs
+     against local, where default privileges differ, so it cannot catch this class of
+     gap. A privilege/ACL assertion belongs in a prod-verification step.
 2. **Module pages gate with `requireOrgModule(orgSlug, moduleKey)`**
    (`apps/web/lib/module-gate.ts`) — org by slug → entitlement → 404. Never hand-roll.
 3. **Org-level module config lives in `org_modules.settings`** (jsonb), typed via a cast
