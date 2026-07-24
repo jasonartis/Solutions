@@ -43,7 +43,13 @@ export async function upsertModuleRole(
   moduleKey: string,
   role: string,
 ) {
-  const { error } = await supabase.from('module_roles').upsert({ org_id: orgId, user_id: userId, module_key: moduleKey, role })
+  // module_roles has a surrogate PK since 20260723010000; the scoped-identity
+  // conflict target must be named explicitly (the old implicit target was the
+  // composite PK). scope_ref defaults null here = a global grant, matching the
+  // pre-slice-2 behavior of this helper.
+  const { error } = await supabase
+    .from('module_roles')
+    .upsert({ org_id: orgId, user_id: userId, module_key: moduleKey, role }, { onConflict: 'org_id,user_id,module_key,role,scope_ref' })
   if (error) throw new Error(error.message)
 }
 

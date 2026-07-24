@@ -502,6 +502,43 @@ vocabulary gets locked.
 
 ## Decisions log
 
+- **2026-07-24 (slice 2 STARTED — 2a: module_roles surrogate PK, Opus session):** Founder
+  initiated slice 2 (per-module vocabulary), starting with classroom, and it's being built
+  in two verified stages. **Stage 2a** (`20260723010000_module_roles_scoped_pk.sql`) is the
+  platform-wide prerequisite: replace `module_roles`' composite PK
+  `(org_id,user_id,module_key,role)` with a surrogate `id`, moving the identity invariant to
+  a `UNIQUE ... NULLS NOT DISTINCT` index on `(org,user,module,role,scope_ref)`. This lets a
+  user hold MULTIPLE scoped grants of the same role (student@Math203 AND student@Bio49 — the
+  normal case once enrollment becomes scoped grants in 2b), while NULLS NOT DISTINCT keeps at
+  most ONE global grant per (user,role) — byte-identical to the old composite-PK invariant for
+  every existing (all-global) row. Purely structural/additive: no FK references the old PK,
+  the two guard triggers + five RLS policies key on columns (unaffected), and all existing data
+  is accepted unchanged. Upsert call sites (app `org-members.ts`, seed, tests) now name the
+  conflict target explicitly (`onConflict: org_id,user_id,module_key,role,scope_ref`) since the
+  implicit target was the composite PK; re-seed idempotency re-verified. RLS 25/25 (+1 test:
+  multiple scoped grants legal, duplicate global rejected, upsert idempotent), guard + all 7
+  modules unchanged. **Stage 2b** (classroom scope-awareness + enrollment-as-scoped-grants)
+  builds on this next. Design settled with the founder this session:
+  - **Rank mapping (classroom):** Director 4 / Coordinator 3 / professor=Lead 2 / GA 1 /
+    student 1. GA and student are PEERS (rank 1) — neither manages the other; the professor
+    manages both. Founder's explicit call (a GA is not "above" a student). Rank stays
+    per-module and COMPUTED (not stored on grants), so re-mapping later is a one-line migration
+    with no backfill — the deliberately-flexible part of the model.
+  - **"More-involved GA" needs no hierarchy change** — it's a data-surface/workflow knob:
+    set the GA's grade weight to 100% in the existing gradebook combination (GA grade becomes
+    the grade), plus an auto-visibility toggle. A GA with actual authority over students
+    (roster) is the separate "co-instructor" case = a Coordinator-granted Lead, not a professor
+    action (a Lead can't mint another Lead).
+  - **Enrollment unifies into scoped grants (Option A, founder-chosen):** "student in class X"
+    becomes a `student` grant scoped to X's node — one source of truth for enrollment AND
+    authority, retiring the split between `module_roles` and the decorative `cls_class_members`
+    roster (the two-systems bug from the testing round, items 29–30). Requires 2a's multi-grant
+    capability (a student takes several classes).
+  - **Global professors stay working:** 2b rewrites `cls_can_manage`/`cls_is_ga` to be
+    scope-aware, treating a GLOBAL grant (scope null) as covering the whole module — so
+    today's global professors are untouched; scoping is opt-in per grant. classroom has ~no
+    real prod users (Pozna runs synagogue-schedules only), so 2b's enforcement change is
+    demo-blast-radius.
 - **2026-07-22 (DECIDED — branch B restricted to the Coordinator tier, Opus session):**
   Resolves the open question the 2026-07-20 Fable re-review left for the founder
   (below). **Branch B of the two-branch guard (same-position + strict-scope

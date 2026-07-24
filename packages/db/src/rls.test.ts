@@ -259,12 +259,15 @@ describe('org self-management', () => {
       .select('user_id')
       .eq('email', 'orgtest@demo.local')
       .single()
-    const { error } = await alice.from('module_roles').upsert({
-      org_id: orgId,
-      user_id: orgtestProfile!.user_id,
-      module_key: 'stub',
-      role: 'user',
-    })
+    const { error } = await alice.from('module_roles').upsert(
+      {
+        org_id: orgId,
+        user_id: orgtestProfile!.user_id,
+        module_key: 'stub',
+        role: 'user',
+      },
+      { onConflict: 'org_id,user_id,module_key,role,scope_ref' },
+    )
     expect(error).toBeNull()
 
     const { data: mine } = await orgtest.from('module_roles').select('role').eq('module_key', 'stub')
@@ -477,6 +480,32 @@ describe('module grants scope (slice 1)', () => {
     expect(errored(await grant(alice, uid.charlie, 'lead', '00000000-0000-0000-0000-000000000000'))).toBe(true) // non-existent
   })
 
+  it('slice 2a: multiple SCOPED grants per (user, role) are legal; duplicate GLOBAL is rejected', async () => {
+    // alice (org owner) bypasses the ladder, so this exercises the surrogate-PK
+    // + NULLS-NOT-DISTINCT identity index (20260723010000), not the guard.
+    const g = (scope: string | null | undefined) =>
+      alice.from('module_roles').insert({ org_id: orgId, module_key: MOD, user_id: uid.frank, role: 'position', scope_ref: scope })
+    // Two DISTINCT scopes, same (user, role) — the new capability (a student in
+    // Math AND Bio). Both allowed.
+    expect(okWrite(await g(node.math))).toBe(true)
+    expect(okWrite(await g(node.cs))).toBe(true)
+    // Same scope again → duplicate identity rejected by the unique index.
+    expect(errored(await g(node.math))).toBe(true)
+    // One GLOBAL grant ok; a second GLOBAL (null scope) rejected — NULLS NOT
+    // DISTINCT preserves the old "one global grant per (user, role)" invariant.
+    expect(okWrite(await g(null))).toBe(true)
+    expect(errored(await g(null))).toBe(true)
+    // Upsert of the global grant on the identity target is idempotent (updates).
+    expect(
+      okWrite(
+        await alice
+          .from('module_roles')
+          .upsert({ org_id: orgId, module_key: MOD, user_id: uid.frank, role: 'position' }, { onConflict: 'org_id,user_id,module_key,role,scope_ref' }),
+      ),
+    ).toBe(true)
+    await alice.from('module_roles').delete().eq('org_id', orgId).eq('module_key', MOD).eq('user_id', uid.frank).eq('role', 'position')
+  })
+
   it('two-branch guard: a non-admin coordinator manages only inside its scope', async () => {
     // Setup (via alice, who bypasses the ladder as org owner).
     expect(okWrite(await grant(alice, uid.eve, 'director', null))).toBe(true)
@@ -535,7 +564,7 @@ describe('module grants scope (slice 1)', () => {
     const eveGlobal = await eve.rpc('has_module_role', { check_org_id: orgId, check_module_key: MOD, check_role: 'director' })
     expect(eveGlobal.data).toBe(true)
     // Additive: an ordinary global grant still resolves TRUE (unchanged behavior).
-    await alice.from('module_roles').upsert({ org_id: orgId, user_id: uid.frank, module_key: 'stub', role: 'user' })
+    await alice.from('module_roles').upsert({ org_id: orgId, user_id: uid.frank, module_key: 'stub', role: 'user' }, { onConflict: 'org_id,user_id,module_key,role,scope_ref' })
     const frankStub = await frank.rpc('has_module_role', { check_org_id: orgId, check_module_key: 'stub', check_role: 'user' })
     expect(frankStub.data).toBe(true)
     await alice.from('module_roles').delete().eq('org_id', orgId).eq('user_id', uid.frank).eq('module_key', 'stub').eq('role', 'user')

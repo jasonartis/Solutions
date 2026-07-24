@@ -1,4 +1,4 @@
-import { boolean, jsonb, pgTable, primaryKey, text, timestamp, uuid } from 'drizzle-orm/pg-core'
+import { boolean, jsonb, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
 
 // Drizzle mirror of the SQL in supabase/migrations — used for typed queries.
 // The SQL migration (with RLS policies) is the source of truth for the database;
@@ -70,6 +70,11 @@ export const moduleScopeNodes = pgTable('module_scope_nodes', {
 export const moduleRoles = pgTable(
   'module_roles',
   {
+    // Surrogate PK since 20260723010000 (slice 2a): the identity invariant moved
+    // to a UNIQUE NULLS NOT DISTINCT index on (org, user, module, role, scope)
+    // so multiple SCOPED grants per (user, role) are legal (student@Math AND
+    // student@Bio) while at most one GLOBAL grant per (user, role) survives.
+    id: uuid('id').primaryKey().defaultRandom(),
     orgId: uuid('org_id')
       .notNull()
       .references(() => orgs.id, { onDelete: 'cascade' }),
@@ -83,5 +88,5 @@ export const moduleRoles = pgTable(
     grantedBy: uuid('granted_by'), // audit pointer (auth.users.id) ON DELETE SET NULL
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [primaryKey({ columns: [t.orgId, t.userId, t.moduleKey, t.role] })],
+  (t) => [uniqueIndex('module_roles_identity_uniq').on(t.orgId, t.userId, t.moduleKey, t.role, t.scopeRef)],
 )

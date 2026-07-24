@@ -52,6 +52,14 @@ const admin = createClient(url, serviceKey, { auth: { persistSession: false } })
 // Local default; PROD walkthrough seeding overrides via DEMO_PASSWORD.
 const DEMO_PASSWORD = process.env.DEMO_PASSWORD ?? 'password123'
 
+// module_roles gained a surrogate PK in 20260723010000, so upsert must name
+// the scoped-identity conflict target explicitly (the old implicit target was
+// the composite PK). All seed grants are global (scope_ref null), so
+// NULLS-NOT-DISTINCT keeps this idempotent across re-seeds. Every seed
+// module_roles upsert goes through this helper.
+const upsertModuleRoles = (rows: object | object[]) =>
+  admin.from('module_roles').upsert(rows, { onConflict: 'org_id,user_id,module_key,role,scope_ref' })
+
 async function ensureUser(email: string, password: string, displayName: string) {
   const { data: created, error } = await admin.auth.admin.createUser({
     email,
@@ -114,7 +122,7 @@ async function main() {
   const platformSelfTest = await ensureOrg('Platform Self-Test', 'platform-self-test')
   await admin.from('org_members').upsert({ org_id: platformSelfTest, user_id: aliceId, role: 'owner' })
   await admin.from('org_modules').upsert({ org_id: platformSelfTest, module_key: 'stub', enabled: true })
-  await admin.from('module_roles').upsert({
+  await upsertModuleRoles({
     org_id: platformSelfTest,
     user_id: aliceId,
     module_key: 'stub',
@@ -144,7 +152,7 @@ async function main() {
       myzmanimLocationId: 'US11210',
     },
   })
-  await admin.from('module_roles').upsert({
+  await upsertModuleRoles({
     org_id: shul,
     user_id: aliceId,
     module_key: 'synagogue-schedules',
@@ -299,7 +307,7 @@ async function main() {
       { org_id: orgA, user_id: gabeId, role: 'member' },
     ])
   await admin.from('org_modules').upsert({ org_id: orgA, module_key: 'classroom', enabled: true, settings: {} })
-  await admin.from('module_roles').upsert([
+  await upsertModuleRoles([
     { org_id: orgA, user_id: aliceId, module_key: 'classroom', role: 'professor' },
     { org_id: orgA, user_id: charlieId, module_key: 'classroom', role: 'student' },
     { org_id: orgA, user_id: gabeId, module_key: 'classroom', role: 'ga' },
@@ -415,7 +423,7 @@ async function main() {
     enabled: true,
     settings: { topX: 5 },
   })
-  await admin.from('module_roles').upsert([
+  await upsertModuleRoles([
     { org_id: match, user_id: aliceId, module_key: 'matchmaking', role: 'admin' },
     { org_id: match, user_id: charlieId, module_key: 'matchmaking', role: 'single' },
     { org_id: match, user_id: danaId, module_key: 'matchmaking', role: 'single' },
@@ -509,7 +517,7 @@ async function main() {
     { org_id: salon, user_id: charlieId, role: 'member' },
   ])
   await admin.from('org_modules').upsert({ org_id: salon, module_key: 'nail-salon', enabled: true })
-  await admin.from('module_roles').upsert([
+  await upsertModuleRoles([
     { org_id: salon, user_id: aliceId, module_key: 'nail-salon', role: 'manager' },
     { org_id: salon, user_id: eveId, module_key: 'nail-salon', role: 'cashier' },
     { org_id: salon, user_id: danaId, module_key: 'nail-salon', role: 'worker' },
@@ -601,7 +609,7 @@ async function main() {
     { org_id: dating, user_id: frankId, role: 'member' },
   ])
   await admin.from('org_modules').upsert({ org_id: dating, module_key: 'speed-dating', enabled: true })
-  await admin.from('module_roles').upsert([
+  await upsertModuleRoles([
     { org_id: dating, user_id: aliceId, module_key: 'speed-dating', role: 'organizer' },
     { org_id: dating, user_id: charlieId, module_key: 'speed-dating', role: 'participant' },
     { org_id: dating, user_id: danaId, module_key: 'speed-dating', role: 'participant' },
@@ -626,7 +634,7 @@ async function main() {
   // Enabled for orgA so the template's e2e can prove the copy-me path works:
   // alice manages, charlie is a member, one seeded project.
   await admin.from('org_modules').upsert({ org_id: orgA, module_key: 'sample', enabled: true })
-  await admin.from('module_roles').upsert([
+  await upsertModuleRoles([
     { org_id: orgA, user_id: aliceId, module_key: 'sample', role: 'manager' },
     { org_id: orgA, user_id: charlieId, module_key: 'sample', role: 'member' },
   ])
@@ -646,7 +654,7 @@ async function main() {
     { org_id: visual, user_id: danaId, role: 'member' },
   ])
   await admin.from('org_modules').upsert({ org_id: visual, module_key: 'visual-messaging', enabled: true })
-  await admin.from('module_roles').upsert([
+  await upsertModuleRoles([
     { org_id: visual, user_id: aliceId, module_key: 'visual-messaging', role: 'admin' },
     { org_id: visual, user_id: charlieId, module_key: 'visual-messaging', role: 'member' },
     { org_id: visual, user_id: danaId, module_key: 'visual-messaging', role: 'member' },
