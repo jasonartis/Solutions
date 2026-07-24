@@ -539,6 +539,31 @@ vocabulary gets locked.
     today's global professors are untouched; scoping is opt-in per grant. classroom has ~no
     real prod users (Pozna runs synagogue-schedules only), so 2b's enforcement change is
     demo-blast-radius.
+  - **2b implementation shape (worked out 2026-07-24, ready to build):**
+    - **Nodes:** `scope_node_id` added to `cls_courses` + `cls_classes` ONLY (not all 16
+      tables) — every scoped `cls_*` row already carries `class_id`/`course_id` via the
+      existing scope-sync triggers, so the new authority functions resolve the node from
+      that. New `cls_can_manage_class(org, class_id)` / `cls_can_manage_course(org, course_id)`
+      / `cls_is_ga_class(org, class_id)` do `is_org_admin(org) OR EXISTS(classroom grant,
+      module_position_rank('classroom',role) ≥ 2 [prof/lead+] AND module_scope_covers(scope,
+      node))`. Global grant (null scope) covers everything (module_scope_covers(null,·)=true)
+      → global professors unchanged. Course node is ancestor of its class nodes, so a
+      course-scoped professor covers all its classes. Node creation for NEW courses/classes
+      via BEFORE-INSERT definer triggers; backfill for existing rows.
+    - **N2 RESOLVED — lower the manager-grant gate to Lead.** `module_has_manager_grant`
+      (the coarse RLS write gate) drops from rank ≥ 3 (Coordinator) to rank ≥ 2 (Lead) so a
+      professor can enroll students/GAs in their OWN scope. The guard trigger still does the
+      fine-grained enforcement (a Lead's branch-A only covers seats it strictly outranks
+      within its scope; branch B stays Coordinator-only, so a professor still can't mint
+      another professor — co-instructor remains a Coordinator action). Platform-wide but
+      inert for the 6 other modules (all their roles are rank 0). Resolves docs/15 N2.
+    - **`cls_class_members` DEMOTED to a name-only store.** Enrollment authority becomes the
+      scoped grant; `cls_is_class_member(class_id)` is rewritten to read `module_roles`
+      (any classroom grant covering the class node) instead of the roster table. The roster
+      table survives only for `preferred_first/last_name` + the badge, so the two-systems
+      disagreement (items 29–30) is gone: authority has ONE source. `enrollClassMember`
+      writes a scoped grant (and optionally the name row); existing roster rows backfill into
+      scoped student/ga/professor grants.
 - **2026-07-22 (DECIDED — branch B restricted to the Coordinator tier, Opus session):**
   Resolves the open question the 2026-07-20 Fable re-review left for the founder
   (below). **Branch B of the two-branch guard (same-position + strict-scope
