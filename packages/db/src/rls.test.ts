@@ -580,3 +580,107 @@ describe('module grants scope (slice 1)', () => {
     ).toBe(true)
   })
 })
+
+// Slice 2b (20260724010000): classroom authority is scope-aware. A grant's
+// reach is its scope subtree (global = whole module). Verified as REAL users.
+describe('classroom scoped authority (slice 2b)', () => {
+  let orgA: string
+  const uid: Record<string, string> = {}
+  const ids: Record<string, string> = {}
+  let bobC: SupabaseClient // scoped professor @ CS course
+  let charlieC: SupabaseClient // scoped student @ CS class
+  let eveC: SupabaseClient // GLOBAL professor (non-admin) — proves global covers all
+
+  const errored = (r: { error: unknown }) => r.error != null
+  const okWrite = (r: { error: unknown }) => r.error == null
+  const hw = (c: SupabaseClient, classId: string | undefined, title: string) =>
+    c.from('cls_homeworks').insert({ org_id: orgA, class_id: classId, title })
+  const grant = (c: SupabaseClient, user: string | undefined, role: string, scope: string | null | undefined) =>
+    c.from('module_roles').insert({ org_id: orgA, user_id: user, module_key: 'classroom', role, scope_ref: scope })
+
+  beforeAll(async () => {
+    bobC = await signIn('bob@demo.local')
+    charlieC = await signIn('charlie@demo.local')
+    eveC = await signIn('eve@demo.local')
+    orgA = (await alice.from('orgs').select('id').eq('slug', 'demo-a').single()).data!.id
+    for (const e of ['bob', 'charlie', 'dana', 'eve']) {
+      const { data } = await alice.rpc('org_find_user_by_email', { check_org_id: orgA, target_email: `${e}@demo.local` })
+      uid[e] = data![0].user_id as string
+      await alice.from('org_members').upsert({ org_id: orgA, user_id: uid[e], role: 'member' })
+    }
+    // Two isolated courses + a class each (as alice, org owner → bypass guard).
+    const mkCourse = async (name: string) =>
+      (await alice.from('cls_courses').insert({ org_id: orgA, name }).select('id, scope_node_id').single()).data!
+    const cs = await mkCourse('RLS-CS')
+    const bio = await mkCourse('RLS-Bio')
+    ids.csCourse = cs.id as string
+    ids.csCourseNode = cs.scope_node_id as string
+    ids.bioCourse = bio.id as string
+    ids.bioCourseNode = bio.scope_node_id as string
+    const mkClass = async (courseId: string, name: string) =>
+      (await alice.from('cls_classes').insert({ org_id: orgA, course_id: courseId, name }).select('id, scope_node_id').single()).data!
+    const csClass = await mkClass(ids.csCourse, 'RLS-CS-Fall')
+    const bioClass = await mkClass(ids.bioCourse, 'RLS-Bio-Fall')
+    ids.csClass = csClass.id as string
+    ids.csClassNode = csClass.scope_node_id as string
+    ids.bioClass = bioClass.id as string
+    ids.bioClassNode = bioClass.scope_node_id as string
+    await alice.from('module_roles').insert([
+      { org_id: orgA, user_id: uid.bob, module_key: 'classroom', role: 'professor', scope_ref: ids.csCourseNode },
+      { org_id: orgA, user_id: uid.charlie, module_key: 'classroom', role: 'student', scope_ref: ids.csClassNode },
+      { org_id: orgA, user_id: uid.eve, module_key: 'classroom', role: 'professor', scope_ref: null },
+    ])
+  })
+
+  afterAll(async () => {
+    await alice.from('module_roles').delete().eq('org_id', orgA).eq('module_key', 'classroom').eq('user_id', uid.eve).is('scope_ref', null)
+    await alice.from('cls_courses').delete().in('id', [ids.csCourse, ids.bioCourse]) // cascades classes/homeworks
+    // Deleting the course nodes cascades child class nodes AND every scoped grant
+    // pinned to them (module_roles.scope_ref ON DELETE CASCADE).
+    await alice.from('module_scope_nodes').delete().in('id', [ids.csCourseNode, ids.bioCourseNode])
+    await alice.from('org_members').delete().eq('org_id', orgA).eq('user_id', uid.bob)
+    await alice.from('org_members').delete().eq('org_id', orgA).eq('user_id', uid.eve)
+  })
+
+  it('a scoped professor manages only their own course subtree', async () => {
+    // bob = professor@CS course → covers the CS class (course is its ancestor).
+    expect(okWrite(await hw(bobC, ids.csClass, 'CS HW'))).toBe(true)
+    // …but NOT the Bio class (different subtree).
+    expect(errored(await hw(bobC, ids.bioClass, 'Bio HW (should fail)'))).toBe(true)
+    // Scoped read: sees the CS course row, not the Bio course row.
+    expect((await bobC.from('cls_courses').select('id').eq('id', ids.csCourse)).data?.length).toBe(1)
+    expect((await bobC.from('cls_courses').select('id').eq('id', ids.bioCourse)).data?.length).toBe(0)
+  })
+
+  it('a GLOBAL professor (non-admin) covers every class — unchanged behavior', async () => {
+    // eve holds professor@global (scope null) and is NOT an org admin.
+    expect(okWrite(await hw(eveC, ids.csClass, 'CS HW by global prof'))).toBe(true)
+    expect(okWrite(await hw(eveC, ids.bioClass, 'Bio HW by global prof'))).toBe(true)
+  })
+
+  it('a non-admin professor can create a course + class (review Finding 1 — no self-ref regression)', async () => {
+    // eve = GLOBAL professor, NOT an org admin. Course INSERT gates on coarse
+    // staff; class INSERT on covering the parent course. No RETURNING (the app
+    // inserts without it), so the SELECT policy's self-join is never hit.
+    expect(okWrite(await eveC.from('cls_courses').insert({ org_id: orgA, name: 'RLS-EveCourse' }))).toBe(true)
+    const { data: c } = await alice.from('cls_courses').select('id, scope_node_id').eq('org_id', orgA).eq('name', 'RLS-EveCourse').single()
+    expect(okWrite(await eveC.from('cls_classes').insert({ org_id: orgA, course_id: c!.id, name: 'RLS-EveClass' }))).toBe(true)
+    await alice.from('cls_courses').delete().eq('id', c!.id) // cascades class
+    await alice.from('module_scope_nodes').delete().eq('id', c!.scope_node_id) // cascades child class node
+  })
+
+  it('a scoped student sees only their own class', async () => {
+    // charlie = student@CS class → a class member of CS, not Bio.
+    expect((await charlieC.from('cls_classes').select('id').eq('id', ids.csClass)).data?.length).toBe(1)
+    expect((await charlieC.from('cls_classes').select('id').eq('id', ids.bioClass)).data?.length).toBe(0)
+  })
+
+  it('enrollment guard: a scoped professor enrolls in-scope, cannot mint a co-professor or reach another course', async () => {
+    // bob (professor@CS course) enrolls dana as a student of the CS class.
+    expect(okWrite(await grant(bobC, uid.dana, 'student', ids.csClassNode))).toBe(true)
+    // …cannot mint another professor (co-instructor) — needs a Coordinator/admin.
+    expect(errored(await grant(bobC, uid.dana, 'professor', ids.csClassNode))).toBe(true)
+    // …cannot enroll into the Bio class (outside their scope).
+    expect(errored(await grant(bobC, uid.dana, 'student', ids.bioClassNode))).toBe(true)
+  })
+})

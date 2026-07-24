@@ -307,11 +307,13 @@ async function main() {
       { org_id: orgA, user_id: gabeId, role: 'member' },
     ])
   await admin.from('org_modules').upsert({ org_id: orgA, module_key: 'classroom', enabled: true, settings: {} })
+  // Slice 2b: professor + GA are GLOBAL grants (org-wide staff, cover every
+  // course). Students are SCOPED grants at their class node — created below,
+  // after the class (and its scope node) exist. A global 'student' grant is
+  // meaningless in the scoped model (would read as enrolled in every class).
   await upsertModuleRoles([
     { org_id: orgA, user_id: aliceId, module_key: 'classroom', role: 'professor' },
-    { org_id: orgA, user_id: charlieId, module_key: 'classroom', role: 'student' },
     { org_id: orgA, user_id: gabeId, module_key: 'classroom', role: 'ga' },
-    { org_id: orgA, user_id: danaId, module_key: 'classroom', role: 'student' },
   ])
 
   await admin.from('cls_courses').delete().eq('org_id', orgA)
@@ -325,9 +327,17 @@ async function main() {
   const { data: klass, error: classErr } = await admin
     .from('cls_classes')
     .insert({ org_id: orgA, course_id: course!.id, name: 'Statistics 101 — Fall', term: 'Fall 2026' })
-    .select('id')
+    .select('id, scope_node_id')
     .single()
   if (classErr) throw new Error(`Class seed failed: ${classErr.message}`)
+
+  // Scoped student enrollment (slice 2b): charlie + dana are students of THIS
+  // class — a student grant pinned to the class's scope node. This is the
+  // enrollment authority; the roster rows below are the name/badge store.
+  await upsertModuleRoles([
+    { org_id: orgA, user_id: charlieId, module_key: 'classroom', role: 'student', scope_ref: klass!.scope_node_id },
+    { org_id: orgA, user_id: danaId, module_key: 'classroom', role: 'student', scope_ref: klass!.scope_node_id },
+  ])
 
   const { error: memberErr } = await admin.from('cls_class_members').insert([
     { org_id: orgA, class_id: klass!.id, user_id: aliceId, role: 'professor' },

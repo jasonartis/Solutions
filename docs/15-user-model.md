@@ -502,6 +502,46 @@ vocabulary gets locked.
 
 ## Decisions log
 
+- **2026-07-24 (slice 2b BUILT — classroom scope-awareness, Opus session):**
+  `20260724010000_classroom_scoped_authority.sql` ships the design recorded below.
+  Classroom authority is now scope-aware: `cls_courses`/`cls_classes` carry a
+  `scope_node_id` (course node = root, class node = child; minted by BEFORE-INSERT
+  definer triggers, backfilled); new PRECISE functions `cls_can_manage_class/_course`
+  + `cls_is_ga_class/_course` gate every per-row DB policy via `module_scope_covers`
+  (global grant covers all → global professors unchanged); `module_position_rank`
+  is per-module (classroom professor=2/ga=1/student=1); the write gate dropped to
+  Lead so a professor enrolls within their scope; `cls_is_class_member` reads
+  scoped grants (enrollment authority has ONE source); existing global professor/GA
+  grants stay global, student rosters migrated to scoped grants. Enrollment
+  (`enrollClassMember`) now writes the scoped grant + the name/badge roster row
+  together. **Full docs/03 #12 rhythm with a 2-reviewer adversarial fan-out:**
+  - **Reviewer A (tenancy/policy): SHIP-WITH-CHANGES** — no cross-tenant hole; 5
+    findings fixed: **F1 (must)** `cls_courses`/`cls_classes` INSERT `WITH CHECK`
+    self-referenced its own table (docs/03 #15) → falls back to `is_org_admin`, so a
+    non-admin professor couldn't create courses/classes (masked in demo by
+    owner-professors); split INSERT (coarse / parent-course) from UPDATE/DELETE
+    (node-precise) + regression test. **F2** a global `student` grant would read as a
+    member of every class → `cls_is_class_member` now requires `scope_ref is not null`.
+    **F3** coarse `cls_can_manage`/`cls_is_ga` are consumed beyond storage (export
+    controls, survey aggregates) → `module_can_manage`(classroom) tightened to
+    admin-or-global-professor; `cls_survey_results` made class-precise; header
+    corrected. **F4** no roster-only staff (verified). **F5** node triggers now own
+    `scope_node_id` (client value ignored).
+  - **Reviewer B (escalation): SHIP** — gate lowering grants the 6 other modules
+    nothing (their roles rank 0); professors can't self-escalate or mint co-professors
+    (branch B is dead for classroom, rank never 3); 2-arg repoint correct; no
+    last-Director regression. Two low notes: **N3** a global professor could
+    hand-craft an API call widening a student's scope to global — NEUTRALIZED by F2
+    (a global student grant now confers nothing); optional guard-level rejection of
+    null-scope classroom position grants DEFERRED. **N4** the email→profile lookup
+    (`shares_org_with`) could enroll a non-member of this org — CLOSED by an
+    org-membership assertion in `enrollClassMember`; the general "a module_roles grant
+    implies org membership" invariant is a platform-wide follow-on.
+  - Verified: RLS 30/30 (+5 scoped-authority tests as real users), e2e 34/34,
+    typecheck + build clean. **Committed local; prod push bundled with 2a.**
+  - **Storage stays ORG-scoped** (cls-submissions/materials/exams bucket paths key on
+    org_id, not class) — a documented known limitation; per-class storage scoping is a
+    follow-on.
 - **2026-07-24 (slice 2 STARTED — 2a: module_roles surrogate PK, Opus session):** Founder
   initiated slice 2 (per-module vocabulary), starting with classroom, and it's being built
   in two verified stages. **Stage 2a** (`20260723010000_module_roles_scoped_pk.sql`) is the

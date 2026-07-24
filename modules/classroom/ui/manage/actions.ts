@@ -30,18 +30,18 @@ export async function createCourse(orgSlug: string, formData: FormData) {
   revalidatePath(`/o/${orgSlug}/m/classroom/manage`)
 }
 
-// Founder feedback (2026-07-16): "as a student, [bob] says he is not
-// enrolled in any class. How does he enroll or get enrolled?" — there was
-// no UI anywhere to write cls_class_members (only ever read). RLS already
-// permits it (cls_class_members is in the generic staff-write loop, gated
-// on cls_can_manage — org-wide, not scoped to a specific course/class; see
-// the founder's separate question about whether professor should scope
-// per-course, still undecided). The target must already be an org member
-// (added via the org's Members page) — this looks them up via the
-// existing shares_org_with-gated profiles read, not a new definer
-// function. Explicit onConflict: cls_class_members' primary key is a
-// synthetic `id`, not (class_id, user_id) — a bare .upsert() would target
-// the wrong constraint and error on a re-enroll instead of updating the role.
+// Enrollment (user model slice 2b, 2026-07-24). Enrollment is now a SCOPED
+// module_roles grant (role @ the class's scope node) — the single source of
+// enrollment authority; `cls_is_class_member` and every per-row policy read it
+// via scope coverage. The `cls_class_members` row is kept in sync purely as a
+// name/badge store (it no longer drives authority), so the two can never
+// disagree (the testing-round items 29–30 split). Both writes go through this
+// one action.
+//
+// Authority is enforced by RLS + the module_roles hierarchy guard: a professor
+// (Lead) may enroll students/GAs whose scope their grant covers, but cannot
+// mint another professor (co-instructor) — that needs a Coordinator/admin. An
+// org admin bypasses the ladder. The target must already be an org member.
 export async function enrollClassMember(orgSlug: string, classId: string, formData: FormData) {
   const email = String(formData.get('email') ?? '').trim().toLowerCase()
   const role = String(formData.get('role') ?? 'student')
@@ -54,6 +54,50 @@ export async function enrollClassMember(orgSlug: string, classId: string, formDa
     throw new Error(`No user found with email ${email} in this organization — add them as an org member first`)
   }
 
+  // The class's scope node — the grant is pinned to it. Readable to any staff
+  // who can manage the class (cls_classes_select policy).
+  const { data: klass } = await supabase
+    .from('cls_classes')
+    .select('org_id, scope_node_id')
+    .eq('id', classId)
+    .single()
+  if (!klass?.scope_node_id) throw new Error('Class has no scope node')
+
+  // The target must be a member of THIS org (review Note 4): the email lookup
+  // above resolves anyone sharing ANY org with the caller, so verify org
+  // membership before minting a classroom grant — otherwise a non-member could
+  // be enrolled and read class content via the grant-based RLS. (Readable to
+  // the caller: org_members_select_member lets any org member read the roster.)
+  const { data: member } = await supabase
+    .from('org_members')
+    .select('user_id')
+    .eq('org_id', klass.org_id)
+    .eq('user_id', profile.user_id)
+    .maybeSingle()
+  if (!member) {
+    throw new Error(`No user found with email ${email} in this organization — add them as an org member first`)
+  }
+
+  // One role per (user, class): drop any prior grant at this class node, then
+  // grant the chosen role. Runs as the caller under the guard, so a professor
+  // changing a co-instructor's seat is correctly rejected (only admin/coord).
+  await supabase
+    .from('module_roles')
+    .delete()
+    .eq('org_id', klass.org_id)
+    .eq('module_key', 'classroom')
+    .eq('user_id', profile.user_id)
+    .eq('scope_ref', klass.scope_node_id)
+  const { error: grantErr } = await supabase.from('module_roles').insert({
+    org_id: klass.org_id,
+    user_id: profile.user_id,
+    module_key: 'classroom',
+    role,
+    scope_ref: klass.scope_node_id,
+  })
+  fail(grantErr, 'Enroll failed')
+
+  // Name/badge store (authority already granted above).
   const { error } = await supabase.from('cls_class_members').upsert(
     {
       org_id: DERIVED_SCOPE_PLACEHOLDER, // derived by cls_class_members_scope trigger from class_id
@@ -63,12 +107,25 @@ export async function enrollClassMember(orgSlug: string, classId: string, formDa
     },
     { onConflict: 'class_id,user_id' },
   )
-  fail(error, 'Enroll failed')
+  fail(error, 'Enroll (roster) failed')
   revalidatePath(`/o/${orgSlug}/m/classroom/manage`)
 }
 
 export async function removeClassMember(orgSlug: string, classId: string, userId: string) {
   const supabase = await createClient()
+  const { data: klass } = await supabase.from('cls_classes').select('org_id, scope_node_id').eq('id', classId).single()
+  if (klass?.scope_node_id) {
+    // Revoke the scoped enrollment grant (the authority) …
+    const { error: grantErr } = await supabase
+      .from('module_roles')
+      .delete()
+      .eq('org_id', klass.org_id)
+      .eq('module_key', 'classroom')
+      .eq('user_id', userId)
+      .eq('scope_ref', klass.scope_node_id)
+    fail(grantErr, 'Remove from class (grant) failed')
+  }
+  // … and the name/badge row.
   const { error } = await supabase.from('cls_class_members').delete().eq('class_id', classId).eq('user_id', userId)
   fail(error, 'Remove from class failed')
   revalidatePath(`/o/${orgSlug}/m/classroom/manage`)
