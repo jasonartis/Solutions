@@ -684,3 +684,101 @@ describe('classroom scoped authority (slice 2b)', () => {
     expect(errored(await grant(bobC, uid.dana, 'student', ids.bioClassNode))).toBe(true)
   })
 })
+
+describe('nail-salon scoped authority (slice 2 — 20260726010000)', () => {
+  // Mirrors the classroom slice-2b block: a LOCATION entity tree replaces
+  // course→class. alice is the salon org OWNER (bypasses the ladder via
+  // is_org_admin), so she does all setup. Every assertion runs as the real
+  // scoped user. sal_locations gains scope_node_id (each location is a root
+  // node minted by a BEFORE-INSERT trigger); sal_can_manage_location /
+  // sal_can_operate_location gate per-row writes/reads by scope coverage, and
+  // a GLOBAL grant (scope_ref null) still covers every location unchanged.
+  let salonOrg: string
+  const uid: Record<string, string> = {}
+  const ids: Record<string, string> = {}
+  let charlieC: SupabaseClient // GLOBAL manager (non-admin) — proves global covers all
+
+  const errored = (r: { error: unknown }) => r.error != null
+  const okWrite = (r: { error: unknown }) => r.error == null
+  // Manage-tier write probe. sal_services write is manager-only (no operate
+  // policy) and location-scoped via sal_services_write_manage. approx_duration
+  // is NOT NULL with no default, so it must be supplied. org_id is re-derived
+  // from location_id by the scope-sync trigger; we pass the real one anyway.
+  const svc = (c: SupabaseClient, locId: string | undefined, name: string) =>
+    c.from('sal_services').insert({ org_id: salonOrg, location_id: locId, name, price: 10, approx_duration_minutes: 30 })
+  const grant = (c: SupabaseClient, user: string | undefined, role: string, scope: string | null | undefined) =>
+    c.from('module_roles').insert({ org_id: salonOrg, user_id: user, module_key: 'nail-salon', role, scope_ref: scope })
+
+  beforeAll(async () => {
+    charlieC = await signIn('charlie@demo.local')
+    salonOrg = (await alice.from('orgs').select('id').eq('slug', 'demo-salon').single()).data!.id
+    for (const e of ['bob', 'charlie', 'dana']) {
+      const { data } = await alice.rpc('org_find_user_by_email', { check_org_id: salonOrg, target_email: `${e}@demo.local` })
+      uid[e] = data![0].user_id as string
+    }
+    // bob is not a salon member (he's in demo-b); charlie/dana are seeded
+    // salon members already. Add only bob, as alice (org owner).
+    await alice.from('org_members').upsert({ org_id: salonOrg, user_id: uid.bob, role: 'member' })
+
+    // Two fresh locations (as alice, owner → bypass). The BEFORE-INSERT trigger
+    // mints each location's root scope node; capture both ids + node ids.
+    const mkLoc = async (name: string) =>
+      (await alice.from('sal_locations').insert({ org_id: salonOrg, name }).select('id, scope_node_id').single()).data!
+    const l1 = await mkLoc('RLS-Loc-1')
+    const l2 = await mkLoc('RLS-Loc-2')
+    ids.loc1 = l1.id as string
+    ids.loc1Node = l1.scope_node_id as string
+    ids.loc2 = l2.id as string
+    ids.loc2Node = l2.scope_node_id as string
+
+    // One expense per location, for the location-scoped READ assertion.
+    const mkExp = async (locId: string, cat: string) =>
+      (await alice.from('sal_expenses').insert({ org_id: salonOrg, location_id: locId, category: cat, amount: 5 }).select('id').single()).data!
+    ids.exp1 = (await mkExp(ids.loc1, 'RLS-exp-1')).id as string
+    ids.exp2 = (await mkExp(ids.loc2, 'RLS-exp-2')).id as string
+
+    // Grants (as alice, org owner → bypasses the ladder guard).
+    await alice.from('module_roles').insert([
+      { org_id: salonOrg, user_id: uid.bob, module_key: 'nail-salon', role: 'manager', scope_ref: ids.loc1Node }, // scoped @ loc1
+      { org_id: salonOrg, user_id: uid.charlie, module_key: 'nail-salon', role: 'manager', scope_ref: null }, // GLOBAL, non-admin
+    ])
+  })
+
+  afterAll(async () => {
+    // charlie's GLOBAL manager grant (scope null) is not node-cascaded — delete
+    // it explicitly, leaving his seeded 'customer' grant (also scope null) intact.
+    await alice.from('module_roles').delete().eq('org_id', salonOrg).eq('module_key', 'nail-salon').eq('user_id', uid.charlie).eq('role', 'manager').is('scope_ref', null)
+    await alice.from('sal_locations').delete().in('id', [ids.loc1, ids.loc2]) // cascades services/expenses
+    // Deleting the location nodes cascades every scoped grant pinned to them
+    // (bob manager@loc1, dana cashier@loc1 — module_roles.scope_ref ON DELETE CASCADE).
+    await alice.from('module_scope_nodes').delete().in('id', [ids.loc1Node, ids.loc2Node])
+    await alice.from('org_members').delete().eq('org_id', salonOrg).eq('user_id', uid.bob)
+  })
+
+  it('a scoped manager acts only within its own location, not a sibling', async () => {
+    // bob = manager@loc1 → manages loc1's manage-tier rows…
+    expect(okWrite(await svc(bob, ids.loc1, 'RLS-svc-loc1'))).toBe(true)
+    // …but NOT loc2 (different location subtree — cross-location isolation).
+    expect(errored(await svc(bob, ids.loc2, 'RLS-svc-loc2 (should fail)'))).toBe(true)
+    // Location-scoped read (sal_expenses): sees loc1's expense, not loc2's.
+    expect((await bob.from('sal_expenses').select('id').eq('id', ids.exp1)).data?.length).toBe(1)
+    expect((await bob.from('sal_expenses').select('id').eq('id', ids.exp2)).data?.length).toBe(0)
+  })
+
+  it('a GLOBAL manager (non-admin) manages every location — unchanged behavior', async () => {
+    // charlie holds manager@global (scope null) and is NOT an org admin.
+    expect(okWrite(await svc(charlieC, ids.loc1, 'RLS-svc-global-1'))).toBe(true)
+    expect(okWrite(await svc(charlieC, ids.loc2, 'RLS-svc-global-2'))).toBe(true)
+  })
+
+  it('enrollment guard: a scoped manager grants in-scope operate staff, cannot mint a co-manager or reach a sibling', async () => {
+    // bob (manager@loc1, rank 2) grants dana a cashier (rank 1) scoped to loc1:
+    // branch A — strictly outranks + covers loc1. Insert without RETURNING.
+    expect(okWrite(await grant(bob, uid.dana, 'cashier', ids.loc1Node))).toBe(true)
+    // …cannot mint another manager at loc1 (branch A 2>2 false; branch B is
+    // rank-3/Coordinator-tier only, and needs strict containment anyway).
+    expect(errored(await grant(bob, uid.dana, 'manager', ids.loc1Node))).toBe(true)
+    // …cannot grant anything at loc2 (scope not covered by a loc1 grant).
+    expect(errored(await grant(bob, uid.dana, 'cashier', ids.loc2Node))).toBe(true)
+  })
+})

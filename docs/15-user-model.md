@@ -502,6 +502,46 @@ vocabulary gets locked.
 
 ## Decisions log
 
+- **2026-07-26 (slice 2 — nail-salon scope-awareness BUILT, Opus session):**
+  `20260726010000_nail_salon_scoped_authority.sql` applies the classroom exemplar to
+  the salon's org → **location** tree — the second module scoped, and the pattern is
+  now proven reusable. `sal_locations` gains `scope_node_id` (each location a ROOT
+  node — the salon tree is flat); every other `sal_` table already carries
+  `location_id`, so its node resolves via `sal_locations`. `module_position_rank`
+  gains the salon vocabulary (admin=3 Coordinator / manager=2 Lead / cashier=1 /
+  worker=1 / customer→0). New precise `sal_can_manage_location`/`sal_can_operate_location`
+  gate every per-row policy + both lifecycle triggers (`sal_pin_appointment`,
+  `sal_guard_bill`); coarse `sal_can_manage`/`_operate`/`sal_is_worker` redefined off
+  `module_roles` for console entry only; `module_can_manage('nail-salon')` tightened
+  to admin-or-global-manager (export controls are module-wide). **Simpler than
+  classroom:** uniform `location_id`, no storage buckets (no storage gap), and NO
+  forced grant migration — existing grants stay GLOBAL (= org-wide, unchanged; the
+  salon has no `cls_is_class_member`-style membership-inflation vector, since
+  customer/worker access keys off `sal_customers.user_id`/`worker_id`, not grant
+  coverage). Backfill just mints location nodes.
+  - **2-reviewer adversarial fan-out (run in parallel per founder's subagent guidance):
+    both SHIP.** Reviewer A (tenancy/policy): no cross-tenant/cross-location hole;
+    coverage direction correct, all 12 write + operate/select policies + both triggers
+    moved to location-precise with own-row arms preserved, node SET-NULL fails closed,
+    definer node-trigger atomic/not cross-org. Reviewer B (escalation): manager
+    self-escalation impossible (only downward in-scope cashier/worker); the FLAT tree
+    makes scoped-admin self-replication + peer-admin tampering structurally impossible
+    (branch B only reaches global-admin→location-admin bounded delegation); gate
+    excludes cashier/worker/customer; cross-module writes double-keyed; re-point
+    defense holds; last-Director inert.
+  - **One reviewer note CLOSED (deliberate divergence from classroom):** both flagged
+    that the coarse INSERT gate let a location-scoped manager create empty,
+    unmanageable locations. Unlike classroom (course creation stays coarse), salon
+    `sal_locations` INSERT is gated on org-admin OR a GLOBAL admin/manager
+    (`has_module_role`) — creating a STORE is a business-level act and salon has an
+    explicit admin tier, so a location-scoped manager cannot spawn locations. F8
+    (generic-tier role strings inherit generic ranks) is pre-existing + org-admin-only,
+    informational.
+  - **Verified:** RLS (+ scoped-authority tests as real users), e2e, typecheck+build
+    clean. **FOLLOW-ON (not built):** a "manager assigns staff to a location" UI (the
+    salon analogue of classroom enrollment) + multi-location surfacing in the console
+    (today both consoles hard-select one location). The authority layer is scope-correct
+    now; scoped assignment is a UI slice.
 - **2026-07-24 (slice 2b BUILT — classroom scope-awareness, Opus session):**
   `20260724010000_classroom_scoped_authority.sql` ships the design recorded below.
   Classroom authority is now scope-aware: `cls_courses`/`cls_classes` carry a
