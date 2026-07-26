@@ -502,6 +502,27 @@ vocabulary gets locked.
 
 ## Decisions log
 
+- **2026-07-26 (scope-authority EXTRACTION — the engine is now shared code, Opus session):**
+  Founder asked whether all modules run on the same user-hierarchy code so a change
+  propagates everywhere. Mostly yes (one guard, one rank fn, one grant table, one scope
+  model) — but each scoped module had hand-rolled its own `<prefix>_can_manage_<entity>`
+  body. Two modules = the "extract on second need" trigger, so `20260726020000_module_scope_authority_extraction.sql`
+  factors the per-row authority logic into two generic primitives —
+  `module_caller_covers_rank(org, module, node, min_rank)` and
+  `module_caller_covers_role(org, module, node, role)` — and collapses all six classroom+
+  salon functions (`cls_can_manage_class/_course`, `cls_is_ga_class/_course`,
+  `sal_can_manage_location`, `sal_can_operate_location`) to one-line wrappers that resolve
+  entity → node and delegate. Signatures unchanged ⇒ **zero policy/trigger churn**. Now a
+  change to how scope authority works touches ONE place for all modules; a new module writes
+  one-liners. **Behavior-preserving**, confirmed by RLS 33/33 unchanged + e2e 34/34.
+  **Equivalence review (subagent): SHIP-WITH-CHANGES** — caught one real divergence: for a
+  NONEXISTENT entity id, the original JOIN returned false-for-non-admins, but the delegated
+  form returned true for a non-admin GLOBAL-grant holder (`module_scope_covers(null,null)=true`).
+  Inert (RLS always passes a real FK; FK blocks bogus inserts) but it broke the "fail-closed"
+  claim, so fixed exactly with a `check_node is not null` guard on each generic's grant arm
+  (missing entity → `is_org_admin` only, matching the original). Coarse entry gates
+  (`<prefix>_can_manage(org)`) left per-module — a smaller future tidy. Convention recorded
+  in docs/03 #16. Committed + prod-pushed.
 - **2026-07-26 (slice 2 — nail-salon scope-awareness BUILT, Opus session):**
   `20260726010000_nail_salon_scoped_authority.sql` applies the classroom exemplar to
   the salon's org → **location** tree — the second module scoped, and the pattern is

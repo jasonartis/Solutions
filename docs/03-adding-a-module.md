@@ -107,6 +107,42 @@ Four modules now run on these; they are load-bearing, not suggestions:
     (`user_id = auth.uid()`); reserve ownership helper functions for policies on
     OTHER tables, whose referenced rows already exist.
 
+## Scope-aware authority (user-model slice 2, proven by classroom + nail-salon)
+
+A module that scopes authority to an entity (a class, a location, an event) follows
+this shape — the authority LOGIC is shared; each module adds only thin wrappers:
+
+16. **The scope-authority engine is platform-shared; per-module code is thin.** The
+    "who may act on this scope" logic lives in ONE place and every module reuses it:
+    - `module_scope_nodes` (one entity-tree table) + a `scope_node_id` column on the
+      module's entity table, minted by a BEFORE-INSERT definer trigger + backfilled.
+    - `module_position_rank(module_key, role)` — one IMMUTABLE fn; add a `CASE` block
+      mapping the module's roles to the generic tiers (director 4 / coordinator 3 /
+      lead 2 / position 1); unmapped roles stay rank 0 (invisible to the ladder).
+    - The two-branch hierarchy guard (`module_caller_can_manage_seat` +
+      `module_roles_guard_hierarchy`) governs who may GRANT which seat — module-agnostic,
+      never re-implemented per module.
+    - **`module_caller_covers_rank(org, module, node, min_rank)` /
+      `module_caller_covers_role(org, module, node, role)`** (20260726020000) — the
+      per-row authority primitives (is-org-admin OR a grant of sufficient rank/role
+      whose scope COVERS the node). Each module writes a ONE-LINE wrapper
+      (`<prefix>_can_manage_<entity>(org, entity_id)`) that resolves its entity → its
+      `scope_node_id` and delegates. Keep the wrapper signatures stable so the RLS
+      policies don't churn.
+    - **Coarse vs precise:** keep a coarse `<prefix>_can_manage(org)` (any-scope, off
+      `module_roles` not `has_module_role`) for CONSOLE ENTRY only; per-row policies
+      and lifecycle/pin triggers use the PRECISE `_<entity>` wrappers. `module_can_manage`
+      (export controls) must gate on admin-or-GLOBAL (`has_module_role`, global-only), so
+      a scoped staffer can't toggle module-wide settings.
+    - **Entity-CREATE gate self-reference:** the entity's own row/node isn't in the
+      INSERT snapshot, so gate INSERT on a NON-self-referential check (coarse, or the
+      parent's node), never `<prefix>_can_manage_<self>(id)` (docs/03 #15). UPDATE/DELETE
+      use the node.
+    - **Existing global grants stay global = org-wide** (unchanged). Only re-scope
+      existing grants when a global grant would OVER-expose through a coverage-based
+      membership read (classroom's `cls_is_class_member` — a "global student" would be a
+      member of every class; salon had no such vector, so its grants were untouched).
+
 ### Composition & template (founder decision, 2026-07-09)
 
 Founder-proposed, adopted with one adjustment:
