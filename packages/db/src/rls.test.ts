@@ -782,3 +782,110 @@ describe('nail-salon scoped authority (slice 2 — 20260726010000)', () => {
     expect(errored(await grant(bob, uid.dana, 'cashier', ids.loc2Node))).toBe(true)
   })
 })
+
+describe('speed-dating scoped authority (slice 2 — 20260726030000)', () => {
+  // Mirrors the nail-salon slice-2 block: an EVENT entity tree replaces
+  // location. alice is the demo-dating org OWNER (bypasses the ladder via
+  // is_org_admin), so she does all setup; every assertion runs as the real
+  // scoped user. sd_events gains scope_node_id (each event a root node minted by
+  // a BEFORE-INSERT trigger); the PRECISE sd_can_organize_event /
+  // sd_can_staff_event_of gate per-row writes/reads + the reveal RPC by scope
+  // coverage of a SPECIFIC event, while a GLOBAL grant (scope_ref null) still
+  // covers every event unchanged.
+  let datingOrg: string
+  const uid: Record<string, string> = {}
+  const ids: Record<string, string> = {}
+  let danaC: SupabaseClient // GLOBAL organizer (non-admin) — proves global covers all
+
+  const errored = (r: { error: unknown }) => r.error != null
+  const okWrite = (r: { error: unknown }) => r.error == null
+  // Event-scoped write probe. sd_rounds is the simplest organize-write table (its
+  // _write_organize policy gates on sd_can_organize_event(org_id, event_id)).
+  // round_number is NOT NULL (check > 0) with no default, so it must be supplied;
+  // org_id + event_id are re-derived from the round's event by the scope-sync
+  // trigger, we pass the real ones anyway.
+  const round = (c: SupabaseClient, eventId: string | undefined, n: number) =>
+    c.from('sd_rounds').insert({ org_id: datingOrg, event_id: eventId, round_number: n })
+  const grant = (c: SupabaseClient, user: string | undefined, role: string, scope: string | null | undefined) =>
+    c.from('module_roles').insert({ org_id: datingOrg, user_id: user, module_key: 'speed-dating', role, scope_ref: scope })
+
+  beforeAll(async () => {
+    danaC = await signIn('dana@demo.local')
+    datingOrg = (await alice.from('orgs').select('id').eq('slug', 'demo-dating').single()).data!.id
+    for (const e of ['bob', 'dana', 'frank']) {
+      const { data } = await alice.rpc('org_find_user_by_email', { check_org_id: datingOrg, target_email: `${e}@demo.local` })
+      uid[e] = data![0].user_id as string
+    }
+    // dana/frank are seeded demo-dating members (participants); bob is not (he's
+    // in demo-b). Add only bob, as alice (org owner).
+    await alice.from('org_members').upsert({ org_id: datingOrg, user_id: uid.bob, role: 'member' })
+
+    // Two fresh events (as alice, owner → bypass). The BEFORE-INSERT trigger mints
+    // each event's root scope node; capture both ids + node ids.
+    const mkEvent = async (name: string) =>
+      (await alice.from('sd_events').insert({ org_id: datingOrg, name, state: 'open' }).select('id, scope_node_id').single()).data!
+    const e1 = await mkEvent('RLS-Event-1')
+    const e2 = await mkEvent('RLS-Event-2')
+    ids.event1 = e1.id as string
+    ids.event1Node = e1.scope_node_id as string
+    ids.event2 = e2.id as string
+    ids.event2Node = e2.scope_node_id as string
+
+    // One round per event, for the event-scoped READ assertion.
+    const mkRound = async (eventId: string, n: number) =>
+      (await alice.from('sd_rounds').insert({ org_id: datingOrg, event_id: eventId, round_number: n }).select('id').single()).data!
+    ids.round1 = (await mkRound(ids.event1, 1)).id as string
+    ids.round2 = (await mkRound(ids.event2, 1)).id as string
+
+    // Grants (as alice, org owner → bypasses the ladder guard).
+    await alice.from('module_roles').insert([
+      { org_id: datingOrg, user_id: uid.bob, module_key: 'speed-dating', role: 'organizer', scope_ref: ids.event1Node }, // scoped @ event1
+      { org_id: datingOrg, user_id: uid.dana, module_key: 'speed-dating', role: 'organizer', scope_ref: null }, // GLOBAL, non-admin
+    ])
+  })
+
+  afterAll(async () => {
+    // dana's GLOBAL organizer grant (scope null) is not node-cascaded — delete it
+    // explicitly, leaving her seeded 'participant' grant (also scope null) intact.
+    await alice.from('module_roles').delete().eq('org_id', datingOrg).eq('module_key', 'speed-dating').eq('user_id', uid.dana).eq('role', 'organizer').is('scope_ref', null)
+    await alice.from('sd_events').delete().in('id', [ids.event1, ids.event2]) // cascades rounds/participants/etc.
+    // Deleting the event nodes cascades every scoped grant pinned to them
+    // (bob organizer@event1, frank host@event1 — module_roles.scope_ref ON DELETE CASCADE).
+    await alice.from('module_scope_nodes').delete().in('id', [ids.event1Node, ids.event2Node])
+    await alice.from('org_members').delete().eq('org_id', datingOrg).eq('user_id', uid.bob)
+  })
+
+  it('a scoped organizer runs only its own event, not a sibling', async () => {
+    // bob = organizer@event1 → writes event1's organize-tier rows…
+    expect(okWrite(await round(bob, ids.event1, 2))).toBe(true)
+    // …but NOT event2 (different event subtree — cross-event isolation).
+    expect(errored(await round(bob, ids.event2, 2))).toBe(true)
+    // Event-scoped read (sd_rounds): sees event1's round, not event2's.
+    expect((await bob.from('sd_rounds').select('id').eq('id', ids.round1)).data?.length).toBe(1)
+    expect((await bob.from('sd_rounds').select('id').eq('id', ids.round2)).data?.length).toBe(0)
+  })
+
+  it('a GLOBAL organizer (non-admin) runs every event — unchanged behavior', async () => {
+    // dana holds organizer@global (scope null) and is NOT an org admin.
+    expect(okWrite(await round(danaC, ids.event1, 3))).toBe(true)
+    expect(okWrite(await round(danaC, ids.event2, 3))).toBe(true)
+  })
+
+  it('the mutual-interest reveal is event-scoped (privacy-critical)', async () => {
+    // bob = organizer@event1 → may reveal event1's matches (a count of 0 is fine)…
+    expect(okWrite(await bob.rpc('sd_reveal_matches', { check_event_id: ids.event1 }))).toBe(true)
+    // …but is REJECTED for event2 ('Only an organizer may reveal matches').
+    expect(errored(await bob.rpc('sd_reveal_matches', { check_event_id: ids.event2 }))).toBe(true)
+  })
+
+  it('enrollment guard: a scoped organizer grants in-scope staff, cannot mint a co-organizer or reach a sibling', async () => {
+    // bob (organizer@event1, rank 2) grants frank a host (rank 1) scoped to event1:
+    // branch A — strictly outranks + covers event1. Insert without RETURNING.
+    expect(okWrite(await grant(bob, uid.frank, 'host', ids.event1Node))).toBe(true)
+    // …cannot mint another organizer at event1 (branch A 2>2 false; branch B is
+    // rank-3/Coordinator-tier only, and needs strict containment anyway).
+    expect(errored(await grant(bob, uid.frank, 'organizer', ids.event1Node))).toBe(true)
+    // …cannot grant anything at event2 (scope not covered by an event1 grant).
+    expect(errored(await grant(bob, uid.frank, 'host', ids.event2Node))).toBe(true)
+  })
+})

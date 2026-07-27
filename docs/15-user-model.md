@@ -502,6 +502,40 @@ vocabulary gets locked.
 
 ## Decisions log
 
+- **2026-07-26 (slice 2 — speed-dating scope-awareness BUILT, Opus session):**
+  `20260726030000_speed_dating_scoped_authority.sql` — the THIRD real multi-entity module
+  scoped (events), and the first to fully exercise the extracted generics from the start.
+  `sd_events` gains `scope_node_id` (each event a flat ROOT node, trigger-minted, backfilled);
+  every other operational `sd_` table carries `event_id`. `module_position_rank` gains
+  speed-dating vocab (admin=3 / organizer=2 / host=1 / participant→0). New precise
+  `sd_can_organize_event(org, event_id)` / `sd_can_staff_event_of(org, event_id)` delegate to
+  `module_caller_covers_rank/role`; coarse `sd_can_organize`/`sd_can_staff_event` redefined off
+  `module_roles` for console entry; `sd_can_manage` unchanged; `module_can_manage('speed-dating')`
+  set global-only. Rewrote the 7 `_write_organize` policies (6 event-scoped + `sd_events`
+  3-way split), 7 selects, 2 `_update_staff`, the 3 pin triggers, and — privacy-critical — the
+  **mutual-match reveal** `sd_reveal_matches`, now gated on `sd_can_organize_event(ev_org,
+  event_id)` (org derived from the event row) so only an organizer of THAT event can reveal
+  its matches. Existing grants stay global (no forced migration; speed-dating has no
+  membership-inflation vector — participant access keys off `sd_participants` rows, not grant
+  coverage). `sd_blocks`/`sd_bans` stay org-wide (root, no event_id). No storage buckets → no
+  storage gap.
+  - **Process (founder's subagent guidance, full docs/03 #12 rhythm): agent-drafted →
+    self-reviewed → 2-reviewer adversarial fan-out, both SHIP.** Draft delegated (context
+    conservation) then read line-by-line by me; tenancy+privacy reviewer confirmed coverage
+    direction, complete policy rewrite, and the reveal/interest privacy arms preserved
+    verbatim; escalation reviewer confirmed organizer self-escalation impossible, flat-tree
+    branch-B bounded, gate excludes host/participant, cross-event blocked (re-point defense),
+    and the reveal is a genuine per-event tightening.
+  - **N1/L1 CLOSED:** both reviewers flagged that the coarse `sd_events` INSERT gate would let
+    a future scoped organizer create orphan events it can't manage — aligned with nail-salon's
+    deliberate hardening (org-admin OR GLOBAL admin/organizer via `has_module_role`).
+  - **N2/L2 documented, not changed (pre-existing, non-exploitable):** the `_event` wrappers
+    trust the caller-supplied `org` arg (every real call site passes a self-consistent
+    (org,event) pair from the same row; returns only a boolean, never an access token —
+    shared by classroom/salon); and the new definer fns carry the implicit PUBLIC-execute grant
+    (fail-closed for anon). Both belong to the already-deferred platform-wide
+    `revoke ... from public` sweep, not this slice.
+  - Verified: RLS (+ event-scoped tests as real users), e2e, typecheck+build clean.
 - **2026-07-26 (scope-authority EXTRACTION — the engine is now shared code, Opus session):**
   Founder asked whether all modules run on the same user-hierarchy code so a change
   propagates everywhere. Mostly yes (one guard, one rank fn, one grant table, one scope
