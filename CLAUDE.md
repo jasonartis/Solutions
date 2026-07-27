@@ -174,6 +174,28 @@ A multi-tenant modular platform: each client engagement produces a **module** bu
   limited credits on routine work.
 - Safeguards, never-do list, backups, recovery: [docs/12-safeguards.md](docs/12-safeguards.md).
 
+## Session hygiene (subagents & fresh chats) — founder ask, 2026-07-27
+
+- **Parallel subagents** — use for independent work that can run concurrently
+  (adversarial security reviews, schema/code surveys, migration drafting, RLS-test
+  authoring) AND to keep heavy reading/analysis OFF the main context. They trade
+  MORE total tokens for parallelism + a leaner main window — they are NOT a way to
+  save a token budget. Use only when quality won't suffer: the proven rhythm is
+  agent-draft → the orchestrator READS the draft itself → independent 2-reviewer
+  adversarial fan-out → test-author → live verify. The orchestrator ALWAYS reviews
+  subagent output; the adversarial review + tests are the quality gate, never the
+  subagent's own say-so. Token math: subagent overhead dominates in a SMALL context
+  (self-do is cheaper there); in a LARGE context their fresh-start saving can
+  outweigh it for heavy tasks. The reliable wins are parallelism + context-leanness,
+  not budget.
+- **Proactively recommend a fresh chat when THIS context grows large.** Per-turn
+  cost scales with accumulated context, so a long session gets progressively more
+  expensive. When the chat has grown big AND you're at a clean, committed, shipped
+  boundary (nothing uncommitted/unpushed), TELL the founder it's a good time to
+  start a fresh chat — don't wait to be asked. A fresh chat auto-loads this file +
+  docs/15 + docs/03, so nothing is lost. Keep the current-state section above and
+  the docs decision logs current so the handoff is always clean.
+
 ## Working agreements
 
 - Never build platform primitives speculatively — extract them when a second module needs the same thing.
