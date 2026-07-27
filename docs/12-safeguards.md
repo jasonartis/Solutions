@@ -100,6 +100,22 @@ Found in a deliberate "what haven't we thought of" pass; ordered by urgency.
 7. **Auth email sender.** Supabase's built-in sender is rate-limited and
    spam-prone; before real user onboarding, configure custom SMTP (their
    dashboard supports it) so magic links and confirmations actually arrive.
+8. **Automated, tested backups before real/paying customers (founder, 2026-07-27
+   — not urgent; no real users yet).** Today prod backups are MANUAL: a
+   `pnpm backup:prod` dump taken by hand before each migration. That protects
+   migration mistakes (recoverable), but not a bad day between deploys. Before
+   real customers depend on the data:
+   (a) confirm which Supabase tier prod is on and its automated-backup / PITR
+       (point-in-time-recovery) policy — managed daily backups on paid plans,
+       PITR on higher tiers — so there's a platform safety net under the manual
+       dumps;
+   (b) schedule automated daily backups (not only pre-migration ones);
+   (c) TEST a restore once on a throwaway project — an untested backup is not a
+       backup.
+   The routine dev loop is already safe (forward-only additive migrations never
+   reset/drop prod; the destructive `db:reset`/`seed` are local-only and guarded
+   — see "Low-context assistant protections" below); this item upgrades
+   "recoverable by discipline" to "recoverable by tested automation."
 
 ## Low-context assistant protections (2026-07-10)
 
