@@ -4,11 +4,12 @@ import { revalidatePath } from 'next/cache'
 import { getModule, moduleRegistry } from '@platform/core'
 import { createClient } from '@/lib/supabase/server'
 import {
+  changeMemberRole,
+  inviteOrgMember,
   removeModuleRole,
   removeOrgMember,
   resolveEmailToUserId,
   upsertModuleRole,
-  upsertOrgMember,
 } from '@/lib/org-members'
 import { parseSynagogueSettingsForm } from '@/lib/synagogue-settings'
 
@@ -75,12 +76,30 @@ export async function addMember(orgId: string, formData: FormData) {
   const supabase = await requireSuperadmin()
   const email = String(formData.get('email') ?? '').trim()
   const role = String(formData.get('role') ?? 'member')
+  // Superadmin-only choice (guard-enforced): add immediately-active vs a pending
+  // invite. The checkbox posts 'immediate' only when ticked.
+  const immediate = formData.get('immediate') != null
   if (!orgId || !email) throw new Error('Org and email are required')
 
   const found = await resolveEmailToUserId(supabase, orgId, email)
   if (!found) throw new Error(`No user found with email ${email} — they must sign up first`)
 
-  await upsertOrgMember(supabase, orgId, found.userId, role)
+  await inviteOrgMember(supabase, orgId, found.userId, role, immediate ? 'active' : 'pending')
+  revalidatePath('/console')
+}
+
+// Persist the superadmin's default for "add member" (immediately-active vs
+// pending invite). Stored on their own profile; only their own row is writable.
+export async function setAddMemberDefault(formData: FormData) {
+  const supabase = await requireSuperadmin()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  const active = formData.get('defaultActive') != null
+  const { data: profile } = await supabase.from('profiles').select('settings').eq('user_id', user!.id).single()
+  const settings = { ...((profile?.settings as Record<string, unknown>) ?? {}), superadminDefaultAddActive: active }
+  const { error } = await supabase.from('profiles').update({ settings }).eq('user_id', user!.id)
+  if (error) throw new Error(error.message)
   revalidatePath('/console')
 }
 
@@ -90,7 +109,7 @@ export async function changeRole(orgId: string, formData: FormData) {
   const role = String(formData.get('role') ?? '')
   if (!orgId || !userId || !role) throw new Error('Org, member, and role are required')
 
-  await upsertOrgMember(supabase, orgId, userId, role)
+  await changeMemberRole(supabase, orgId, userId, role)
   revalidatePath('/console')
 }
 

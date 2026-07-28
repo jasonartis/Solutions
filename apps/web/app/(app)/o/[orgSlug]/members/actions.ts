@@ -4,11 +4,12 @@ import { revalidatePath } from 'next/cache'
 import { getModule } from '@platform/core'
 import { createClient } from '@/lib/supabase/server'
 import {
+  changeMemberRole,
+  inviteOrgMember,
   removeModuleRole,
   removeOrgMember,
   resolveEmailToUserId,
   upsertModuleRole,
-  upsertOrgMember,
 } from '@/lib/org-members'
 
 // Org self-management actions (docs/03 "Control hierarchy" level 2). Each
@@ -36,7 +37,7 @@ export async function addMember(orgSlug: string, formData: FormData) {
   const found = await resolveEmailToUserId(supabase, orgId, email)
   if (!found) throw new Error(`No user found with email ${email} — they must sign up first`)
 
-  await upsertOrgMember(supabase, orgId, found.userId, role)
+  await inviteOrgMember(supabase, orgId, found.userId, role)
   revalidatePath(`/o/${orgSlug}/members`)
 }
 
@@ -46,7 +47,7 @@ export async function changeRole(orgSlug: string, formData: FormData) {
   const role = String(formData.get('role') ?? '')
   if (!userId || !role) throw new Error('Member and role are required')
 
-  await upsertOrgMember(supabase, orgId, userId, role)
+  await changeMemberRole(supabase, orgId, userId, role)
   revalidatePath(`/o/${orgSlug}/members`)
 }
 

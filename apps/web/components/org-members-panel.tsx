@@ -14,6 +14,8 @@ export type OrgMemberRow = {
   displayName: string | null
   email: string | null
   orgRole: string
+  // Slice 3: 'pending' until the invited user accepts, else 'active'.
+  status: 'pending' | 'active'
   moduleRoles: { moduleKey: string; moduleName: string; role: string }[]
 }
 
@@ -41,6 +43,11 @@ export default function OrgMembersPanel(props: {
   // org_members_guard_hierarchy trigger (20260717010000) so the UI never
   // shows a control that would only error.
   callerRank: number
+  // Superadmin-only (console): show the "add immediately-active vs invite"
+  // toggle on the add form, pre-checked from the superadmin's saved default.
+  // Org admins never see it — they can only ever send a pending invite.
+  showActiveToggle?: boolean
+  activeToggleDefault?: boolean
 }) {
   const nameOf = (m: OrgMemberRow) => m.displayName || m.email || m.userId
   // Roles the caller may assign: strictly below their own rank.
@@ -70,6 +77,14 @@ export default function OrgMembersPanel(props: {
               <span className="text-sm">
                 <span className="font-medium">{nameOf(m)}</span>
                 {m.email && <span className="ml-2 text-xs text-gray-400">{m.email}</span>}
+                {m.status === 'pending' && (
+                  <span
+                    title="Invited but not yet accepted — they aren't a member and can't see anything in this org until they accept."
+                    className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700"
+                  >
+                    invited · pending
+                  </span>
+                )}
               </span>
               <span className="flex items-center gap-2">
                 {canManage ? (
@@ -115,7 +130,12 @@ export default function OrgMembersPanel(props: {
         {props.members.length === 0 && <li className="text-sm text-gray-400">No members yet.</li>}
       </ul>
 
-      <h3 className="mb-2 text-sm font-medium text-gray-600">Add a member</h3>
+      <h3 className="mb-2 text-sm font-medium text-gray-600">{props.showActiveToggle ? 'Add a member' : 'Invite a member'}</h3>
+      <p className="mb-2 max-w-xl text-xs text-gray-400">
+        {props.showActiveToggle
+          ? 'By default the person is sent a pending invite (they accept from their own dashboard). As platform owner you can instead add them as an active member immediately. They must already have an account.'
+          : 'The person is added as a pending invite and becomes a member only once they accept it from their own dashboard. They must already have an account.'}
+      </p>
       <form action={props.addMemberAction} className="mb-6 flex flex-wrap items-center gap-2">
         <input name="email" type="email" required placeholder="email@example.com" className={`${inputCls} w-56`} />
         <select name="role" className={inputCls} defaultValue="member">
@@ -123,7 +143,13 @@ export default function OrgMembersPanel(props: {
             <option key={r} value={r}>{r}</option>
           ))}
         </select>
-        <button className={btnCls}>Add</button>
+        {props.showActiveToggle && (
+          <label className="flex items-center gap-1 text-xs text-gray-600">
+            <input type="checkbox" name="immediate" defaultChecked={props.activeToggleDefault} />
+            add active immediately (skip invite)
+          </label>
+        )}
+        <button className={btnCls}>{props.showActiveToggle ? 'Add' : 'Invite'}</button>
       </form>
 
       {props.enabledModules.length > 0 && (

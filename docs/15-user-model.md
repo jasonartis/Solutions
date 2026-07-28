@@ -494,6 +494,27 @@ All of this is RLS/trigger territory ⇒ **Opus + full docs/03 #12 rhythm**, sli
    classroom first (professor grants GA/student — the already-agreed next piece).
 3. **Join policies + invite-accept** — entity-level joinPolicy everywhere; org-level
    invite-accept (touches `is_org_member()` — the most sensitive slice).
+   **[org-level invite-accept BUILT 2026-07-27 — `20260727010000_org_invite_accept.sql`;
+   entity-level joinPolicy still deferred to a follow-on pass.]** `org_members` gains
+   `status ('pending'|'active')` (existing rows backfilled active; future default `pending`,
+   fail-closed); `is_org_member` + its three siblings (`shares_org_with`, `org_caller_rank`,
+   `is_org_admin`) + **every** module capability predicate that reads `module_roles`
+   (`has_module_role`, the two generics, and the coarse/shared readers the scope migrations
+   left inline: `module_caller_can_manage_seat`, `module_has_manager_grant`, `cls_can_manage`,
+   `cls_is_ga`, `cls_is_class_member`, `sal_can_manage/operate/is_worker`,
+   `sd_can_organize/staff_event`) + `syn_can_write` all now require `status='active'` — this
+   finally delivers the "a module_roles grant implies (active) org membership" invariant.
+   Guard rewrite: authenticated INSERTs forced to `pending` + inviter server-stamped, a
+   self-accept carve-out (reachable only via the `org_accept_invite` definer — no self-UPDATE
+   policy exists), a self-decline/leave carve-out (member/pending own seat), a consent block on
+   admin force-activation; last-admin guard counts active-only. New definers
+   `org_accept_invite` (revalidates the inviter) + `org_my_pending_invites` (name-only card);
+   `org_members_select_self`/`_delete_self` policies. Dashboard invite cards + accept/decline/
+   leave; members-panel pending badge. **Founder decision 2026-07-27: the superadmin (platform
+   owner) may CHOOSE per-add — immediately-active vs pending invite — with a saved per-profile
+   default (`profiles.settings.superadminDefaultAddActive`); org admins can only ever invite.**
+   Two independent adversarial reviews (one caught the coarse-reader leak, fixed); RLS suite
+   50/50 + e2e invite→accept.
 4. **Defaults on join** — per-module default grants + backfill on enable.
 5. **View-as** — tabs + role-surface boundary + audit stamping. UI-heavy; last.
 
@@ -502,6 +523,35 @@ vocabulary gets locked.
 
 ## Decisions log
 
+- **2026-07-27 (slice 3 — ORG-LEVEL INVITE-ACCEPT BUILT, Opus session):**
+  `20260727010000_org_invite_accept.sql`. Being added to an org no longer makes you a live
+  member — every add by a signed-in user creates a **pending** invite; the invitee sees a
+  greyed-out dashboard card and becomes a member only when THEY accept (`org_accept_invite`,
+  which revalidates the inviter is still authorized). `org_members.status ('pending'|'active')`;
+  existing rows backfilled active, future default `pending` (fail-closed). The whole platform's
+  read/write reach flows through `is_org_member` + siblings, so all of `shares_org_with`,
+  `org_caller_rank`, `is_org_admin` were gated to active too.
+  **Adversarial review earned its keep:** the first draft only gated the generic module
+  predicates, but slice-2b had redefined ~10 coarse/shared functions to read `module_roles`
+  DIRECTLY (so scoped staff reach consoles) — including the ones backing classroom Storage
+  (student PII), course creation, and the shared `module_roles` write path. A pending-or-non-
+  member holding a grant could reach all of those. All ten gated on active membership (plus the
+  inline `syn_can_write`), which is what finally delivers the long-deferred "a module_roles
+  grant implies (active) org membership" invariant, platform-wide, at the point of use.
+  Guard: authenticated INSERT forced pending + inviter stamped; self-accept carve-out (safe
+  because no self-UPDATE RLS policy exists — reachable only via the definer); self-decline/leave
+  carve-out (member/pending own seat; active owner/admin still can't self-remove); consent block
+  on admin force-activation; last-admin guard counts active-only. **Superadmin choice (founder,
+  2026-07-27): the platform owner may add immediately-active OR pending, per-add, with a saved
+  per-profile default — "the superadmin should control everything." Org admins can only invite.**
+  App: dashboard invite cards + accept/decline/leave, members-panel pending badge, console
+  add-active toggle + default control. Seed flips all seeded members to active (invite-accept is
+  exercised by tests, not the seed). Two independent adversarial reviews (guard-logic = clean;
+  leak-hunt = found+fixed the coarse-reader gap); 50/50 RLS suite (incl. pending-invisibility,
+  consent, decline/leave, capability-gate, superadmin-choice) + e2e invite→accept. **Deferred:
+  entity-level joinPolicy (invite-only/request-approval/open per class/location/event) — a
+  follow-on pass; org-level request-to-join is a network feature (gated by `orgs.kind`), not a
+  client-org one.**
 - **2026-07-26 (slice 2 — speed-dating scope-awareness BUILT, Opus session):**
   `20260726030000_speed_dating_scoped_authority.sql` — the THIRD real multi-entity module
   scoped (events), and the first to fully exercise the extracted generics from the start.

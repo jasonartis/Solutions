@@ -75,12 +75,16 @@ test('org self-management: admin adds/removes members, changes roles, grants/rev
   await expect(aliceRow.getByRole('button', { name: 'Remove', exact: true })).not.toBeVisible()
   await expect(aliceRow.getByText('owner', { exact: true })).toBeVisible()
 
-  // Add bob as a new member by email.
+  // Invite bob (org membership is invite-accept now — he lands as a pending
+  // invite, shown with a badge, until he accepts from his own dashboard).
   await page.getByPlaceholder('email@example.com').fill('bob@demo.local')
-  await page.getByRole('button', { name: 'Add' }).click()
+  await page.getByRole('button', { name: 'Invite' }).click()
   await expect(page.getByText('bob@demo.local')).toBeVisible()
+  await expect(
+    page.locator('li', { has: page.getByText('bob@demo.local') }).getByText('invited · pending'),
+  ).toBeVisible()
 
-  // Change bob's org role to admin.
+  // Change bob's (pending) org role to admin — role edits work pre-acceptance.
   const bobRow = page.locator('li', { has: page.getByText('bob@demo.local') });
   await bobRow.getByRole('combobox').first().selectOption('admin')
   await bobRow.getByRole('button', { name: 'Update' }).click()
@@ -106,6 +110,37 @@ test('org self-management: admin adds/removes members, changes roles, grants/rev
   // Remove bob (cleanup — leaves the fixture org as other tests expect it).
   await bobRow.getByRole('button', { name: 'Remove' }).click()
   await expect(page.getByText('bob@demo.local')).not.toBeVisible()
+})
+
+test('org invite-accept: an invitee accepts a pending invite from their dashboard', async ({ page }) => {
+  // Slice 3 (2026-07-27): being added to an org is an INVITE. Alice invites bob;
+  // he sees a greyed-out pending card on his dashboard, accepts, and the org
+  // appears as a real card. He then leaves to reset the fixture.
+  await signIn(page, 'alice@demo.local')
+  await page.goto('/o/platform-self-test/members')
+  await page.getByPlaceholder('email@example.com').fill('bob@demo.local')
+  await page.getByRole('button', { name: 'Invite' }).click()
+  await expect(
+    page.locator('li', { has: page.getByText('bob@demo.local') }).getByText('invited · pending'),
+  ).toBeVisible()
+
+  // Bob: the invite shows as a pending card; the org is NOT yet a real card.
+  await signIn(page, 'bob@demo.local')
+  await expect(page.getByText(/been invited to join/)).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Platform Self-Test' })).not.toBeVisible()
+
+  // Accept -> the invite card disappears and the org becomes a real card.
+  const accepted = page.waitForResponse((r) => r.request().method() === 'POST')
+  await page.getByRole('button', { name: 'Accept' }).click()
+  await accepted
+  await expect(page.getByText(/been invited to join/)).not.toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Platform Self-Test' })).toBeVisible()
+
+  // A plain member can leave from the dashboard (resets the fixture).
+  const left = page.waitForResponse((r) => r.request().method() === 'POST')
+  await page.getByRole('button', { name: 'Leave' }).click()
+  await left
+  await expect(page.getByRole('heading', { name: 'Platform Self-Test' })).not.toBeVisible()
 })
 
 test('org settings: org admin edits module settings; non-admins are locked out', async ({ page }) => {
@@ -186,9 +221,17 @@ test('classroom module: professor enrolls a member into a class roster', async (
   await page.goto('/o/demo-a/members')
   await page.getByPlaceholder('email@example.com').fill('bob@demo.local')
   const added = page.waitForResponse((r) => r.request().method() === 'POST')
-  await page.getByRole('button', { name: 'Add', exact: true }).click()
+  await page.getByRole('button', { name: 'Invite' }).click()
   await added
 
+  // Org membership is invite-accept: bob is pending until he accepts, and
+  // enrollment requires an ACCEPTED member — so bob accepts from his dashboard.
+  await signIn(page, 'bob@demo.local')
+  const acc = page.waitForResponse((r) => r.request().method() === 'POST')
+  await page.getByRole('button', { name: 'Accept' }).click()
+  await acc
+
+  await signIn(page, 'alice@demo.local')
   await page.goto('/o/demo-a/m/classroom/manage')
   const rosterSection = page.locator('section').filter({ hasText: 'Statistics 101 — Fall' })
   await rosterSection.getByPlaceholder('email@example.com').fill('bob@demo.local')

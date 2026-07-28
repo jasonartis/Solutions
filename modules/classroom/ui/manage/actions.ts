@@ -73,9 +73,10 @@ export async function enrollClassMember(orgSlug: string, classId: string, formDa
     .select('user_id')
     .eq('org_id', klass.org_id)
     .eq('user_id', profile.user_id)
+    .eq('status', 'active')
     .maybeSingle()
   if (!member) {
-    throw new Error(`No user found with email ${email} in this organization — add them as an org member first`)
+    throw new Error(`No user found with email ${email} in this organization — add them as an org member first (and they must have accepted the invite)`)
   }
 
   // One role per (user, class): drop any prior grant at this class node, then

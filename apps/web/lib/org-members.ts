@@ -26,8 +26,52 @@ export async function resolveEmailToUserId(
   return { userId: row.user_id as string, displayName: row.display_name as string | null }
 }
 
-export async function upsertOrgMember(supabase: SupabaseClient, orgId: string, userId: string, role: string) {
-  const { error } = await supabase.from('org_members').upsert({ org_id: orgId, user_id: userId, role })
+// Add someone to the org (slice 3, 20260727010000). A plain INSERT: the
+// org_members_guard_hierarchy trigger server-stamps invited_by and, for an ORG
+// ADMIN, forces status='pending' (they can only ever invite). A SUPERADMIN may
+// pass status:'active' to add immediately (the escape hatch); for anyone else
+// the trigger overwrites it back to 'pending'. Default (unspecified) is a
+// pending invite. A PK conflict (already a member/invite) surfaces as an error
+// rather than silently re-adding.
+export async function inviteOrgMember(
+  supabase: SupabaseClient,
+  orgId: string,
+  userId: string,
+  role: string,
+  status?: 'pending' | 'active',
+) {
+  const row: { org_id: string; user_id: string; role: string; status?: string } = { org_id: orgId, user_id: userId, role }
+  if (status) row.status = status
+  const { error } = await supabase.from('org_members').insert(row)
+  if (error) throw new Error(error.message)
+}
+
+// Change an EXISTING member's org role — a pure UPDATE of role, so it never
+// touches the status column (changing a role must not re-open the accept
+// handshake for an already-active member).
+export async function changeMemberRole(supabase: SupabaseClient, orgId: string, userId: string, role: string) {
+  const { error } = await supabase.from('org_members').update({ role }).eq('org_id', orgId).eq('user_id', userId)
+  if (error) throw new Error(error.message)
+}
+
+// The caller's own pending org invites, with org name (via the narrow
+// org_my_pending_invites definer — the invitee cannot read orgs directly).
+export type PendingInvite = {
+  org_id: string
+  org_name: string
+  org_slug: string
+  invited_role: string
+  invited_at: string
+}
+
+export async function getPendingInvites(supabase: SupabaseClient): Promise<PendingInvite[]> {
+  const { data, error } = await supabase.rpc('org_my_pending_invites')
+  if (error) throw new Error(error.message)
+  return (data ?? []) as PendingInvite[]
+}
+
+export async function acceptOrgInvite(supabase: SupabaseClient, orgId: string) {
+  const { error } = await supabase.rpc('org_accept_invite', { check_org_id: orgId })
   if (error) throw new Error(error.message)
 }
 

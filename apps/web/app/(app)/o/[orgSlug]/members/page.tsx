@@ -18,8 +18,12 @@ export default async function MembersPage(props: { params: Promise<{ orgSlug: st
   } = await supabase.auth.getUser()
 
   const [{ data: members }, { data: profiles }, { data: entitlements }, { data: moduleRoles }] = await Promise.all([
-    supabase.from('org_members').select('user_id, role').eq('org_id', org.id),
-    supabase.from('profiles').select('user_id, display_name, email'),
+    supabase.from('org_members').select('user_id, role, status').eq('org_id', org.id),
+    // Member identities via the admin-scoped definer: a PENDING invitee's
+    // profile isn't visible through shares_org_with (active-only), so the broad
+    // profiles read would show pending rows as a bare UUID. This returns
+    // name/email for every member (active + pending) of an org the caller admins.
+    supabase.rpc('org_member_profiles', { check_org_id: org.id }),
     supabase.from('org_modules').select('module_key').eq('org_id', org.id).eq('enabled', true),
     supabase.from('module_roles').select('user_id, module_key, role').eq('org_id', org.id),
   ])
@@ -50,6 +54,7 @@ export default async function MembersPage(props: { params: Promise<{ orgSlug: st
       displayName: profile?.display_name ?? null,
       email: profile?.email ?? null,
       orgRole: mem.role,
+      status: (mem.status ?? 'active') as 'pending' | 'active',
       moduleRoles: myModuleRoles,
     }
   })

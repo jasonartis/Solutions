@@ -12,6 +12,7 @@ import {
   removeMember,
   removeModuleRoleAction,
   renameOrg,
+  setAddMemberDefault,
   toggleModule,
   updateSynagogueSettings,
 } from './actions'
@@ -21,12 +22,15 @@ const inputCls = 'rounded border border-gray-300 px-2 py-1 text-sm'
 export default async function ConsolePage() {
   const profile = await getProfile()
   if (!profile?.is_superadmin) notFound()
+  // The superadmin's saved default for "add member": immediately-active vs a
+  // pending invite (per-profile, slice 3). Pre-checks the per-add toggle below.
+  const addActiveDefault = (profile.settings as { superadminDefaultAddActive?: boolean } | null)?.superadminDefaultAddActive === true
 
   const supabase = await createClient()
   const [{ data: orgs }, { data: members }, { data: entitlements }, { data: profiles }, { data: moduleRoles }] =
     await Promise.all([
       supabase.from('orgs').select('id, name, slug').order('name'),
-      supabase.from('org_members').select('org_id, user_id, role'),
+      supabase.from('org_members').select('org_id, user_id, role, status'),
       supabase.from('org_modules').select('org_id, module_key, enabled, settings'),
       supabase.from('profiles').select('user_id, email, display_name'),
       supabase.from('module_roles').select('org_id, user_id, module_key, role'),
@@ -51,6 +55,17 @@ export default async function ConsolePage() {
           </label>
           <button className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
             Create
+          </button>
+        </form>
+
+        {/* Superadmin preference: what "Add a member" defaults to (slice 3). */}
+        <form action={setAddMemberDefault} className="mt-4 flex flex-wrap items-center gap-2 border-t border-gray-100 pt-4">
+          <label className="flex items-center gap-1.5 text-xs text-gray-600">
+            <input type="checkbox" name="defaultActive" defaultChecked={addActiveDefault} />
+            Default my “Add a member” to <span className="font-medium">active immediately</span> (unchecked = send a pending invite)
+          </label>
+          <button className="rounded border border-gray-300 px-3 py-1 text-xs text-gray-700 hover:bg-gray-50">
+            Save default
           </button>
         </form>
       </section>
@@ -142,6 +157,7 @@ export default async function ConsolePage() {
                     displayName: p?.display_name ?? null,
                     email: p?.email ?? null,
                     orgRole: m.role,
+                    status: (m.status ?? 'active') as 'pending' | 'active',
                     moduleRoles: (moduleRoles ?? [])
                       .filter((r) => r.org_id === org.id && r.user_id === m.user_id)
                       .map((r) => ({
@@ -160,6 +176,8 @@ export default async function ConsolePage() {
                 addModuleRoleAction={addModuleRole.bind(null, org.id)}
                 removeModuleRoleAction={removeModuleRoleAction.bind(null, org.id)}
                 callerRank={SUPERADMIN_RANK}
+                showActiveToggle
+                activeToggleDefault={addActiveDefault}
               />
             </section>
           )

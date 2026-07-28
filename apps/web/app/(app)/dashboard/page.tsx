@@ -1,14 +1,44 @@
 import Link from 'next/link'
-import { getOrgsWithModules } from '@/lib/platform'
+import { getOrgsWithModules, getPendingOrgInvites } from '@/lib/platform'
+import { acceptInvite, declineInvite, leaveOrg } from './actions'
 
 export default async function DashboardPage() {
-  const orgs = await getOrgsWithModules()
+  const [orgs, invites] = await Promise.all([getOrgsWithModules(), getPendingOrgInvites()])
 
   return (
     <div>
       <h1 className="mb-6 text-2xl font-semibold">Dashboard</h1>
 
-      {orgs.length === 0 && (
+      {invites.length > 0 && (
+        <div className="mb-6 space-y-3">
+          {invites.map((inv) => (
+            <section
+              key={inv.org_id}
+              className="rounded-lg border border-dashed border-amber-300 bg-amber-50 p-5"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-sm text-amber-900">
+                  You&apos;ve been invited to join <span className="font-semibold">{inv.org_name}</span> as{' '}
+                  <span className="font-medium">{inv.invited_role}</span>. It won&apos;t appear below until you
+                  accept.
+                </p>
+                <span className="flex items-center gap-2">
+                  <form action={acceptInvite.bind(null, inv.org_id)}>
+                    <button className="rounded bg-amber-600 px-3 py-1 text-sm font-medium text-white hover:bg-amber-700">
+                      Accept
+                    </button>
+                  </form>
+                  <form action={declineInvite.bind(null, inv.org_id)}>
+                    <button className="px-2 py-1 text-sm text-amber-700 hover:underline">Decline</button>
+                  </form>
+                </span>
+              </div>
+            </section>
+          ))}
+        </div>
+      )}
+
+      {orgs.length === 0 && invites.length === 0 && (
         <p className="text-gray-500">
           You are not a member of any organization yet. Ask your administrator for access.
         </p>
@@ -51,6 +81,11 @@ export default async function DashboardPage() {
                 <Link href={`/o/${org.slug}/export`} className="text-xs text-blue-600 hover:underline">
                   Export data
                 </Link>
+                {org.role === 'member' && (
+                  <form action={leaveOrg.bind(null, org.id)}>
+                    <button className="text-xs text-red-600 hover:underline">Leave</button>
+                  </form>
+                )}
               </span>
             </div>
             {org.modules.length === 0 ? (

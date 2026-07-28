@@ -19,21 +19,30 @@ A multi-tenant modular platform: each client engagement produces a **module** bu
      and update only the compact "Now / Next / Standing rules" below. A fresh chat must never
      pay for the full journal. See "Session hygiene". -->
 
-**Now (2026-07-27):** Live on prod (solutions-platform.vercel.app; prod Supabase migrated).
-**User-model slice 2 scope-aware authority is BUILT + LIVE for all three multi-entity
-modules** — classroom (course/class), nail-salon (location), speed-dating (event) — plus the
-shared scope-authority engine (`module_caller_covers_rank/role`, docs/03 #16). Working tree
-clean; every slice shipped via the full docs/03 #12 rhythm + prod-verify, each backed up first.
+**Now (2026-07-27):** Live on prod (solutions-platform.vercel.app; prod Supabase migrated
+through slice 2). **User-model slice 3 — ORG-LEVEL INVITE-ACCEPT — is BUILT + committed
+locally, NOT yet pushed to prod.** Being added to an org is now a *pending invite* until the
+invitee accepts (`org_accept_invite`); `is_org_member` + its three siblings + EVERY module
+capability predicate are active-gated, which finally delivers the "a module_roles grant implies
+(active) org membership" invariant platform-wide (an adversarial review caught that ~10
+coarse/shared `module_roles` readers — incl. classroom Storage/PII + the shared write path —
+had been missed; all fixed). Superadmin may add immediately-active OR pending (per-add + saved
+per-profile default); org admins can only invite. Full docs/03 #12 rhythm (2 independent
+reviews; RLS 50/50; e2e). Slice 2 scope-aware authority stays LIVE for all three multi-entity
+modules + the shared engine (`module_caller_covers_rank/role`, docs/03 #16).
 
 **Next / open (pick WITH the founder — do not start unprompted; details in docs/15 §11):**
+- **Push slice 3 to prod** (backup → `migrate:prod` → prod-verify ACLs, esp. the new definer
+  grants against the local/prod divergence trap) — the immediate open item.
+- Slice 3 remainder: **entity-level joinPolicy** (invite-only/request-approval/open per
+  class/location/event) — deferred follow-on. Slice 4 (defaults-on-join), 5 (view-as).
 - Single-entity modules (matchmaking / synagogue-schedules / visual-messaging) NOT yet
   rank-mapped — OPTIONAL (a real behavior change, not cosmetic).
 - View-as + everywhere role-clarity labels (founder testing-round items 31–42) — high value.
-- Slice 3 (join policies + invite-accept), 4 (defaults-on-join), 5 (view-as).
 - Deferred platform hardening: platform-wide `revoke PUBLIC` on definer fns; generic
   scope-wrappers deriving org from the entity row; generalize coarse `<prefix>_can_manage(org)`;
-  per-class storage scoping; per-module scoped-assignment UIs; "a module_roles grant implies
-  org membership" invariant.
+  per-class storage scoping; per-module scoped-assignment UIs. (The "grant implies org
+  membership" invariant is now DELIVERED by slice 3.)
 - Pre-launch before real customers (docs/12 checklist): automated+tested backups, monitoring,
   2FA, privacy/terms, custom SMTP.
 

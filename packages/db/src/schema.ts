@@ -8,6 +8,8 @@ export const profiles = pgTable('profiles', {
   userId: uuid('user_id').primaryKey(), // = auth.users.id
   displayName: text('display_name'),
   isSuperadmin: boolean('is_superadmin').notNull().default(false),
+  // Per-profile prefs (20260727010000). Today: superadminDefaultAddActive.
+  settings: jsonb('settings').notNull().default({}),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 })
@@ -31,6 +33,15 @@ export const orgMembers = pgTable(
     role: text('role', { enum: ['owner', 'admin', 'member'] })
       .notNull()
       .default('member'),
+    // Slice 3 (20260727010000): org membership is invite-accept. A new seat is
+    // 'pending' (a greyed-out invite) until the invited user accepts; every
+    // membership predicate treats only 'active' as a real member.
+    status: text('status', { enum: ['pending', 'active'] })
+      .notNull()
+      .default('pending'),
+    invitedBy: uuid('invited_by'),
+    invitedAt: timestamp('invited_at', { withTimezone: true }).notNull().defaultNow(),
+    acceptedAt: timestamp('accepted_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [primaryKey({ columns: [t.orgId, t.userId] })],

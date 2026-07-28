@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation'
 import { moduleRegistry } from '@platform/core'
 import { createClient } from '@/lib/supabase/server'
+import { getPendingInvites, type PendingInvite } from '@/lib/org-members'
 
 export type OrgWithModules = {
   id: string
@@ -31,7 +32,10 @@ export async function getOrgsWithModules(): Promise<OrgWithModules[]> {
   // RLS lets members see ALL rows of their orgs (needed elsewhere) — the
   // dashboard wants only the caller's own memberships, one per org.
   const [{ data: memberships }, { data: entitlements }, { data: myModuleRoles }] = await Promise.all([
-    supabase.from('org_members').select('role, orgs(id, name, slug)').eq('user_id', user.id),
+    // Only ACCEPTED memberships become dashboard cards; pending invites are
+    // surfaced separately by getPendingOrgInvites() (they can't even join to
+    // orgs here — orgs RLS refuses a pending invitee the org row).
+    supabase.from('org_members').select('role, orgs(id, name, slug)').eq('user_id', user.id).eq('status', 'active'),
     supabase.from('org_modules').select('org_id, module_key').eq('enabled', true),
     supabase.from('module_roles').select('org_id, module_key, role').eq('user_id', user.id),
   ])
@@ -54,6 +58,17 @@ export async function getOrgsWithModules(): Promise<OrgWithModules[]> {
   })
 }
 
+// The caller's pending org invites (slice 3) for the dashboard invite cards.
+// Empty for almost everyone; one row per not-yet-accepted invitation.
+export async function getPendingOrgInvites(): Promise<PendingInvite[]> {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return []
+  return getPendingInvites(supabase)
+}
+
 // The caller's org-level role for one org by slug (founder feedback,
 // 2026-07-11: "once you click in you lose sight of your role" — the
 // dashboard card showed it, but nothing inside the org did). Used by the
@@ -71,6 +86,7 @@ export async function getMyOrgRole(orgSlug: string): Promise<{ orgName: string; 
     .select('role, orgs!inner(name, slug)')
     .eq('orgs.slug', orgSlug)
     .eq('user_id', user.id)
+    .eq('status', 'active')
     .maybeSingle()
   if (!data) return null
   const org = data.orgs as unknown as { name: string; slug: string }
@@ -103,7 +119,7 @@ export async function getProfile() {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('user_id, email, display_name, is_superadmin')
+    .select('user_id, email, display_name, is_superadmin, settings')
     .eq('user_id', user.id)
     .single()
   return profile

@@ -671,6 +671,15 @@ async function main() {
   ])
   await admin.from('vm_conversations').delete().eq('org_id', visual)
 
+  // Slice 3 (20260727010000): org membership is invite-accept, so a fresh
+  // org_members row defaults to status='pending'. Everyone seeded above is a
+  // real, accepted member (the demo must work without an accept step), so flip
+  // them all to 'active' in one pass here — this covers every insert above and
+  // any added later, and runs as service-role so the hierarchy/last-admin
+  // guards are bypassed. (Invite-accept itself is exercised by the RLS suite,
+  // not the seed.)
+  await admin.from('org_members').update({ status: 'active', accepted_at: new Date().toISOString() }).neq('status', 'active')
+
   console.log('Seed complete:')
   console.log('  owner@demo.local / <demo password>  (superadmin)')
   console.log('  alice@demo.local / <demo password>  (admin of Demo Org A + Demo Synagogue + Demo Match + Demo Salon + Demo Visual + Demo Dating + Platform Self-Test)')

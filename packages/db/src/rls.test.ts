@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeAll, afterAll } from 'vitest'
+import { describe, expect, it, beforeAll, afterAll, afterEach } from 'vitest'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 
 // RLS isolation test (M0 acceptance, docs/04): a user in org B must see
@@ -12,6 +12,19 @@ async function signIn(email: string): Promise<SupabaseClient> {
   const { error } = await client.auth.signInWithPassword({ email, password: 'password123' })
   if (error) throw new Error(`Sign-in failed for ${email}: ${error.message} (did you seed?)`)
   return client
+}
+
+// Slice 3 (20260727010000): an admin adding a member now creates a PENDING
+// invite; the invitee is not a real member (no read/authority) until THEY
+// accept. Test setups that need an active member must invite THEN accept — this
+// signs in as the invitee and accepts. Tolerant of "already active" so a re-run
+// against a not-freshly-reseeded stack doesn't spuriously fail.
+async function acceptInviteAs(email: string, orgId: string) {
+  const c = await signIn(email)
+  const { error } = await c.rpc('org_accept_invite', { check_org_id: orgId })
+  if (error && !/no pending invitation/i.test(error.message)) {
+    throw new Error(`accept invite failed for ${email} in ${orgId}: ${error.message}`)
+  }
 }
 
 let alice: SupabaseClient
@@ -275,6 +288,277 @@ describe('org self-management', () => {
   })
 })
 
+// Org invite-accept (slice 3, 20260727010000): being added to an org creates a
+// PENDING invite that is INVISIBLE and INERT until the invited user accepts.
+// The tenancy properties CI must protect: a pending invitee reads nothing and
+// can do nothing in the org; only the invitee (never an admin) can activate the
+// seat; a module grant to a pending user confers no authority until acceptance.
+describe('org invite-accept (slice 3)', () => {
+  let pstId: string
+  let shulId: string
+  let demoAId: string
+  let bobId: string
+  let charlieId: string
+  let owner: SupabaseClient // superadmin (owner@demo.local is superadmin locally)
+
+  beforeAll(async () => {
+    owner = await signIn('owner@demo.local')
+    pstId = (await alice.from('orgs').select('id').eq('slug', 'platform-self-test').single()).data!.id
+    shulId = (await alice.from('orgs').select('id').eq('slug', 'demo-shul').single()).data!.id
+    demoAId = (await alice.from('orgs').select('id').eq('slug', 'demo-a').single()).data!.id
+    const resolve = async (email: string) =>
+      (await alice.rpc('org_find_user_by_email', { check_org_id: pstId, target_email: email })).data![0].user_id as string
+    bobId = await resolve('bob@demo.local')
+    charlieId = await resolve('charlie@demo.local')
+  })
+
+  // Leave no trace between tests: bob is a shared global fixture (admin of
+  // demo-b), so every test that touches his membership cleans up across all
+  // three orgs it might have used, plus any test-created grants/entities.
+  afterEach(async () => {
+    for (const org of [pstId, shulId, demoAId]) {
+      await alice.from('module_roles').delete().eq('org_id', org).eq('user_id', bobId)
+      await alice.from('org_members').delete().eq('org_id', org).eq('user_id', bobId)
+    }
+    // ONLY the global grant this block creates — never charlie's SEED-scoped
+    // student grant (scope_ref = the Stats-101 class node), which the classroom
+    // e2e depends on.
+    await alice.from('module_roles').delete().eq('org_id', demoAId).eq('user_id', charlieId).eq('module_key', 'classroom').is('scope_ref', null)
+    await alice.from('syn_schedule_types').delete().eq('org_id', shulId).eq('name', 'RLS Invite Sheet')
+    const { data: leftover } = await alice.from('cls_courses').select('id, scope_node_id').eq('org_id', demoAId).eq('name', 'RLS Invite Course')
+    for (const c of leftover ?? []) {
+      await alice.from('cls_courses').delete().eq('id', c.id)
+      if (c.scope_node_id) await alice.from('module_scope_nodes').delete().eq('id', c.scope_node_id)
+    }
+  })
+
+  it('an invited user is pending, invisible, and inert until they accept', async () => {
+    expect((await alice.from('org_members').insert({ org_id: pstId, user_id: bobId, role: 'member' })).error).toBeNull()
+
+    // The insert lands as a pending invite (server-forced, regardless of input).
+    const { data: seat } = await alice
+      .from('org_members')
+      .select('status, invited_by')
+      .eq('org_id', pstId)
+      .eq('user_id', bobId)
+      .single()
+    expect(seat?.status).toBe('pending')
+    const { data: aliceUser } = await alice.auth.getUser()
+    expect(seat?.invited_by).toBe(aliceUser.user!.id) // inviter server-stamped
+
+    // Bob cannot see the org, its entitlements, or its other members…
+    expect((await bob.from('orgs').select('id').eq('id', pstId)).data?.length).toBe(0)
+    expect((await bob.from('org_modules').select('module_key').eq('org_id', pstId)).data?.length).toBe(0)
+    const { data: bobSeesMembers } = await bob.from('org_members').select('user_id').eq('org_id', pstId)
+    expect(bobSeesMembers?.map((r) => r.user_id)).toEqual([bobId]) // only his own invite row (select_self)
+    // …and gains no cross-member profile visibility (shares_org_with is active-only).
+    const { data: profs } = await bob.from('profiles').select('email')
+    expect(profs?.map((p) => p.email)).not.toContain('orgtest@demo.local')
+
+    // But he DOES see the invite via the narrow name-only definer.
+    const { data: invites } = await bob.rpc('org_my_pending_invites')
+    const inv = (invites ?? []).find((i: { org_id: string }) => i.org_id === pstId)
+    expect(inv?.org_name).toBe('Platform Self-Test')
+    expect(inv?.invited_role).toBe('member')
+  })
+
+  it('org_member_profiles: an admin reads a pending invitee\'s identity; a non-admin gets nothing', async () => {
+    await alice.from('org_members').insert({ org_id: pstId, user_id: bobId, role: 'member' })
+    // Alice (org admin) can see bob's name/email even though he's pending and
+    // shares_org_with would hide him.
+    const { data: asAdmin } = await alice.rpc('org_member_profiles', { check_org_id: pstId })
+    expect((asAdmin ?? []).some((r: { email: string }) => r.email === 'bob@demo.local')).toBe(true)
+    // Bob (pending, not an admin of pst) gets zero rows.
+    const { data: asBob } = await bob.rpc('org_member_profiles', { check_org_id: pstId })
+    expect(asBob ?? []).toEqual([])
+  })
+
+  it('an admin cannot force-activate an invite — only the invitee accepts (consent)', async () => {
+    await alice.from('org_members').insert({ org_id: pstId, user_id: bobId, role: 'member' })
+
+    // Alice (org admin) trying to flip bob to active on his behalf is rejected.
+    const { error } = await alice
+      .from('org_members')
+      .update({ status: 'active' })
+      .eq('org_id', pstId)
+      .eq('user_id', bobId)
+    expect(error).not.toBeNull()
+
+    const { data: seat } = await alice
+      .from('org_members')
+      .select('status')
+      .eq('org_id', pstId)
+      .eq('user_id', bobId)
+      .single()
+    expect(seat?.status).toBe('pending')
+  })
+
+  it('accepting makes the invitee a real member; then a plain member can leave', async () => {
+    await alice.from('org_members').insert({ org_id: pstId, user_id: bobId, role: 'member' })
+
+    // Before accept: invisible. After accept: visible + a real member.
+    expect((await bob.from('orgs').select('id').eq('id', pstId)).data?.length).toBe(0)
+    expect((await bob.rpc('org_accept_invite', { check_org_id: pstId })).error).toBeNull()
+    expect((await bob.from('orgs').select('id').eq('id', pstId)).data?.length).toBe(1)
+
+    // A plain member may leave their own seat (self-DELETE carve-out).
+    expect(
+      (await bob.from('org_members').delete().eq('org_id', pstId).eq('user_id', bobId)).error,
+    ).toBeNull()
+    expect((await bob.from('orgs').select('id').eq('id', pstId)).data?.length).toBe(0)
+  })
+
+  it('an invitee can decline (self-delete their pending row)', async () => {
+    await alice.from('org_members').insert({ org_id: pstId, user_id: bobId, role: 'member' })
+    expect(
+      (await bob.from('org_members').delete().eq('org_id', pstId).eq('user_id', bobId)).error,
+    ).toBeNull()
+    const { data: invites } = await bob.rpc('org_my_pending_invites')
+    expect((invites ?? []).some((i: { org_id: string }) => i.org_id === pstId)).toBe(false)
+  })
+
+  it('accepting with no pending invite errors', async () => {
+    // Bob has no pending invite to demo-a → the definer refuses.
+    const { error } = await bob.rpc('org_accept_invite', { check_org_id: demoAId })
+    expect(error).not.toBeNull()
+  })
+
+  it('an active admin cannot self-remove (must ask a co-admin)', async () => {
+    // Invite bob, accept, promote to admin (alice, owner). His own seat is then
+    // untouchable by himself even though carve-out (b) covers pending/member.
+    await alice.from('org_members').insert({ org_id: pstId, user_id: bobId, role: 'member' })
+    await bob.rpc('org_accept_invite', { check_org_id: pstId })
+    expect(
+      (await alice.from('org_members').update({ role: 'admin' }).eq('org_id', pstId).eq('user_id', bobId)).error,
+    ).toBeNull()
+    // Bob (active admin) cannot delete his own seat.
+    expect(
+      (await bob.from('org_members').delete().eq('org_id', pstId).eq('user_id', bobId)).error,
+    ).not.toBeNull()
+    const { data: still } = await alice
+      .from('org_members')
+      .select('role, status')
+      .eq('org_id', pstId)
+      .eq('user_id', bobId)
+      .single()
+    expect(still?.status).toBe('active') // still there
+  })
+
+  it('a module grant confers NO authority while the holder is a pending invite', async () => {
+    // Bob is invited to the synagogue org as a plain member (pending) AND granted
+    // the 'maker' module role. The grant must be inert until he accepts.
+    await alice.from('org_members').insert({ org_id: shulId, user_id: bobId, role: 'member' })
+    expect(
+      (await alice
+        .from('module_roles')
+        .insert({ org_id: shulId, user_id: bobId, module_key: 'synagogue-schedules', role: 'maker' })).error,
+    ).toBeNull()
+
+    // Pending: syn_can_write() (now active-gated via has_module_role) refuses the write.
+    expect(
+      (await bob.from('syn_schedule_types').insert({ org_id: shulId, name: 'RLS Invite Sheet' })).error,
+    ).not.toBeNull()
+
+    // Accept → the same maker grant now works.
+    expect((await bob.rpc('org_accept_invite', { check_org_id: shulId })).error).toBeNull()
+    expect(
+      (await bob.from('syn_schedule_types').insert({ org_id: shulId, name: 'RLS Invite Sheet' })).error,
+    ).toBeNull()
+  })
+
+  it('a pending OWNER/ADMIN invite cannot write module data (syn_can_write leak closed)', async () => {
+    // The specific inline-org_members leak: syn_can_write took owner/admin without
+    // a status filter. Invite bob as ADMIN (pending) — he must NOT be able to write.
+    await alice.from('org_members').insert({ org_id: shulId, user_id: bobId, role: 'admin' })
+    const { data: seat } = await alice
+      .from('org_members')
+      .select('status, role')
+      .eq('org_id', shulId)
+      .eq('user_id', bobId)
+      .single()
+    expect(seat).toMatchObject({ status: 'pending', role: 'admin' })
+
+    expect(
+      (await bob.from('syn_schedule_types').insert({ org_id: shulId, name: 'RLS Invite Sheet' })).error,
+    ).not.toBeNull()
+  })
+
+  it('a pending professor cannot reach the classroom coarse gate (cls_can_manage)', async () => {
+    // cls_can_manage backs the classroom Storage buckets (student PII) + course
+    // insert. Its module_roles arm is now active-gated, so a pending professor
+    // cannot insert a course (nor, by the same gate, read the storage buckets).
+    await alice.from('org_members').insert({ org_id: demoAId, user_id: bobId, role: 'member' })
+    await alice.from('module_roles').insert({ org_id: demoAId, user_id: bobId, module_key: 'classroom', role: 'professor' })
+
+    expect(
+      (await bob.from('cls_courses').insert({ org_id: demoAId, name: 'RLS Invite Course' })).error,
+    ).not.toBeNull()
+
+    // Accept → the same professor grant now works.
+    expect((await bob.rpc('org_accept_invite', { check_org_id: demoAId })).error).toBeNull()
+    expect(
+      (await bob.from('cls_courses').insert({ org_id: demoAId, name: 'RLS Invite Course' })).error,
+    ).toBeNull()
+  })
+
+  it('a pending manager cannot staff other users (shared module_roles write path)', async () => {
+    // module_has_manager_grant / module_caller_can_manage_seat are the SHARED
+    // module_roles write authority. A pending "professor" must not be able to
+    // grant roles to OTHER users until they accept.
+    await alice.from('org_members').insert({ org_id: demoAId, user_id: bobId, role: 'member' })
+    await alice.from('module_roles').insert({ org_id: demoAId, user_id: bobId, module_key: 'classroom', role: 'professor' })
+
+    const grantCharlie = () =>
+      bob.from('module_roles').insert({ org_id: demoAId, user_id: charlieId, module_key: 'classroom', role: 'student' })
+    expect((await grantCharlie()).error).not.toBeNull() // pending: no write authority
+
+    expect((await bob.rpc('org_accept_invite', { check_org_id: demoAId })).error).toBeNull()
+    expect((await grantCharlie()).error).toBeNull() // active professor: may staff a student
+  })
+
+  it('a superadmin may add a member immediately-active (the escape hatch)', async () => {
+    // Founder decision 2026-07-27: the platform owner controls everything, so a
+    // superadmin can choose to skip the invite and add an ACTIVE member directly.
+    expect(
+      (await owner.from('org_members').insert({ org_id: pstId, user_id: bobId, role: 'member', status: 'active' })).error,
+    ).toBeNull()
+    const { data: seat } = await alice
+      .from('org_members')
+      .select('status')
+      .eq('org_id', pstId)
+      .eq('user_id', bobId)
+      .single()
+    expect(seat?.status).toBe('active')
+    // Bob is a real member without accepting anything.
+    expect((await bob.from('orgs').select('id').eq('id', pstId)).data?.length).toBe(1)
+  })
+
+  it('a superadmin add with no status still defaults to a pending invite', async () => {
+    expect((await owner.from('org_members').insert({ org_id: pstId, user_id: bobId, role: 'member' })).error).toBeNull()
+    const { data: seat } = await alice
+      .from('org_members')
+      .select('status')
+      .eq('org_id', pstId)
+      .eq('user_id', bobId)
+      .single()
+    expect(seat?.status).toBe('pending')
+  })
+
+  it('an ORG ADMIN cannot force an active add — the guard forces pending', async () => {
+    // Alice (owner of pst, not a superadmin) tries to add bob as active directly.
+    expect(
+      (await alice.from('org_members').insert({ org_id: pstId, user_id: bobId, role: 'member', status: 'active' })).error,
+    ).toBeNull() // the insert succeeds…
+    const { data: seat } = await alice
+      .from('org_members')
+      .select('status')
+      .eq('org_id', pstId)
+      .eq('user_id', bobId)
+      .single()
+    expect(seat?.status).toBe('pending') // …but lands pending, not active
+  })
+})
+
 // Nail-salon worker availability (2026-07-16, 20260716010000): the
 // sal_worker_has_time_off definer RPC lets a CUSTOMER honor a worker's time
 // off at booking without reading sal_worker_time_off (its `reason` is
@@ -422,6 +706,7 @@ describe('module grants scope (slice 1)', () => {
       })
       uid[e] = data![0].user_id as string
       await alice.from('org_members').upsert({ org_id: orgId, user_id: uid[e], role: 'member' })
+      await acceptInviteAs(`${e}@demo.local`, orgId) // slice 3: pending -> active
     }
     // Clean fixtures then build the tree: STEM{Math,CS}, Humanities.
     await alice.from('module_roles').delete().eq('org_id', orgId).eq('module_key', MOD)
@@ -607,6 +892,7 @@ describe('classroom scoped authority (slice 2b)', () => {
       const { data } = await alice.rpc('org_find_user_by_email', { check_org_id: orgA, target_email: `${e}@demo.local` })
       uid[e] = data![0].user_id as string
       await alice.from('org_members').upsert({ org_id: orgA, user_id: uid[e], role: 'member' })
+      await acceptInviteAs(`${e}@demo.local`, orgA) // slice 3: pending -> active
     }
     // Two isolated courses + a class each (as alice, org owner → bypass guard).
     const mkCourse = async (name: string) =>
@@ -719,6 +1005,7 @@ describe('nail-salon scoped authority (slice 2 — 20260726010000)', () => {
     // bob is not a salon member (he's in demo-b); charlie/dana are seeded
     // salon members already. Add only bob, as alice (org owner).
     await alice.from('org_members').upsert({ org_id: salonOrg, user_id: uid.bob, role: 'member' })
+    await acceptInviteAs('bob@demo.local', salonOrg) // slice 3: pending -> active
 
     // Two fresh locations (as alice, owner → bypass). The BEFORE-INSERT trigger
     // mints each location's root scope node; capture both ids + node ids.
@@ -819,6 +1106,7 @@ describe('speed-dating scoped authority (slice 2 — 20260726030000)', () => {
     // dana/frank are seeded demo-dating members (participants); bob is not (he's
     // in demo-b). Add only bob, as alice (org owner).
     await alice.from('org_members').upsert({ org_id: datingOrg, user_id: uid.bob, role: 'member' })
+    await acceptInviteAs('bob@demo.local', datingOrg) // slice 3: pending -> active
 
     // Two fresh events (as alice, owner → bypass). The BEFORE-INSERT trigger mints
     // each event's root scope node; capture both ids + node ids.
