@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { moduleRegistry } from '@platform/core'
 import { requireOrgAdmin } from '@/lib/platform'
+import type { OrgMemberProfile } from '@/lib/org-members'
 import OrgMembersPanel, { type OrgMemberRow } from '@/components/org-members-panel'
 import { addMember, addModuleRole, changeRole, removeMember, removeModuleRoleAction } from './actions'
 
@@ -40,8 +41,11 @@ export default async function MembersPage(props: { params: Promise<{ orgSlug: st
   const myRole = (members ?? []).find((mem) => mem.user_id === user?.id)?.role
   const callerRank = myRole === 'owner' ? 3 : myRole === 'admin' ? 2 : 3
 
+  // rpc() has no generated row type for a definer, so name the shape once here.
+  const memberProfiles = (profiles ?? []) as OrgMemberProfile[]
+
   const rows: OrgMemberRow[] = (members ?? []).map((mem) => {
-    const profile = (profiles ?? []).find((p) => p.user_id === mem.user_id)
+    const profile = memberProfiles.find((p) => p.user_id === mem.user_id)
     const myModuleRoles = (moduleRoles ?? [])
       .filter((r) => r.user_id === mem.user_id)
       .map((r) => ({

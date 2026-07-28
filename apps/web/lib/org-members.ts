@@ -70,6 +70,17 @@ export async function getPendingInvites(supabase: SupabaseClient): Promise<Pendi
   return (data ?? []) as PendingInvite[]
 }
 
+// Rows from the admin-scoped org_member_profiles definer: name/email for every
+// member (active AND pending) of an org the caller admins. Needed because
+// shares_org_with is active-only, so the broad profiles read can't see a pending
+// invitee. Typed here for the same reason as PendingInvite above — the generated
+// DB types don't describe definer return shapes, so rpc() data comes back `any`.
+export type OrgMemberProfile = {
+  user_id: string
+  display_name: string | null
+  email: string | null
+}
+
 export async function acceptOrgInvite(supabase: SupabaseClient, orgId: string) {
   const { error } = await supabase.rpc('org_accept_invite', { check_org_id: orgId })
   if (error) throw new Error(error.message)
