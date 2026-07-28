@@ -32,19 +32,23 @@ rot; pipelines don't.
 - Never run bulk mutations against prod without a fresh backup (below).
 - Never skip the docs/03 #12 rhythm for schema/RLS work: agent-draft →
   security-review → live verification, regardless of model.
-- **Never `migrate:prod` a slice whose APP commit is still unpushed** — Vercel
-  deploys from `origin/master`, so the DB lands ahead of the UI. Slice 3
+- **Never `migrate:prod` a slice whose APP commit is still unpushed.** Production
+  deploys ONLY from a master push — `.github/workflows/ci.yml`'s `deploy` job
+  (a prebuilt Vercel deploy, `needs: check`); the Vercel project has NO GitHub
+  link, so every deployment is `src=cli` and nothing ships until CI is green.
+  So an unpushed app commit means the DB lands ahead of the UI. Slice 3
   (2026-07-28) proved the cost: prod's `org_members.status` began defaulting to
   `pending` while the deployed build still had no accept UI, so every member-add
   on the live site created an invite nobody could accept. Push the app commit and
   run `migrate:prod` in the same session, and confirm
   `git log origin/master..master` is EMPTY before calling a prod push done.
 - **Never push to master without running `pnpm typecheck && pnpm build` first.**
-  Vercel builds from the push; a red build leaves prod serving the OLD app, which
-  is exactly the wrong outcome when the DB has already moved. Slice 3 proved this
-  too: commit `29c572d`'s message claimed "typecheck 9/9" but the committed tree
-  actually failed `tsc` (an untyped `rpc('org_member_profiles')` row), caught only
-  by a pre-push build.
+  CI's `check` job would catch a red tree — but then `deploy` is SKIPPED, so prod
+  keeps serving the OLD app, which is exactly the wrong outcome when the DB has
+  already moved (above). Slice 3 proved this too: commit `29c572d`'s message
+  claimed "typecheck 9/9" but the committed tree actually failed `tsc` (an untyped
+  `rpc('org_member_profiles')` row) — caught by a pre-push build, fixed in
+  `28ddf92` before pushing.
 - If running as a lighter model and the task drifts into migrations, RLS,
   triggers, or export/privacy rules: **say so and suggest switching to
   Opus-class before continuing** — don't push through quietly.
