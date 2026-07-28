@@ -494,7 +494,14 @@ All of this is RLS/trigger territory ⇒ **Opus + full docs/03 #12 rhythm**, sli
    classroom first (professor grants GA/student — the already-agreed next piece).
 3. **Join policies + invite-accept** — entity-level joinPolicy everywhere; org-level
    invite-accept (touches `is_org_member()` — the most sensitive slice).
-   **[org-level invite-accept BUILT 2026-07-27 — `20260727010000_org_invite_accept.sql`;
+   **[org-level invite-accept BUILT 2026-07-27 — `20260727010000_org_invite_accept.sql`
+   — and LIVE ON PROD 2026-07-28 (backup → `migrate:prod` → full read-only prod
+   verification via the new `scripts/prod-verify-migration.ts`: 23/23 function bodies
+   byte-identical + secdef + pinned search_path, the 3 new rpcs anon-denied on prod,
+   active-gating live on the 4 org predicates + all 14 module capability predicates,
+   28/28 `org_members` rows backfilled `active` (0 pending, cross-checked against the
+   pre-migration backup), and a ROLLED-BACK live prod transaction proving
+   pending-invisibility → `org_accept_invite` → active admin);
    entity-level joinPolicy still deferred to a follow-on pass.]** `org_members` gains
    `status ('pending'|'active')` (existing rows backfilled active; future default `pending`,
    fail-closed); `is_org_member` + its three siblings (`shares_org_with`, `org_caller_rank`,
@@ -523,6 +530,73 @@ vocabulary gets locked.
 
 ## Decisions log
 
+- **2026-07-28 (slice 3 PUSHED TO PROD + prod-verified; a reusable prod-verifier; two
+  prod-only ACL findings, Opus session):** `20260727010000_org_invite_accept.sql` is now
+  **LIVE ON PROD** (commit `29c572d`). Backup first (`backups/2026-07-28T17-30-20/` —
+  schema ~339KB + data ~1.7MB, exit 0); `scripts/prod-migrate.ts --dry-run` confirmed
+  exactly ONE pending migration; `pnpm migrate:prod` applied it. (The CLI's non-fatal
+  `failed to cache migrations catalog: ... pgdelta-target-ca.crt ENOENT` is its own
+  pg-delta catalog-CACHE step tripping on a local cert path — the migration applied and is
+  recorded in `supabase_migrations.schema_migrations`.)
+  - **New tooling, generalizing the 2026-07-22 lesson into a repeatable check:**
+    `scripts/prod-verify-migration.ts` — a generic **read-only** verifier. Given a
+    migration path it parses every `create [or replace] function public.*` and its
+    dollar-quoted body out of the SQL, then compares each against PROD's `pg_proc`: body
+    **md5** (byte-identical?), `prosecdef`, pinned `search_path`, and the REAL `EXECUTE`
+    ACL (resolving PUBLIC + per-role grants, flagging `anon`); it also asserts the version
+    row exists in `supabase_migrations`. Reason: function EXECUTE grants **diverge local
+    vs prod** and the local RLS suite structurally cannot catch it (docs/03 convention #1).
+    `VERIFY_DB_URL` dry-runs it against local first. `scripts/prod-migrate.ts` now forwards
+    extra args to `supabase db push` so `--dry-run` works.
+  - **Verification results (all green).** 23/23 function definitions byte-identical to
+    prod's `pg_proc.prosrc`, every one SECURITY DEFINER with `search_path=public`. The
+    three NEW rpcs (`org_accept_invite`, `org_my_pending_invites`, `org_member_profiles`)
+    show `postgres=X | service_role=X | authenticated=X` on prod — **no PUBLIC, no anon**
+    (anon EXECUTE false), so the migration's explicit `revoke ... from public, anon,
+    authenticated` + `grant ... to authenticated` **did** defuse the divergence trap on
+    prod. (Prod's `ALTER DEFAULT PRIVILEGES` additionally granted `service_role` EXECUTE
+    where local didn't — harmless; service_role is the trusted worker role and bypasses
+    RLS anyway.) Active-gating live: `is_org_member`, `shares_org_with`, `org_caller_rank`,
+    `is_org_admin` all carry `status = 'active'`, and all **14** module capability
+    predicates route through `is_org_member`/`is_org_admin`; the only function reading
+    `org_members` WITHOUT a status filter is `org_member_profiles` — intentional
+    (admin-scoped, it must show pending invitees). Schema on prod as designed
+    (`status` NOT NULL default `'pending'` + CHECK, `invited_by`, `invited_at` NOT NULL
+    default now(), `accepted_at`, `org_members_status_idx`, `profiles.settings jsonb` NOT
+    NULL default `'{}'`), both new policies present and scoped to `user_id = auth.uid()`,
+    RLS still enabled. **Backfill confirmed:** 28 `org_members` rows, ALL `active`, 0
+    pending, `invited_at` on every row — cross-checked against the pre-migration backup
+    (its `org_members` INSERT block has exactly 28 rows and only the 4 pre-slice columns),
+    so nothing was added, lost, or left silently pending. Column-level ACL: `profiles.settings`
+    is `authenticated=w` only and `authenticated` cannot update `is_superadmin`/`email`
+    (table-level `ardDxtm`, no `w`) — the column-scoped UPDATE restriction holds on prod;
+    no self-promotion path. **Live behavioral test, run inside a ROLLED-BACK prod
+    transaction** (28 rows / 0 non-active verified before and after): a synthetic pending
+    ADMIN invite gave `is_org_member=false`, `is_org_admin=false`, `org_caller_rank=0`,
+    `shares_org_with(inviter)=false`, org row not SELECTable, `org_my_pending_invites()`
+    = exactly the caller's own invite, `org_member_profiles()` = 0 rows to a non-admin,
+    and `anon` refused on all three rpcs; after `org_accept_invite()`: member + admin,
+    `org_caller_rank=2` (= `org_role_rank('admin')`), seat active with `accepted_at`
+    stamped.
+  - **Prod-only finding 1 — the deferred `revoke PUBLIC` sweep is now QUANTIFIED.** The
+    ~20 **replaced** functions kept their PRE-EXISTING prod ACL, which includes PUBLIC and
+    anon EXECUTE (`=X/postgres | anon=X/postgres | ...`) — `create or replace` preserves
+    ACLs, so slice 3 neither caused nor worsened this. Harmless today (they all key on
+    `auth.uid()`, null for anon), but it puts a number on the 2026-07-20 item: **20 of the
+    23** functions in this single migration are PUBLIC/anon-executable on prod.
+  - **Prod-only finding 2 — NEW deferred hardening item: `anon` holds TABLE-LEVEL write
+    grants on prod.** Prod grants `anon` INSERT/UPDATE/DELETE on **all 67** public tables
+    (local does not), so **RLS is the only gate between an anonymous request and every
+    table.** Assessed and currently **SAFE**: 0 public tables have RLS disabled;
+    `syn_zmanim_cache` is RLS-on with zero policies (deny-all); of the **197** policies
+    whose roles include public/anon, every write policy resolves to `auth.uid()` or a
+    capability predicate — spot-checked `cls_submission_open`, `sal_owns_customer`,
+    `sd_owns_participant`, `vm_is_conv_admin`, `module_has_manager_grant`. **Action
+    recorded as deferred hardening:** revoke anon's table-level write grants on public
+    tables (defense in depth), to run alongside the platform-wide `revoke PUBLIC on definer
+    fns` sweep — both verified against PROD, per docs/03 convention #1.
+  - **Still open in §11:** entity-level joinPolicy (slice 3 remainder), slice 4
+    (defaults-on-join), slice 5 (view-as) — founder-initiated only.
 - **2026-07-27 (slice 3 — ORG-LEVEL INVITE-ACCEPT BUILT, Opus session):**
   `20260727010000_org_invite_accept.sql`. Being added to an org no longer makes you a live
   member — every add by a signed-in user creates a **pending** invite; the invitee sees a

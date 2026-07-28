@@ -25,7 +25,10 @@ if (!ref || !dbPassword) {
 }
 const dbUrl = `postgresql://postgres.${ref}:${encodeURIComponent(dbPassword)}@aws-1-us-west-2.pooler.supabase.com:5432/postgres`
 
-console.log(`Applying migrations to PRODUCTION (${ref})…`)
-const cmd = ['pnpm', 'exec', 'supabase', 'db', 'push', '--db-url', '"' + dbUrl + '"'].join(' ')
+// Extra args are forwarded to `supabase db push` — notably `--dry-run`, which
+// lists what WOULD be applied without touching prod. Always dry-run first.
+const passthrough = process.argv.slice(2)
+console.log(`Applying migrations to PRODUCTION (${ref})… ${passthrough.join(' ')}`)
+const cmd = ['pnpm', 'exec', 'supabase', 'db', 'push', '--db-url', '"' + dbUrl + '"', ...passthrough].join(' ')
 const res = spawnSync(cmd, { cwd: root, stdio: 'inherit', shell: true })
 process.exit(res.status ?? 1)

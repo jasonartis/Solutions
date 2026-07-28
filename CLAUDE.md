@@ -19,30 +19,36 @@ A multi-tenant modular platform: each client engagement produces a **module** bu
      and update only the compact "Now / Next / Standing rules" below. A fresh chat must never
      pay for the full journal. See "Session hygiene". -->
 
-**Now (2026-07-27):** Live on prod (solutions-platform.vercel.app; prod Supabase migrated
-through slice 2). **User-model slice 3 — ORG-LEVEL INVITE-ACCEPT — is BUILT + committed
-locally, NOT yet pushed to prod.** Being added to an org is now a *pending invite* until the
-invitee accepts (`org_accept_invite`); `is_org_member` + its three siblings + EVERY module
-capability predicate are active-gated, which finally delivers the "a module_roles grant implies
-(active) org membership" invariant platform-wide (an adversarial review caught that ~10
-coarse/shared `module_roles` readers — incl. classroom Storage/PII + the shared write path —
-had been missed; all fixed). Superadmin may add immediately-active OR pending (per-add + saved
-per-profile default); org admins can only invite. Full docs/03 #12 rhythm (2 independent
-reviews; RLS 50/50; e2e). Slice 2 scope-aware authority stays LIVE for all three multi-entity
-modules + the shared engine (`module_caller_covers_rank/role`, docs/03 #16).
+**Now (2026-07-28):** Live on prod (solutions-platform.vercel.app). **User-model slice 3 —
+ORG-LEVEL INVITE-ACCEPT — is PUSHED TO PROD AND PROD-VERIFIED** (`20260727010000`, commit
+29c572d): backup → `migrate:prod` → read-only prod verification via the new
+`scripts/prod-verify-migration.ts` — 23/23 definer fns byte-identical + secdef + pinned
+`search_path`, the 3 new rpcs anon-DENIED on prod (divergence trap defused), active-gating live
+on `is_org_member` + its 3 siblings + all 14 module capability predicates, 28/28 `org_members`
+rows backfilled `active` (0 pending, cross-checked vs the backup), and a rolled-back prod
+transaction proving pending-invite → `org_accept_invite`. So being added to an org is a *pending
+invite* until accepted, and "a module_roles grant implies (active) org membership" holds
+platform-wide; superadmin may add active-or-pending, org admins can only invite. Slice 2
+scope-aware authority stays LIVE across the three multi-entity modules + the shared engine
+(`module_caller_covers_rank/role`, docs/03 #16). The app commit was unpushed when the migration
+landed (DB briefly ahead of the deployed UI — see the docs/12 never-do bullet); pushed the same
+session, so prod DB + app now match.
 
 **Next / open (pick WITH the founder — do not start unprompted; details in docs/15 §11):**
-- **Push slice 3 to prod** (backup → `migrate:prod` → prod-verify ACLs, esp. the new definer
-  grants against the local/prod divergence trap) — the immediate open item.
 - Slice 3 remainder: **entity-level joinPolicy** (invite-only/request-approval/open per
   class/location/event) — deferred follow-on. Slice 4 (defaults-on-join), 5 (view-as).
 - Single-entity modules (matchmaking / synagogue-schedules / visual-messaging) NOT yet
   rank-mapped — OPTIONAL (a real behavior change, not cosmetic).
 - View-as + everywhere role-clarity labels (founder testing-round items 31–42) — high value.
-- Deferred platform hardening: platform-wide `revoke PUBLIC` on definer fns; generic
-  scope-wrappers deriving org from the entity row; generalize coarse `<prefix>_can_manage(org)`;
-  per-class storage scoping; per-module scoped-assignment UIs. (The "grant implies org
-  membership" invariant is now DELIVERED by slice 3.)
+- Deferred platform hardening: platform-wide `revoke PUBLIC` on definer fns — now *quantified*
+  (2026-07-28 prod verify: 20 of the 23 fns in slice 3's migration are PUBLIC/anon-executable on
+  prod, since `create or replace` preserves the pre-existing ACL; harmless today, all key on
+  `auth.uid()`); **revoke `anon`'s TABLE-level INSERT/UPDATE/DELETE — prod grants them on all 67
+  public tables (local doesn't), so RLS is currently the only gate. Assessed SAFE today** (0
+  tables with RLS off; every anon-reachable write policy resolves to `auth.uid()` or a capability
+  predicate) — defense-in-depth, not urgent. Plus: generic scope-wrappers deriving org from the
+  entity row; generalize coarse `<prefix>_can_manage(org)`; per-class storage scoping; per-module
+  scoped-assignment UIs. (The "grant implies org membership" invariant is now DELIVERED by slice 3.)
 - Pre-launch before real customers (docs/12 checklist): automated+tested backups, monitoring,
   2FA, privacy/terms, custom SMTP.
 
@@ -51,7 +57,7 @@ migration/RLS/trigger change runs the docs/03 #12 rhythm (draft → adversarial 
 live-verify as real users → RLS tests → docs); model-choice + subagent + fresh-chat guidance
 in the sections below.
 
-**Full dated history** (2026-07-06 → 2026-07-27, every prior entry verbatim):
+**Full dated history** (2026-07-06 → 2026-07-28, every prior entry verbatim):
 [docs/history/platform-journal.md](docs/history/platform-journal.md).
 
 ## Hard-won local-dev gotchas (Windows host)
@@ -61,7 +67,7 @@ in the sections below.
 - After `supabase db reset`, Kong can hold a stale route to the recreated auth container (502 on `/auth/v1/*` while `rest` works) → `docker restart supabase_kong_Solutions_Platform`.
 - `import.meta.dirname` is `undefined` under tsx — use `dirname(fileURLToPath(import.meta.url))`.
 - Docker Desktop's WSL backend crashed under parallel image pulls → `C:\Users\yarmishj\.wslconfig` caps WSL at 8GB/4CPU (delete to revert); pull images sequentially if it recurs; zero-log segfaulting containers (exit 139) = corrupted image layers, `docker rmi` + re-pull.
-- Tables created in CLI migrations do NOT inherit Supabase's default API-role grants — every migration must `grant` explicitly (see 20260706120000_core.sql). **Functions are the inverse trap and dev/prod DIVERGE:** Postgres grants `EXECUTE` to `PUBLIC` at CREATE (so anon can call), and on PROD `ALTER DEFAULT PRIVILEGES FOR ROLE postgres` ALSO grants `EXECUTE` directly to `anon`/`authenticated` — which `revoke ... from public` does NOT remove. Local lacks that default, so a function locked down with only `revoke ... from public` looks closed locally but is open on prod (the 2026-07-22 `module_scope_covers` gap → `20260722010000`). Rule: state the full intended ACL explicitly (`revoke execute ... from public, anon, authenticated;` then `grant` to exactly who needs it), and verify security-sensitive ACLs against PROD — the local RLS suite can't catch this. See docs/03 convention #1.
+- Tables created in CLI migrations do NOT inherit Supabase's default API-role grants — every migration must `grant` explicitly (see 20260706120000_core.sql). **Functions are the inverse trap and dev/prod DIVERGE:** Postgres grants `EXECUTE` to `PUBLIC` at CREATE (so anon can call), and on PROD `ALTER DEFAULT PRIVILEGES FOR ROLE postgres` ALSO grants `EXECUTE` directly to `anon`/`authenticated` — which `revoke ... from public` does NOT remove. Local lacks that default, so a function locked down with only `revoke ... from public` looks closed locally but is open on prod (the 2026-07-22 `module_scope_covers` gap → `20260722010000`). Rule: state the full intended ACL explicitly (`revoke execute ... from public, anon, authenticated;` then `grant` to exactly who needs it), and verify security-sensitive ACLs against PROD — the local RLS suite can't catch this. See docs/03 convention #1. **`pnpm exec tsx scripts/prod-verify-migration.ts <migration>` now automates that prod check** (read-only: per-function body md5, secdef, pinned search_path, real EXECUTE ACL incl. anon).
 
 ## Key standing decisions
 
