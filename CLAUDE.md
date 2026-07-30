@@ -69,6 +69,26 @@ session, so prod DB + app now match.
   class/location/event) — deferred follow-on. Slice 4 (defaults-on-join), 5 (view-as).
 - Single-entity modules (matchmaking / synagogue-schedules / visual-messaging) NOT yet
   rank-mapped — OPTIONAL (a real behavior change, not cosmetic).
+- **Flaky e2e test — ready to pick up, Sonnet-tier** (findings below are established, don't
+  re-derive): `speed-dating module: register → round → mutual interest → reveal`
+  (`apps/web/e2e/platform.spec.ts:765`) fails intermittently. **It is NOT a regression** — proven
+  by removing the ACL migration, `db:reset`, and re-running: the same test still failed (1 failed
+  / 34 passed). It **passes in isolation on fresh seed state** (4/4, 49s) but fails in the full
+  suite, where `pnpm --filter @platform/db test` runs first and mutates data — CI uses that same
+  order (`ci.yml`: seed → db test → e2e). Failures are **30-second timeouts, not permission
+  errors**, and land at different points per run (6th `signIn` at line 860; "Safety reports
+  (1 open)"; the "Register for this event" button). One run showed the login button stuck on
+  "Working…" with an empty error box. The test is **not idempotent** — it assumes fresh seed
+  state. 32–34 of 35 pass; a second full run gave 3 failures vs 1, tracking machine load.
+  Weigh: RLS-suite state contamination vs the test's own non-idempotency vs genuine timing
+  flakiness. **Don't paper over it with longer timeouts or retries before establishing which.**
+- Low-priority verification: the **worker** was not exercised after the ACL sweep (neither the RLS
+  suite nor e2e touches it). It should be unaffected — `service_role`'s privileges are provably
+  unchanged (the verifier asserts they can't shrink), it makes zero `.rpc()` calls, and pg-boss
+  connects as `postgres`. Watch the next real job run rather than building a test for it.
+- `gh` is NOT installed on this machine — CI status can't be read from the terminal; check GitHub's
+  UI. Also `Solutions Platform.code-workspace` sits untracked; commit it or gitignore it so it
+  stops showing as noise in every `git status`.
 - View-as + everywhere role-clarity labels (founder testing-round items 31–42) — high value.
 - Deferred platform hardening — the `revoke PUBLIC`/anon-table items are **DONE pending the prod
   push** (see Now, above). Still open, all recorded with rationale in docs/15's 2026-07-29 entry:
