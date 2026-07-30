@@ -34,7 +34,8 @@ One multi-tenant web application + one background worker, sharing one Postgres d
 │   ├── web/                  # Next.js (App Router) — all UI + API routes
 │   └── worker/               # Node service: pg-boss consumers, cron, Socket.IO (M6)
 ├── packages/
-│   ├── db/                   # Drizzle schema, migrations, seed scripts
+│   ├── db/                   # Drizzle type-only schema mirror, seed script, RLS tests
+│   │                         #   (migrations live in supabase/migrations — see docs/02)
 │   ├── platform/             # Shared primitives (see catalog below)
 │   └── ui/                   # Shared components (shadcn/ui based)
 ├── modules/

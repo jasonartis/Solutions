@@ -19,7 +19,29 @@ A multi-tenant modular platform: each client engagement produces a **module** bu
      and update only the compact "Now / Next / Standing rules" below. A fresh chat must never
      pay for the full journal. See "Session hygiene". -->
 
-**Now (2026-07-28):** Live on prod (solutions-platform.vercel.app). **User-model slice 3 —
+**Now (2026-07-29):** Live on prod (solutions-platform.vercel.app). **ACL HARDENING SWEEP is
+BUILT, LOCAL-VERIFIED and PROD-PREFLIGHTED — NOT YET PUSHED** (`20260728010000_acl_hardening.sql`,
+uncommitted). Closes the GRANT layer platform-wide so RLS stops being the only gate: `anon` now
+holds nothing in `public` but schema `USAGE` + EXECUTE on the two `syn_public_*` functions
+(134 anon-executable fns → 2, PUBLIC → 0); the 54 trigger fns hold no api-role EXECUTE;
+`authenticated` keeps EXECUTE on the other 81 non-trigger fns (**required** — policy expressions
+are permission-checked as the querying role) and its per-table DML unchanged, but loses
+TRUNCATE/REFERENCES/TRIGGER/MAINTAIN (**RLS cannot gate TRUNCATE** — the one privilege here it
+never covered; anon AND authenticated held it on all 67 tables on BOTH envs). Verified local:
+RLS **57/57** (incl. a new `anon`-role block — the suite had never tested a logged-out caller),
+typecheck 9/9, verifier **17/17** + a rolled-back live anon probe **22/22**; **prod `--preflight`
+3/3** (prod has the identical 139 fns, all covered). Signup proved safe with the grant fully
+revoked (definer trigger, real `supabase_auth_admin`); `supabase db push` proved atomic per file,
+so a partial sweep is impossible. Adversarial review fixed 3 real test defects + the
+prod-vs-local preflight gap. Rules → docs/03 **#17**, docs/12; record → docs/15 + journal.
+**Next step is the founder's go/no-go on `backup:prod` → `migrate:prod` → verify.**
+One open question for the founder: `config.toml` exposes `graphql_public` and pg_graphql is on
+prod (not local), so anon can reach `/graphql/v1` — nothing in the repo uses GraphQL, so dropping
+it from `api.schemas` would remove an untested surface. Unrelated pre-existing flake: the
+`speed-dating … reveal` e2e test fails intermittently WITH OR WITHOUT this migration (proven by
+running the suite with it removed) — worth a separate fix.
+
+**Previously (2026-07-28):** **User-model slice 3 —
 ORG-LEVEL INVITE-ACCEPT — is PUSHED TO PROD AND PROD-VERIFIED** (`20260727010000`, commit
 29c572d): backup → `migrate:prod` → read-only prod verification via the new
 `scripts/prod-verify-migration.ts` — 23/23 definer fns byte-identical + secdef + pinned
@@ -40,15 +62,17 @@ session, so prod DB + app now match.
 - Single-entity modules (matchmaking / synagogue-schedules / visual-messaging) NOT yet
   rank-mapped — OPTIONAL (a real behavior change, not cosmetic).
 - View-as + everywhere role-clarity labels (founder testing-round items 31–42) — high value.
-- Deferred platform hardening: platform-wide `revoke PUBLIC` on definer fns — now *quantified*
-  (2026-07-28 prod verify: 20 of the 23 fns in slice 3's migration are PUBLIC/anon-executable on
-  prod, since `create or replace` preserves the pre-existing ACL; harmless today, all key on
-  `auth.uid()`); **revoke `anon`'s TABLE-level INSERT/UPDATE/DELETE — prod grants them on all 67
-  public tables (local doesn't), so RLS is currently the only gate. Assessed SAFE today** (0
-  tables with RLS off; every anon-reachable write policy resolves to `auth.uid()` or a capability
-  predicate) — defense-in-depth, not urgent. Plus: generic scope-wrappers deriving org from the
-  entity row; generalize coarse `<prefix>_can_manage(org)`; per-class storage scoping; per-module
-  scoped-assignment UIs. (The "grant implies org membership" invariant is now DELIVERED by slice 3.)
+- Deferred platform hardening — the `revoke PUBLIC`/anon-table items are **DONE pending the prod
+  push** (see Now, above). Still open, all recorded with rationale in docs/15's 2026-07-29 entry:
+  **`storage`-schema grants** (prod grants anon the full set incl. TRUNCATE; buckets private,
+  policies key on `auth.uid()`; a `public`-schema sweep doesn't touch it); **prod's
+  `ALTER DEFAULT PRIVILEGES`**, which re-opens every FUTURE object so the sweep decays without a
+  drift check — Supabase removes the legacy auto-expose 2026-10-30, so the fix is likely project
+  config not SQL, and note a local-only check structurally CANNOT catch prod drift; ~9
+  internal-only helpers keeping `authenticated` EXECUTE they don't need; 3 provably dead functions
+  locked not dropped; `service_role`'s retained TRUNCATE. Plus: generic scope-wrappers deriving
+  org from the entity row; generalize coarse `<prefix>_can_manage(org)`; per-class storage
+  scoping; per-module scoped-assignment UIs.
 - Pre-launch before real customers (docs/12 checklist): automated+tested backups, monitoring,
   2FA, privacy/terms, custom SMTP.
 

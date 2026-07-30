@@ -23,8 +23,16 @@ Every choice evaluated against: least cost, least maintenance, most expandable, 
 
 ## ORM: Drizzle
 
-- **Why:** SQL-first and lightweight; generated migrations we can read; plays cleanly with RLS and Supabase; TypeScript-native types.
+- **Why:** SQL-first and lightweight; plays cleanly with RLS and Supabase; TypeScript-native types.
 - Alternative: Prisma (heavier runtime, migration engine more magical). Either works; Drizzle chosen for transparency.
+- **Drizzle does NOT generate or run migrations here** (corrected 2026-07-29 — the
+  docs had described a workflow the repo never used). There is no `drizzle.config.*`,
+  no `drizzle/` output dir, and no script invoking `drizzle-kit`; `drizzle-kit` is an
+  unused devDependency. `packages/db/src/schema.ts` is a hand-maintained **type-only
+  mirror** of the SQL, imported for typed queries. The single source of truth for
+  schema, RLS and grants is `supabase/migrations/*.sql`, applied by the Supabase CLI
+  (`pnpm db:reset` locally, `pnpm migrate:prod` for prod). If the mirror and the SQL
+  ever disagree, the SQL wins and the mirror is the bug.
 
 ## Auth: Supabase Auth
 

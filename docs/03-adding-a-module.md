@@ -230,6 +230,48 @@ pages under `apps/web/app/(app)/o/[orgSlug]/m/<key>/`, (d) a manifest entry in
 `packages/platform/src/modules.ts`, and (e) a seed block. If building one forces an
 edit anywhere else, that's a missing platform primitive — extract it, don't fork it.
 
+## The privilege model — two locks (ACL hardening sweep, 2026-07-29)
+
+17. **Every object has TWO gates and a module must satisfy both.** RLS ("which rows?")
+    is the one we design carefully; the GRANT layer ("may this role touch the object at
+    all?") is the one that silently defaults open. Until `20260728010000` prod granted
+    `anon` the full privilege set (`arwdDxtm`) on all 67 tables and left 134 of 139
+    functions PUBLIC/anon-executable, so RLS was the ONLY gate. The sweep set the
+    intended ACL platform-wide; keeping it that way is now a convention, not a one-off:
+    - **`anon` holds NOTHING in schema `public`** except schema `USAGE` and EXECUTE on
+      the explicitly allowlisted public functions. **Strangers never write — there is no
+      sanctioned anon write path anywhere** (founder decision, 2026-07-29). A new module
+      table needs no anon grant, ever.
+    - **A public (no-login) surface is a `security definer` function granted to `anon`,
+      never a table grant** (extends convention #4). This holds for platform-level pages
+      as much as module pages. A purely static page (about, contact-by-email) needs no
+      grant at all. If a public page ever needs to WRITE, it goes through a definer
+      function that validates and writes internally — never `grant insert ... to anon`.
+    - **`authenticated` must KEEP EXECUTE on every function named in an RLS policy.**
+      Policy expressions are permission-checked as the *querying* role, so revoking it
+      turns every read into `permission denied for function`. Verified empirically.
+    - **Trigger functions get no api-role EXECUTE at all.** EXECUTE is checked at
+      `create trigger` time, not at fire time — verified as `authenticated`,
+      `service_role` and `supabase_auth_admin` (signup still works with the grant fully
+      revoked). So `revoke execute ... from public, anon, authenticated, service_role`.
+    - **Never enumerate signatures by hand.** Generate from
+      `pg_get_function_identity_arguments`, or blanket-revoke then re-grant explicitly.
+      Hand lists miss overloads (`module_position_rank` exists as both `(text)` and
+      `(text, text)`) and can name dropped functions (which aborts the transaction).
+    - **A table-level `revoke all` also wipes COLUMN-level grants** (verified). `profiles`
+      deliberately gives `authenticated` column-only UPDATE on `(display_name, settings)`;
+      any table-wide revoke must restore it explicitly.
+    - **RLS does not gate `TRUNCATE`** (nor REFERENCES/TRIGGER). Those are ACL-only, so
+      they must not be granted to `anon`/`authenticated` — RLS is not a mitigation.
+    - **Don't write `revoke truncate`** — CI's destructive-migration guard matches
+      `truncate[[:space:]]`. Use `revoke all privileges` then re-grant the intended DML.
+    - **Verify against PROD, not local** (convention #1's rule, mechanized):
+      `pnpm exec tsx scripts/verify-acl-hardening.ts [--probe]` asserts the intended end
+      state and exits non-zero; `scripts/acl-audit.ts [--json]` reports the full privilege
+      state for a before/after diff. The local RLS suite alone cannot catch this class of
+      gap, which is why `packages/db/src/rls.test.ts` now has an explicit `anon`-role
+      block — before the sweep the suite had never once tested a not-logged-in caller.
+
 ## Hard rules
 
 1. **Never fork a platform primitive.** If the notifications/files/workflow primitive almost fits, extend it in `packages/platform` (benefiting every module) — don't copy it into the module.

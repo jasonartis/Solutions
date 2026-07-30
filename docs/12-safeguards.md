@@ -49,6 +49,20 @@ rot; pipelines don't.
   claimed "typecheck 9/9" but the committed tree actually failed `tsc` (an untyped
   `rpc('org_member_profiles')` row) — caught by a pre-push build, fixed in
   `28ddf92` before pushing.
+- **Never grant `anon` a table privilege, and never assume RLS is the only gate
+  that matters.** Strangers hold nothing in schema `public` but schema `USAGE`
+  plus EXECUTE on the allowlisted public functions (docs/03 #17). A public
+  no-login surface is a `security definer` function granted to `anon`; strangers
+  never write. Note `TRUNCATE`/`REFERENCES`/`TRIGGER` are **not** RLS-gated at
+  all — an ACL is the only thing standing in front of them.
+- **Never trust a green local RLS suite as proof of a privilege change.** Local
+  and prod have different `ALTER DEFAULT PRIVILEGES`, so prod can be wide open
+  while local looks closed (the 2026-07-22 gap). Any migration touching grants
+  must be verified against PROD's catalog:
+  `pnpm exec tsx scripts/verify-acl-hardening.ts --probe` (asserts + exits
+  non-zero; `--probe` additionally becomes `anon` and attempts real reads/writes
+  inside a transaction that always rolls back), with
+  `scripts/acl-audit.ts --json` before/after for the diff.
 - If running as a lighter model and the task drifts into migrations, RLS,
   triggers, or export/privacy rules: **say so and suggest switching to
   Opus-class before continuing** — don't push through quietly.

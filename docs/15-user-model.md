@@ -530,6 +530,68 @@ vocabulary gets locked.
 
 ## Decisions log
 
+- **2026-07-29 (ACL HARDENING SWEEP — the deferred grant-layer pass, Opus session):**
+  `20260728010000_acl_hardening.sql` closes the GRANT layer platform-wide so RLS stops
+  being the only gate. Quantified off prod's `pg_catalog` first, which found the scope
+  larger than the docs implied: **134 of 139** public functions were anon- AND
+  PUBLIC-executable on *both* local and prod (not just slice 3's 20 of 23), and all **67**
+  tables granted `anon` the FULL set `arwdDxtm` on prod. End state: `anon` holds nothing in
+  `public` but schema `USAGE` + EXECUTE on the two `syn_public_*` functions; the 54 trigger
+  functions hold no api-role EXECUTE; `authenticated` keeps EXECUTE on all 81 other
+  non-trigger functions and its per-table DML exactly as the creating migrations granted it.
+  - **Two findings that changed the job.** (1) `anon` AND `authenticated` held `TRUNCATE`
+    on all 67 tables on **both** environments — and **RLS does not gate TRUNCATE**, so this
+    was the one item RLS could never have covered (unreachable today only because PostgREST
+    emits no TRUNCATE verb; the API surface was the mitigation, not the database).
+    (2) Prod also granted `anon` **SELECT** on all 67 tables, a larger surface than the
+    INSERT/UPDATE/DELETE the task started from.
+  - **Mechanisms established empirically rather than cited** (each one changed the SQL):
+    trigger-function EXECUTE is checked at `create trigger` time, not fire time (tested as
+    `authenticated`, `service_role`, and — the catastrophic case — `supabase_auth_admin`,
+    where **signup still created its profile row with the grant fully revoked**); functions
+    named in an RLS policy DO require EXECUTE for the querying role; a table-level
+    `revoke all` **also wipes column-level grants**, which would have broken `profiles`
+    display-name/settings editing had it not been restored explicitly.
+  - **Founder decisions (2026-07-29):** strangers **never write** — there is no sanctioned
+    anon write path anywhere, so a public surface is always a read-only definer function
+    (static pages like about/contact-by-email need no grant at all); a platform-level
+    public-page option is kept as a first-class concept alongside per-module ones;
+    `service_role` keeps its grants (it bypasses RLS by design and isn't internet-reachable);
+    prod verification must include a real rolled-back `anon` probe, not just a catalog read.
+  - **Deliberate deferrals, each to be revisited (founder-approved 2026-07-29):**
+    1. **`storage` schema grants** — prod grants `anon` the full set on `storage` tables too.
+       All 5 buckets are private and the 13 `storage.objects` policies key on `auth.uid()`,
+       and the sweep's `... in schema public` statements do not touch it. Separate job,
+       riskier because the Storage service's own role depends on those grants.
+    2. **Prod's `ALTER DEFAULT PRIVILEGES`** still re-opens every FUTURE object, so this
+       sweep decays without a guard. Deliberately NOT combined with a 200-object privilege
+       change. Supabase removes the legacy auto-expose behavior on **2026-10-30** (see the
+       `auto_expose_new_tables` note in `supabase/config.toml`), so the durable fix is
+       likely a project-config change rather than SQL. **Needs a drift check in the
+       meantime** — and note a local-only check structurally cannot catch prod drift.
+    3. **~9 internal-only helpers** (`org_role_rank`, `org_caller_rank`, `module_caller_*`,
+       both `module_position_rank` overloads, `vm_can_moderate_org`, `vm_layer_locked`) keep
+       `authenticated` EXECUTE they don't strictly need — they're called only from inside
+       definer functions. Skipped as real behavior-change risk for no security gain.
+    4. **3 provably dead functions** (`sal_owns_appointment`, `cls_set_preferred_name`,
+       `cls_comments_for_my_submission` — no policy, no trigger, no `.rpc()` caller) were
+       locked down rather than dropped; dropping is one-way and needs explicit approval.
+       Revisit as cleanup.
+    5. **`service_role` retains `TRUNCATE`** on all 67 tables (untouched by design).
+       Defensible — it bypasses RLS anyway and lives only in the worker — but worth a look.
+  - **Tooling added:** `scripts/acl-audit.ts` (read-only privilege reporter, `--json` for
+    before/after diffing — the existing `prod-verify-migration.ts` parses
+    `create function` blocks and so verifies *nothing* on an ACL-only migration) and
+    `scripts/verify-acl-hardening.ts` (asserts the intended end state, exits non-zero,
+    `--probe` runs a live rolled-back `anon` probe). Conventions in docs/03 **#17**;
+    never-do entries in docs/12.
+  - **Test blind spot closed:** `packages/db/src/rls.test.ts` had a single `signIn()`
+    factory and had therefore **never tested the `anon` role** — meaning the table half of
+    this change was both a local no-op and unverifiable, the same structural gap behind the
+    2026-07-22 incident. Added an `anon` block that asserts both the semantic invariant
+    (a stranger obtains/changes nothing) and the mechanism (refused at the privilege layer
+    with `42501`, not merely filtered by RLS — so it cannot pass for the wrong reason).
+
 - **2026-07-28 (slice 3 PUSHED TO PROD + prod-verified; a reusable prod-verifier; two
   prod-only ACL findings, Opus session):** `20260727010000_org_invite_accept.sql` is now
   **LIVE ON PROD** (commit `29c572d`). Backup first (`backups/2026-07-28T17-30-20/` —

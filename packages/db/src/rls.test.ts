@@ -1177,3 +1177,160 @@ describe('speed-dating scoped authority (slice 2 — 20260726030000)', () => {
     expect(errored(await grant(bob, uid.frank, 'host', ids.event2Node))).toBe(true)
   })
 })
+
+// ---------------------------------------------------------------------------
+// ACL hardening (20260728010000) — the `anon` role.
+//
+// WHY THIS BLOCK EXISTS: every other test in this file signs in first, so until
+// now the suite had never once exercised the `anon` (not-logged-in) role.
+//
+// READ THIS BEFORE TRUSTING IT: these tests run against LOCAL, and local was never
+// the vulnerable side. Local `anon` has only ever held `Dxtm` (TRUNCATE/REFERENCES/
+// TRIGGER/MAINTAIN — no DML), and 20260722010000's `revoke ... from public` did
+// close the oracle locally. So every assertion here would have been GREEN on local
+// throughout the entire window prod sat open. **This block does NOT close the
+// 2026-07-22 class of gap and must not be treated as if it does** — only
+// `scripts/verify-acl-hardening.ts` run against PROD can, because the divergence
+// lives in prod's ALTER DEFAULT PRIVILEGES, which local does not have.
+//
+// What this block IS good for: locking the invariant in place going forward. It
+// fails loudly if a future migration re-grants anon something on local, or if the
+// public no-login surface regresses. That is a ratchet, not a proof about prod.
+//
+// These run over PostgREST with the anon key and NO sign-in — the same surface a
+// stranger on the internet reaches. Two distinct things are asserted:
+//   * the SEMANTIC invariant (a stranger obtains and changes nothing), which held
+//     before this migration too, via RLS; and
+//   * the MECHANISM (a stranger is now refused at the privilege layer, before RL
+//     is consulted), which is what this migration actually changed. Asserting
+//     only the first would pass whether or not the migration worked.
+describe('acl hardening: the anon role (20260728010000)', () => {
+  // A client with the anon key and no session -> Postgres role `anon`.
+  const anonClient = () => createClient(url, anonKey, { auth: { persistSession: false } })
+
+  // One representative table per module + the platform core tables. Each carries a
+  // column that REALLY EXISTS on it, because a filter/payload naming a non-existent
+  // column makes PostgREST fail with PGRST204/42703 before the request ever reaches
+  // the privilege check — which would make the write assertions below untestable.
+  // (Four of these have no `id` column at all: profiles, org_members, org_modules,
+  // syn_published_weeks.)
+  const TABLES: { name: string; key: string }[] = [
+    { name: 'profiles', key: 'user_id' },
+    { name: 'orgs', key: 'id' },
+    { name: 'org_members', key: 'org_id' },
+    { name: 'org_modules', key: 'org_id' },
+    { name: 'module_roles', key: 'org_id' },
+    { name: 'module_scope_nodes', key: 'id' },
+    { name: 'job_requests', key: 'id' },
+    { name: 'cls_classes', key: 'id' },
+    { name: 'cls_submissions', key: 'id' },
+    { name: 'mm_questions', key: 'id' },
+    { name: 'sal_appointments', key: 'id' },
+    { name: 'sd_events', key: 'id' },
+    { name: 'vm_conversations', key: 'id' },
+    { name: 'syn_published_weeks', key: 'org_id' },
+    { name: 'smp_projects', key: 'id' },
+  ]
+
+  // A TABLE-privilege denial and an RLS `WITH CHECK` violation are BOTH SQLSTATE
+  // 42501, so the code alone cannot tell them apart on a write — and conflating
+  // them is exactly the false confidence this block is supposed to rule out. The
+  // message disambiguates: "permission denied for table X" (privilege) vs "new row
+  // violates row-level security policy" (RLS). Require the former and exclude the
+  // latter, so an RLS-only refusal can never make these tests green.
+  const isPrivilegeDenied = (error: { code?: string; message?: string } | null) => {
+    if (!error) return false
+    const msg = error.message ?? ''
+    return (
+      error.code === '42501' &&
+      /permission denied for (table|relation|function|view)/i.test(msg) &&
+      !/row-level security/i.test(msg)
+    )
+  }
+
+  it('a stranger can read no rows from any table (semantic invariant)', async () => {
+    const anon = anonClient()
+    for (const { name } of TABLES) {
+      const { data, error } = await anon.from(name).select('*').limit(1)
+      // Either refused outright, or allowed through but yielding nothing.
+      const leaked = !error && Array.isArray(data) && data.length > 0
+      expect(leaked, `anon read rows from ${name}`).toBe(false)
+    }
+  })
+
+  it('a stranger is refused at the PRIVILEGE layer, not merely filtered by RLS', async () => {
+    const anon = anonClient()
+    for (const { name } of TABLES) {
+      const { error } = await anon.from(name).select('*').limit(1)
+      // On a SELECT this distinction is unambiguous: RLS filters silently and
+      // returns 200/[], so a 42501 here can only be the table privilege.
+      expect(isPrivilegeDenied(error), `${name}: expected permission-denied, got ${JSON.stringify(error)}`).toBe(true)
+    }
+  })
+
+  it('a stranger cannot insert, update or delete anywhere', async () => {
+    const anon = anonClient()
+    // Deliberately assert the PRIVILEGE denial rather than merely "an error".
+    // A bare {id} insert would also fail on a not-null/constraint violation even
+    // WITH permission, and an UPDATE/DELETE matching no rows succeeds with no
+    // error at all — so a truthiness check here would pass vacuously and give
+    // false confidence that the revoke worked.
+    const beef = '00000000-0000-4000-8000-00000000beef'
+    for (const { name, key } of TABLES) {
+      // The payload key is computed per table, so it can't be checked against the
+      // generated row types — cast it. The VALUE of the payload is irrelevant here:
+      // a table-privilege denial is raised before the row is ever validated.
+      const payload = { [key]: beef } as never
+      const ins = await anon.from(name).insert(payload)
+      expect(isPrivilegeDenied(ins.error), `${name}: anon insert not privilege-denied (${JSON.stringify(ins.error)})`).toBe(true)
+
+      const upd = await anon.from(name).update(payload).eq(key, beef)
+      expect(isPrivilegeDenied(upd.error), `${name}: anon update not privilege-denied (${JSON.stringify(upd.error)})`).toBe(true)
+
+      const del = await anon.from(name).delete().eq(key, beef)
+      expect(isPrivilegeDenied(del.error), `${name}: anon delete not privilege-denied (${JSON.stringify(del.error)})`).toBe(true)
+    }
+  })
+
+  it('a stranger cannot call platform authority functions', async () => {
+    const anon = anonClient()
+    // Authority predicates and privileged RPCs alike must be closed to anon.
+    const closed: [string, Record<string, unknown>][] = [
+      ['is_org_member', { check_org_id: '00000000-0000-4000-8000-00000000beef' }],
+      ['is_org_admin', { check_org_id: '00000000-0000-4000-8000-00000000beef' }],
+      ['is_superadmin', {}],
+      ['has_module_role', { check_org_id: '00000000-0000-4000-8000-00000000beef', check_module_key: 'classroom', check_role: 'lecturer' }],
+      ['org_my_pending_invites', {}],
+      ['org_accept_invite', { check_org_id: '00000000-0000-4000-8000-00000000beef' }],
+      ['module_scope_covers', { ancestor: '00000000-0000-4000-8000-00000000beef', descendant: '00000000-0000-4000-8000-00000000beef' }],
+    ]
+    for (const [fn, args] of closed) {
+      const { error } = await anon.rpc(fn, args)
+      expect(isPrivilegeDenied(error), `${fn}: expected permission-denied, got ${JSON.stringify(error)}`).toBe(true)
+    }
+  })
+
+  it('the public no-login schedule surface still works for a stranger', async () => {
+    const anon = anonClient()
+    // This is the ENTIRE intended anon surface — two read-only definer functions.
+    const { data: index, error: e1 } = await anon.rpc('syn_public_weeks', { p_org_slug: 'demo-shul' })
+    expect(e1, `syn_public_weeks failed for anon: ${e1?.message}`).toBeNull()
+    expect(Array.isArray(index?.weeks)).toBe(true)
+    expect(index.weeks.length).toBeGreaterThan(0)
+
+    const { data: week, error: e2 } = await anon.rpc('syn_public_week', {
+      p_org_slug: 'demo-shul',
+      p_week_start: index.weeks[0],
+    })
+    expect(e2, `syn_public_week failed for anon: ${e2?.message}`).toBeNull()
+    expect(week?.org?.name).toBeTruthy()
+  })
+
+  it('an unpublished org exposes nothing through the public surface', async () => {
+    const anon = anonClient()
+    // Same function, an org with no published weeks -> null, not a leak.
+    const { data, error } = await anon.rpc('syn_public_weeks', { p_org_slug: 'demo-a' })
+    expect(error).toBeNull()
+    expect(data).toBeNull()
+  })
+})

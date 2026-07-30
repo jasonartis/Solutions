@@ -44,7 +44,7 @@ A dedicated staging project is added when the first real client is live; before 
 ## Deploy pipeline (GitHub Actions)
 
 1. PR: typecheck, lint, unit tests, build, Playwright e2e against a fresh local-style Supabase in CI; Vercel preview.
-2. Merge to `main`: apply migrations to prod (`supabase db push` / drizzle migrate — forward-only, already exercised locally), deploy web (Vercel), deploy worker (Coolify webhook on the VPS, Phase B+).
+2. Merge to `main`: apply migrations to prod (`pnpm migrate:prod`, which wraps `supabase db push` — forward-only, already exercised locally; Drizzle is NOT a migration tool here, see docs/02), deploy web (Vercel), deploy worker (Coolify webhook on the VPS, Phase B+).
 3. Rollback strategy: web/worker roll back by redeploying the previous build; **migrations don't roll back** — write additive migrations (new column, backfill, switch, drop later) so old code tolerates the new schema during deploys.
 
 ## Secrets
