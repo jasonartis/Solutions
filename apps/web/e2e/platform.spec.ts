@@ -763,6 +763,17 @@ test('nail-salon module: worker sees only their assigned chairs', async ({ page 
 })
 
 test('speed-dating module: register → round → mutual interest → reveal', async ({ page }) => {
+  // 8 sign-ins/page loads (every other speed-dating test does 1-3) — the
+  // heaviest single flow in the file. Diagnosed 2026-07-30: intermittent
+  // failures in the full suite are 30s timeouts landing at different
+  // navigations each run (confirmed via error-context.md: a run failed with
+  // the browser still on the stale events-list page, mid-navigation, when
+  // the assertion's 5s window expired) — genuine timing/load, not RLS-suite
+  // data contamination or stale seed state (every prior assertion in this
+  // test, including exact roster/round/reveal counts, had to pass first to
+  // reach the failure point). test.slow() triples the timeout for this one
+  // test rather than padding global config or adding retries.
+  test.slow()
   // Charlie and Dana register for the seeded open event.
   for (const who of ['charlie@demo.local', 'dana@demo.local']) {
     await signIn(page, who)

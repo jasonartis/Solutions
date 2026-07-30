@@ -69,19 +69,16 @@ session, so prod DB + app now match.
   class/location/event) — deferred follow-on. Slice 4 (defaults-on-join), 5 (view-as).
 - Single-entity modules (matchmaking / synagogue-schedules / visual-messaging) NOT yet
   rank-mapped — OPTIONAL (a real behavior change, not cosmetic).
-- **Flaky e2e test — ready to pick up, Sonnet-tier** (findings below are established, don't
-  re-derive): `speed-dating module: register → round → mutual interest → reveal`
-  (`apps/web/e2e/platform.spec.ts:765`) fails intermittently. **It is NOT a regression** — proven
-  by removing the ACL migration, `db:reset`, and re-running: the same test still failed (1 failed
-  / 34 passed). It **passes in isolation on fresh seed state** (4/4, 49s) but fails in the full
-  suite, where `pnpm --filter @platform/db test` runs first and mutates data — CI uses that same
-  order (`ci.yml`: seed → db test → e2e). Failures are **30-second timeouts, not permission
-  errors**, and land at different points per run (6th `signIn` at line 860; "Safety reports
-  (1 open)"; the "Register for this event" button). One run showed the login button stuck on
-  "Working…" with an empty error box. The test is **not idempotent** — it assumes fresh seed
-  state. 32–34 of 35 pass; a second full run gave 3 failures vs 1, tracking machine load.
-  Weigh: RLS-suite state contamination vs the test's own non-idempotency vs genuine timing
-  flakiness. **Don't paper over it with longer timeouts or retries before establishing which.**
+- **Flaky e2e test — FIXED 2026-07-30** (`speed-dating module: register → round → mutual
+  interest → reveal`): diagnosed as genuine timing/load, not RLS-suite data contamination or
+  the test's own non-idempotency (full reasoning in docs/history/platform-journal.md's
+  2026-07-30 entry). Fixed with a scoped `test.slow()`; verified via clean `db:reset` → seed →
+  full RLS suite → full e2e suite reproduction (the exact failure-inducing order) — now passes.
+- **New, unstarted:** the clean reproduction above surfaced a DIFFERENT e2e failure once
+  speed-dating stopped absorbing the flake: `visual messaging: create from a picture, draw a
+  reply, membership gates access` — Charlie sees no "Layer 1.1" link at all after Alice's
+  moderation-removal step earlier in the same test (should the removed layer still be
+  navigable for a non-moderator member?). Not investigated — pick up WITH the founder.
 - Low-priority verification: the **worker** was not exercised after the ACL sweep (neither the RLS
   suite nor e2e touches it). It should be unaffected — `service_role`'s privileges are provably
   unchanged (the verifier asserts they can't shrink), it makes zero `.rpc()` calls, and pg-boss
@@ -119,6 +116,7 @@ in the sections below.
 - After `supabase db reset`, Kong can hold a stale route to the recreated auth container (502 on `/auth/v1/*` while `rest` works) → `docker restart supabase_kong_Solutions_Platform`.
 - `import.meta.dirname` is `undefined` under tsx — use `dirname(fileURLToPath(import.meta.url))`.
 - Docker Desktop's WSL backend crashed under parallel image pulls → `C:\Users\yarmishj\.wslconfig` caps WSL at 8GB/4CPU (delete to revert); pull images sequentially if it recurs; zero-log segfaulting containers (exit 139) = corrupted image layers, `docker rmi` + re-pull.
+- **Reproducing a flaky/order-dependent e2e failure: `db:reset` + `pnpm seed` immediately before the reproduction run, not just once at the start of the session.** Several e2e tests are documented non-idempotent (assume fresh seed state). Running a suspect test in isolation first (to confirm it currently passes) mutates that seed data; a subsequent full-suite reproduction attempt then fails for the mundane reason of stale state from your OWN prior run — which looks like the bug you're chasing but isn't (hit in a 2026-07-30 session validating the speed-dating flaky-test fix: an isolated run advanced the seeded event to `complete`, then the very next full-suite run failed at the first "Register" step instead of reproducing the real timing issue).
 - Tables created in CLI migrations do NOT inherit Supabase's default API-role grants — every migration must `grant` explicitly (see 20260706120000_core.sql). **Functions are the inverse trap and dev/prod DIVERGE:** Postgres grants `EXECUTE` to `PUBLIC` at CREATE (so anon can call), and on PROD `ALTER DEFAULT PRIVILEGES FOR ROLE postgres` ALSO grants `EXECUTE` directly to `anon`/`authenticated` — which `revoke ... from public` does NOT remove. Local lacks that default, so a function locked down with only `revoke ... from public` looks closed locally but is open on prod (the 2026-07-22 `module_scope_covers` gap → `20260722010000`). Rule: state the full intended ACL explicitly (`revoke execute ... from public, anon, authenticated;` then `grant` to exactly who needs it), and verify security-sensitive ACLs against PROD — the local RLS suite can't catch this. See docs/03 convention #1. **`pnpm exec tsx scripts/prod-verify-migration.ts <migration>` now automates that prod check** (read-only: per-function body md5, secdef, pinned search_path, real EXECUTE ACL incl. anon).
 
 ## Key standing decisions
