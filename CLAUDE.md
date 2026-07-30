@@ -20,8 +20,14 @@ A multi-tenant modular platform: each client engagement produces a **module** bu
      pay for the full journal. See "Session hygiene". -->
 
 **Now (2026-07-29):** Live on prod (solutions-platform.vercel.app). **ACL HARDENING SWEEP is
-BUILT, LOCAL-VERIFIED and PROD-PREFLIGHTED — NOT YET PUSHED** (`20260728010000_acl_hardening.sql`,
-uncommitted). Closes the GRANT layer platform-wide so RLS stops being the only gate: `anon` now
+PUSHED TO PROD AND PROD-VERIFIED** (`20260728010000`, commit `a16f4a5`): backup →
+`--dry-run` (exactly 1 pending) → `migrate:prod` → **`verify-acl-hardening.ts --probe` 39/39 on
+prod**, including a rolled-back live `anon` probe where all 20 table reads/writes were refused
+`42501 permission denied for table`, `syn_public_weeks` still answered, and `is_org_member` was
+refused. **Confirmed from the open internet with the prod anon key:** a table read now returns
+**401 / 42501** (it used to return `200 []` with RLS as the only gate), a table write 401, the
+public RPC 200 with real data, and `/s/demo-shul` renders. Prod row counts unchanged
+(28 members / 8 orgs / 10 profiles, 0 non-active) — no data touched. Closes the GRANT layer platform-wide so RLS stops being the only gate: `anon` now
 holds nothing in `public` but schema `USAGE` + EXECUTE on the two `syn_public_*` functions
 (134 anon-executable fns → 2, PUBLIC → 0); the 54 trigger fns hold no api-role EXECUTE;
 `authenticated` keeps EXECUTE on the other 81 non-trigger fns (**required** — policy expressions
@@ -34,7 +40,6 @@ typecheck 9/9, verifier **17/17** + a rolled-back live anon probe **22/22**; **p
 revoked (definer trigger, real `supabase_auth_admin`); `supabase db push` proved atomic per file,
 so a partial sweep is impossible. Adversarial review fixed 3 real test defects + the
 prod-vs-local preflight gap. Rules → docs/03 **#17**, docs/12; record → docs/15 + journal.
-**Next step is the founder's go/no-go on `backup:prod` → `migrate:prod` → verify.**
 One open question for the founder: `config.toml` exposes `graphql_public` and pg_graphql is on
 prod (not local), so anon can reach `/graphql/v1` — nothing in the repo uses GraphQL, so dropping
 it from `api.schemas` would remove an untested surface. Unrelated pre-existing flake: the
