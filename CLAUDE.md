@@ -40,9 +40,12 @@ typecheck 9/9, verifier **17/17** + a rolled-back live anon probe **22/22**; **p
 revoked (definer trigger, real `supabase_auth_admin`); `supabase db push` proved atomic per file,
 so a partial sweep is impossible. Adversarial review fixed 3 real test defects + the
 prod-vs-local preflight gap. Rules → docs/03 **#17**, docs/12; record → docs/15 + journal.
-One open question for the founder: `config.toml` exposes `graphql_public` and pg_graphql is on
-prod (not local), so anon can reach `/graphql/v1` — nothing in the repo uses GraphQL, so dropping
-it from `api.schemas` would remove an untested surface. Unrelated pre-existing flake: the
+Adversarial review raised `graphql_public` as a possibly-untested anon surface; **probed prod and
+CLOSED it — `pg_graphql` is NOT installed there** (prod extensions: pg_stat_statements, pgcrypto,
+plpgsql, supabase_vault, uuid-ossp). The anon-executable `graphql_public.graphql` wrapper exists
+but returns "pg_graphql extension is not enabled", so no schema and no data are reachable.
+Removing `graphql_public` from `api.schemas` would only delete a dead endpoint — cosmetic, not
+security. Unrelated pre-existing flake: the
 `speed-dating … reveal` e2e test fails intermittently WITH OR WITHOUT this migration (proven by
 running the suite with it removed) — worth a separate fix.
 
