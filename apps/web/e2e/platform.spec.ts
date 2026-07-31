@@ -1168,6 +1168,17 @@ test('help walkthroughs: role-aware — student sees their guide, professor sees
 })
 
 test('visual messaging: create from a picture, draw a reply, membership gates access', async ({ page }) => {
+  // Diagnosed 2026-07-30 alongside the speed-dating flake: despite fewer
+  // sign-ins (6 vs 8), this is comparably heavy in wall-clock time — canvas
+  // drawing, multi-step mouse gestures, two file uploads, swipe navigation,
+  // tree view, a full moderation flow. Confirmed genuine timing/load, not a
+  // fixed bug: three separate isolated runs failed at three different
+  // points (a click-hang on the conversation-title link, a stalled
+  // waitForResponse on "Remove this layer", a stalled click on "Layer
+  // 1.1") — a static bug would fail at the same spot every time. Same
+  // test.slow() remedy as speed-dating, for the same reason: this test's
+  // scope is genuinely long, not buggy.
+  test.slow()
   // Alice starts a conversation from an image.
   const title = 'Family sketch ' + Date.now()
   await signIn(page, 'alice@demo.local')
