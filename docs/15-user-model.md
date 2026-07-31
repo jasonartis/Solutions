@@ -396,6 +396,7 @@ not buildable without these; several change claims made above.
    vocabulary, immutable at runtime. Per-org tuning may only DISABLE manifest
    edges, never add them (an org-admin-writable edge list in `org_modules.settings`
    would let an org admin mint impersonation the module designers banned).
+   **Amended, not reversed — see point 11 (2026-07-30).**
 6. **Every mode-2 session start is logged append-only** (actor, target grant,
    timestamp) **from v1** — reads are the unstamped side, and the session log is a
    security requirement, not the later audit upgrade. Whether targets are notified
@@ -426,6 +427,34 @@ not buildable without these; several change claims made above.
     view-as rendering is always the target's surface **intersected with the
     caller's scope** ("what Smith sees, within what I govern" — a CS chair viewing
     professor Smith never sees Smith's Math101 side), labeled as partial in the UI.
+11. **Amendment (2026-07-30, founder-driven): rank-differential completeness
+    check.** Point 5 stays intact — edges are still declared per module, static,
+    immutable at runtime, never org-admin-configurable. Added on top: for every
+    module, every ordered position pair (A, B) where `rank(A) > rank(B)` must
+    carry an explicit on/off entry in the manifest's edge declaration; an
+    undeclared pair is a **build/CI-time error, not a silent default** (a
+    TypeScript mapped type keyed by every rank-differential pair is one plausible
+    enforcement mechanism, not yet committed to). This resolves a real tension
+    `module_position_rank()`'s own design creates: rank is deliberately cheap to
+    change ("a one-line migration with no backfill," §11 build sequencing item 1),
+    while view-as is deliberately meant to require scrutiny every time (points 2,
+    6 above). Without this check, a rank remap that introduces a new
+    rank-differential pair — a new position added, or two previously-equal
+    positions diverging — could silently open or close view-as reach with nobody
+    consciously deciding. With it, that same remap fails the build until every
+    newly-implied pair is explicitly resolved; friction lands exactly where a new
+    visibility question genuinely exists, nowhere else. Equal-rank pairs (GA and
+    student, e.g.) never require an entry at all — no edge, no decision needed,
+    matching their existing exclusion for free. Subsumes point 7's per-position
+    `viewAs: none` ban as a special case (every incoming pair explicitly off); a
+    blanket shorthand flag for that case is reasonable sugar, not a separate
+    mechanism. Leaves professor→student an explicitly OPEN, undecided pair as of
+    this writing (only implied by the general tab sketch in §8, never confirmed
+    the way professor→GA and GA-vs-student were) — this check guarantees it gets
+    a real, conscious answer the moment slice 5 is actually built, rather than
+    being silently assumed either way. Full reasoning + two rejected alternatives
+    (rank-derived *default* edges; a dedicated RLS-bypassing read-path for
+    item-level exclusion) in the Decisions log, 2026-07-30.
 
 ## 9. Per-module mapping (the vocabulary table)
 
@@ -530,6 +559,47 @@ vocabulary gets locked.
 
 ## Decisions log
 
+- **2026-07-30 (VIEW-AS DESIGN REVISION — rank-differential completeness check,
+  founder-driven, Sonnet session; SPEC ONLY, NOT BUILT):** Founder pushed back on
+  §8.1 point 5 ("edges are code, not derived from rank"), asking why hierarchy
+  changes couldn't drive view-as automatically. Working through it live surfaced a
+  real error in the original defense: GA/student's peer-rank exclusion had been
+  cited as proof rank-derivation breaks, but a plain `rank(A) > rank(B)` comparison
+  actually reproduces it for free (equal rank ⇒ no edge, no exception needed) —
+  checked against every edge discussed (professor→GA, the Director full-depth tab
+  sketch) with zero exceptions beyond speed-dating/matchmaking's already-existing
+  `viewAs: none` end-user ban. That same exercise surfaced a genuine,
+  previously-unnoticed GAP: professor→student was never actually confirmed as a
+  declared edge, only implied by §8's general "higher position sees tabs for
+  everything below" sketch — the first concrete case of the kind of ambiguity a
+  hand-declared-only approach can quietly leave open. Two fixes were explored and
+  **rejected** before landing on the one that shipped to spec: (1) rank-derived
+  *default* edges (auto-on unless explicitly turned off) — rejected because
+  `module_position_rank()` is deliberately cheap to change (a one-line migration,
+  no backfill) while view-as is deliberately meant to require scrutiny every time;
+  defaulting on would let a routine rank remap silently widen who can read whose
+  data, with nobody consciously deciding. (2) A dedicated, RLS-bypassing read-path
+  per view-as surface, to make excluding an already-ambiently-visible item (e.g.
+  hiding `sd_interest` from an organizer's view of a participant, despite the
+  organizer's own policy already covering it) uniformly easy regardless of the
+  viewer's separate ambient access — rejected per extract-don't-speculate: no
+  currently-planned module actually has an allowed edge where the viewer's ambient
+  access exceeds the intended surface (speed-dating's one candidate case is
+  already fully closed by the coarse ban), and a SECURITY DEFINER read-path would
+  remove RLS as a backstop against a bad surface declaration for no demonstrated
+  need. **What shipped to spec instead (§8.1 point 11):** an exhaustiveness
+  requirement, not a default — every module-internal position pair with a rank
+  gap must carry an explicit on/off entry, or the build/CI fails. Keeps point 5
+  intact (edges stay declared, static, immutable at runtime) while guaranteeing a
+  rank remap can never silently change view-as reach: a newly-implied pair blocks
+  the build until a human resolves it, and the friction only appears exactly when
+  a new question genuinely exists. Equal-rank pairs never require an entry,
+  matching the existing GA/student exclusion for free. Subsumes the per-position
+  `viewAs: none` ban as a special case. Leaves professor→student explicitly open
+  — not decided here, but now guaranteed to force a real answer the moment slice 5
+  is actually built, rather than being silently assumed either way. **Not built —
+  spec-only revision**, for whoever picks up slice 5 (still last in build
+  sequencing, §11, still founder-initiated only per the standing rule).
 - **2026-07-29 (ACL HARDENING SWEEP — the deferred grant-layer pass, Opus session):**
   `20260728010000_acl_hardening.sql` closes the GRANT layer platform-wide so RLS stops
   being the only gate. Quantified off prod's `pg_catalog` first, which found the scope
