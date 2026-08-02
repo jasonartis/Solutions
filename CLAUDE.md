@@ -101,6 +101,13 @@ on prod, so the wrapper returns "extension is not enabled" and no data is reacha
   connects as `postgres`. Watch the next real job run rather than building a test for it.
 - `gh` is NOT installed on this machine — CI status can't be read from the terminal; check
   GitHub's UI.
+- **Founder decision 2026-08-02, small and unbuilt:** a student must see the COMMENTS on
+  their own homework but never the peer GRADES given to them. The database already does
+  exactly this (`cls_owns_submission` arm on `cls_review_comments_select`; a reviewee cannot
+  read `cls_review_assignments` at all) — what is missing is the PAGE. UI-only:
+  `cls_comments_for_my_submission()` was written for it, strips `author_id`, is still
+  granted to `authenticated`, and has never had a caller. Peer review currently produces
+  feedback no student can read. Sonnet-tier. Details in docs/modules/module-2-classroom.md.
 - **Founder-raised 2026-08-02, parked in docs/13:** a superadmin **read-only** view of every
   module's positions/ranks/view-as pair grid + surfaces (highest-value follow-on — those
   decisions are real and tested but buried in a TS file), and generalising per-position

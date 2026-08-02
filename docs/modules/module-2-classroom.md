@@ -258,3 +258,31 @@ comment text, and who wrote it) but not the peer *marks* — the grade lives on
 `cls_review_assignments`, which they cannot read, and `cls_grades` shows a GA only their own
 `source='ga'` cells. So "anonymous from the GA" means anonymous in the *grading* sense, not
 a blanket bar. No change needed; recorded so a future reader does not "fix" it.
+
+### Students must see comments on their own homework, but never peer grades (founder, 2026-08-02)
+
+**The rule.** A student sees the *comments* written on their own submission.
+A student never sees the *grades* their peers gave them.
+
+**Current state: the rule is already enforced in the database; the student-facing
+page is simply missing.** Found while confirming slice 5's surfaces.
+
+| | Today | Matches the rule? |
+|---|---|---|
+| Comments on their own submission | RLS **allows** it — `cls_review_comments_select` carries a `cls_owns_submission(submission_id)` arm (`20260724010000:588-595`). `cls_comments_for_my_submission()` exists to serve exactly this, author-stripped. **But nothing calls it and no page renders it**, so in practice the student sees nothing. | Policy yes, **UI no — the gap** |
+| Peer grades given *to* them | RLS **refuses** it — `cls_review_assignments_select` is `cls_can_manage_class OR reviewer_id = auth.uid()`, so a reviewee cannot read the row their grade lives on. | **Yes, already correct** |
+| Grades they gave *as* a reviewer | Visible (their own `reviewer_id` rows). | Yes |
+
+So this is a **UI-only build**: a section on the student's homework page calling
+`cls_comments_for_my_submission(submission_id)`, which returns
+`id, file_path, line_start, line_end, body, created_at` and deliberately omits
+`author_id`. No migration, no policy change, and **no grant work either**: the
+2026-07-29 ACL sweep listed this among its three provably-dead functions but
+still re-granted EXECUTE to `authenticated`
+(`20260728010000_acl_hardening.sql:80`), so it is callable today. The definer
+was written for this page and has been sitting unused since `20260708010000`.
+
+**Sequencing note:** peer review is arguably incomplete without this — the
+feature produces feedback nobody receives. Worth pairing with any next classroom
+pass. Sonnet-tier work: one page section, one RPC call, one e2e test, plus the
+one-line grant restore.
