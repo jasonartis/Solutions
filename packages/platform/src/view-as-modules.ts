@@ -386,7 +386,7 @@ export const nailSalonViewAs = declareViewAs({
 // keeping a second mechanism.
 // ---------------------------------------------------------------------------
 const SD_PARTICIPANT_BAN =
-  'OFF permanently, not pending review — this is §8.1 point 7\'s end-user impersonation ban ' +
+  'OFF permanently, not pending review — this is §8.1 point 7\'s end-user view-as ban ' +
   'expressed as pairs. sd_interest is a one-sided secret whose RLS deliberately gives the ' +
   'rated person no read path at all, so rejection is indistinguishable from indecision; ' +
   'sd_matches hides an unrevealed match from both parties until the organizer reveals it; ' +

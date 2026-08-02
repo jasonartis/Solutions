@@ -581,6 +581,17 @@ vocabulary gets locked.
 
 ## Decisions log
 
+- **2026-08-02 (TERMINOLOGY — say "view-as", not "impersonation"; founder):** Mode 2
+  is **READ-ONLY** (§8.1 point 2) and always has been: the viewer sees the target's
+  surface, cannot write anything, cannot act on their behalf, and no row anywhere
+  can carry an identity column naming someone other than the true actor. Founder,
+  2026-08-02: "they are viewing, not impersonating" — the word overstates the
+  capability and should stop being used for it. §8/§8.1's original wording is left
+  as written (it is the spec's history), but all slice-5 CODE and comments were
+  reworded, `mayImpersonatePosition()` is now `mayViewAsPerson()`, and future
+  entries should follow. Where a distinction is needed, say **mode 1** ("as if I
+  held that position") and **mode 2** ("view as a named person"), both read-only.
+
 - **2026-07-31 (SLICE 5 — VIEW-AS BUILT, Opus session; the four open items
   resolved):** `20260731010000_view_as_sessions.sql` plus a declaration layer,
   a generic renderer, and a completeness check. The spec deliberately left four

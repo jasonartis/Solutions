@@ -14,7 +14,7 @@
 -- timestamp. Not the later audit upgrade; a security requirement.
 --
 -- THE LOG ROW *IS* THE SESSION. The app stores this row's id in an HttpOnly
--- cookie and every impersonated render requires it. There is deliberately no
+-- cookie and every view-as-a-person render requires it. There is deliberately no
 -- way to render mode 2 without first creating a row here, so "logged" is a
 -- structural property rather than a call the app is trusted to remember to
 -- make. Sessions end by EXPIRY, never by an UPDATE — which is what lets the
@@ -29,7 +29,7 @@
 -- legacy behaviour 2026-10-30). Without the explicit revoke this table would
 -- ship to prod with `authenticated` holding UPDATE, DELETE and the whole-table
 -- wipe privilege — the one privilege RLS provably does not gate — so any
--- signed-in user could erase the platform's whole impersonation audit trail.
+-- signed-in user could erase the platform's whole view-as audit trail.
 -- (Phrased that way on purpose: CI's destructive-migration guard greps for the
 -- literal word followed by whitespace, in comments too, and adding
 -- DESTRUCTIVE-CHANGE-APPROVED here would be a lie — this migration creates a
@@ -45,7 +45,7 @@ create table public.view_as_sessions (
   -- security log must outlive the things it describes: with cascade, deleting a
   -- departed user, or an org admin tidying up a course node (an ordinary,
   -- permitted `module_scope_nodes` delete), would silently erase the history of
-  -- who impersonated whom. §8.1 point 6 makes this log a security requirement,
+  -- who viewed whose surface. §8.1 point 6 makes this log a security requirement,
   -- and a log a routine admin action can quietly empty does not meet that bar.
   -- The columns are nullable only so `set null` is legal; the guard below
   -- refuses to write a row with a null actor, so no live session lacks one.
@@ -147,12 +147,12 @@ grant execute on function public.module_view_as_edge(text, text, text) to authen
 --
 -- This is the direction docs/15 §2.2 and §9 already set, where the
 -- is_org_admin coupling is named as legacy to unwind; a brand-new
--- impersonation surface should not add a fresh instance of it. Note the rule
+-- view-as surface should not add a fresh instance of it. Note the rule
 -- adds deliberation, not prevention: the module_roles hierarchy guard exempts
 -- org admins (20260720010000:399), so an owner may grant themselves the seat
 -- freely — it just becomes an explicit, recorded act rather than an ambient
 -- power. Reading the session log IS still open to org admins (the policy
--- below): overseeing impersonation inside your own org is auditing, not
+-- below): overseeing view-as inside your own org is auditing, not
 -- view-as.
 -- ---------------------------------------------------------------------------
 create function public.view_as_guard_session()

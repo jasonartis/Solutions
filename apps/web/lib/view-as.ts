@@ -11,7 +11,7 @@
 import { cookies } from 'next/headers'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import {
-  mayImpersonatePosition,
+  mayViewAsPerson,
   mayRenderPosition,
   viewAsTabsFor,
   type PositionSurface,
@@ -205,7 +205,7 @@ export type ActiveSession = {
  * Resolve the mode-2 session from its HttpOnly cookie, or null.
  *
  * The log row IS the session (see the migration header): there is no way to
- * render an impersonated view without a row in `view_as_sessions`, so §8.1
+ * render a view-as-a-person render without a row in `view_as_sessions`, so §8.1
  * point 6's "every mode-2 session start is logged" is structural rather than a
  * call the app is trusted to remember. A pasted URL with no cookie renders the
  * picker, not a view.
@@ -253,7 +253,7 @@ export function sessionStillAuthorised(
   session: ActiveSession,
 ): boolean {
   const roles = callerGrants.map((g) => g.role)
-  if (!mayImpersonatePosition(decl, roles, session.targetRole)) return false
+  if (!mayViewAsPerson(decl, roles, session.targetRole)) return false
   const targetRank = decl.positions[session.targetRole]
   if (targetRank === undefined) return false
   return callerGrants.some(

@@ -9,7 +9,7 @@
 //
 // Two modes (§8.1 points 2-3):
 //   mode 1 "see it as if I held that position" — the position's page shape
-//          filled with the CALLER's own (possibly empty) data. No impersonation.
+//          filled with the CALLER's own (possibly empty) data. Nobody else involved.
 //   mode 2 "see what Smith sees"               — the position's page shape
 //          filled with rows ABOUT Smith that the caller already reads.
 //          READ-ONLY, logged append-only, and NOT a re-execution of Smith's
@@ -442,7 +442,7 @@ export function viewAsTabsFor(
 }
 
 /** Does any position the caller holds carry a mode-2 edge into `target`? */
-export function mayImpersonatePosition(
+export function mayViewAsPerson(
   decl: ViewAsDeclaration,
   callerPositions: readonly string[],
   target: string,
