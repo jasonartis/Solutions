@@ -263,6 +263,15 @@ edit anywhere else, that's a missing platform primitive — extract it, don't fo
       any table-wide revoke must restore it explicitly.
     - **RLS does not gate `TRUNCATE`** (nor REFERENCES/TRIGGER). Those are ACL-only, so
       they must not be granted to `anon`/`authenticated` — RLS is not a mitigation.
+    - **A `revoke all` must name `service_role` too, or prod decides for you.** Prod's
+      `ALTER DEFAULT PRIVILEGES FOR ROLE postgres` grants the FULL set to `service_role`
+      on every new table as well as to anon/authenticated — so a revoke listing only
+      `public, anon, authenticated` leaves service_role holding DELETE/UPDATE/the wipe
+      privilege, silently and only on prod. Usually harmless (it bypasses RLS by design
+      and isn't internet-reachable — the 2026-07-29 founder decision), but **never for an
+      audit log**, whose entire value is that nobody can quietly edit or erase it. Caught
+      on `view_as_sessions` by its prod verifier on the first run; fixed by
+      `20260802010000`. State every role the migration means to govern.
     - **Don't write `revoke truncate`** — CI's destructive-migration guard matches
       `truncate[[:space:]]`. Use `revoke all privileges` then re-grant the intended DML.
     - **Verify against PROD, not local** (convention #1's rule, mechanized):

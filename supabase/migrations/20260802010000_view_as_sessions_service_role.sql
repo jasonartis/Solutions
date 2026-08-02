@@ -1,0 +1,34 @@
+-- Follow-up to 20260731010000 (view-as session log), caught by the new
+-- scripts/prod-verify-view-as.mts on the very first prod run.
+--
+-- THE GAP. 20260731010000 wrote:
+--     revoke all privileges on public.view_as_sessions from public, anon, authenticated;
+-- and its comment claimed "No UPDATE, no DELETE, no TRUNCATE, to anyone". On
+-- LOCAL that was true. On PROD it was not: `ALTER DEFAULT PRIVILEGES FOR ROLE
+-- postgres` also grants the full privilege set to **service_role** on every
+-- newly created table, and the revoke list did not name it. Prod came back with
+--     service_role = DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+-- against an intended `SELECT`. `anon` and `authenticated` were correct, so the
+-- api-role surface was never exposed — but a security log the worker's key can
+-- delete or wipe is not append-only in the sense the design claims.
+--
+-- WHY IT MATTERS HERE SPECIFICALLY. The 2026-07-29 sweep deliberately left
+-- `service_role` alone platform-wide (founder decision: it bypasses RLS by
+-- design and is not internet-reachable), and that reasoning still holds for
+-- ordinary data tables. An AUDIT LOG is the exception: its whole value is that
+-- nobody can quietly edit or erase it, and nothing in the worker reads or
+-- writes this table at all. So this is a targeted narrowing of one table, NOT a
+-- reopening of the platform-wide deferral.
+--
+-- WHY A NEW FILE rather than fixing the old one: 20260731010000 has already run
+-- against prod. Editing an applied migration is the append-only rule's exact
+-- failure mode — a later `db:reset` would build a local database that differs
+-- from prod while both report the same version. docs/12.
+--
+-- GENERAL LESSON, recorded in docs/03 #17: a `revoke all` that names only
+-- `public, anon, authenticated` is incomplete on prod. Name every role whose
+-- privileges the migration means to state — `service_role` included — or accept
+-- that prod's defaults decide for you.
+
+revoke all privileges on public.view_as_sessions from service_role;
+grant select on public.view_as_sessions to service_role;
