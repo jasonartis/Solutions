@@ -74,11 +74,9 @@ on prod, so the wrapper returns "extension is not enabled" and no data is reacha
 RECOMMENDED ORDER as of 2026-08-02 — the first is blocking, then a broken user-facing
 feature, then new tooling:**
 
-- **1. BLOCKING — confirm CI went green for `1f2fc05` and that Vercel DEPLOYED.** The slice-5
-  migration is already applied to prod, so if `check` failed then `deploy` was SKIPPED and
-  prod runs the OLD app against the NEW schema. Harmless in itself (nothing deployed calls
-  the new table) but it must not sit that way. `gh` is not installed — check the GitHub UI.
-  If it failed on the speed-dating waitlist test, that is item 2, not a real regression.
+- ~~**1. Confirm CI/deploy for slice 5.**~~ **DONE 2026-08-02** — all three pushes
+  (`ad8e989`, `1f2fc05`, `01d7339`) are `READY` in Vercel production, which proves CI was
+  green (the `deploy` job has `needs: check`). Prod app and prod schema are in sync.
 - **2. The speed-dating waitlist flake** (details in its own bullet below). Only truly urgent
   if it is what broke CI. **CI has `retries: 1` and runs the PREBUILT server (`pnpm start`),
   while local runs the dev server with JIT compilation and 0 retries** — and the 2026-07-30
@@ -125,8 +123,13 @@ Everything below is open but unranked:
   suite nor e2e touches it). It should be unaffected — `service_role`'s privileges are provably
   unchanged (the verifier asserts they can't shrink), it makes zero `.rpc()` calls, and pg-boss
   connects as `postgres`. Watch the next real job run rather than building a test for it.
-- `gh` is NOT installed on this machine — CI status can't be read from the terminal; check
-  GitHub's UI. **CI differs from local in two ways that matter for flaky e2e:** `retries: 1`
+- `gh` is NOT installed on this machine, so GitHub Actions logs need the web UI — **but CI
+  PASS/FAIL is readable from the terminal indirectly**: the `deploy` job has `needs: check`,
+  so a `READY` production deployment proves `check` was green. Query it with the
+  `VERCEL_TOKEN` already in `.env.deploy`:
+  `GET https://api.vercel.com/v6/deployments?limit=8` with `Authorization: Bearer <token>`,
+  and match `meta.githubCommitSha` against the commit. Gives state/target/sha/time per
+  deploy. Only the UI shows *why* a run failed, but this answers "did it ship?" in seconds. **CI differs from local in two ways that matter for flaky e2e:** `retries: 1`
   (local 0) and a PREBUILT server via `pnpm start` (local uses `pnpm dev`, so route
   compilation happens mid-test). A test that flakes locally may be reliably green in CI, and
   vice versa — judge by the actual CI run, not the local one. Both settings are in
