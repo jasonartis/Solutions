@@ -108,6 +108,15 @@ on prod, so the wrapper returns "extension is not enabled" and no data is reacha
   `cls_comments_for_my_submission()` was written for it, strips `author_id`, is still
   granted to `authenticated`, and has never had a caller. Peer review currently produces
   feedback no student can read. Sonnet-tier. Details in docs/modules/module-2-classroom.md.
+- **Founder decision 2026-08-02, parked in docs/13 (NOT built, sequenced after the slice-5
+  prod push):** a superadmin-only Owner Console surface that **bypasses every declared
+  view-as edge** (including the permanently-banned speed-dating participant pairs),
+  deliberately kept out of the in-module tabs, and **unlogged**. Plus a companion per-person
+  **data browser** ("what do you hold about me?") to sit alongside view-as. Five open
+  questions recorded there — the load-bearing one is whether the data browser is
+  superadmin-only or follows view-as edges, since following edges would bypass the surface
+  allow-list. Note a position with no declared SURFACE renders blank regardless of edges:
+  only classroom student/ga have one today.
 - **Founder-raised 2026-08-02, parked in docs/13:** a superadmin **read-only** view of every
   module's positions/ranks/view-as pair grid + surfaces (highest-value follow-on — those
   decisions are real and tested but buried in a TS file), and generalising per-position

@@ -434,3 +434,70 @@ superadmin page in the entry above — same data, one renderer.
 **Status:** parked, founder-raised. Recommended shape is
 documentation-plus-tests, explicitly NOT generated policies. Natural companion
 to the superadmin read-only view; do them together if either is picked up.
+
+---
+
+## Superadmin "view as anything" console + a per-person data browser
+
+*Founder, 2026-08-02, deciding the superadmin question left open by slice 5.
+Parked deliberately — NOT built. Sequenced after the slice-5 prod push so a
+god-mode surface does not ride along in a deploy of already-reviewed work.*
+
+**Decision taken:** option (b) — the platform superadmin gets a **separate**
+surface that **bypasses every declared edge**, including pairs banned on purpose
+(speed-dating participant). Kept out of the normal in-module tab strips so those
+stay strictly by-the-rules. **Unlogged**, by founder decision. Lives in the Owner
+Console.
+
+Founder rule this sits under (2026-08-02): *org position does not enable view-as,
+module position does* — the superadmin is not an org position at all (it is a
+flag on `profiles`, not a seat in `org_members`), so it sits outside that rule
+rather than contradicting it.
+
+**What it can and cannot do — worth re-reading before building:**
+- It bypasses the **edges**, not **RLS**. The renderer runs on the superadmin's
+  own client, which is what stops this becoming a second unaudited read path.
+  A superadmin passes `is_org_admin` everywhere, so nearly all module data is
+  reachable — but `sd_notes` is author-only with no staff arm anywhere and stays
+  invisible even here. Making it visible would need a service-role read path,
+  which breaks the keystone; the Supabase dashboard exists for that.
+- **Unlogged has one non-obvious consequence:** logging would have surfaced
+  superadmin activity to ORG ADMINS, who can read their org's session log. Fine
+  with a single owner-operator superadmin; revisit if there is ever a second
+  superadmin or an external audit, since an unlogged god-mode read path is
+  exactly what an auditor asks about.
+- **Surfaces gate the content, and are separate from edges.** A position with no
+  declared surface renders BLANK, because a surface is the content definition,
+  not a permission. Today only classroom `student` and `ga` have one; a
+  `professor` surface would need writing. Every other module is blank until its
+  per-module surface review (§8.1 point 9) happens.
+
+**The companion idea — a per-person data browser ("C").** Founder: *"C sounds
+valuable too and perhaps should go along with view-as, wherever view-as goes."*
+Rather than rendering a declared surface, dump every row in the module that
+references that person. Never blank, works before any surface review exists, and
+answers "what do you hold about me?" directly. Crude and NOT faithful to "what
+they see" — it is a different question and should be labelled as one in the UI so
+the two are never confused.
+
+**OPEN QUESTIONS to settle before building** (asked 2026-08-02, unanswered):
+1. **Is the data browser superadmin-only, or does it follow view-as edges?**
+   The security fork. If a professor gets a data browser for a student it
+   bypasses the surface allow-list, which is the mechanism keeping survey
+   answers and reviewer identity off that surface. Strong recommendation:
+   superadmin-only.
+2. **"Everything about this person" = rows REFERENCING them, or rows they CAN
+   SEE?** Different queries and different meanings; the first is a subject-access
+   answer, the second is a support answer.
+3. **Does the superadmin view honour the target grant's SCOPE?** Viewing a
+   course-scoped professor: only their course, or the whole module? (Recommend
+   honouring scope — the scope is part of what defines their view.)
+4. **Cross-org:** does the org picker list every org on the platform, or only
+   ones the superadmin is a member of? (RLS already permits any.)
+5. Does the data browser overlap the existing per-hat data export (docs/03 "Data
+   export")? Possibly the same query with a different renderer.
+
+**Sizing:** the console view against classroom alone is small (the renderer is
+already generic — `renderSurface` in `apps/web/lib/view-as.ts` takes a surface
+and a subject). Writing surfaces for the remaining modules is the substantial
+part, and speed-dating's are the delicate ones (interest marks, safety reports).
