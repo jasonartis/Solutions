@@ -2,6 +2,9 @@
 // registered here. apps/web mounts nav/routes from this list, filtered by the
 // org's entitlements (org_modules) and the user's module_roles.
 
+import { viewAsDeclarations } from './view-as-modules'
+import type { ViewAsDeclaration } from './view-as'
+
 export type ModuleManifest = {
   /** Stable key — matches org_modules.module_key and the mm_/cls_/… table prefix docs. */
   key: string
@@ -11,6 +14,14 @@ export type ModuleManifest = {
   roles: readonly string[]
   /** Base path under /m/<key>; nav entries are relative to it. */
   nav: readonly { label: string; path: string }[]
+  /**
+   * View-as: position ranks, the exhaustive rank-differential edge table, and
+   * each renderable position's data surface (docs/15 §8.1 points 5, 9, 11).
+   * Declared in view-as-modules.ts and attached here so it travels with the
+   * manifest. `roles` and `viewAs.positions` must name the same set — asserted
+   * in the test suite alongside the SQL rank-parity check.
+   */
+  viewAs: ViewAsDeclaration
 }
 
 export const stubModule: ModuleManifest = {
@@ -19,6 +30,7 @@ export const stubModule: ModuleManifest = {
   description: 'Proves entitlements end-to-end. Replaced by real modules.',
   roles: ['user', 'admin'],
   nav: [{ label: 'Home', path: '' }],
+  viewAs: viewAsDeclarations['stub']!,
 }
 
 export const synagogueSchedulesModule: ModuleManifest = {
@@ -30,6 +42,7 @@ export const synagogueSchedulesModule: ModuleManifest = {
     { label: 'Schedules', path: '' },
     { label: 'Setup', path: 'setup' },
   ],
+  viewAs: viewAsDeclarations['synagogue-schedules']!,
 }
 
 export const classroomModule: ModuleManifest = {
@@ -42,6 +55,7 @@ export const classroomModule: ModuleManifest = {
     { label: 'Classes', path: '' },
     { label: 'Manage', path: 'manage' },
   ],
+  viewAs: viewAsDeclarations['classroom']!,
 }
 
 export const matchmakingModule: ModuleManifest = {
@@ -51,6 +65,7 @@ export const matchmakingModule: ModuleManifest = {
     'Matchmaking via admin-defined weighted questions: care-weighted pair scoring, matchmaker-assisted introductions, and an approval workflow for new questions.',
   roles: ['single', 'matchmaker', 'admin'],
   nav: [{ label: 'Questions', path: '' }],
+  viewAs: viewAsDeclarations['matchmaking']!,
 }
 
 export const nailSalonModule: ModuleManifest = {
@@ -60,6 +75,7 @@ export const nailSalonModule: ModuleManifest = {
     'Salon management: booking, in-appointment workflow, billing/receipts (record-keeping), promotions, and light bookkeeping (earnings, expenses, shopping lists). Org → locations from day one.',
   roles: ['admin', 'manager', 'cashier', 'worker', 'customer'],
   nav: [{ label: 'Salon', path: '' }],
+  viewAs: viewAsDeclarations['nail-salon']!,
 }
 
 export const speedDatingModule: ModuleManifest = {
@@ -69,6 +85,7 @@ export const speedDatingModule: ModuleManifest = {
     'Live speed-dating events: timed video rounds with rotation, directional interest with privacy-preserving mutual reveal, safety reports, personal blocks.',
   roles: ['admin', 'organizer', 'host', 'participant'],
   nav: [{ label: 'Events', path: '' }],
+  viewAs: viewAsDeclarations['speed-dating']!,
 }
 
 // Module 0 — the living template (docs/03, modules/sample/SPEC.md). Kept in
@@ -79,6 +96,7 @@ export const sampleModule: ModuleManifest = {
   description: 'The living template for new modules — copy modules/sample to start module 7+.',
   roles: ['manager', 'member'],
   nav: [{ label: 'Sample', path: '' }],
+  viewAs: viewAsDeclarations['sample']!,
 }
 
 export const visualMessagingModule: ModuleManifest = {
@@ -88,6 +106,7 @@ export const visualMessagingModule: ModuleManifest = {
     'Visual conversations: a thread starts with a picture; every reply is a drawn layer on the layer it answers. Tree navigation, moderation with tombstones, org or ad-hoc groups.',
   roles: ['admin', 'moderator', 'member'],
   nav: [{ label: 'Conversations', path: '' }],
+  viewAs: viewAsDeclarations['visual-messaging']!,
 }
 
 const allModules: readonly ModuleManifest[] = [

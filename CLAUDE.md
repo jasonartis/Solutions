@@ -19,74 +19,96 @@ A multi-tenant modular platform: each client engagement produces a **module** bu
      and update only the compact "Now / Next / Standing rules" below. A fresh chat must never
      pay for the full journal. See "Session hygiene". -->
 
-**Now (2026-07-29):** Live on prod (solutions-platform.vercel.app). **ACL HARDENING SWEEP is
-PUSHED TO PROD AND PROD-VERIFIED** (`20260728010000`, commit `a16f4a5`): backup →
-`--dry-run` (exactly 1 pending) → `migrate:prod` → **`verify-acl-hardening.ts --probe` 39/39 on
-prod**, including a rolled-back live `anon` probe where all 20 table reads/writes were refused
-`42501 permission denied for table`, `syn_public_weeks` still answered, and `is_org_member` was
-refused. **Confirmed from the open internet with the prod anon key:** a table read now returns
-**401 / 42501** (it used to return `200 []` with RLS as the only gate), a table write 401, the
-public RPC 200 with real data, and `/s/demo-shul` renders. Prod row counts unchanged
-(28 members / 8 orgs / 10 profiles, 0 non-active) — no data touched. Closes the GRANT layer platform-wide so RLS stops being the only gate: `anon` now
-holds nothing in `public` but schema `USAGE` + EXECUTE on the two `syn_public_*` functions
-(134 anon-executable fns → 2, PUBLIC → 0); the 54 trigger fns hold no api-role EXECUTE;
-`authenticated` keeps EXECUTE on the other 81 non-trigger fns (**required** — policy expressions
-are permission-checked as the querying role) and its per-table DML unchanged, but loses
-TRUNCATE/REFERENCES/TRIGGER/MAINTAIN (**RLS cannot gate TRUNCATE** — the one privilege here it
-never covered; anon AND authenticated held it on all 67 tables on BOTH envs). Verified local:
-RLS **57/57** (incl. a new `anon`-role block — the suite had never tested a logged-out caller),
-typecheck 9/9, verifier **17/17** + a rolled-back live anon probe **22/22**; **prod `--preflight`
-3/3** (prod has the identical 139 fns, all covered). Signup proved safe with the grant fully
-revoked (definer trigger, real `supabase_auth_admin`); `supabase db push` proved atomic per file,
-so a partial sweep is impossible. Adversarial review fixed 3 real test defects + the
-prod-vs-local preflight gap. Rules → docs/03 **#17**, docs/12; record → docs/15 + journal.
-Adversarial review raised `graphql_public` as a possibly-untested anon surface; **probed prod and
-CLOSED it — `pg_graphql` is NOT installed there** (prod extensions: pg_stat_statements, pgcrypto,
-plpgsql, supabase_vault, uuid-ossp). The anon-executable `graphql_public.graphql` wrapper exists
-but returns "pg_graphql extension is not enabled", so no schema and no data are reachable.
-Removing `graphql_public` from `api.schemas` would only delete a dead endpoint — cosmetic, not
-security. Unrelated pre-existing flake: the
-`speed-dating … reveal` e2e test fails intermittently WITH OR WITHOUT this migration (proven by
-running the suite with it removed) — worth a separate fix.
+**Now (2026-07-31):** Live on prod (solutions-platform.vercel.app). **User-model slice 5 —
+VIEW-AS — is BUILT AND LOCALLY VERIFIED, NOT YET PUSHED TO PROD**
+(`20260731010000_view_as_sessions.sql`, uncommitted). A higher position can render a lower
+position's page shape as themselves (mode 1) or, for a declared pair, view a NAMED person's
+surface read-only (mode 2). **Declarations exist for all 8 modules** — the rank-differential
+completeness check is only a check if no module can opt out — but **edges are ON for classroom
+only**, on the rule that §8.1 point 9 makes surface classification a per-module security review,
+so an edge may only be ON where that review happened. **professor→student, the pair the spec
+left explicitly OPEN, is answered ON (both modes)** with a deliberately narrow surface —
+FOUNDER CONFIRMATION WANTED. **No new database read path**: everything renders through the
+caller's own RLS client and the surface declaration is a column allow-list, so a table nobody
+declared cannot appear. Enforcement is a TypeScript mapped type (undeclared pair ⇒ `pnpm
+typecheck` fails, CI runs it) **plus** a SQL rank-parity test — the type keys on the TS rank
+table while the authority is SQL's `module_position_rank()`, so **the type alone does not
+deliver the amendment's guarantee**. Two Fable reviews; review 1 found 3 ship-blockers, all
+fixed: the manifest edge table had **no enforcement at the live insert path** (a speed-dating
+organizer could have minted a session naming a participant, a permanently banned pair) → ON
+pairs mirrored into IMMUTABLE SQL (`module_view_as_edge()`) with one grant required to satisfy
+rank+scope+edge together; FKs `on delete cascade` would have let a routine node delete erase the
+audit trail → `set null`; and a missing explicit `revoke all` would have handed prod's
+`ALTER DEFAULT PRIVILEGES` a TRUNCATE-able audit log. Review 2 then caught a regression created by review 1's own fix — the append-only
+trigger and the new `on delete set null` FKs are incompatible (Postgres runs SET NULL as
+a real UPDATE, so the trigger aborted the parent DELETE and made any referenced node,
+user or org permanently undeletable) → append-only is now grants-only, as
+`vm_moderation_log` always did it; plus a vacuous probe, a GA misclassification (a third
+list, `unreadableByPosition`, now separates "viewer declines to render" from "the
+position cannot read it"), and a test that looped only one surface. A self-review also
+found mode 1 was not filtering by subject at all. RLS **77/77** (was 57), 2 e2e as real
+users, **21/21 live probes** (`scripts/verify-view-as.mts`), typecheck 9/9. Rules → docs/03
+**#18**; decisions → docs/15 (2026-07-31) + docs/modules/module-2-classroom.md; record →
+journal.
 
-**Previously (2026-07-28):** **User-model slice 3 —
-ORG-LEVEL INVITE-ACCEPT — is PUSHED TO PROD AND PROD-VERIFIED** (`20260727010000`, commit
-29c572d): backup → `migrate:prod` → read-only prod verification via the new
-`scripts/prod-verify-migration.ts` — 23/23 definer fns byte-identical + secdef + pinned
-`search_path`, the 3 new rpcs anon-DENIED on prod (divergence trap defused), active-gating live
-on `is_org_member` + its 3 siblings + all 14 module capability predicates, 28/28 `org_members`
-rows backfilled `active` (0 pending, cross-checked vs the backup), and a rolled-back prod
-transaction proving pending-invite → `org_accept_invite`. So being added to an org is a *pending
-invite* until accepted, and "a module_roles grant implies (active) org membership" holds
-platform-wide; superadmin may add active-or-pending, org admins can only invite. Slice 2
-scope-aware authority stays LIVE across the three multi-entity modules + the shared engine
-(`module_caller_covers_rank/role`, docs/03 #16). The app commit was unpushed when the migration
-landed (DB briefly ahead of the deployed UI — see the docs/12 never-do bullet); pushed the same
-session, so prod DB + app now match.
+**Previously (2026-07-29):** **ACL HARDENING SWEEP is PUSHED TO PROD AND PROD-VERIFIED**
+(`20260728010000`, commit `a16f4a5`): backup → `--dry-run` → `migrate:prod` →
+`verify-acl-hardening.ts --probe` 39/39 on prod, including a rolled-back live `anon` probe where
+all 20 table reads/writes were refused `42501`. Closes the GRANT layer platform-wide so RLS stops
+being the only gate: `anon` now holds nothing in `public` but schema `USAGE` + EXECUTE on the two
+`syn_public_*` functions; the 54 trigger fns hold no api-role EXECUTE; `authenticated` keeps
+EXECUTE on the other 81 non-trigger fns (**required** — policy expressions are permission-checked
+as the querying role) but loses TRUNCATE/REFERENCES/TRIGGER/MAINTAIN (**RLS cannot gate
+TRUNCATE**). Prod row counts unchanged; no data touched. Rules → docs/03 **#17**, docs/12.
+`graphql_public` was raised as a possible anon surface and CLOSED — `pg_graphql` is not installed
+on prod, so the wrapper returns "extension is not enabled" and no data is reachable.
 
 **Next / open (pick WITH the founder — do not start unprompted; details in docs/15 §11):**
+- **Slice 5 follow-ons (nearest work, all cheap now the mechanism exists):** confirm or flip
+  **professor→student**; run the **nail-salon** view-as surface review (its 9 pairs are
+  enumerated and OFF — manager→worker/cashier looks straightforward) and then **speed-dating**'s
+  6; decide whether view-as **targets are notified** (§8.1 point 6 leaves it a product call);
+  confirm the guard's deliberate **lack of an `is_org_admin` short-circuit**, a conscious break
+  from docs/03 #9. Then **push slice 5 to prod** (backup → `--dry-run` → `migrate:prod` →
+  `prod-verify-migration.ts`) — it is committed-but-unpushed work until then.
 - Slice 3 remainder: **entity-level joinPolicy** (invite-only/request-approval/open per
-  class/location/event) — deferred follow-on. Slice 4 (defaults-on-join), 5 (view-as).
+  class/location/event) — deferred follow-on. Slice 4 (defaults-on-join) is the only
+  unbuilt slice left.
 - Single-entity modules (matchmaking / synagogue-schedules / visual-messaging) NOT yet
-  rank-mapped — OPTIONAL (a real behavior change, not cosmetic).
+  rank-mapped — OPTIONAL (a real behavior change, not cosmetic). **Note since slice 5:** their
+  vocabularies are entirely rank 0, so they imply no view-as pairs today; rank-mapping any of
+  them will FAIL THE BUILD until every newly-implied pair is explicitly answered. That is the
+  2026-07-30 amendment working as designed, not an obstacle — but budget for it.
 - **Flaky e2e test — FIXED 2026-07-30** (`speed-dating module: register → round → mutual
   interest → reveal`): diagnosed as genuine timing/load, not RLS-suite data contamination or
   the test's own non-idempotency (full reasoning in docs/history/platform-journal.md's
   2026-07-30 entry). Fixed with a scoped `test.slow()`; verified via clean `db:reset` → seed →
   full RLS suite → full e2e suite reproduction (the exact failure-inducing order) — now passes.
-- **New, unstarted:** the clean reproduction above surfaced a DIFFERENT e2e failure once
-  speed-dating stopped absorbing the flake: `visual messaging: create from a picture, draw a
-  reply, membership gates access` — Charlie sees no "Layer 1.1" link at all after Alice's
-  moderation-removal step earlier in the same test (should the removed layer still be
-  navigable for a non-moderator member?). Not investigated — pick up WITH the founder.
+- **New, unstarted (2026-08-02, surfaced by slice 5's clean-seed full-suite run):** a SECOND
+  speed-dating test in the same flaky family — `speed-dating module: two-sided event enforces
+  per-side capacity and waitlist promotion` — fails at the end of a full sequential run
+  (timeout waiting for the event link after `signIn`) but **passes in 29s in isolation on a
+  fresh seed**. Same symptom and shape as the sibling fixed 2026-07-30 (many sign-ins,
+  data-heavy server components, unbuilt dev server, late in a long run), so a scoped
+  `test.slow()` is the likely one-line fix — but that diagnosis has NOT been established the
+  way the sibling's was (error-context analysis), so it was deliberately not applied blind.
+  Unrelated to view-as: nothing in slice 5 is reachable from this flow. Note the earlier
+  5-failure run in the same session was the documented order-dependency trap (the RLS suite
+  ran immediately before e2e without a reset), not a real regression.
 - Low-priority verification: the **worker** was not exercised after the ACL sweep (neither the RLS
   suite nor e2e touches it). It should be unaffected — `service_role`'s privileges are provably
   unchanged (the verifier asserts they can't shrink), it makes zero `.rpc()` calls, and pg-boss
   connects as `postgres`. Watch the next real job run rather than building a test for it.
-- `gh` is NOT installed on this machine — CI status can't be read from the terminal; check GitHub's
-  UI. Also `Solutions Platform.code-workspace` sits untracked; commit it or gitignore it so it
-  stops showing as noise in every `git status`.
-- View-as + everywhere role-clarity labels (founder testing-round items 31–42) — high value.
+- `gh` is NOT installed on this machine — CI status can't be read from the terminal; check
+  GitHub's UI.
+- **Founder-raised 2026-08-02, parked in docs/13:** a superadmin **read-only** view of every
+  module's positions/ranks/view-as pair grid + surfaces (highest-value follow-on — those
+  decisions are real and tested but buried in a TS file), and generalising per-position
+  visibility as a *documented, test-proven* map rather than generated RLS. Both entries carry
+  the reusable line they produced: **anything that WIDENS reach belongs in code; anything that
+  only NARROWS it can be a runtime switch.**
+- Everywhere role-clarity labels (founder testing-round items 31–42) — high value; the
+  view-as half of that item is now built.
 - Deferred platform hardening — the `revoke PUBLIC`/anon-table items are **DONE pending the prod
   push** (see Now, above). Still open, all recorded with rationale in docs/15's 2026-07-29 entry:
   **`storage`-schema grants** (prod grants anon the full set incl. TRUNCATE; buckets private,
@@ -117,6 +139,8 @@ in the sections below.
 - `import.meta.dirname` is `undefined` under tsx — use `dirname(fileURLToPath(import.meta.url))`.
 - Docker Desktop's WSL backend crashed under parallel image pulls → `C:\Users\yarmishj\.wslconfig` caps WSL at 8GB/4CPU (delete to revert); pull images sequentially if it recurs; zero-log segfaulting containers (exit 139) = corrupted image layers, `docker rmi` + re-pull.
 - **Reproducing a flaky/order-dependent e2e failure: `db:reset` + `pnpm seed` immediately before the reproduction run, not just once at the start of the session.** Several e2e tests are documented non-idempotent (assume fresh seed state). Running a suspect test in isolation first (to confirm it currently passes) mutates that seed data; a subsequent full-suite reproduction attempt then fails for the mundane reason of stale state from your OWN prior run — which looks like the bug you're chasing but isn't (hit in a 2026-07-30 session validating the speed-dating flaky-test fix: an isolated run advanced the seeded event to `complete`, then the very next full-suite run failed at the first "Register" step instead of reproducing the real timing issue).
+- **`ON DELETE SET NULL` fires the referencing table's BEFORE UPDATE triggers** — Postgres implements the FK action as a real UPDATE. So an append-only `before update or delete ... raise exception` trigger silently makes every row the table has ever referenced UNDELETABLE (the parent DELETE aborts), including whole orgs via a cascading `org_id`. Enforce append-only with GRANTS instead (no UPDATE/DELETE to api roles → `42501`), which is why `vm_moderation_log` has no such trigger. Found live in the 2026-07-31 view-as review, one review after `set null` had been (correctly) required.
+- **Since slice 3, a test fixture that adds an org member must ACCEPT the invite** (`org_accept_invite`, as that user) or the member stays `pending` and satisfies no membership predicate. A negative assertion then passes for the mundane reason that the user isn't a member yet — proving nothing about the thing under test. Hit while verifying view-as scope isolation 2026-07-31: "a course-A professor cannot view a course-B student" passed vacuously until the fixture accepted.
 - Tables created in CLI migrations do NOT inherit Supabase's default API-role grants — every migration must `grant` explicitly (see 20260706120000_core.sql). **Functions are the inverse trap and dev/prod DIVERGE:** Postgres grants `EXECUTE` to `PUBLIC` at CREATE (so anon can call), and on PROD `ALTER DEFAULT PRIVILEGES FOR ROLE postgres` ALSO grants `EXECUTE` directly to `anon`/`authenticated` — which `revoke ... from public` does NOT remove. Local lacks that default, so a function locked down with only `revoke ... from public` looks closed locally but is open on prod (the 2026-07-22 `module_scope_covers` gap → `20260722010000`). Rule: state the full intended ACL explicitly (`revoke execute ... from public, anon, authenticated;` then `grant` to exactly who needs it), and verify security-sensitive ACLs against PROD — the local RLS suite can't catch this. See docs/03 convention #1. **`pnpm exec tsx scripts/prod-verify-migration.ts <migration>` now automates that prod check** (read-only: per-function body md5, secdef, pinned search_path, real EXECUTE ACL incl. anon).
 
 ## Key standing decisions

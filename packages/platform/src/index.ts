@@ -1,4 +1,6 @@
 export * from './modules'
+export * from './view-as'
+export * from './view-as-modules'
 export * from './tenancy'
 export * from './export'
 export * from './help'

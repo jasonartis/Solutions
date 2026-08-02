@@ -322,7 +322,14 @@ Implementation notes:
   "auto-enrolled, nobody has reviewed them yet" queue — and the column is needed for
   audit anyway, so the feature is nearly free.
 
-## 8. View-as and audit
+## 8. View-as and audit — **[BUILT 2026-07-31, classroom only]**
+
+*(Declarations exist for all 8 modules; edges are ON for classroom alone. See
+the 2026-07-31 decisions entry for what was resolved at build time — including
+professor→student, which point 11 below left open, and a correction to the
+"personal layer" vocabulary. Everything in §8/§8.1 that describes intent still
+describes intent; where the build diverged or sharpened it, that entry says so.)*
+
 
 Any higher position can see and act in the capacities below it, via per-position tabs
 (founder UX sketch, 2026-07-20): e.g. a classroom module Director sees tabs
@@ -553,11 +560,195 @@ All of this is RLS/trigger territory ⇒ **Opus + full docs/03 #12 rhythm**, sli
    50/50 + e2e invite→accept.
 4. **Defaults on join** — per-module default grants + backfill on enable.
 5. **View-as** — tabs + role-surface boundary + audit stamping. UI-heavy; last.
+   **[BUILT 2026-07-31 — `20260731010000_view_as_sessions.sql` + the declaration
+   layer in `packages/platform/src/view-as{,-modules}.ts` + the generic renderer in
+   `apps/web/{lib/view-as.ts,components/view-as/}`.]** Declarations are
+   **platform-wide** (all 8 modules — the completeness check is only a check if no
+   module can opt out); **edges are ON for classroom only**, because §8.1 point 9
+   makes a position's surface classification a per-module security review and
+   classroom is the module that had one. Both classroom pairs answered:
+   professor→GA ON (already settled in §8) and **professor→student ON**, the pair
+   point 11 left open. Nail-salon (9 pairs) and speed-dating (6) are enumerated and
+   explicitly OFF with reasons; the other five vocabularies are entirely rank 0 in
+   SQL so they imply no pairs at all — and rank-mapping any of them will break the
+   build until every newly-implied pair is answered, which is the amendment working.
+   No new database read path (§8.1 point 1): one append-only session-log table, its
+   guard, and the SQL edge mirror. Two independent Fable reviews; RLS suite 77/77,
+   2 e2e, 21/21 live probes as real users.
 
 Each slice independently shippable; module specs get dated decision entries as their
 vocabulary gets locked.
 
 ## Decisions log
+
+- **2026-07-31 (SLICE 5 — VIEW-AS BUILT, Opus session; the four open items
+  resolved):** `20260731010000_view_as_sessions.sql` plus a declaration layer,
+  a generic renderer, and a completeness check. The spec deliberately left four
+  things to whoever built this; here is what each was decided to be and why.
+
+  **1. Starting scope — declarations platform-wide, edges ON for classroom
+  only.** The completeness check is only a check if no module can opt out, so
+  all 8 modules declare. But §8.1 point 9 says a position's surface
+  classification is "decided in each module's security review", which makes
+  turning an edge on a per-module act: **an edge may only be ON in a module that
+  has HAD that review.** Classroom got one (§11 sequencing puts it first, §8's
+  own tab sketch is classroom, it holds the pair point 11 left open, and it is
+  the only module with real SCOPED grants in the seed, so scope intersection is
+  actually exercisable). Nail-salon and speed-dating have their pairs
+  enumerated and OFF with per-pair reasons, so turning one on later is flipping
+  booleans and writing a surface, never inventing a mechanism.
+
+  **2. Per-module role-surface vs personal-layer declarations — and a
+  correction to the vocabulary.** Written for classroom (see
+  docs/modules/module-2-classroom.md for the table-by-table reasoning). Building
+  it surfaced a real problem with a single "personal" label: point 1 defines
+  personal as **RLS-unreadable** to higher positions and calls a personal
+  marking on a staff-readable table a spec violation — but classroom has no
+  `sd_notes` analogue at all, and a professor reads every `cls_*` table inside
+  their scope. Calling survey answers "personal" would therefore have been
+  precisely the violation point 1 warns about. So the declaration carries **two
+  distinct lists**: `personal` (asserted RLS-unreadable, test-enforced) and
+  `excluded` (off the surface by product decision over data the viewer reads
+  ambiently anyway, also test-enforced — in the opposite direction). Classroom's
+  `personal` list is **empty**, and that emptiness is the finding, not an
+  oversight. Keeping the two apart is what stops a genuine RLS gap from hiding
+  behind an "it's hidden" label.
+
+  **3. Every rank-differential pair, explicitly — including professor→student,
+  which is now ANSWERED: ON, both modes.** Rationale in full in the module spec.
+  Short version: a student's surface is almost entirely the professor's own duty
+  output reflected back, "what does my student actually see?" is the support
+  question the Student tab exists for, and nothing widens — every declared table
+  is already professor-readable in scope. The sensitive parts are handled by
+  narrowing the surface rather than closing the pair: survey answers and review
+  comments excluded, `submission_id` omitted from review assignments so the
+  reviewer→reviewee direction cannot be walked, grades filtered to
+  `is_final AND visible` (the student's own RLS arm), and retention hiding
+  reproduced because the professor is exempt from it. **Flagged for founder
+  confirmation** — the spec asked for a conscious answer, this is it, and
+  reversing it is a one-line change in two places.
+
+  **4. Enforcement — a TypeScript mapped type AND a SQL parity test, because
+  the type alone does not deliver the guarantee.** `ViewAsEdges<positions>` is a
+  mapped type keyed by every rank-differential pair, so a missing pair is a
+  `pnpm typecheck` failure and CI already runs typecheck; an equal-rank or
+  upward pair is an excess-property error; `mode2` without `mode1` is not
+  representable. Both negative cases were proven to bite, including the
+  amendment's own scenario (remapping `student` from 1 to 0 makes `ga → student`
+  newly rank-differential and fails the build). **But the mapped type keys on
+  the TypeScript rank table while the authoritative rank lives in SQL's
+  `module_position_rank()`** — a SQL-only remap, exactly the "one-line
+  migration, no backfill" the amendment was written to catch, would sail past
+  it. The RLS suite's rank-parity test against the live database is what
+  actually closes that, and it should never be treated as optional. No separate
+  build script was needed: CI already runs `pnpm typecheck` and the db suite.
+
+  **Architecture: no new database read path, and the migration is small because
+  of it.** Everything renders through the CALLER's ordinary RLS-enforced client;
+  the surface declaration is a column ALLOW-LIST, so a table nobody declared
+  cannot appear and point 9's "anything unclassified defaults to PERSONAL"
+  becomes structural rather than a rule to remember. The 2026-07-30 entry's
+  rejection of an RLS-bypassing read path is what keeps it that way.
+  **One correction to that rejection's premise, found by building it:** it
+  argued no planned module has an allowed edge where the viewer's ambient access
+  exceeds the intended surface. Turning professor→student on creates exactly
+  two such cases (survey answers, review-comment authorship). The *decision*
+  still stands — the allow-list excludes them, and a definer would remove RLS as
+  the backstop for no gain — but the premise is now falsified, so future
+  reasoning should not lean on it.
+
+  **Both gates, for edges too (docs/03 #17).** The first adversarial review
+  caught that the manifest's ON/OFF table had **no enforcement at the one thing
+  already live**: `authenticated` can insert into `view_as_sessions` straight
+  through PostgREST, and the guard only checked rank + scope. A speed-dating
+  organizer could therefore have minted a session row naming a participant — a
+  pair banned permanently by point 7. Fixed by mirroring the ON pairs into
+  IMMUTABLE SQL (`module_view_as_edge()`, same shape as `module_position_rank`)
+  and requiring **one single grant** to satisfy rank, scope coverage and the
+  declared edge together, so a caller with two grants cannot borrow the rank of
+  one and the edge of the other. A parity test asserts SQL and TypeScript agree
+  on every ordered pair, OFF ones included. The same review also caught FKs
+  written `on delete cascade` (an org admin tidying a course node would have
+  silently erased view-as history — now `set null`, matching `vm_moderation_log`)
+  and a missing explicit `revoke all` (prod's `ALTER DEFAULT PRIVILEGES` would
+  otherwise have handed `authenticated` TRUNCATE on the audit log, and RLS does
+  not gate TRUNCATE).
+
+  **Founder correction, 2026-08-02 — professor→student CONFIRMED, and the anonymity
+  boundary was in the wrong place.** The pair is confirmed ON. But the first draft excluded
+  `cls_review_comments` and dropped `submission_id` from `cls_review_assignments` on the
+  reasoning that showing a reviewer's identity would break peer-review anonymity. Founder:
+  anonymity runs from other STUDENTS and from the GA — **never from the professor**, who runs
+  the process. Both are now on the student surface in full, carrying caveats saying they show
+  deliberately MORE than the student sees (the student's own path strips the author via
+  `cls_comments_for_my_submission`). The mistake was about WHO the anonymity protects
+  against, not about the mechanism, which is worth remembering because it is easy to repeat
+  per module. **A follow-up question was raised and answered the same day:**
+  `cls_review_comments_select` carries a `cls_is_ga_class` arm while
+  `cls_review_assignments_select` has never had one, so a GA reads comment text and
+  authorship but no peer marks. Founder: **intended.** "Anonymous from the GA" means
+  anonymous in the GRADING sense — the GA sees the substance, not the scores. No change;
+  recorded in docs/modules/module-2-classroom.md so nobody "fixes" it later.
+
+  **Adversarial review 2 (Fable) caught a regression created by review 1's own fix, plus
+  three classification/coverage defects.** (1) **The append-only trigger and the
+  `on delete set null` FKs were incompatible** — Postgres implements `SET NULL` as a real
+  UPDATE on the referencing table, so the `before update or delete` guard fired on the FK
+  action and aborted the parent DELETE. Once any scope node or user had been named in a
+  session it became permanently undeletable, and `org_id`'s cascade did the same for whole
+  orgs. The trigger did not make the log outlive what it describes; it made what it
+  describes undeletable. Removed: append-only is now grants-only, exactly as
+  `vm_moderation_log` has always done it. Reusable lesson in CLAUDE.md's gotchas and
+  docs/03 #18. (2) **The live probe meant to validate review 1's FK fix was vacuous** —
+  its cleanup delete was silently failing (for the reason above) and `supabase-js` does not
+  throw, so "the log survived the delete" passed because the delete never happened. It now
+  asserts the delete SUCCEEDS, that the node is really gone, and that the rows survived.
+  (3) **A misclassification the two-list model allowed**: classroom's GA surface listed
+  `cls_review_assignments` and `cls_survey_answers` as `excluded` when in fact no GA can
+  read either. "Excluded" and "the position has no read path" are different claims about
+  different readers, so there is now a third list, `unreadableByPosition`, asserted against
+  a real position-holder. (4) **The excluded-is-readable test only looped `student`**,
+  skipping `ga` — which is precisely where the misclassification sat. It now loops every
+  surface of every module. Also fixed: a `scopeColumn: null` role table would have skipped
+  scope intersection entirely (§8.1 point 10) and is now a completeness-check error; the
+  app-layer pre-check could satisfy edge/rank/scope from three *different* grants where the
+  SQL guard requires one; and `scopeCovers` now checks node existence before its identity
+  shortcut. Independently of the review, a self-review found **mode 1 was not filtering by
+  subject at all** — it rendered every row in scope under a lower position's label instead
+  of the caller's own data (§8.1 point 8). Not a widening (the professor reads those rows
+  anyway) but the wrong mechanism, and it would have become a real widening in the first
+  module whose viewer has narrower ambient reach.
+
+  **The session log IS the session.** Its row id lives in an HttpOnly cookie and
+  every impersonated render requires it, so point 6's "every mode-2 session
+  start is logged" is structural, not a call the app is trusted to remember.
+  Sessions end by EXPIRY, never by an UPDATE, which is what lets the table stay
+  genuinely append-only. Authorisation is re-resolved on every render, so
+  revoked authority takes effect immediately.
+
+  **Point 7's `viewAs: none` is gone as a separate mechanism**, subsumed by
+  point 11 exactly as the amendment predicted: speed-dating's ban is now three
+  explicit `participant`-target pairs set OFF with the reason attached.
+
+  **Deliberate departure, flagged for founder confirmation:** the session guard
+  has **no `is_org_admin` short-circuit**, unlike every other module gate on the
+  platform (docs/03 #9). Org roles are independent of module authority (§2.2),
+  and this is the only floor under an impersonation surface — so an org owner
+  who wants a view-as tab holds the module seat like anyone else.
+
+  **Verification:** RLS suite **77/77** (was 57; +20 for this slice), 2 new e2e
+  tests as real users through the browser, and **21/21 live probes**
+  (`scripts/verify-view-as.mts`) covering the banned-pair refusal, the edge
+  mirror's fail-closed default on 9 pairs, mode-2 being unreachable without the
+  cookie, the log actually recording, cross-course scope refusal, and the audit
+  log surviving deletion of the scope nodes it references. Two independent
+  Fable-tier adversarial reviews. Test floor raised to e2e 29 / rls 76.
+
+  **Not done, deliberately:** nail-salon and speed-dating surface reviews (their
+  pairs are enumerated and off); notifying view-as targets (point 6 leaves it a
+  per-module product decision); the temporal-table audit-history upgrade (§8);
+  and any mode-2 write path, which point 2 bans until a dated decision says
+  otherwise.
 
 - **2026-07-30 (VIEW-AS DESIGN REVISION — rank-differential completeness check,
   founder-driven, Sonnet session; SPEC ONLY, NOT BUILT):** Founder pushed back on

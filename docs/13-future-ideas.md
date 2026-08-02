@@ -345,3 +345,92 @@ the right path is a hosted API, not running your own model.**
 dogfooding candidate and the cleanest on-ramp to a shared AI-connector
 primitive — build the non-AI core first, layer AI via a hosted API second,
 self-host only if privacy demands it.
+
+---
+
+## Superadmin config UI for the user model — and where the line goes
+
+*Founder question, 2026-08-02, immediately after slice 5 (view-as) was built:
+"The config edges that we discussed that must be filled out and the module
+position hierarchy — should we make a superuser UI for setting these configs?
+Are there other things the superuser should have a config to set?" Asked for
+consideration only; nothing built.*
+
+**The organising principle (the reusable part of the answer):**
+
+> **Anything that WIDENS reach belongs in code. Anything that only NARROWS it
+> can be a runtime switch.**
+
+This one line settles most versions of the question, and it is already the rule
+docs/15 §8.1 point 5 arrived at independently for view-as edges ("per-org tuning
+may only DISABLE manifest edges, never add them"). Recording it here because it
+generalises well beyond view-as.
+
+**Applying it to the three things slice 5 introduced:**
+
+| Config | Verdict | Why |
+|---|---|---|
+| **Read-only view** of positions, ranks, the pair grid + notes, and each position's declared surface | **Yes — highest-value follow-on** | All of it is real, reviewed and tested, but buried in `packages/platform/src/view-as-modules.ts`. Surfacing it costs nothing and lets the decisions be audited without reading TypeScript. Build this first. |
+| Turning a view-as edge **ON** | **No — not even for the superadmin** | The completeness check's value is not the switch, it's that flipping it drags the decision through a diff, a reviewer, a test run and (for anything novel) an adversarial review. A UI makes it a click with no record of reasoning. Mechanically it also breaks the guard: the ON pairs are mirrored in an IMMUTABLE SQL function the trigger trusts; make it a UI-writable table and the fail-closed property that caught the organizer→participant hole in review 1 is gone. |
+| Turning a view-as edge **OFF** | **Yes, per-org** | Only narrows. A client who says "our professors do not look through student accounts" should be able to enforce that without a code change. |
+| Editing **position ranks** | **No — the most dangerous of the three** | Ranks do not only drive view-as; they drive who may appoint and remove whom (the hierarchy guard). docs/15 §4.1 item 5 bans a tenant-writable rank table outright: `student = 5` inverts the ladder. Ranks stay a migration. |
+
+**Other superadmin config candidates identified in the same conversation**
+(none urgent, all genuinely open):
+- **Whether view-as targets are notified.** §8.1 point 6 deliberately left this
+  a per-module product decision; per-org is probably the right level.
+- **View-as session length** — currently a hardcoded 30 minutes in
+  `20260731010000`. Harmless to make configurable, low value.
+- Nothing else looked like a real gap: the console already covers entitlements,
+  `org_modules.settings`, and `profiles.settings.superadminDefaultAddActive`.
+
+**Caution worth keeping:** every new superadmin switch is a new writable surface
+that needs its own RLS thinking. The console being superadmin-only keeps the
+blast radius small today, but it also means nobody else can self-serve — so
+"add a config" is rarely as cheap as it looks.
+
+---
+
+## Generalising per-position visibility (a documented map, NOT generated RLS)
+
+*Founder, 2026-08-02, on confirming that a classroom GA sees peer-review
+comments but not peer marks: "If this type of flexibility can be generalized to
+be made easier to flip on/off for all module parts, that is something to
+consider."*
+
+**What the flexibility actually is:** a per-position, per-table, sometimes
+per-column read rule. Today those live as hand-written RLS policy SQL spread
+across migrations, so answering "can a GA see peer grades?" means reading policy
+bodies in three files. That is the real pain, and it is worth fixing.
+
+**The tempting move, and why to resist it.** Slice 5's surface declaration is
+already a declarative per-position table/column map, so the obvious next step is
+to make it the source of truth and **generate** the RLS from it. Two reasons not
+to:
+
+1. **It inverts the failure direction.** Today a wrong declaration shows too
+   *little* — annoying. If it generated RLS, a wrong declaration shows too
+   *much*. That moves the tenancy boundary onto a code generator, in a platform
+   whose first principle is that tenancy isolation is existential.
+2. **A table×position grid cannot express the real policies.** `is_final AND
+   visible`, `graded_by = auth.uid()`, `cls_submission_hidden`'s retention
+   window, `sd_paired_with` — these are row predicates involving the caller. You
+   would end up with a grid plus escape hatches, which is worse than either.
+
+**The version worth building instead — proven, not speculative.** Keep RLS as
+the authority; add a declaration that DOCUMENTS it and a test that PROVES the
+documentation true. That is exactly the three-list model slice 5 shipped
+(`personal` = viewer cannot read / `excluded` = viewer can, we decline /
+`unreadableByPosition` = the position cannot read), each separately asserted
+against the live database. It earned its keep immediately: the split caught a
+real misclassification within a day of existing, and the non-emptiness control
+caught a test that would have passed vacuously.
+
+Extending that from "view-as surfaces" to "every position × every table in every
+module" gives one screen answering who-sees-what, it cannot drift (the tests
+fail), and nothing security-critical moves. It also feeds the read-only
+superadmin page in the entry above — same data, one renderer.
+
+**Status:** parked, founder-raised. Recommended shape is
+documentation-plus-tests, explicitly NOT generated policies. Natural companion
+to the superadmin read-only view; do them together if either is picked up.

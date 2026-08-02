@@ -122,12 +122,22 @@ export default async function ClassroomPage(props: { params: Promise<{ orgSlug: 
       <div className="mb-6 flex items-baseline gap-4">
         <h1 className="text-2xl font-semibold">Classes</h1>
         {isStaff && (
-          <Link
-            href={`/o/${orgSlug}/m/classroom/manage`}
-            className="text-sm text-blue-600 hover:underline"
-          >
-            Manage
-          </Link>
+          <>
+            <Link
+              href={`/o/${orgSlug}/m/classroom/manage`}
+              className="text-sm text-blue-600 hover:underline"
+            >
+              Manage
+            </Link>
+            {/* View-as (docs/15 §8). The page itself resolves whether the
+                caller has any declared edge below them and says so if not. */}
+            <Link
+              href={`/o/${orgSlug}/m/classroom/view-as`}
+              className="text-sm text-blue-600 hover:underline"
+            >
+              View as
+            </Link>
+          </>
         )}
       </div>
 

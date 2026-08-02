@@ -272,6 +272,65 @@ edit anywhere else, that's a missing platform primitive — extract it, don't fo
       gap, which is why `packages/db/src/rls.test.ts` now has an explicit `anon`-role
       block — before the sweep the suite had never once tested a not-logged-in caller.
 
+## View-as (user-model slice 5, proven by classroom — 2026-07-31)
+
+18. **Every module declares view-as, and the declaration is exhaustive by
+    construction.** A module may not opt out: the rank-differential completeness
+    check (docs/15 §8.1 point 11) is only a check if it is platform-wide.
+    - **Declare with `declareViewAs()`** in `packages/platform/src/view-as-modules.ts`
+      and attach it to the manifest. `edges` is typed `ViewAsEdges<positions>`, a mapped
+      type over the module's own rank table, so **every ordered position pair with a rank
+      gap must carry an explicit `{mode1, mode2, note}` entry or `pnpm typecheck` fails**
+      — and CI runs typecheck. Equal-rank pairs (GA/student) require no entry and get
+      their exclusion for free. `mode2` without `mode1` is not representable.
+    - **The mapped type alone does NOT deliver the guarantee.** It keys on the
+      *TypeScript* rank table, while the authoritative rank lives in SQL's
+      `module_position_rank()`. A SQL-only rank remap — the exact "one-line migration,
+      no backfill" the amendment exists to catch — would not fail it. The RLS suite's
+      rank-parity test against the live database is what closes that; never treat the
+      type as sufficient on its own.
+    - **Both gates again (#17), for edges too.** `module_view_as_edge(module_key,
+      from_role, to_role)` mirrors the ON pairs into IMMUTABLE SQL and the
+      `view_as_sessions` guard requires it, because `authenticated` can reach the table
+      through PostgREST directly — the app layer is not a gate. A parity test asserts SQL
+      and TypeScript agree on **every** ordered pair, including the OFF ones.
+    - **No new read path, ever.** View-as renders through the CALLER's ordinary
+      RLS-enforced client; the surface declaration is a column ALLOW-LIST that can only
+      narrow. If a declared surface table is not readable by the viewing position, that
+      is a gap in the ladder's RLS — fix the ladder, never add a definer to bridge it. A
+      SECURITY DEFINER read path for view-as was considered and rejected (docs/15,
+      2026-07-30) precisely because it removes RLS as the backstop against a bad
+      declaration.
+    - **Three off-surface lists, because there are three different readers.** Each
+      claim is separately falsifiable and the RLS suite asserts all three:
+      `personal` — the **viewer** cannot read it (§8.1 point 1's strict sense);
+      `excluded` — the **viewer** can read it, we decline to render it;
+      `unreadableByPosition` — the **position itself** has no read path.
+      Collapsing any two lets a genuine RLS gap hide behind the wrong label, which is
+      exactly what §8.1 point 1 warns about when it calls a personal marking on a
+      staff-readable table a spec violation. Two lists were tried first and the second
+      adversarial review found a real misclassification inside a week: classroom's GA
+      surface listed `cls_review_assignments` as `excluded` when in fact no GA can read
+      it at all.
+    - **Enforce append-only with GRANTS, never a `before update or delete` trigger.**
+      Postgres implements `ON DELETE SET NULL` as a genuine UPDATE on the referencing
+      table, so such a trigger fires on the FK action and aborts the parent DELETE —
+      making any row an audit log has ever referenced permanently undeletable (users,
+      scope nodes, and via `org_id`'s cascade, whole orgs). A no-UPDATE/no-DELETE grant
+      refuses api-role writes at the privilege layer with `42501` while leaving internal
+      FK actions working, which is why `vm_moderation_log` has no such trigger. Found
+      live by the second view-as review, after the first review had (correctly) required
+      the `set null` FKs.
+    - **Every "X cannot read this" assertion needs a non-emptiness control.** A clean seed
+      has no `cls_review_assignments` and no `cls_survey_answers`, so "the GA sees nothing"
+      passes because the table is EMPTY, not because RLS hides it. Assert a privileged
+      reader sees rows first, and create a fixture if the seed has none. This caught itself
+      on the first clean run — an earlier manual row count had been contaminated by e2e
+      leftovers, which is its own reminder that counts taken mid-session prove nothing.
+    - **An edge may only be ON in a module whose surfaces have had a security review**
+      (§8.1 point 9). Enumerate the pairs, set them OFF with a note saying why, and turn
+      them on when that module's review happens. Classroom is the worked example.
+
 ## Hard rules
 
 1. **Never fork a platform primitive.** If the notifications/files/workflow primitive almost fits, extend it in `packages/platform` (benefiting every module) — don't copy it into the module.

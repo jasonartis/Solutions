@@ -179,3 +179,82 @@ inventing something new — meaningfully lower risk than starting from
 scratch, though still real RLS/authorization work (`cls_can_manage` would
 need to become course-aware) needing an Opus session if pursued. Not
 decided; not built.
+
+## View-as: positions, edges, and surfaces (user-model slice 5 — BUILT 2026-07-31)
+
+Classroom is the first module with view-as turned on (docs/15 §8, §8.1). Its
+ladder is `professor` (2, Entity Lead) over `ga` (1) and `student` (1) — **GA
+and student are peers, not a hierarchy** (docs/15 §5) — so exactly two ordered
+pairs carry a rank gap and therefore need an explicit on/off answer.
+
+**professor → GA: ON, both modes.** Already settled in docs/15 §8. A GA's
+surface is duty output (the grading queue, the grades they entered) and the
+professor reads all of it inside their scope, so neither mode widens anything.
+Mode 2 earns its keep here: `cls_grades` is narrowed to `source='ga' AND
+graded_by = <the GA>` (the 20260712020000 rule), which the professor's own
+ambient query never shows separated out — "what has Gabe actually graded?" is
+answerable only through the tab.
+
+**professor → student: ON, both modes — the pair docs/15 §8.1 point 11 left
+explicitly undecided, now consciously answered.** A student's role surface is
+almost entirely the professor's own duty output reflected back: publication
+windows, announcements, homework, published grades. "What does my student
+actually see?" is the most common classroom support question and the reason §8
+sketched a Student tab at all. Nothing widens — every declared table is already
+professor-readable in scope. Rather than closing the pair wholesale, the
+genuinely sensitive parts are kept off the surface:
+
+- `cls_survey_answers` — **excluded**. Entered as oneself, and the module
+  already exposes the staff signal as counts via `cls_survey_results`.
+- `cls_review_comments` — **excluded**. The raw row carries `author_id`;
+  reviewer anonymity is enforced only by the app routing the reviewee through
+  `cls_comments_for_my_submission`, which strips it. Rendering the table would
+  deanonymize peer reviewers to whoever holds the tab.
+- `cls_review_assignments` — included but **`submission_id` omitted**: that is
+  the reviewer→reviewee direction, and it is not needed to show a student their
+  own assignment list.
+- `cls_grades` — filtered to `is_final AND visible`, byte-for-byte the
+  student's own RLS arm. Draft and instructor-source cells stay invisible.
+- Submission **retention hiding is reproduced** in the renderer. The professor
+  is exempt from `cls_submission_hidden`; without reproducing it, a professor
+  debugging "why can't Charlie see his old submission?" would see the row and
+  conclude nothing was wrong.
+
+**A finding worth recording: classroom has NO personal layer in the strict
+sense.** docs/15 §8.1 point 1 defines "personal" as RLS-*unreadable* to higher
+positions and calls a personal marking on a staff-readable table a spec
+violation. Classroom has no `sd_notes` analogue — a professor reads every
+`cls_*` table inside their scope. So the two exclusions above are recorded as
+`excluded` (product decision over ambiently-readable data), not `personal`, and
+the RLS suite asserts both halves: personal entries must be unreadable,
+excluded entries must be readable. If a future migration made survey answers
+staff-unreadable, the entry should be reclassified — the test is what forces
+that question.
+
+**FOUNDER CONFIRMATION WANTED** on professor → student. The spec deliberately
+left it open so it would get a real answer at build time rather than being
+assumed; this is that answer, and flipping either mode is a one-line change to
+`classroomViewAs` in `packages/platform/src/view-as-modules.ts` plus the
+matching arm of `module_view_as_edge()`.
+
+### Peer-review anonymity — who it protects against (founder, 2026-08-02)
+
+Correcting the view-as entry above, which had this wrong on first pass.
+**Peer review is anonymous from other STUDENTS and from the GA. It is not
+anonymous from the professor**, who runs the process. So in the professor's
+view-as-a-student surface, `cls_review_comments` is shown WITH `author_id`, and
+`cls_review_assignments` keeps `submission_id` (which submission this student is
+reviewing). Both are deliberately more than the student themselves sees — the
+student's own path goes through `cls_comments_for_my_submission`, which strips
+the author. The earlier draft excluded both; that was wrong about *who* the
+anonymity protects against, not about the mechanism.
+
+**Resolved same day, founder 2026-08-02 — the asymmetry is INTENDED, not a bug.**
+Reading the policies raised what looked like a contradiction: `cls_review_comments_select`
+carries a `cls_is_ga_class` arm (`20260724010000:588-595`), so a GA reads every review
+comment in scope including `author_id`, while `cls_review_assignments_select` has never had
+a GA arm at all. Founder: **that is correct.** A GA sees the peer-review *substance* (the
+comment text, and who wrote it) but not the peer *marks* — the grade lives on
+`cls_review_assignments`, which they cannot read, and `cls_grades` shows a GA only their own
+`source='ga'` cells. So "anonymous from the GA" means anonymous in the *grading* sense, not
+a blanket bar. No change needed; recorded so a future reader does not "fix" it.

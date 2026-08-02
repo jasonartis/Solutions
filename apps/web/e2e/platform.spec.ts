@@ -1419,6 +1419,82 @@ test('help guides: a non-admin staff role (GA) sees their own staff guide', asyn
   await expect(page.getByText('404')).toBeVisible()
 })
 
+// User-model slice 5 — VIEW-AS (docs/15 §8 + §8.1). The critical path as real
+// users: a professor opens the tabs their declared edges give them, renders a
+// lower position's surface as themselves (mode 1), then views a NAMED student
+// (mode 2) and sees that student's own data — read-only, banner shown, session
+// logged. Plus the two negative paths that matter most: a peer (GA) gets no tab
+// into a student, and a student gets no view-as at all.
+test('view-as: professor tabs, mode 1, and a logged read-only mode 2 on a named student', async ({
+  page,
+}) => {
+  await signIn(page, 'alice@demo.local')
+  await page.getByRole('link', { name: 'Classroom' }).click()
+  await page.getByRole('link', { name: 'View as' }).click()
+  await expect(page.getByRole('heading', { name: 'View as' })).toBeVisible()
+
+  // The tab strip is the declared rank-differential edges, nothing else.
+  // professor(2) > ga(1) and > student(1); ga and student are PEERS, so
+  // neither gets a tab of its own here.
+  await expect(page.getByRole('link', { name: /^GA/ })).toBeVisible()
+  await expect(page.getByRole('link', { name: /^Student/ })).toBeVisible()
+
+  // Mode 1 — the student page shape with Alice's own (empty) enrolment. It
+  // must not create a roster row for her (§8.1 point 8: mode 1 creates nothing).
+  await page.getByRole('link', { name: /^Student/ }).click()
+  await expect(page.getByText('Student — as you would hold it')).toBeVisible()
+
+  // Mode 2 — pick a real person. The picker lists GRANT TRIPLES, so the
+  // option carries the position and the scope, not just a name.
+  const picker = page.getByLabel('Or view as a specific person:')
+  const charlieOption = picker.locator('option', { hasText: 'Charlie C' }).first()
+  await expect(charlieOption).toHaveText(/student/)
+  await picker.selectOption((await charlieOption.getAttribute('value'))!)
+  await page.getByRole('button', { name: 'View as' }).click()
+
+  // The banner is unmissable and states the two guarantees.
+  await expect(page.getByText(/Viewing as/)).toBeVisible()
+  await expect(page.getByText('Charlie C')).toBeVisible()
+  await expect(page.getByText('read-only')).toBeVisible()
+  await expect(page.getByText(/This session is recorded/)).toBeVisible()
+
+  // Charlie's actual surface: his class, his roster row, the published
+  // materials, and grades he can see.
+  await expect(page.getByText('Statistics 101 — Fall')).toBeVisible()
+  await expect(page.getByText('Enrolled classes')).toBeVisible()
+  await expect(page.getByText('Their submissions')).toBeVisible()
+
+  // The exclusions are stated on the page, not silently applied — a
+  // professor must be able to see what the view is NOT showing them.
+  await page.getByText('What this view deliberately leaves out').click()
+  await expect(page.getByText('cls_survey_answers')).toBeVisible()
+  await expect(page.getByText('cls_review_comments')).toBeVisible()
+
+  // Leaving drops the session; the banner goes with it.
+  await page.getByRole('button', { name: 'Stop viewing as' }).click()
+  await expect(page.getByText(/Viewing as/)).not.toBeVisible()
+  await expect(page.getByText('Student — as you would hold it')).toBeVisible()
+})
+
+test('view-as: a GA gets no tab into a student (peers), and a student gets no view-as at all', async ({
+  page,
+}) => {
+  // Gabe is the seeded GA. GA and student are the same rank (docs/15 §5:
+  // "GA is NOT above the student"), so the completeness check requires no
+  // entry for the pair and no tab can exist — the peer exclusion falls out of
+  // the rank comparison for free rather than needing a special case.
+  await signIn(page, 'gabe@demo.local')
+  await page.goto('/o/demo-a/m/classroom/view-as')
+  await expect(page.getByRole('heading', { name: 'View as' })).toBeVisible()
+  await expect(page.getByText(/has a declared view-as edge below it/)).toBeVisible()
+  await expect(page.getByRole('link', { name: /^Student/ })).not.toBeVisible()
+
+  // Charlie is a student — bottom of the ladder, nothing below him.
+  await signIn(page, 'charlie@demo.local')
+  await page.goto('/o/demo-a/m/classroom/view-as')
+  await expect(page.getByText(/has a declared view-as edge below it/)).toBeVisible()
+})
+
 test('unauthenticated visitors are redirected to login', async ({ page }) => {
   await page.goto('/dashboard')
   await expect(page).toHaveURL(/\/login/)

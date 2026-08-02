@@ -6,6 +6,193 @@ lean. Newest first. Durable *decisions/conventions* live in their own docs (docs
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
 
 
+- **2026-07-31 (USER-MODEL SLICE 5 — VIEW-AS BUILT, Opus session; the four open items resolved):**
+  `20260731010000_view_as_sessions.sql` + a declaration layer
+  (`packages/platform/src/view-as{,-modules}.ts`) + a generic renderer
+  (`apps/web/lib/view-as.ts`, `apps/web/components/view-as/`) + the classroom route.
+  Founder-initiated. Full docs/03 #12 rhythm: draft → two independent Fable-tier
+  adversarial reviews → fixes → live verification as real users → RLS tests → docs.
+  Decisions in docs/15's 2026-07-31 entry; the classroom vocabulary/surfaces in
+  docs/modules/module-2-classroom.md; the reusable rules as docs/03 **#18**.
+  - **The four open items the spec left to the builder, and what they became.**
+    (1) *Starting scope* — declarations for **all 8 modules** (the completeness check
+    is only a check if no module can opt out), edges **ON for classroom only**, on
+    the principle that §8.1 point 9 makes surface classification a per-module
+    security review, so an edge may only be ON in a module that has HAD one.
+    (2) *Surface declarations* — written for classroom; see the vocabulary correction
+    below. (3) *Every rank-differential pair* — classroom's two both ON;
+    nail-salon's nine and speed-dating's six enumerated and OFF with per-pair
+    reasons; the other five vocabularies are entirely rank 0 in SQL so they imply no
+    pairs at all. (4) *Enforcement* — a TypeScript mapped type **plus** a SQL parity
+    test, because the type alone provably does not deliver the guarantee.
+  - **professor→student, the pair §8.1 point 11 left explicitly open, is ANSWERED:
+    ON, both modes.** A student's surface is almost entirely the professor's own duty
+    output reflected back, and "what does my student actually see?" is the support
+    question the Student tab exists for. Nothing widens — every declared table is
+    already professor-readable in scope. Rather than closing the pair, the sensitive
+    parts were narrowed out: `cls_survey_answers` and `cls_review_comments` excluded,
+    `submission_id` omitted from `cls_review_assignments` so the reviewer→reviewee
+    direction cannot be walked, `cls_grades` filtered to `is_final AND visible` (the
+    student's own RLS arm, byte for byte), and submission-retention hiding reproduced
+    in the renderer because the professor is exempt from `cls_submission_hidden` —
+    without that, a professor debugging "why can't Charlie see his old submission?"
+    would see the row and conclude nothing was wrong. **Flagged for founder
+    confirmation**; reversing it is a one-line change in two places.
+  - **A vocabulary correction the build forced: "personal" split into two lists.**
+    §8.1 point 1 defines personal as RLS-*unreadable* to higher positions and calls a
+    personal marking on a staff-readable table a spec violation. Classroom has no
+    `sd_notes` analogue at all — a professor reads every `cls_*` table inside their
+    scope — so labelling survey answers "personal" would have been exactly that
+    violation. The declaration therefore carries `personal` (asserted RLS-unreadable,
+    test-enforced) and `excluded` (product decision over ambiently-readable data,
+    also test-enforced, in the opposite direction). **Classroom's `personal` list is
+    empty, and that emptiness is the finding.** The suite asserts both directions, so
+    a genuine RLS gap cannot hide behind an "it's hidden" label.
+  - **The mapped type alone is NOT the guarantee — the load-bearing catch.**
+    `ViewAsEdges<positions>` makes an undeclared rank-differential pair a
+    `pnpm typecheck` error (CI runs typecheck), an equal-rank or upward pair an
+    excess-property error, and `mode2` without `mode1` unrepresentable. Both negative
+    cases were proven to bite, including the amendment's own scenario: remapping
+    `student` from rank 1 to 0 makes `ga → student` newly rank-differential and fails
+    the build until it is answered. **But the type keys on the TypeScript rank table
+    while the authoritative rank lives in SQL's `module_position_rank()`** — a
+    SQL-only remap, precisely the "one-line migration, no backfill" the amendment
+    exists to catch, sails straight past it. The RLS suite's rank-parity test against
+    the live database is what actually closes that gap. Recorded in docs/03 #18 so it
+    is never treated as optional. No new build script was needed: CI already runs
+    `pnpm typecheck` and the db suite.
+  - **Architecture: no new database read path, which is why the migration is small.**
+    Everything renders through the CALLER's ordinary RLS-enforced client; the surface
+    declaration is a column ALLOW-LIST (never `select *`), so a table nobody declared
+    cannot appear and point 9's "anything unclassified defaults to PERSONAL" is
+    structural rather than a rule to remember. **One correction to the 2026-07-30
+    rejection of an RLS-bypassing read path:** it argued that no planned module has an
+    allowed edge where the viewer's ambient access exceeds the intended surface.
+    Turning professor→student on creates exactly two such cases (survey answers,
+    review-comment authorship). The decision still stands — the allow-list excludes
+    them and a definer would remove RLS as the backstop for no gain — but the premise
+    is now falsified and future reasoning must not lean on it.
+  - **Adversarial review 1 (Fable) found three ship-blockers, all fixed.**
+    (1) **CRITICAL — the manifest's ON/OFF edge table had no enforcement at the one
+    thing already live.** `authenticated` can insert into `view_as_sessions` straight
+    through PostgREST, and the guard checked only rank + scope coverage, so a
+    speed-dating organizer (rank 2) could have minted a session row naming a
+    PARTICIPANT (rank 0) — a pair banned permanently by point 7. Fixed by mirroring
+    the ON pairs into IMMUTABLE SQL (`module_view_as_edge()`, the same
+    config-in-a-migration shape as `module_position_rank`) and requiring **one single
+    grant** to satisfy rank, scope coverage and the declared edge together, so a
+    caller holding two grants cannot borrow the rank of one and the edge of the other.
+    A parity test asserts SQL and TypeScript agree on every ordered pair, OFF ones
+    included. This is docs/03 #17's two-gate rule applied to edges.
+    (2) **CRITICAL — FKs written `on delete cascade` would let a routine admin action
+    erase the audit trail.** An org admin tidying up a `module_scope_nodes` row (a
+    permitted, ordinary delete) would have silently removed every view-as session row
+    pointing at it. Changed to `on delete set null`, matching `vm_moderation_log`, the
+    platform's existing audit log — a security log must outlive what it describes.
+    (3) **CRITICAL — missing explicit `revoke all`.** The migration relied on omitting
+    UPDATE/DELETE grants, but prod's still-open `ALTER DEFAULT PRIVILEGES` (docs/15
+    2026-07-29 deferral 2) auto-grants the full set on every new table — including
+    TRUNCATE, which RLS provably does not gate. Without the revoke this would have
+    shipped to prod with any signed-in user able to erase the whole impersonation
+    audit trail. Exactly the convention #1/#17 rule, on a table created two days after
+    the sweep that wrote it.
+    The same review independently re-verified the classroom surfaces table by table
+    against the live 20260724010000 policies, and confirmed the null semantics of
+    `module_scope_covers`, the `is not distinct from` grant check, the
+    trigger-then-revoke ordering, and the deliberate non-reuse of
+    `module_caller_covers_rank` (which ORs in `is_org_admin`, unwanted here).
+  - **Founder correction, 2026-08-02 — professor→student CONFIRMED, and the anonymity
+    boundary was in the wrong place.** The pair is confirmed ON. But the first draft excluded
+    `cls_review_comments` and dropped `submission_id` from `cls_review_assignments` on the
+    reasoning that showing a reviewer's identity would break peer-review anonymity. Founder:
+    anonymity runs from other STUDENTS and from the GA — **never from the professor**, who runs
+    the process. Both are now on the student surface in full, carrying caveats saying they show
+    deliberately MORE than the student sees (the student's own path strips the author via
+    `cls_comments_for_my_submission`). The mistake was about WHO the anonymity protects
+    against, not about the mechanism, which is worth remembering because it is easy to repeat
+    per module. **A follow-up question was raised and answered the same day:**
+    `cls_review_comments_select` carries a `cls_is_ga_class` arm while
+    `cls_review_assignments_select` has never had one, so a GA reads comment text and
+    authorship but no peer marks. Founder: **intended.** "Anonymous from the GA" means
+    anonymous in the GRADING sense — the GA sees the substance, not the scores. No change;
+    recorded in docs/modules/module-2-classroom.md so nobody "fixes" it later.
+
+- **Adversarial review 2 (Fable) caught a regression created by review 1's own fix, plus
+    three classification/coverage defects.** (1) **The append-only trigger and the
+    `on delete set null` FKs were incompatible** — Postgres implements `SET NULL` as a real
+    UPDATE on the referencing table, so the `before update or delete` guard fired on the FK
+    action and aborted the parent DELETE. Once any scope node or user had been named in a
+    session it became permanently undeletable, and `org_id`'s cascade did the same for whole
+    orgs. The trigger did not make the log outlive what it describes; it made what it
+    describes undeletable. Removed: append-only is now grants-only, exactly as
+    `vm_moderation_log` has always done it. Reusable lesson in CLAUDE.md's gotchas and
+    docs/03 #18. (2) **The live probe meant to validate review 1's FK fix was vacuous** —
+    its cleanup delete was silently failing (for the reason above) and `supabase-js` does not
+    throw, so "the log survived the delete" passed because the delete never happened. It now
+    asserts the delete SUCCEEDS, that the node is really gone, and that the rows survived.
+    (3) **A misclassification the two-list model allowed**: classroom's GA surface listed
+    `cls_review_assignments` and `cls_survey_answers` as `excluded` when in fact no GA can
+    read either. "Excluded" and "the position has no read path" are different claims about
+    different readers, so there is now a third list, `unreadableByPosition`, asserted against
+    a real position-holder. (4) **The excluded-is-readable test only looped `student`**,
+    skipping `ga` — which is precisely where the misclassification sat. It now loops every
+    surface of every module. Also fixed: a `scopeColumn: null` role table would have skipped
+    scope intersection entirely (§8.1 point 10) and is now a completeness-check error; the
+    app-layer pre-check could satisfy edge/rank/scope from three *different* grants where the
+    SQL guard requires one; and `scopeCovers` now checks node existence before its identity
+    shortcut. Independently of the review, a self-review found **mode 1 was not filtering by
+    subject at all** — it rendered every row in scope under a lower position's label instead
+    of the caller's own data (§8.1 point 8). Not a widening (the professor reads those rows
+    anyway) but the wrong mechanism, and it would have become a real widening in the first
+    module whose viewer has narrower ambient reach.
+
+  - **The session log IS the session.** Its row id lives in an HttpOnly cookie and
+    every impersonated render requires it, so point 6's "every mode-2 session start is
+    logged" is structural, not something the app is trusted to remember. Sessions end
+    by EXPIRY, never by an UPDATE — which is what lets the table stay genuinely
+    append-only (no `ended_at` to write). Authorisation is re-resolved on every render,
+    so revoked authority takes effect immediately rather than at session end.
+  - **Point 7's `viewAs: none` is gone as a separate mechanism**, subsumed by point 11
+    exactly as the amendment predicted: speed-dating's end-user ban is now three
+    explicit `participant`-target pairs set OFF, each carrying its reason.
+  - **Deliberate departure, flagged for founder confirmation:** the session guard has
+    **no `is_org_admin` short-circuit**, unlike every other module gate on the platform
+    (docs/03 #9). Org roles are independent of module authority (docs/15 §2.2) and this
+    is the only floor under an impersonation surface, so an org owner who wants a
+    view-as tab holds the module seat like anyone else.
+  - **Verification.** RLS suite **77/77** (was 57; +20 for this slice, covering
+    SQL↔TS rank parity, SQL↔TS edge parity over every ordered pair, the runtime
+    completeness backstop, the personal/excluded split in both directions with a
+    positive control on `sd_notes` so the assertion is not vacuous, and the session
+    guard's accept/refuse cases including the equal-rank GA→student refusal). **2 new
+    e2e tests** as real users through the browser: a professor opening the tabs, mode 1,
+    a logged read-only mode 2 on a named student with the exclusions listed on the page,
+    and the negative path where a GA (a peer) and a student get no tabs at all.
+    **21/21 live probes** (`scripts/verify-view-as.mts`) over PostgREST as real
+    signed-in users: the banned-pair refusal and its exact error, the edge mirror's
+    fail-closed default across 9 pairs, mode 2 unreachable without the cookie, the log
+    actually recording, a course-scoped professor refused on a student in a sibling
+    course *and* allowed on one in their own, and the audit log surviving deletion of
+    the scope nodes it references. Typecheck 9/9. Test floor raised to e2e 29 / rls 76.
+  - **One probe initially failed for the right reason and caught a bad test.** The
+    cross-course scope check passed its negative case vacuously: the professor fixture
+    had been added to the org but never accepted the invite, so slice 3 refused him as
+    a *pending* member before scope was ever consulted. Fixed the fixture to accept
+    first, which made the negative assertion actually test scope. Worth remembering —
+    since slice 3, any test fixture that adds an org member must accept the invite or
+    its negative assertions may prove nothing.
+  - **Also fixed in passing:** `pnpm --filter @platform/db test` never loaded the
+    repo-root `.env` (Vitest looks beside the package), so the suite only ran where the
+    vars happened to be exported — contradicting its own "run `pnpm dev` once to
+    generate .env" error message. `packages/db/vitest.config.ts` now loads it, and
+    aliases `@platform/core` so the suite can assert the declarations against the DB.
+  - **Not done, deliberately:** nail-salon and speed-dating surface reviews (pairs
+    enumerated and off); notifying view-as targets (point 6 leaves it a per-module
+    product decision); the temporal-table audit-history upgrade (§8); any mode-2 write
+    path (point 2 bans it until a dated decision says otherwise); and prod deployment,
+    which is a separate founder-initiated step with its own backup → `--dry-run` →
+    `migrate:prod` → prod-verify rhythm.
+
 - **2026-07-30 (FLAKY E2E TEST — DIAGNOSED + FIXED, `speed-dating: register → round → mutual interest → reveal`, Sonnet session):** Diagnosed which of the three candidate causes (docs/history 2026-07-29 entry) it actually was, using the `error-context.md` artifact from the last real full-suite failure (2026-07-29): at the failing assertion, Dana's browser was still on the stale events-LIST page, mid-navigation to the event-detail page, when the assertion's 5s window expired — and every prior assertion in the test (exact roster/round/reveal counts) had already passed, which rules out both RLS-suite data contamination (that suite's speed-dating fixtures create/clean up their own uniquely-named events, never touching the seeded "Friday Night Mixer") and the test's own non-idempotency (stale seed state would have failed at the very first "Register" step, not 13 steps in). Root cause: genuine timing/load — this test does 8 full sign-ins/page-loads (every other speed-dating test does 1-3), each a data-heavy server component (~11 sequential Supabase round-trips), run sequentially right after the 57-test RLS suite, against the unbuilt `pnpm dev` server (JIT route compilation, flat 30s timeout, 0 local retries per `playwright.config.ts`). Fix: `test.slow()` on just this test (Playwright's idiom for a known-heavier test — triples its timeout to 90s) rather than padding global config, individual assertion timeouts, or adding retries. **Verified by clean reproduction, not just theory:** `db:reset` + `pnpm seed`, then the full 57-test RLS suite, then the full e2e suite immediately after (the exact ordering that produced the original failures) — the target test passed in 31.6s. (A first reproduction attempt was contaminated by an earlier isolated run of the same test advancing the seeded event to `complete` before the full-suite run started — a real instance of the test's documented non-idempotency, but self-inflicted by the reproduction method, not the phenomenon being fixed; redone clean.) **New finding surfaced by the clean reproduction, NOT investigated further (out of scope for this session):** with speed-dating now passing, a DIFFERENT test failed instead — `visual messaging: create from a picture, draw a reply, membership gates access` — with the same signature (30s timeout on a navigation-adjacent click, same post-RLS-suite load window), but a different immediate cause: Charlie's page showed only a "Layer 1" (root) link, no "Layer 1.1" link at all, right after Alice's moderation-removal step earlier in the same test — worth a founder-directed look at whether the removed-layer link should still render for a non-moderator member. Flagged, not fixed.
 - **2026-07-29 (ACL HARDENING SWEEP — PUSHED TO PROD + PROD-VERIFIED, commit `a16f4a5`):** **PROD RESULT, all green.** Fresh backup first (`backups/2026-07-29T21-11-44/` — schema ~347KB + data ~1.73MB); `migrate:prod --dry-run` confirmed exactly ONE pending migration; `pnpm migrate:prod` applied it. (Same non-fatal `pgdelta-target-ca.crt ENOENT` as slice 3 — the CLI's own catalog-cache step tripping on a local cert path, not the migration; verified applied rather than assumed.) **`verify-acl-hardening.ts --probe` on prod: 39/39, 0 failures** — exactly the 2 allowlisted signatures anon-executable, 0 functions PUBLIC-executable, all 54 trigger functions with no api-role EXECUTE, oracles still service_role-only, all 81 others keeping authenticated+service_role, every definer still pinning `search_path`, anon holding NO privilege on any of the 67 tables, authenticated holding no TRUNCATE/REFERENCES/TRIGGER/MAINTAIN anywhere, authenticated DML matching intent on all 67, service_role un-shrunk, RLS on everywhere, and both `profiles` column grants intact with no table-wide UPDATE. Plus a **live rolled-back `anon` probe on prod**: all 20 table read/delete attempts refused `42501 permission denied for table`, `syn_public_weeks` allowed, `is_org_member` refused. **Verified from the OPEN INTERNET with the prod anon key** (the check that actually matters): `GET /rest/v1/orgs` → **401 `42501 permission denied for table orgs`** where it previously returned `200 []` with RLS as the sole gate; `POST /rest/v1/orgs` → 401; `POST /rest/v1/rpc/syn_public_weeks` → **200** with real data; and `/s/demo-shul` on the live site → **200**, rendering "Demo Synagogue". Live health check 200 on `/`, `/login`, `/s/demo-shul`, `/dashboard`. **Prod row counts UNCHANGED** (28 org_members / 8 orgs / 10 profiles, 0 non-active) — the migration moved privileges only, no DDL and no rows. Pushed to master and `git log origin/master..master` empty; note this commit carries **no app code**, so the slice-3 "DB ahead of deployed UI" trap did not apply. `gh` is not installed on this machine so CI status could not be read from the terminal — immaterial here for the same reason (a skipped deploy leaves the correct, unchanged app serving). **Build detail below.**
 - **2026-07-29 (ACL HARDENING SWEEP — the build, local verification and prod preflight; Opus session):** `20260728010000_acl_hardening.sql` closes the GRANT layer platform-wide so RLS stops being the only gate. **Quantified off prod's `pg_catalog` FIRST, which found the job bigger than the docs implied:** 134 of 139 public functions were anon- AND PUBLIC-executable on *both* local and prod (not just slice 3's 20 of 23), and all 67 tables granted `anon` the full set `arwdDxtm` on prod. **Two findings that changed the shape of the work:** (1) `anon` AND `authenticated` held **TRUNCATE** on all 67 tables on *both* environments — and **RLS does not gate TRUNCATE**, so it was the one privilege here RLS could never have covered (unreachable today only because PostgREST emits no such verb — the API surface was the mitigation, not the database); (2) prod also granted `anon` **SELECT** on all 67 tables, a strictly larger surface than the INSERT/UPDATE/DELETE the task started from. **End state:** `anon` holds nothing in `public` but schema `USAGE` + EXECUTE on the two `syn_public_*` functions; the 54 trigger functions hold no api-role EXECUTE; `authenticated` keeps EXECUTE on all 81 other non-trigger functions and its per-table DML exactly as the creating migrations granted it; the 2 ancestry oracles stay service_role-only (preserving 20260722010000); `service_role` untouched. Strategy: ONE blanket `revoke execute on all functions in schema public` then 85 explicit grants — because hand-enumerating signatures is how an overload gets missed (`module_position_rank` exists as both `(text)` and `(text, text)`) and how a dropped function gets named (`org_members_guard_self_admin`, dropped 20260717010000, would abort the transaction). Every statement generated from `pg_get_function_identity_arguments`, nothing hand-typed. **FIVE MECHANISMS PROVED EMPIRICALLY RATHER THAN CITED — each changed the SQL:** (a) **SIGNUP SURVIVES** — the catastrophic case. `handle_new_user` is a definer trigger on `auth.users` and GoTrue reaches it as `supabase_auth_admin`, which today only gets there via the PUBLIC grant being removed. Tested with the real role and a real revoke (`has_function_privilege` = false), the insert still fired the trigger and created the profile row; rolled back, 0 leftovers. Trigger EXECUTE is checked at `create trigger` time, not fire time — confirmed across `authenticated`, `service_role`, `supabase_auth_admin`. (b) Functions named in an RLS policy **DO** require EXECUTE for the querying role — revoking it turned a working read into `permission denied for function`, so `authenticated` must keep it on ~60 predicates. (c) **A table-level `revoke all` ALSO wipes column-level grants** — would have broken `profiles` display-name/settings editing; restored explicitly. (d) Local has always run with zero anon table privileges and the public schedule RPC still returns real data there, so revoking anon SELECT is safe. (e) **`supabase db push` is ATOMIC per migration file** — verified by pushing a deliberately-failing migration to local: the preceding `create table` did not persist and no version row was written. That removes the "partial sweep locks out every user" outage scenario. **Full docs/03 #12 rhythm.** Two independent adversarial reviewers were lost to a session limit mid-flight and the gate was NOT counted as met until a relaunched review reported. It earned its keep — it **independently re-derived `authenticated`'s intended table privileges by replaying every grant/revoke across all 17 prior migrations and found zero differences across all 66 granted tables**, confirmed all 40 distinct `.rpc()` names and all 191 policy expressions (178 `public` + 13 `storage`) are covered, confirmed no index expression / CHECK / column default / generated column depends on a project function, and confirmed `auth.uid()` and `storage.foldername` live outside `public` and are untouched. **Findings fixed:** its top OUTAGE finding — the grant list was generated from LOCAL and nothing diffed PROD before the push — produced a new **`--preflight` mode** that compares the target's function set against the migration's parsed grant list and refuses the push on any orphan (would silently lose EXECUTE) or phantom (would abort the migration); **run against PROD, 3/3 green** — prod has the identical 139 functions (85 non-trigger + 54 trigger), all covered. It also found **three real test defects**: 4 of the 15 probed tables (`profiles`, `org_members`, `org_modules`, `syn_published_weeks`) have **no `id` column**, so 12 of 45 write assertions could never reach a privilege check (PGRST204/42703 first) — fixed with a real per-table key column; `isPrivilegeDenied` could not distinguish a table-privilege denial from an **RLS `WITH CHECK` violation, which is ALSO SQLSTATE 42501** — fixed to require `permission denied for (table|relation|function|view)` and exclude `row-level security`, so an RLS-only refusal can no longer make the tests green; and the block's own comment **falsely claimed** it closed the 2026-07-22 gap — it cannot, because local was never the vulnerable side (local `anon` only ever held `Dxtm`, no DML), so those tests would have been green throughout the window prod sat open — comment corrected to say so explicitly and to point at the prod verifier as the only thing that closes it. Also applied: `revoke all privileges on all tables in schema public from public` (the function revoke named PUBLIC, the table revokes didn't — an unexplained asymmetry that would have let a PUBLIC table entry keep anon fully privileged); `service_role` added to the two `syn_public_*` grants (otherwise this migration silently narrowed it, invisibly to any verifier, since those two must be exempt from the authenticated+service_role rule); verifier hardened (PUBLIC detected via `aclexplode` grantee=0 so `=X*/owner` with grant option can't hide, allowlists matched on full SIGNATURES not bare names so a future overload can't slip through, `MAINTAIN` added to the privilege set, plus a `service_role` no-shrink assertion — note `mm_interests` intentionally grants SELECT/INSERT/DELETE to BOTH roles, no UPDATE, so the bar there is not full CRUD). **CI caught a real hit:** its destructive-migration guard greps case-insensitively for that word followed by whitespace **including in comments**, and the first draft tripped it. Adding `DESTRUCTIVE-CHANGE-APPROVED` would have been a lie (this migration touches no rows and contains no DDL), so the prose was reworded instead and the safeguard left untouched — guard now clean across all migrations. **VERIFIED LOCALLY:** migration applies clean via `db:reset`; anon-executable functions **134 → 2**, PUBLIC-executable **134 → 0**, anon TRUNCATE **67 → 0**, authenticated TRUNCATE **67 → 0**, nothing else moved; **RLS suite 57/57** (51 pre-existing + 6 new); **typecheck 9/9**; **verifier 17/17** plus a **live rolled-back `anon` probe on local, 22/22** — every table read and write refused with `42501 permission denied for table`, `syn_public_weeks` still allowed, `is_org_member` refused. **TEST BLIND SPOT CLOSED:** `rls.test.ts` had a single `signIn()` factory and had therefore **never once tested the `anon` role**, so the table half of this change was both a local no-op and unverifiable — the same structural gap behind 2026-07-22. The new block asserts both the semantic invariant and the mechanism. **PRE-EXISTING FLAKE, NOT CAUSED BY THIS CHANGE — established by controlled experiment:** the full e2e suite failed `speed-dating module: register → round → mutual interest → reveal` (1 failure), then 3 failures on a second run, all 30s *timeouts* with page snapshots showing the app working correctly under the new ACLs. Pulling the migration out entirely and re-running gave **the same test failing, 1 failed / 34 passed** — so it is a flaky long test (the 1-vs-3 variance tracks machine load), unrelated to the sweep. Left alone deliberately rather than bundled in; worth a separate fix. **NOT YET PUSHED TO PROD** — awaiting the founder's go-ahead per the standing rule. **Founder decisions (2026-07-29):** strangers **never write** — no sanctioned anon write path anywhere, so a public surface is always a read-only definer function and a static page (about / contact-by-email) needs no grant at all; a **platform-level** public-page option is kept as a first-class concept alongside per-module ones; `service_role` keeps its grants; prod verification must include a real rolled-back anon probe. **Deferred (all recorded in docs/15 with rationale):** `storage`-schema grants (prod grants anon the full set incl. TRUNCATE there too; all 5 buckets private, 13 policies key on `auth.uid()`, and `... in schema public` doesn't touch it); prod's `ALTER DEFAULT PRIVILEGES`, which re-opens every FUTURE object so this sweep decays without a guard (Supabase removes the legacy auto-expose on **2026-10-30**, so the durable fix is likely project config, not SQL); ~9 internal-only helpers that keep `authenticated` EXECUTE they don't need; 3 provably dead functions locked rather than dropped; `service_role`'s retained TRUNCATE. **New tooling:** `scripts/acl-audit.ts` (read-only privilege reporter, `--json` diffable) and `scripts/verify-acl-hardening.ts` (`--preflight` / assertions / `--probe`) — needed because `prod-verify-migration.ts` parses `create function` blocks and so verifies *nothing* on an ACL-only migration. Conventions → docs/03 **#17**; two never-do entries → docs/12; dated record → docs/15. Also fixed longstanding **doc drift**: docs/01, docs/02 and docs/05 described Drizzle as generating/running migrations — it does neither (no config, no output dir, `drizzle-kit` an unused devDependency; `schema.ts` is a hand-maintained type-only mirror and `supabase/migrations/` is the sole source of truth).

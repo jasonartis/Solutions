@@ -47,3 +47,5 @@ backups/
 /founder-todo.md
 /TESTING-TODO-2DAYS.md
 /verify-*.mjs
+# Windows/Git-Bash crash artifacts — machine noise, never source
+bash.exe.stackdump

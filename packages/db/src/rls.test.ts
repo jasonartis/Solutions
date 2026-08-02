@@ -1,5 +1,6 @@
 import { describe, expect, it, beforeAll, afterAll, afterEach } from 'vitest'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { getModule, moduleRegistry, viewAsCompleteness } from '@platform/core'
 
 // RLS isolation test (M0 acceptance, docs/04): a user in org B must see
 // nothing of org A. Runs against the seeded local stack:
@@ -1332,5 +1333,378 @@ describe('acl hardening: the anon role (20260728010000)', () => {
     const { data, error } = await anon.rpc('syn_public_weeks', { p_org_slug: 'demo-a' })
     expect(error).toBeNull()
     expect(data).toBeNull()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// User-model slice 5 — VIEW-AS (docs/15 §8 + §8.1). 20260731010000.
+//
+// Three things need proving, and only one of them is about the new table.
+//
+// 1. THE COMPLETENESS CHECK IS REAL (§8.1 point 11). The TypeScript mapped type
+//    in packages/platform/src/view-as.ts fails `pnpm typecheck` on an
+//    undeclared rank-differential pair — but it is only as trustworthy as the
+//    TS rank table it is keyed on, and the AUTHORITATIVE rank lives in SQL's
+//    module_position_rank(). A SQL-only rank remap — exactly the "one-line
+//    migration with no backfill" the amendment was written to catch — would
+//    NOT fail that type. The parity test below is what closes that gap; the
+//    mapped type alone does not deliver the amendment's guarantee.
+//
+// 2. THE PERSONAL / EXCLUDED SPLIT IS HONEST (§8.1 point 1). "Personal layer"
+//    means RLS-UNREADABLE to higher positions, never merely UI-hidden, and a
+//    personal marking on a staff-readable table is a spec violation. So the
+//    split is asserted in BOTH directions: every `personal` entry must be
+//    unreadable by a position holding a mode-2 edge in, and every `excluded`
+//    entry must be readable by it — proving the author was not quietly calling
+//    an ambiently-readable table "personal" to dodge the rule.
+//
+// 3. THE SESSION LOG IS A FLOOR, NOT A RECORD. The guard trigger enforces
+//    strict rank + scope coverage independently of the TypeScript edge table,
+//    so a bug in the app layer cannot mint an impersonation session.
+// ---------------------------------------------------------------------------
+describe('view-as: the rank-differential completeness check (slice 5)', () => {
+  it('every declared TS rank matches SQL module_position_rank() — the check keys on SQL, not on itself', async () => {
+    for (const mod of moduleRegistry) {
+      for (const [role, tsRank] of Object.entries(mod.viewAs.positions)) {
+        const { data, error } = await alice.rpc('module_position_rank', {
+          module_key: mod.key,
+          role,
+        })
+        expect(error, `${mod.key}/${role}: ${JSON.stringify(error)}`).toBeNull()
+        expect(data, `${mod.key}/${role}: TS says ${tsRank}, SQL says ${data}`).toBe(tsRank)
+      }
+    }
+  })
+
+  it('every module declares a position for exactly its manifest roles', () => {
+    for (const mod of moduleRegistry) {
+      expect(Object.keys(mod.viewAs.positions).sort(), `${mod.key}`).toEqual([...mod.roles].sort())
+    }
+  })
+
+  it('every module passes the runtime completeness check (the backstop behind the mapped type)', () => {
+    const problems = moduleRegistry.flatMap((m) => viewAsCompleteness(m.key, m.viewAs))
+    expect(problems.map((p) => `${p.moduleKey}: ${p.problem}`)).toEqual([])
+  })
+
+  it('equal-rank pairs carry no entry at all — GA and student stay peers for free', () => {
+    const cls = getModule('classroom')!.viewAs
+    expect(cls.positions.ga).toBe(cls.positions.student)
+    expect(cls.edges.ga).toBeUndefined()
+    expect(cls.edges.student).toBeUndefined()
+  })
+
+  it('SQL module_view_as_edge() agrees with the TypeScript edge map for EVERY ordered pair', async () => {
+    // The second gate (docs/03 #17). The manifest is the authoritative
+    // declaration, but `authenticated` can reach view_as_sessions through
+    // PostgREST directly, so the database mirrors the ON pairs and the guard
+    // enforces them. These two copies must never drift — including on pairs
+    // that are OFF, where a stray SQL `true` would silently unban an edge the
+    // manifest forbids.
+    for (const mod of moduleRegistry) {
+      const positions = Object.keys(mod.viewAs.positions)
+      for (const a of positions) {
+        for (const b of positions) {
+          const ts = mod.viewAs.edges[a]?.[b]?.mode2 === true
+          const { data, error } = await alice.rpc('module_view_as_edge', {
+            module_key: mod.key,
+            from_role: a,
+            to_role: b,
+          })
+          expect(error, `${mod.key} ${a}->${b}: ${JSON.stringify(error)}`).toBeNull()
+          expect(data, `${mod.key} ${a}->${b}: TS mode2=${ts}, SQL=${data}`).toBe(ts)
+        }
+      }
+    }
+  })
+
+  it('every registered module has a populated declaration — no module can opt out of the check', () => {
+    for (const mod of moduleRegistry) {
+      expect(mod.viewAs, `${mod.key} has no viewAs declaration`).toBeDefined()
+      expect(Object.keys(mod.viewAs.positions).length, `${mod.key} declares no positions`).toBeGreaterThan(0)
+    }
+  })
+
+  it('speed-dating end-user ban is expressed as pairs, not a second mechanism (point 7 subsumed)', () => {
+    const sd = getModule('speed-dating')!.viewAs
+    for (const a of ['admin', 'organizer', 'host']) {
+      const edge = sd.edges[a]?.participant
+      expect(edge, `${a} -> participant must be declared`).toBeDefined()
+      expect(edge!.mode1).toBe(false)
+      expect(edge!.mode2).toBe(false)
+    }
+  })
+})
+
+describe('view-as: the personal / excluded split is honest (slice 5)', () => {
+  // Fixtures for the unreadable-by-position check. A clean seed has zero
+  // cls_review_assignments and zero cls_survey_answers, so without these the
+  // "a GA cannot read this" assertions would pass because the tables are
+  // EMPTY, not because RLS hides them — which is exactly the vacuity the
+  // control inside that test exists to refuse. (Discovered the honest way:
+  // the control failed the first time it ran on a fresh database. An earlier
+  // manual row count had been contaminated by e2e leftovers.)
+  const fixture: { assignmentId?: string; surveyId?: string } = {}
+
+  beforeAll(async () => {
+    const orgId = (await alice.from('orgs').select('id').eq('slug', 'demo-a').single()).data!.id
+    const sub = (
+      await alice.from('cls_submissions').select('id, class_id, homework_id, student_id').limit(2)
+    ).data!
+    const target = sub[0]!
+    const reviewer = sub[1]?.student_id ?? target.student_id
+
+    const asg = await alice
+      .from('cls_review_assignments')
+      .insert({
+        org_id: orgId,
+        class_id: target.class_id,
+        homework_id: target.homework_id,
+        submission_id: target.id,
+        reviewer_id: reviewer,
+      })
+      .select('id')
+      .single()
+    if (asg.error) throw new Error(`view-as fixture (review assignment): ${asg.error.message}`)
+    fixture.assignmentId = asg.data.id as string
+
+    const svy = await alice
+      .from('cls_surveys')
+      .insert({ org_id: orgId, class_id: target.class_id, question: 'View-as fixture survey?' })
+      .select('id')
+      .single()
+    if (svy.error) throw new Error(`view-as fixture (survey): ${svy.error.message}`)
+    fixture.surveyId = svy.data.id as string
+
+    // The answer must be written BY its owner — cls_survey_answers is own-row.
+    const charlie = await signIn('charlie@demo.local')
+    const ans = await charlie
+      .from('cls_survey_answers')
+      .insert({
+        org_id: orgId,
+        class_id: target.class_id,
+        survey_id: fixture.surveyId,
+        user_id: (await charlie.auth.getUser()).data.user!.id,
+        answer: 'fixture',
+      })
+    if (ans.error) throw new Error(`view-as fixture (survey answer): ${ans.error.message}`)
+  })
+
+  afterAll(async () => {
+    if (fixture.assignmentId) {
+      await alice.from('cls_review_assignments').delete().eq('id', fixture.assignmentId)
+    }
+    // Deleting the survey cascades its answers.
+    if (fixture.surveyId) await alice.from('cls_surveys').delete().eq('id', fixture.surveyId)
+  })
+
+  // Alice is the seeded GLOBAL professor in demo-a, i.e. the position holding a
+  // mode-2 edge into both ga and student.
+  it('every table marked PERSONAL really is unreadable by the position that can view-as into it', async () => {
+    for (const mod of moduleRegistry) {
+      for (const targets of Object.values(mod.viewAs.edges)) {
+        for (const [target, edge] of Object.entries(targets)) {
+          if (!edge.mode2) continue
+          for (const p of mod.viewAs.surfaces[target]?.personal ?? []) {
+            const { data, error } = await alice.from(p.table).select('*').limit(1)
+            const readable = !error && (data ?? []).length > 0
+            expect(
+              readable,
+              `${mod.key}: ${p.table} is marked personal for ${target} but the viewer reads rows from it`,
+            ).toBe(false)
+          }
+        }
+      }
+    }
+  })
+
+  it('every table marked EXCLUDED really IS ambiently readable — so it was right not to call it personal', async () => {
+    // Loops EVERY surface of every module with edges on, not just `student`.
+    // The 2026-07-31 review found the first version hardcoded `student` and so
+    // skipped `ga` — which was exactly where a misclassification was sitting.
+    for (const mod of moduleRegistry) {
+      for (const [position, surface] of Object.entries(mod.viewAs.surfaces)) {
+        for (const e of surface.excluded) {
+          const { error } = await alice.from(e.table).select('*').limit(1)
+          expect(
+            error,
+            `${mod.key}/${position}: ${e.table} is marked excluded (a product decision over ` +
+              `data the viewer reads anyway) but the viewer cannot read it — it belongs in ` +
+              `personal or unreadableByPosition`,
+          ).toBeNull()
+        }
+      }
+    }
+    // Classroom declares NO personal layer, and that emptiness is the finding —
+    // the module has no sd_notes analogue, so nothing here is RLS-hidden upward.
+    expect(getModule('classroom')!.viewAs.surfaces.student!.personal).toEqual([])
+    expect(getModule('classroom')!.viewAs.surfaces.ga!.personal).toEqual([])
+  })
+
+  it('every table marked UNREADABLE-BY-POSITION really is unreadable by someone holding that position', async () => {
+    // The third claim, about the third reader: not "the viewer cannot see it"
+    // (personal) and not "the viewer can but we decline to render it"
+    // (excluded), but "this POSITION has no read path at all". Asserted as the
+    // real position-holder, so the label cannot drift away from the policies.
+    // Gabe is the seeded GA and Charlie the seeded student in demo-a.
+    const holder: Record<string, SupabaseClient> = {
+      ga: await signIn('gabe@demo.local'),
+      student: await signIn('charlie@demo.local'),
+    }
+    let checked = 0
+    for (const [position, surface] of Object.entries(getModule('classroom')!.viewAs.surfaces)) {
+      const client = holder[position]
+      if (!client) continue
+      for (const u of surface.unreadableByPosition ?? []) {
+        // Control first: a privileged reader must see rows, otherwise "the
+        // position sees nothing" would be true merely because the table is
+        // empty and the assertion below would prove nothing.
+        const { data: seeded } = await alice.from(u.table).select('*').limit(1)
+        expect(
+          (seeded ?? []).length,
+          `${u.table} has no seeded rows, so the unreadability check below is vacuous`,
+        ).toBeGreaterThan(0)
+
+        const { data, error } = await client.from(u.table).select('*').limit(1)
+        const readable = !error && (data ?? []).length > 0
+        expect(readable, `${position} can read ${u.table}, declared unreadable to them`).toBe(false)
+        checked++
+      }
+    }
+    // Guard against the whole assertion quietly becoming a no-op.
+    expect(checked, 'no unreadableByPosition entries were actually checked').toBeGreaterThan(0)
+  })
+
+  it('positive control: a genuinely personal table (sd_notes) is unreadable by staff, so the assertion is not vacuous', async () => {
+    // sd_notes is author-only with no staff arm anywhere (20260709050000) — the
+    // shape a real personal-layer entry must have. Alice is the seeded
+    // speed-dating organizer in demo-dating and authors no notes there.
+    const { data, error } = await alice.from('sd_notes').select('*').limit(1)
+    expect(error).toBeNull()
+    expect((data ?? []).length).toBe(0)
+  })
+
+  it('the declared surfaces are fully readable by the professor — no gap for view-as to bridge (point 1)', async () => {
+    // The keystone stated as a positive: if a declared surface table were NOT
+    // readable by the caller, the tab would be a widening mechanism waiting to
+    // happen. Every declared table must answer without a privilege/policy error.
+    const decl = getModule('classroom')!.viewAs
+    for (const position of ['student', 'ga'] as const) {
+      for (const t of decl.surfaces[position]!.role) {
+        const { error } = await alice.from(t.table).select(t.columns.join(', ')).limit(1)
+        expect(error, `${position}/${t.table}: ${JSON.stringify(error)}`).toBeNull()
+      }
+    }
+  })
+})
+
+describe('view-as session log: append-only, and a floor under the edge table (slice 5)', () => {
+  let orgA: string
+  let charlieV: SupabaseClient
+  let gabeV: SupabaseClient
+  const uid = {} as Record<string, string> & { alice: string; charlie: string; dana: string; gabe: string }
+  const errored = (r: { error: unknown }) => r.error != null
+
+  const session = (c: SupabaseClient, target: string, role: string, scope: string | null) =>
+    c
+      .from('view_as_sessions')
+      .insert({
+        org_id: orgA,
+        module_key: 'classroom',
+        actor_user_id: uid.alice,
+        target_user_id: target,
+        target_role: role,
+        target_scope_ref: scope,
+      })
+      .select('id, actor_user_id, expires_at')
+      .single()
+
+  beforeAll(async () => {
+    charlieV = await signIn('charlie@demo.local')
+    gabeV = await signIn('gabe@demo.local')
+    orgA = (await alice.from('orgs').select('id').eq('slug', 'demo-a').single()).data!.id
+    for (const e of ['alice', 'charlie', 'dana', 'gabe']) {
+      const { data } = await alice.rpc('org_find_user_by_email', {
+        check_org_id: orgA,
+        target_email: `${e}@demo.local`,
+      })
+      uid[e] = data![0].user_id as string
+    }
+  })
+
+  it('a professor may open a session on a student grant; identity and expiry are server-stamped', async () => {
+    // Charlie is the seeded student, SCOPED to the Statistics 101 class node.
+    const { data: grant } = await alice
+      .from('module_roles')
+      .select('scope_ref')
+      .eq('org_id', orgA)
+      .eq('module_key', 'classroom')
+      .eq('user_id', uid.charlie)
+      .eq('role', 'student')
+      .single()
+    const { data, error } = await session(alice, uid.charlie, 'student', grant!.scope_ref as string | null)
+    expect(error, JSON.stringify(error)).toBeNull()
+    expect(data!.actor_user_id).toBe(uid.alice)
+    expect(new Date(data!.expires_at as string).getTime()).toBeGreaterThan(Date.now())
+  })
+
+  it('the actor column is the real caller even when the client forges it', async () => {
+    const { data, error } = await charlieV
+      .from('view_as_sessions')
+      .insert({
+        org_id: orgA,
+        module_key: 'classroom',
+        actor_user_id: uid.alice, // forged
+        target_user_id: uid.dana,
+        target_role: 'student',
+        target_scope_ref: null,
+      })
+      .select('id')
+      .single()
+    // Charlie is a student: rewritten to himself, then refused for not
+    // outranking. The forgery never survives to a stored row.
+    expect(error, JSON.stringify(data)).not.toBeNull()
+  })
+
+  it('EQUAL RANK is refused in the database: a GA cannot open a session on a student', async () => {
+    // The peers rule (docs/15 §5) enforced independently of the TypeScript
+    // edge table — ga and student are both rank 1.
+    expect(errored(await session(gabeV, uid.charlie, 'student', null))).toBe(true)
+  })
+
+  it('upward and self targets are refused', async () => {
+    expect(errored(await session(charlieV, uid.alice, 'professor', null))).toBe(true)
+    expect(errored(await session(alice, uid.alice, 'professor', null))).toBe(true)
+  })
+
+  it('a target grant that does not exist is refused (point 4: the target is a real grant triple)', async () => {
+    expect(errored(await session(alice, uid.dana, 'ga', null))).toBe(true)
+  })
+
+  it('the log is append-only — no UPDATE, no DELETE, by anyone', async () => {
+    const { data: mine } = await alice.from('view_as_sessions').select('id').limit(1).single()
+    expect(errored(await alice.from('view_as_sessions').update({ target_role: 'ga' }).eq('id', mine!.id))).toBe(true)
+    expect(errored(await alice.from('view_as_sessions').delete().eq('id', mine!.id))).toBe(true)
+  })
+
+  it('a session is visible to its actor and to org admins, not to the wider org', async () => {
+    const { data: charlieSees } = await charlieV.from('view_as_sessions').select('id')
+    expect(charlieSees ?? []).toEqual([])
+    const { data: aliceSees } = await alice.from('view_as_sessions').select('id')
+    expect((aliceSees ?? []).length).toBeGreaterThan(0)
+  })
+
+  it('a stranger reaches the session log at neither the privilege nor the row layer', async () => {
+    const anon = createClient(url, anonKey, { auth: { persistSession: false } })
+    const read = await anon.from('view_as_sessions').select('*').limit(1)
+    expect(read.error?.code, JSON.stringify(read.error)).toBe('42501')
+    const write = await anon.from('view_as_sessions').insert({
+      org_id: orgA,
+      module_key: 'classroom',
+      actor_user_id: uid.alice,
+      target_user_id: uid.charlie,
+      target_role: 'student',
+    })
+    expect(write.error?.code, JSON.stringify(write.error)).toBe('42501')
   })
 })
