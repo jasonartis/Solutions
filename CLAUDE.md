@@ -70,14 +70,33 @@ TRUNCATE**). Prod row counts unchanged; no data touched. Rules → docs/03 **#17
 `graphql_public` was raised as a possible anon surface and CLOSED — `pg_graphql` is not installed
 on prod, so the wrapper returns "extension is not enabled" and no data is reachable.
 
-**Next / open (pick WITH the founder — do not start unprompted; details in docs/15 §11):**
-- **Slice 5 follow-ons (nearest work, all cheap now the mechanism exists):** confirm or flip
-  **professor→student**; run the **nail-salon** view-as surface review (its 9 pairs are
-  enumerated and OFF — manager→worker/cashier looks straightforward) and then **speed-dating**'s
-  6; decide whether view-as **targets are notified** (§8.1 point 6 leaves it a product call);
-  confirm the guard's deliberate **lack of an `is_org_admin` short-circuit**, a conscious break
-  from docs/03 #9. Then **push slice 5 to prod** (backup → `--dry-run` → `migrate:prod` →
-  `prod-verify-migration.ts`) — it is committed-but-unpushed work until then.
+**Next / open (pick WITH the founder — do not start unprompted; details in docs/15 §11).
+RECOMMENDED ORDER as of 2026-08-02 — the first is blocking, then a broken user-facing
+feature, then new tooling:**
+
+- **1. BLOCKING — confirm CI went green for `1f2fc05` and that Vercel DEPLOYED.** The slice-5
+  migration is already applied to prod, so if `check` failed then `deploy` was SKIPPED and
+  prod runs the OLD app against the NEW schema. Harmless in itself (nothing deployed calls
+  the new table) but it must not sit that way. `gh` is not installed — check the GitHub UI.
+  If it failed on the speed-dating waitlist test, that is item 2, not a real regression.
+- **2. The speed-dating waitlist flake** (details in its own bullet below). Only truly urgent
+  if it is what broke CI. **CI has `retries: 1` and runs the PREBUILT server (`pnpm start`),
+  while local runs the dev server with JIT compilation and 0 retries** — and the 2026-07-30
+  diagnosis pinned this family on exactly that dev-server/load combination, so it may well be
+  green in CI and be a local-suite annoyance only.
+- **3. Students cannot see peer-review comments on their own homework** (own bullet below).
+  Small, UI-only, and arguably the peer-review feature not working at all — it produces
+  feedback nobody can read. Ranked above the new tooling for that reason; swap if you'd
+  rather have the debugging tools first.
+- **4. The superadmin console + per-person data browser** (own bullet below, fully specced in
+  docs/13 with all five open questions answered).
+
+Everything below is open but unranked:
+- **Slice 5 remaining follow-ons:** the **nail-salon** view-as surface review (its 9 pairs are
+  enumerated and OFF — manager→worker/cashier looks straightforward) and then
+  **speed-dating**'s 6; and decide whether view-as **targets are notified** (§8.1 point 6
+  leaves it a per-module product call). *(professor→student, the `is_org_admin` question and
+  the prod push are all SETTLED — see Now and docs/15's 2026-08-02 entry.)*
 - Slice 3 remainder: **entity-level joinPolicy** (invite-only/request-approval/open per
   class/location/event) — deferred follow-on. Slice 4 (defaults-on-join) is the only
   unbuilt slice left.
@@ -107,7 +126,11 @@ on prod, so the wrapper returns "extension is not enabled" and no data is reacha
   unchanged (the verifier asserts they can't shrink), it makes zero `.rpc()` calls, and pg-boss
   connects as `postgres`. Watch the next real job run rather than building a test for it.
 - `gh` is NOT installed on this machine — CI status can't be read from the terminal; check
-  GitHub's UI.
+  GitHub's UI. **CI differs from local in two ways that matter for flaky e2e:** `retries: 1`
+  (local 0) and a PREBUILT server via `pnpm start` (local uses `pnpm dev`, so route
+  compilation happens mid-test). A test that flakes locally may be reliably green in CI, and
+  vice versa — judge by the actual CI run, not the local one. Both settings are in
+  `apps/web/playwright.config.ts:9,15`.
 - **Founder decision 2026-08-02, small and unbuilt:** a student must see the COMMENTS on
   their own homework but never the peer GRADES given to them. The database already does
   exactly this (`cls_owns_submission` arm on `cls_review_comments_select`; a reviewee cannot
