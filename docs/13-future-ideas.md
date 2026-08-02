@@ -480,6 +480,54 @@ answers "what do you hold about me?" directly. Crude and NOT faithful to "what
 they see" — it is a different question and should be labelled as one in the UI so
 the two are never confused.
 
+**ANSWERED by the founder, 2026-08-02 — the five questions above, resolved:**
+
+1. **Superadmin-only for now, but design it to expand to module positions.** And
+   the key correction to my framing: a professor's data browser would **not
+   bypass the surface allow-list — it is a different question entirely.** It
+   shows *what the viewer already has the right to see* about that person,
+   bounded by their own RLS, "like we said with speed dating, no notes." So the
+   two tools answer two different questions and neither is a weaker version of
+   the other:
+   - **view-as** = *what does THIS PERSON see?* Curated by the surface
+     declaration, deliberately narrower than the viewer's own reach (survey
+     answers and reviewer identity are excluded on purpose).
+   - **data browser** = *what do I hold about this person?* Everything the
+     VIEWER may read, bounded by RLS and nothing else. A professor therefore
+     WOULD see survey answers here — legitimately, because they can already read
+     them. `sd_notes` stays invisible to everyone including a superadmin,
+     because no staff arm exists anywhere.
+   **Consequence that solves the blank-page problem:** the data browser needs no
+   surface declarations, so it works for every module on day one and never
+   renders blank. That inverts the earlier sequencing worry entirely.
+   **UI requirement:** it must never be labelled "what they see". It is "what I
+   can see about them". Presenting one as the other is the only way this
+   combination becomes misleading.
+
+2. **Build ONE query shape: rows that REFERENCE the person.** Founder flagged
+   over-engineering risk explicitly, and this is the answer to it — "rows they
+   can see" is what view-as already does, curated, so building both would be
+   duplicating view-as badly. Two tools, two questions, no overlap. A later
+   "combined view" is then just a UI convenience putting the two side by side,
+   not a third mechanism.
+
+3. **Honour the target grant's scope, but allow moving between scopes.** A scope
+   picker rather than a fixed scope. Founder's stated use: *"I can ask a user to
+   describe what they see and debug why something is working the way it is."*
+   Debuggability is the primary requirement here, not least because this is a
+   one-person team supporting the whole platform.
+
+4. **Superadmin picks any org.** If the tool later expands beyond superadmin, it
+   follows **view-as access** — so a professor could browse student and GA data
+   in their own scope, and eventually toggle between "rows referencing them",
+   "rows they can see", or a combined view.
+
+5. Overlap with the existing per-hat data export: unresolved, but likely the
+   same underlying query with a different renderer. Check `modules/*/ui/export.ts`
+   before writing new query code.
+
+**Superseded — the original open questions, kept for the reasoning:**
+
 **OPEN QUESTIONS to settle before building** (asked 2026-08-02, unanswered):
 1. **Is the data browser superadmin-only, or does it follow view-as edges?**
    The security fork. If a professor gets a data browser for a student it

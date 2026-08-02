@@ -6,6 +6,55 @@ lean. Newest first. Durable *decisions/conventions* live in their own docs (docs
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
 
 
+- **2026-08-02 (SLICE 5 PUSHED TO PROD + PROD-VERIFIED; a prod-only ACL gap the generic
+  verifier structurally could not see, Opus session):** `20260731010000_view_as_sessions.sql`
+  is **LIVE ON PROD** (commit `ad8e989`, pushed with 5 earlier commits;
+  `git log origin/master..master` empty). Backup first
+  (`backups/2026-08-02T14-06-48/` — schema 337KB + data 1.7MB); `--dry-run` confirmed exactly
+  ONE pending migration; `migrate:prod` applied it. The CLI's non-fatal
+  `pgdelta-target-ca.crt ENOENT` appeared again — its catalog-CACHE step tripping on a local
+  cert path, same as slice 3; the migration applied and is recorded.
+  - **New tooling, and it paid for itself on the first run:**
+    `scripts/prod-verify-view-as.mts`. Needed because `prod-verify-migration.ts` parses
+    `create function` blocks, so on this migration it verified two function bodies and the
+    version row and **nothing else** — not the table, not its ACL, not the policies, not the
+    trigger, not whether the guard actually refuses anything. The new script checks all of
+    those plus the edge mirror across 9 pairs, rank parity across 12 positions, and a
+    **rolled-back live probe** (founder's 2026-07-29 requirement) proving a student and a
+    speed-dating organizer are both refused — the latter specifically by the EDGE check, not
+    merely by rank or scope. Prod **29/29**.
+  - **THE FINDING — a prod-only ACL gap, exactly the class the 2026-07-22 lesson is about.**
+    `20260731010000` wrote `revoke all privileges ... from public, anon, authenticated` and
+    its comment claimed "No UPDATE, no DELETE, no TRUNCATE, to anyone". True on LOCAL. On
+    PROD, `ALTER DEFAULT PRIVILEGES FOR ROLE postgres` also grants the full set to
+    **service_role** on every new table, and the revoke never named it — so prod had
+    `service_role = DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE` on the
+    audit log. **anon and authenticated were correct**, so no api-role surface was ever
+    exposed, but a security log the worker's key can wipe is not append-only in the sense the
+    design claims. `20260802010000_view_as_sessions_service_role.sql` narrows it to SELECT.
+    A NEW file, not an edit: the original had already run against prod, and editing an
+    applied migration is the append-only rule's exact failure mode. Deliberately targeted at
+    this ONE table rather than reopening the platform-wide `service_role` deferral — an audit
+    log is precisely where "it bypasses RLS anyway" stops being a good reason, and nothing in
+    the worker touches this table. Lesson recorded as docs/03 **#17**: a revoke naming only
+    `public, anon, authenticated` is incomplete on prod.
+  - **A harness bug worth remembering** (cost one crashed prod run, wrote nothing): in
+    Postgres a failed statement poisons the whole transaction, so catching the error in
+    JavaScript is not enough — the next statement dies with "current transaction is aborted".
+    Every expected-to-fail probe now runs inside its own SAVEPOINT. Verified prod was left
+    with 0 rows after the crash before continuing.
+  - **Also this session:** the founder rule **"org position does not enable view-as, module
+    position does"** (recorded in the migration, docs/15 and docs/03 #18 as an explicit
+    do-not-fix, since it makes this the one gate on the platform without an `is_org_admin`
+    arm); terminology corrected from "impersonation" to **view-as** on the founder's point
+    that mode 2 is read-only viewing, not acting-as (`mayImpersonatePosition` →
+    `mayViewAsPerson`); the peer-review anonymity boundary corrected (anonymous from other
+    students and the GA, never from the professor) and the resulting GA comment/grade
+    asymmetry confirmed INTENDED; and the finding that **no student-facing view of
+    peer-review feedback exists at all** — `cls_comments_for_my_submission()` was written for
+    it, strips `author_id`, is still granted, and has never had a caller.
+  - Local after both migrations: `db:reset` + seed + **RLS 77/77**, typecheck 9/9, build clean.
+
 - **2026-07-31 (USER-MODEL SLICE 5 — VIEW-AS BUILT, Opus session; the four open items resolved):**
   `20260731010000_view_as_sessions.sql` + a declaration layer
   (`packages/platform/src/view-as{,-modules}.ts`) + a generic renderer

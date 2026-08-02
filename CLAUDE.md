@@ -19,9 +19,16 @@ A multi-tenant modular platform: each client engagement produces a **module** bu
      and update only the compact "Now / Next / Standing rules" below. A fresh chat must never
      pay for the full journal. See "Session hygiene". -->
 
-**Now (2026-07-31):** Live on prod (solutions-platform.vercel.app). **User-model slice 5 —
-VIEW-AS — is BUILT AND LOCALLY VERIFIED, NOT YET PUSHED TO PROD**
-(`20260731010000_view_as_sessions.sql`, uncommitted). A higher position can render a lower
+**Now (2026-08-02):** Live on prod (solutions-platform.vercel.app). **User-model slice 5 —
+VIEW-AS — is PUSHED TO PROD AND PROD-VERIFIED** (`20260731010000` + `20260802010000`,
+commit `ad8e989`): backup → `--dry-run` (exactly 1 pending) → `migrate:prod` → the new
+**`scripts/prod-verify-view-as.mts` 29/29 on prod**, including a rolled-back live probe where
+a student and a speed-dating organizer were both refused a session, the second by the EDGE
+check specifically. **That verifier earned itself immediately:** it caught that
+`20260731010000`'s `revoke all ... from public, anon, authenticated` had not named
+`service_role`, so prod's `ALTER DEFAULT PRIVILEGES` left it holding DELETE/UPDATE/wipe on
+the audit log (anon + authenticated were correct, so no api-role surface was exposed);
+`20260802010000` narrows it to SELECT. Lesson → docs/03 #17. A higher position can render a lower
 position's page shape as themselves (mode 1) or, for a declared pair, view a NAMED person's
 surface read-only (mode 2). **Declarations exist for all 8 modules** — the rank-differential
 completeness check is only a check if no module can opt out — but **edges are ON for classroom
@@ -108,15 +115,17 @@ on prod, so the wrapper returns "extension is not enabled" and no data is reacha
   `cls_comments_for_my_submission()` was written for it, strips `author_id`, is still
   granted to `authenticated`, and has never had a caller. Peer review currently produces
   feedback no student can read. Sonnet-tier. Details in docs/modules/module-2-classroom.md.
-- **Founder decision 2026-08-02, parked in docs/13 (NOT built, sequenced after the slice-5
-  prod push):** a superadmin-only Owner Console surface that **bypasses every declared
+- **NEXT UP — founder-decided 2026-08-02, fully specced in docs/13, NOT built (the prod push
+  it was sequenced behind is now DONE):** a superadmin-only Owner Console surface that **bypasses every declared
   view-as edge** (including the permanently-banned speed-dating participant pairs),
   deliberately kept out of the in-module tabs, and **unlogged**. Plus a companion per-person
-  **data browser** ("what do you hold about me?") to sit alongside view-as. Five open
-  questions recorded there — the load-bearing one is whether the data browser is
-  superadmin-only or follows view-as edges, since following edges would bypass the surface
-  allow-list. Note a position with no declared SURFACE renders blank regardless of edges:
-  only classroom student/ga have one today.
+  **data browser** ("what do you hold about me?") to sit alongside view-as. All five open questions are now ANSWERED there. The key
+  one: the data browser does NOT bypass the surface allow-list — it answers a DIFFERENT
+  question. view-as = "what does this person see?" (curated, deliberately narrower than the
+  viewer's reach); data browser = "what do I hold about this person?" (everything the VIEWER
+  may read, bounded by RLS). So it needs no surfaces, works for every module on day one, and
+  never renders blank — which removes the blank-page problem entirely. Build ONE query shape
+  (rows REFERENCING the person); "rows they can see" is view-as and must not be rebuilt.
 - **Founder-raised 2026-08-02, parked in docs/13:** a superadmin **read-only** view of every
   module's positions/ranks/view-as pair grid + surfaces (highest-value follow-on — those
   decisions are real and tested but buried in a TS file), and generalising per-position
