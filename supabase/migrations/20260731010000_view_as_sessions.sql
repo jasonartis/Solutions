@@ -139,11 +139,21 @@ grant execute on function public.module_view_as_edge(text, text, text) to authen
 -- Requiring all three of ONE grant matters: a caller holding two grants must
 -- not be able to borrow the rank of one and the declared edge of another.
 --
--- Note there is deliberately NO is_org_admin() arm. Org roles are independent
--- of module authority (docs/15 §2.2); an org admin who wants a view-as tab
--- holds the module seat like anyone else. Every other module gate in the
--- platform bundles that short-circuit; this one should not, because it is the
--- only floor under an impersonation surface.
+-- FOUNDER RULE, 2026-08-02: **org position does not enable view-as; module
+-- position does.** So there is deliberately NO is_org_admin() arm here, unlike
+-- every other module gate on the platform (docs/03 #9), which all begin
+-- `is_org_admin(org) OR ...`. Org MEMBERSHIP remains a precondition — checked
+-- above — but org RANK (owner/admin/superadmin) confers nothing.
+--
+-- This is the direction docs/15 §2.2 and §9 already set, where the
+-- is_org_admin coupling is named as legacy to unwind; a brand-new
+-- impersonation surface should not add a fresh instance of it. Note the rule
+-- adds deliberation, not prevention: the module_roles hierarchy guard exempts
+-- org admins (20260720010000:399), so an owner may grant themselves the seat
+-- freely — it just becomes an explicit, recorded act rather than an ambient
+-- power. Reading the session log IS still open to org admins (the policy
+-- below): overseeing impersonation inside your own org is auditing, not
+-- view-as.
 -- ---------------------------------------------------------------------------
 create function public.view_as_guard_session()
 returns trigger

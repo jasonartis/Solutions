@@ -39,7 +39,7 @@ organizer could have minted a session naming a participant, a permanently banned
 pairs mirrored into IMMUTABLE SQL (`module_view_as_edge()`) with one grant required to satisfy
 rank+scope+edge together; FKs `on delete cascade` would have let a routine node delete erase the
 audit trail → `set null`; and a missing explicit `revoke all` would have handed prod's
-`ALTER DEFAULT PRIVILEGES` a TRUNCATE-able audit log. Review 2 then caught a regression created by review 1's own fix — the append-only
+`ALTER DEFAULT PRIVILEGES` a TRUNCATE-able audit log. **Founder rule 2026-08-02: org position does not enable view-as, module position does** — so the guard is the one gate on the platform with no `is_org_admin` arm (org membership is a precondition, org rank confers nothing; superadmin included; reading the session log stays open to org admins). Review 2 then caught a regression created by review 1's own fix — the append-only
 trigger and the new `on delete set null` FKs are incompatible (Postgres runs SET NULL as
 a real UPDATE, so the trigger aborted the parent DELETE and made any referenced node,
 user or org permanently undeletable) → append-only is now grants-only, as

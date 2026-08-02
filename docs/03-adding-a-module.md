@@ -327,6 +327,13 @@ edit anywhere else, that's a missing platform primitive — extract it, don't fo
       reader sees rows first, and create a fixture if the seed has none. This caught itself
       on the first clean run — an earlier manual row count had been contaminated by e2e
       leftovers, which is its own reminder that counts taken mid-session prove nothing.
+    - **Org position does not enable view-as; module position does** (founder,
+      2026-08-02). The `view_as_sessions` guard is the ONE gate on the platform with no
+      `is_org_admin` short-circuit — org membership is a precondition, org rank confers
+      nothing. Do not "fix" the inconsistency by adding the arm. Org admins may still READ
+      the session log (auditing is not view-as), and may still grant themselves a module
+      seat freely, which is the point: the power becomes an explicit recorded act instead
+      of an ambient one.
     - **An edge may only be ON in a module whose surfaces have had a security review**
       (§8.1 point 9). Enumerate the pairs, set them OFF with a note saying why, and turn
       them on when that module's review happens. Classroom is the worked example.

@@ -730,11 +730,21 @@ vocabulary gets locked.
   point 11 exactly as the amendment predicted: speed-dating's ban is now three
   explicit `participant`-target pairs set OFF with the reason attached.
 
-  **Deliberate departure, flagged for founder confirmation:** the session guard
-  has **no `is_org_admin` short-circuit**, unlike every other module gate on the
-  platform (docs/03 #9). Org roles are independent of module authority (§2.2),
-  and this is the only floor under an impersonation surface — so an org owner
-  who wants a view-as tab holds the module seat like anyone else.
+  **FOUNDER RULE, 2026-08-02 (confirming the build's deliberate departure):
+  "Org position does not enable view-as, but module position does."** The
+  session guard therefore has **no `is_org_admin` short-circuit**, unlike every
+  other module gate on the platform (docs/03 #9), which all begin
+  `is_org_admin(org) OR ...`. Org MEMBERSHIP stays a precondition; org RANK —
+  owner, admin, superadmin — confers nothing. This is the direction §2.2 and §9
+  already set, where that coupling is named as legacy to unwind; a new
+  impersonation surface should not add a fresh instance of it. The rule adds
+  DELIBERATION, not prevention: the module_roles guard exempts org admins
+  (`20260720010000:399`), so an owner may grant themselves the seat freely — it
+  simply becomes an explicit, recorded act rather than an ambient power.
+  Two consequences worth knowing: the **platform superadmin is included** (no
+  module role, no tabs — grant yourself one when testing), and **reading the
+  session log stays open to org admins**, since overseeing impersonation inside
+  your own org is auditing rather than view-as.
 
   **Verification:** RLS suite **77/77** (was 57; +20 for this slice), 2 new e2e
   tests as real users through the browser, and **21/21 live probes**
