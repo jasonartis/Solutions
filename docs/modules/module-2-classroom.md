@@ -286,3 +286,22 @@ was written for this page and has been sitting unused since `20260708010000`.
 feature produces feedback nobody receives. Worth pairing with any next classroom
 pass. Sonnet-tier work: one page section, one RPC call, one e2e test, plus the
 one-line grant restore.
+
+**Built (2026-08-03).** No migration, no grant change — `cls_comments_for_my_submission`
+already carried the correct `s.student_id = auth.uid()` filter and the ACL sweep had
+already left its `authenticated` grant in place (`20260728010000_acl_hardening.sql:80`);
+this was a pure UI gap. `modules/classroom/ui/homework/[homeworkId]/page.tsx` now calls
+the RPC whenever a submission exists and renders a "Peer review comments" section
+(file path + line range + body, no author) below the submission uploader. Extended the
+existing grading-workflow e2e (`apps/web/e2e/platform.spec.ts:319`) rather than adding a
+new test: after Charlie's review comment ("Nice work!") lands on Dana's submission and
+Dana's grades are checked, the test now also opens Dana's homework page and asserts the
+comment is visible with no "Charlie" text anywhere on the page. One locator wrinkle: Dana
+has her own peer-review assignment linking to the same homework title (a different href),
+so the click had to scope by `a[href*="/classroom/homework/"]` rather than link text alone
+— the same ambiguity the original Charlie-side test had already worked around for the
+review-route link. Verified: `pnpm typecheck` 9/9, the extended test in isolation, and a
+full clean `db:reset` → seed → e2e suite run — 37/37 passed, including the two previously-flaky
+speed-dating tests (docs/build-plan's open flake items are about test *ordering* sensitivity,
+not this change) — all via Playwright driving a real browser against the real local stack
+(no manual click-through session was done this pass).

@@ -64,6 +64,20 @@ export default async function HomeworkPage(props: {
 
   const canModify = submission?.state === 'submitted' && !deadlinePassed
 
+  type ReviewComment = {
+    id: string
+    file_path: string
+    line_start: number | null
+    line_end: number | null
+    body: string
+    created_at: string
+  }
+  let comments: ReviewComment[] = []
+  if (submission) {
+    const { data } = await supabase.rpc('cls_comments_for_my_submission', { check_submission_id: submission.id })
+    comments = (data ?? []) as ReviewComment[]
+  }
+
   return (
     <div>
       <p className="mb-1 text-sm text-gray-400">{org.name}</p>
@@ -112,6 +126,25 @@ export default async function HomeworkPage(props: {
           </p>
         )}
       </section>
+
+      {submission && (
+        <section className="mt-6 rounded-lg border border-gray-200 bg-white p-5">
+          <h2 className="mb-1 text-lg font-medium">Peer review comments</h2>
+          <p className="mb-3 text-xs text-gray-400">Reviewers are anonymous.</p>
+          <ul className="space-y-2 text-sm">
+            {comments.map((c) => (
+              <li key={c.id} className="rounded bg-gray-50 p-2">
+                <p className="mb-1 text-xs text-gray-400">
+                  {c.file_path}
+                  {c.line_start != null && `:${c.line_start}${c.line_end && c.line_end !== c.line_start ? `-${c.line_end}` : ''}`}
+                </p>
+                {c.body}
+              </li>
+            ))}
+            {comments.length === 0 && <li className="text-gray-400">No comments yet.</li>}
+          </ul>
+        </section>
+      )}
     </div>
   )
 }

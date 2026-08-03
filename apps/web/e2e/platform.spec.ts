@@ -387,6 +387,15 @@ test('classroom module: grading workflow — GA grade, peer review, finalize, pu
   const gradesList = page.locator('h3', { hasText: 'Your grades' }).locator('xpath=following-sibling::ul[1]')
   await expect(gradesList).toContainText('Homework 1 — Descriptive statistics')
   await expect(gradesList).toContainText('90')
+
+  // Dana's submission was the one Charlie reviewed and commented on above —
+  // she should see the comment on her own homework page, author-stripped.
+  // Dana also has her own peer-review assignment linking to the same homework
+  // title, so scope by href (/classroom/homework/, not /classroom/review/).
+  await page.locator('a[href*="/classroom/homework/"]', { hasText: 'Homework 1 — Descriptive statistics' }).click()
+  await expect(page.getByRole('heading', { name: 'Peer review comments' })).toBeVisible()
+  await expect(page.getByText('Nice work!')).toBeVisible()
+  await expect(page.getByText('Charlie', { exact: false })).not.toBeVisible()
 })
 
 test('classroom module: student answers a survey, professor reveals aggregate results', async ({ page }) => {

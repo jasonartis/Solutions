@@ -71,23 +71,26 @@ TRUNCATE**). Prod row counts unchanged; no data touched. Rules → docs/03 **#17
 on prod, so the wrapper returns "extension is not enabled" and no data is reachable.
 
 **Next / open (pick WITH the founder — do not start unprompted; details in docs/15 §11).
-RECOMMENDED ORDER as of 2026-08-02 — the first is blocking, then a broken user-facing
-feature, then new tooling:**
+RECOMMENDED ORDER as of 2026-08-03 — the first two are done, next is a bigger design/RLS
+piece (Opus/Fable territory, not Sonnet), then unranked follow-ons:**
 
 - ~~**1. Confirm CI/deploy for slice 5.**~~ **DONE 2026-08-02** — all three pushes
   (`ad8e989`, `1f2fc05`, `01d7339`) are `READY` in Vercel production, which proves CI was
   green (the `deploy` job has `needs: check`). Prod app and prod schema are in sync.
-- **2. The speed-dating waitlist flake** (details in its own bullet below). Only truly urgent
-  if it is what broke CI. **CI has `retries: 1` and runs the PREBUILT server (`pnpm start`),
-  while local runs the dev server with JIT compilation and 0 retries** — and the 2026-07-30
-  diagnosis pinned this family on exactly that dev-server/load combination, so it may well be
-  green in CI and be a local-suite annoyance only.
-- **3. Students cannot see peer-review comments on their own homework** (own bullet below).
-  Small, UI-only, and arguably the peer-review feature not working at all — it produces
-  feedback nobody can read. Ranked above the new tooling for that reason; swap if you'd
-  rather have the debugging tools first.
+- ~~**2. Students cannot see peer-review comments on their own homework.**~~ **DONE 2026-08-03**
+  (see the dated bullet below).
+- **3. The speed-dating waitlist flake** (details in its own bullet below). Only truly urgent
+  if it is what broke CI, which is now ruled out by item 1. **CI has `retries: 1` and runs the
+  PREBUILT server (`pnpm start`), while local runs the dev server with JIT compilation and 0
+  retries** — and the 2026-07-30 diagnosis pinned this family on exactly that dev-server/load
+  combination, so it may well be green in CI and be a local-suite annoyance only. A clean
+  `db:reset` → seed → full e2e run on 2026-08-03 (verifying the peer-review-comments fix)
+  reproduced BOTH speed-dating tests passing cleanly — so the flake, when it happens, is
+  intermittent even under the documented failure-inducing order, not a hard regression.
 - **4. The superadmin console + per-person data browser** (own bullet below, fully specced in
-  docs/13 with all five open questions answered).
+  docs/13 with all five open questions answered). **Model note:** this is new RLS/edge-bypass
+  design, not a copy of an audited pattern — Opus 4.8+ territory per the model-choice rules
+  below, not a Sonnet session.
 
 Everything below is open but unranked:
 - **Slice 5 remaining follow-ons:** the **nail-salon** view-as surface review (its 9 pairs are
@@ -134,13 +137,13 @@ Everything below is open but unranked:
   compilation happens mid-test). A test that flakes locally may be reliably green in CI, and
   vice versa — judge by the actual CI run, not the local one. Both settings are in
   `apps/web/playwright.config.ts:9,15`.
-- **Founder decision 2026-08-02, small and unbuilt:** a student must see the COMMENTS on
-  their own homework but never the peer GRADES given to them. The database already does
-  exactly this (`cls_owns_submission` arm on `cls_review_comments_select`; a reviewee cannot
-  read `cls_review_assignments` at all) — what is missing is the PAGE. UI-only:
-  `cls_comments_for_my_submission()` was written for it, strips `author_id`, is still
-  granted to `authenticated`, and has never had a caller. Peer review currently produces
-  feedback no student can read. Sonnet-tier. Details in docs/modules/module-2-classroom.md.
+- ~~**Founder decision 2026-08-02, small and unbuilt:** a student must see the COMMENTS on
+  their own homework but never the peer GRADES given to them.~~ **BUILT 2026-08-03** — UI-only,
+  no migration/grant change needed (`cls_comments_for_my_submission()` already had the right
+  RLS-equivalent filter and its `authenticated` grant). The homework page now renders a
+  "Peer review comments" section via that RPC; extended the existing grading-workflow e2e
+  rather than adding a new one. Typecheck 9/9, full clean-seed e2e suite 37/37. Details →
+  docs/modules/module-2-classroom.md's 2026-08-03 entry.
 - **NEXT UP — founder-decided 2026-08-02, fully specced in docs/13, NOT built (the prod push
   it was sequenced behind is now DONE):** a superadmin-only Owner Console surface that **bypasses every declared
   view-as edge** (including the permanently-banned speed-dating participant pairs),
