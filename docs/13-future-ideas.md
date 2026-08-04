@@ -478,6 +478,21 @@ to the superadmin read-only view; do them together if either is picked up.
 >   customers who DO have an account were also missing their bills, for an unrelated
 >   structural reason (a two-hop path), and that one was a bug and is fixed.
 >
+> **Small follow-ons the two adversarial reviews raised and the build did NOT act on**
+> (recorded so they are not lost; none is a correctness or security problem):
+> - The coverage test's **tier 2 has no non-triviality floor**, unlike tier 1's
+>   `expect(rows.length).toBeGreaterThan(40)`. A *fully* broken tier-2 query is still
+>   caught indirectly (every declared via-link would show as phantom), but a *partially*
+>   broken one would under-report its triage list silently. Cheap to add.
+> - **No e2e exercises a via-only section's happy path.** The two-hop chain is proved at
+>   the data layer by `verify-data-browser.mts` probes [2] and [5], but the browser e2e
+>   only asserts direct-column sections, so a `resolveViaIds` regression would be caught
+>   by the manual probe script rather than by CI.
+> - **`truncated` is a safe-direction false positive**: `rows.length >= limit` marks a
+>   section truncated when exactly `limit` rows exist and there is no more. Over-cautions
+>   rather than under-reports, which is the correct side of this feature's asymmetry, so
+>   it was left alone deliberately.
+>
 > **Also settled 2026-08-03 (founder asked, answer verified against the live policies):**
 > the view-as session log is NOT scope-based. `view_as_sessions_select_org_admin` is
 > `is_org_admin(org_id)` — whole-org. Scope lives on module positions; org admin has no
