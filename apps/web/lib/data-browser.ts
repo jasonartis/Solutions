@@ -50,6 +50,8 @@ export type BrowsedSection = {
   truncated: boolean
   /** Which module (or 'platform') this table belongs to. */
   source: string
+  /** Audit/queue rows — rendered under their own heading, not mixed with data. */
+  activity: boolean
 }
 
 export type BrowsedResult = {
@@ -169,6 +171,7 @@ async function runLookup(
       error: `could not resolve which rows relate to this person: ${via.error}`,
       truncated: false,
       source,
+      activity: lookup.activity === true,
     }
   }
 
@@ -202,6 +205,7 @@ async function runLookup(
       error: error.message,
       truncated: false,
       source,
+      activity: lookup.activity === true,
     }
   }
 
@@ -224,6 +228,7 @@ async function runLookup(
     // the section is a prefix even when the parent query returned few rows.
     truncated: rows.length >= limit || via.truncated,
     source,
+    activity: lookup.activity === true,
   }
 }
 

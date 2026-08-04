@@ -459,6 +459,16 @@ to the superadmin read-only view; do them together if either is picked up.
 > - **Show every column, not a chosen list** — the tool exists to be complete, and an
 >   allow-list would hide the new data it should surface. Paired with search, per-section
 >   column hide/show, and collapse, since the answer can be large.
+> - **Audit/history rows ARE included, under their own heading.** `view_as_sessions` and
+>   `vm_moderation_log` name people, and "professor X viewed your account on Tuesday" is
+>   genuinely part of what the platform holds about someone — so they are shown, but under
+>   an "Activity about this person" heading rather than mixed in with their own data. The
+>   founder asked whether this would expose staff activity to a GA or student; it does not,
+>   and RLS is the reason rather than anything the browser does:
+>   `view_as_sessions` is readable only by the actor and by org admins, `vm_moderation_log`
+>   only at moderator tier, so a lower position simply gets nothing back. The one real
+>   (pre-existing) consequence is that one org admin can see another's view-as history —
+>   already true since slice 5, and the open scope question above is about exactly that.
 > - **Walk-in salon customers stay out of scope.** Most `sal_customers` rows identify a
 >   person by free-text name/phone/email with no account, and the browser keys on a user
 >   account. Requiring accounts was considered and rejected as the wrong fix (it works

@@ -248,9 +248,39 @@ export default function DataBrowserResults({
         </p>
       )}
 
-      {visible.map((s) => (
-        <SectionCard key={`${s.source}:${s.table}`} section={s} search={search} subjectId={subjectId} />
-      ))}
+      {/* Data they or the org entered, first. */}
+      {visible
+        .filter((s) => !s.activity)
+        .map((s) => (
+          <SectionCard key={`${s.source}:${s.table}`} section={s} search={search} subjectId={subjectId} />
+        ))}
+
+      {/* Then what was DONE to or by them — kept apart on the founder's
+          decision (2026-08-03) that "professor X viewed your account on
+          Tuesday" belongs in the answer but not mixed in with their gradebook. */}
+      {visible.some((s) => s.activity) && (
+        <div className="mt-6">
+          <h2 className="mb-1 text-sm font-semibold uppercase tracking-wide text-gray-500">
+            Activity about this person
+          </h2>
+          <p className="mb-3 text-xs text-gray-500">
+            Not data they entered — a record of what was done to or by them. Who can see any of
+            this is decided by RLS as everywhere else: the view-as log is readable only by the
+            person who did the viewing and by org admins, and the moderation log only by
+            moderators.
+          </p>
+          {visible
+            .filter((s) => s.activity)
+            .map((s) => (
+              <SectionCard
+                key={`${s.source}:${s.table}`}
+                section={s}
+                search={search}
+                subjectId={subjectId}
+              />
+            ))}
+        </div>
+      )}
 
       {result.unreadable.length > 0 && (
         <section className="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-4">

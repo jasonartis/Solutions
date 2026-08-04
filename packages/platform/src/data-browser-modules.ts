@@ -70,6 +70,7 @@ export const platformDataBrowser = declareDataBrowser({
     },
     {
       table: 'job_requests',
+      activity: true,
       label: 'Background jobs they requested',
       personColumns: ['requested_by'],
       orgColumn: 'org_id',
@@ -81,6 +82,7 @@ export const platformDataBrowser = declareDataBrowser({
     },
     {
       table: 'view_as_sessions',
+      activity: true,
       label: 'View-as sessions naming them',
       personColumns: ['actor_user_id', 'target_user_id'],
       orgColumn: 'org_id',
@@ -659,6 +661,7 @@ export const visualMessagingDataBrowser = declareDataBrowser({
     },
     {
       table: 'vm_moderation_log',
+      activity: true,
       label: 'Moderation actions',
       personColumns: ['actor_user_id'],
       via: [

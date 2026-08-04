@@ -103,6 +103,18 @@ export type PersonLookup = {
   limit?: number
   /** Shown with the section when the rows need interpreting. */
   note?: string
+  /**
+   * Rows recording what was DONE to or by this person rather than data they
+   * or the org entered — audit logs and operational queues.
+   *
+   * Rendered under a separate heading, on the founder's decision (2026-08-03)
+   * that "professor X viewed your account on Tuesday" is a legitimate part of
+   * "what do you hold about me?" but should not sit mixed in with a person's
+   * own gradebook rows. Presentation only: RLS decides who sees any of it, and
+   * these tables are among the most tightly gated on the platform (the view-as
+   * log is actor-or-org-admin; the moderation log is moderator-tier).
+   */
+  activity?: boolean
 }
 
 /**
