@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { getModule } from '@platform/core'
 import { requireOrgModule } from '@/lib/module-gate'
+import { formatCell } from '@/lib/format-cell'
 import {
   activeSession,
   heldGrants,
@@ -33,18 +34,9 @@ type Props = {
   searchParams: Promise<{ tab?: string; mode?: string }>
 }
 
-function fmtCell(value: unknown): string {
-  if (value === null || value === undefined) return '—'
-  if (typeof value === 'boolean') return value ? 'yes' : 'no'
-  if (typeof value === 'object') {
-    const obj = value as Record<string, unknown>
-    return String(obj.title ?? obj.name ?? JSON.stringify(obj))
-  }
-  const s = String(value)
-  // Timestamps read better short; ids stay as-is so they can be matched up.
-  if (/^\d{4}-\d{2}-\d{2}T/.test(s)) return s.slice(0, 16).replace('T', ' ')
-  return s
-}
+// Shared with the data browser, which renders the same kind of generic row
+// table — see lib/format-cell.ts for why it was extracted.
+const fmtCell = formatCell
 
 function SectionTable({ section }: { section: RenderedSection }) {
   const embedKeys = section.rows.length

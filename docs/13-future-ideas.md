@@ -439,6 +439,46 @@ to the superadmin read-only view; do them together if either is picked up.
 
 ## Superadmin "view as anything" console + a per-person data browser
 
+> **STATUS 2026-08-03: the DATA BROWSER half is BUILT** (`/console/data-browser`,
+> superadmin-only, zero migrations). Rules extracted to docs/03 **#19**; the dated
+> record is in docs/15's decisions log and the journal. The **Owner Console view-as**
+> half is next, founder-sequenced. Everything below is kept as the reasoning that
+> produced it — where the build sharpened or corrected it, docs/15's 2026-08-03 entry
+> says so.
+>
+> **Build order changed, founder 2026-08-03:** data browser first, Owner Console
+> after. The reason is in the sizing note at the bottom of this entry, sharpened by
+> reading the code: the console's edge bypass can only render positions that have a
+> declared SURFACE, and today that is classroom `student` and `ga` alone. The banned
+> speed-dating `participant` pair it was meant to bypass has no surface, so the console
+> renders it blank regardless. The data browser needs no surfaces and worked on all
+> eight modules on day one — so it delivers first.
+>
+> **Two founder answers added 2026-08-03**, both resolving questions the original entry
+> did not ask:
+> - **Show every column, not a chosen list** — the tool exists to be complete, and an
+>   allow-list would hide the new data it should surface. Paired with search, per-section
+>   column hide/show, and collapse, since the answer can be large.
+> - **Walk-in salon customers stay out of scope.** Most `sal_customers` rows identify a
+>   person by free-text name/phone/email with no account, and the browser keys on a user
+>   account. Requiring accounts was considered and rejected as the wrong fix (it works
+>   against how a salon actually operates); the clean fix, if ever needed, is letting a
+>   salon LINK an existing walk-in record to an account when that person signs up.
+>   Recorded as a known gap. Note this is narrower than it sounds — a review found that
+>   customers who DO have an account were also missing their bills, for an unrelated
+>   structural reason (a two-hop path), and that one was a bug and is fixed.
+>
+> **Also settled 2026-08-03 (founder asked, answer verified against the live policies):**
+> the view-as session log is NOT scope-based. `view_as_sessions_select_org_admin` is
+> `is_org_admin(org_id)` — whole-org. Scope lives on module positions; org admin has no
+> scope dimension. So a course-scoped professor who is *not* an org admin sees only
+> sessions they started, while one who *is* an org admin sees every session in the org
+> regardless of which course it concerned. Left as-is deliberately: narrowing it is a
+> real RLS change with its own migration and review, and faking the narrowing in the UI
+> would look like a boundary without being one. **Open question, parked here:** should
+> org-admin log reading be scope-narrowed? The browser makes this data findable where
+> before it was merely readable.
+
 *Founder, 2026-08-02, deciding the superadmin question left open by slice 5.
 Parked deliberately — NOT built. Sequenced after the slice-5 prod push so a
 god-mode surface does not ride along in a deploy of already-reviewed work.*

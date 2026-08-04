@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeAll, afterAll, afterEach } from 'vitest'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
-import { getModule, moduleRegistry, viewAsCompleteness } from '@platform/core'
+import { dataBrowserDeclarations, getModule, moduleRegistry, viewAsCompleteness } from '@platform/core'
 
 // RLS isolation test (M0 acceptance, docs/04): a user in org B must see
 // nothing of org A. Runs against the seeded local stack:
@@ -1706,5 +1706,123 @@ describe('view-as session log: append-only, and a floor under the edge table (sl
       target_role: 'student',
     })
     expect(write.error?.code, JSON.stringify(write.error)).toBe('42501')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Data browser (docs/13, docs/03 #19)
+// ---------------------------------------------------------------------------
+describe('data browser: the neverReadable claim is TRUE, not just declared', () => {
+  // WHY THIS IS IN THE CI SUITE AND NOT ONLY IN scripts/verify-data-browser.mts.
+  // `neverReadable` is rendered to an operator as a statement of fact — "rows
+  // about this person exist here and NOBODY, including you, may read them".
+  // Nothing else checks that the statement is true: the coverage test only
+  // checks the entry is well-formed, and the probe script is not run by CI. A
+  // migration that added `or public.is_superadmin()` to sd_notes_all_own would
+  // leave every automated check green while the UI kept asserting the opposite.
+  //
+  // This mirrors what view-as already does for `unreadableByPosition` above —
+  // the same claim shape deserves the same enforcement.
+
+  // Each neverReadable table needs a recipe that creates a REAL row as whoever
+  // is allowed to, so the "nobody can read it" assertion is never satisfied by
+  // an empty table (docs/03 #18's non-emptiness control). A declared table with
+  // no recipe FAILS rather than being skipped: an unprovable claim on screen is
+  // exactly what this test exists to prevent.
+  type Fixture = { rowId: string; author: SupabaseClient; cleanup: () => Promise<void> }
+  const recipes: Record<string, () => Promise<Fixture>> = {
+    sd_notes: async () => {
+      const organizer = await signIn('alice@demo.local')
+      const author = await signIn('charlie@demo.local')
+      const subject = await signIn('dana@demo.local')
+      const authorId = (await author.auth.getUser()).data.user!.id
+      const subjectId = (await subject.auth.getUser()).data.user!.id
+      const org = (await organizer.from('orgs').select('id').eq('slug', 'demo-dating').single()).data!
+
+      const ev = await organizer
+        .from('sd_events')
+        .insert({ org_id: org.id, name: 'neverReadable fixture', scheduled_at: new Date(Date.now() + 864e5).toISOString() })
+        .select('id')
+        .single()
+      if (ev.error) throw new Error(`fixture event: ${ev.error.message}`)
+
+      const parts = await organizer
+        .from('sd_participants')
+        .insert([
+          { org_id: org.id, event_id: ev.data.id, user_id: authorId },
+          { org_id: org.id, event_id: ev.data.id, user_id: subjectId },
+        ])
+        .select('id')
+      if (parts.error) throw new Error(`fixture participants: ${parts.error.message}`)
+
+      const note = await author
+        .from('sd_notes')
+        .insert({
+          org_id: org.id,
+          event_id: ev.data.id,
+          author_user_id: authorId,
+          about_user_id: subjectId,
+          body: 'neverReadable fixture',
+        })
+        .select('id')
+        .single()
+      if (note.error) throw new Error(`fixture note: ${note.error.message}`)
+
+      return {
+        rowId: note.data.id,
+        author,
+        cleanup: async () => {
+          await author.from('sd_notes').delete().eq('id', note.data.id)
+          for (const p of parts.data ?? []) await organizer.from('sd_participants').delete().eq('id', p.id)
+          await organizer.from('sd_events').delete().eq('id', ev.data.id)
+        },
+      }
+    },
+  }
+
+  it('every neverReadable table really is unreadable — by staff and by the superadmin', async () => {
+    const superadmin = await signIn('owner@demo.local')
+    const organizer = await signIn('alice@demo.local')
+
+    // The superadmin precondition is itself asserted: if owner@demo.local were
+    // not a superadmin locally, "the superadmin cannot read it" would pass for
+    // the wrong reason entirely.
+    const ownerId = (await superadmin.auth.getUser()).data.user!.id
+    const { data: prof } = await superadmin.from('profiles').select('is_superadmin').eq('user_id', ownerId).single()
+    expect(prof?.is_superadmin, 'owner@demo.local must be the local superadmin for this test to mean anything').toBe(true)
+
+    const entries = Object.entries(dataBrowserDeclarations).flatMap(([key, decl]) =>
+      decl.neverReadable.map((u) => ({ moduleKey: key, table: u.table })),
+    )
+    expect(entries.length, 'no neverReadable entries were checked').toBeGreaterThan(0)
+
+    for (const entry of entries) {
+      const recipe = recipes[entry.table]
+      expect(
+        recipe,
+        `${entry.moduleKey} declares ${entry.table} neverReadable but no fixture recipe proves it — ` +
+          `add one to rls.test.ts rather than shipping an unprovable claim to the UI`,
+      ).toBeDefined()
+
+      const fixture = await recipe!()
+      try {
+        // CONTROL: the row exists and someone can read it.
+        const { data: byAuthor } = await fixture.author.from(entry.table).select('id').eq('id', fixture.rowId)
+        expect((byAuthor ?? []).length, `${entry.table}: the fixture row is not readable by its own author`).toBe(1)
+
+        for (const [who, client] of [
+          ['module staff', organizer],
+          ['the platform superadmin', superadmin],
+        ] as [string, SupabaseClient][]) {
+          const { data } = await client.from(entry.table).select('id').eq('id', fixture.rowId)
+          expect(
+            (data ?? []).length,
+            `${entry.table} is declared readable by nobody, but ${who} can read it`,
+          ).toBe(0)
+        }
+      } finally {
+        await fixture.cleanup()
+      }
+    }
   })
 })

@@ -6,6 +6,35 @@ lean. Newest first. Durable *decisions/conventions* live in their own docs (docs
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
 
 
+- **2026-08-03 (PER-PERSON DATA BROWSER BUILT — docs/13's Owner Console pair, first half;
+  Opus session, two Fable adversarial reviews; NOT YET PUSHED):** `/console/data-browser`,
+  superadmin-only. Answers *"what do I hold about this person?"* — every row the VIEWER may
+  read that names the subject — as distinct from view-as's *"what does this person see?"*.
+  Full reasoning, findings and verification numbers in **docs/15's decisions log,
+  2026-08-03**; the reusable rules are docs/03 **#19**. Headlines:
+  - **Zero migrations**, because `is_org_admin()` already short-circuits on
+    `is_superadmin()` and `profiles`/`module_roles` already carry superadmin select arms.
+    The feature is presentation over the caller's own RLS client.
+  - **Founder re-sequenced the pair 2026-08-03**: data browser first, Owner Console view-as
+    second. Reading the code sharpened why — the console's edge bypass can only render a
+    position that has a declared SURFACE, and today that is classroom `student`/`ga` alone,
+    so the banned speed-dating pair it was meant to bypass renders blank anyway. The data
+    browser needs no surfaces and worked on all 8 modules on day one.
+  - **Two Fable reviews.** No ship-blocker on the security keystone (both attacked `.or()`
+    injection from the URL param, existence leaks via the two-step `via`, and cross-org
+    bleed; none broke it). One ship-blocker on honesty: `sal_bills` has no customer column,
+    so reaching a paying customer needs TWO hops and a customer with an account saw zero
+    bills. Plus three silent-under-report bugs and one factually wrong note.
+  - **The lesson most likely to recur:** `scripts/*.mts` are not run by CI, so a claim the
+    UI states as FACT (`neverReadable`) needs its assertion in the db suite, not only in a
+    probe script.
+  - **Rode along, unrelated:** the matchmaking e2e flake (~40% fresh seed, 100% dirty),
+    confirmed pre-existing on clean `master` by stashing all new work, then diagnosed rather
+    than patched blind — post-failure DB state was identical to the seed, so the write always
+    succeeded and only the re-render was late. `test.slow()` + a 20s timeout on the one
+    assertion; 5/5 green after. `test.slow()` alone is NOT sufficient: it raises the test
+    timeout, not the `expect` timeout, which was what expired.
+
 - **2026-08-02 (SLICE 5 PUSHED TO PROD + PROD-VERIFIED; a prod-only ACL gap the generic
   verifier structurally could not see, Opus session):** `20260731010000_view_as_sessions.sql`
   is **LIVE ON PROD** (commit `ad8e989`, pushed with 5 earlier commits;

@@ -161,3 +161,23 @@ kept only as a record of what was considered, not something to build):
 **Module 1's only remaining gap is the platform-wide conversations
 primitive** (users→admin messaging, still deferred — no second module has
 forced it yet).
+
+## Who can read `mm_answers` (clarified 2026-08-03)
+
+Recorded because it was got wrong once, in a data-browser note, and the mistake is a natural
+one: **`mm_answers` has no staff/admin arm at all.** The policy is
+
+```sql
+mm_answers_select: user_id = auth.uid() OR mm_matchmaker_can_see(org_id, user_id)
+```
+
+and `mm_matchmaker_can_see` requires a matching `mm_matchmaker_assignments` row for *that
+specific single* (directly or through a shared group). So `mm_can_manage` — which gates most
+of this module and includes org admins and the platform superadmin — grants **nothing** here.
+
+The practical consequence: an org admin with no assignment reads zero answers for a single,
+and an empty result does **not** mean the single has answered nothing. Any tool that reports
+"what we hold about this person" must say so rather than let the emptiness speak. Contrast
+`mm_interests`, which *does* have an `mm_can_manage` arm (admin oversight) while excluding
+plain matchmakers — the two tables differ deliberately, so neither can be inferred from the
+other.

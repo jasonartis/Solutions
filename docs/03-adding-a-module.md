@@ -347,6 +347,70 @@ edit anywhere else, that's a missing platform primitive — extract it, don't fo
       (§8.1 point 9). Enumerate the pairs, set them OFF with a note saying why, and turn
       them on when that module's review happens. Classroom is the worked example.
 
+## The data browser (docs/13, built 2026-08-03)
+
+19. **Every module declares which of its tables can name a person, and the DATABASE
+    CATALOG — not TypeScript — is the authority.** The data browser answers a different
+    question from view-as: *"what do I hold about this person?"* (everything the VIEWER
+    may read, bounded by RLS and nothing else) rather than *"what does this person
+    see?"* (a curated surface, deliberately narrower). Two tools, two questions; a UI
+    that presents one as the other is the only way the pair becomes misleading, so the
+    contrast is stated on the page itself.
+    - **Declare with `declareDataBrowser()`** in `packages/platform/src/data-browser-modules.ts`,
+      attached to the manifest beside `viewAs`. Three lists, mirroring #18's discipline for
+      the same reason: `lookups` (queried), `omitted` (person columns we deliberately do not
+      query, with a why), `neverReadable` (rows exist that NO viewer may read).
+    - **A mapped type cannot enforce this**, because "which columns name a person" is a fact
+      about the schema. `packages/db/src/data-browser-coverage.test.ts` reads `pg_catalog` and
+      FAILS on any FK to `auth.users`/`profiles` that no list accounts for, so a migration
+      adding a person column breaks CI until someone decides what the browser should do with
+      it. Use `pg_catalog`, never `information_schema` — `constraint_column_usage` does not
+      expose constraints targeting the `auth` schema, so the information_schema form of that
+      query silently returns ZERO rows and passes vacuously.
+    - **Indirect links are the ones that bite, and no catalog scan can find them.** Nine
+      tables name a person only through a child row and carry no person column at all
+      (`sd_interest`, `sd_matches`, `sd_pairings`, peer-review comments on your own
+      submission), and they hold some of the most sensitive rows on the platform. Declared as
+      `via` hops. The dividing rule for which one-hop links to declare: does the row say
+      something ABOUT the person, or does it merely share a CONTAINER with them? A flag on
+      their layer, a comment on their submission, a line item on their bill — declared.
+      "Same event", "same conversation" — not.
+    - **A hop chain can be longer than one, and assuming otherwise shipped a real gap.**
+      `sal_bills` has no customer column at all, so the path to a paying customer is
+      `bills.appointment_id -> appointments.customer_id -> customers.user_id`. With one hop
+      the browser showed a customer their appointments and ZERO bills — which reads as "we
+      hold no billing record for you", not as a broken link. Hence `PersonVia.then`.
+    - **`select *`, not an allow-list — the one deliberate departure from view-as.** The
+      feature exists to be COMPLETE, so an allow-list would silently hide exactly the new data
+      it should surface; and RLS is row-level, so anyone who can read the row can already read
+      every column of it from any client, making a UI allow-list comfort rather than
+      protection (hard rule 6).
+    - **The failure direction is under-reporting, and an empty section is indistinguishable
+      from a truthful "nothing here".** So: never swallow a query error (a failed `via` lookup
+      makes a via-only section VANISH — a third state, "we could not check", that must be
+      rendered as an error); cap every query including the intermediate hops; and check
+      module selection off entitlement rows that EXIST, not `enabled = true`, or disabling a
+      module hides its whole history at the exact moment someone opens this tool to decide
+      what to export before deprecating it.
+    - **Verify a `via` points where it CLAIMS to point.** Checking only that the column is
+      "some FK to some person-bearing table" leaves a hole: two candidate targets both having
+      an `id` means a wrong `lookupTable` passes every check and then returns zero rows
+      forever.
+    - **`neverReadable` is asserted in the CI suite, not only in a probe script.** It is
+      rendered to an operator as a statement of fact, and `scripts/*.mts` are NOT run by CI —
+      a migration adding a staff arm to `sd_notes` would leave everything green while the UI
+      kept claiming the opposite. `rls.test.ts` builds a real row as its author and asserts
+      staff and the superadmin both get nothing; a declared table with no fixture recipe
+      FAILS rather than being skipped.
+    - **The superadmin gate is a UI gate, and that is sound HERE for one specific reason:**
+      every query runs on the caller's own RLS client, so each is one they could already issue
+      against PostgREST themselves — bypassing the gate grants nothing. This does NOT
+      contradict #18's "the app layer is not a gate": that rule was about view-as, where
+      starting a session was a real PostgREST-reachable WRITE. **The invariant that keeps it
+      true: no code on this path may call `.rpc()` or a service-role client.** One SECURITY
+      DEFINER call turns the app gate into the only thing standing between a user and data RLS
+      would have refused. Source-scanned by `scripts/verify-data-browser.mts`.
+
 ## Hard rules
 
 1. **Never fork a platform primitive.** If the notifications/files/workflow primitive almost fits, extend it in `packages/platform` (benefiting every module) — don't copy it into the module.

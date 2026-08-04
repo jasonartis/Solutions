@@ -110,6 +110,38 @@ export async function requireOrgAdmin(orgSlug: string) {
   return { supabase, org }
 }
 
+/**
+ * The Owner Console gate: 404 unless the caller is the platform superadmin.
+ *
+ * Shared because there are now several superadmin-only pages, and the check was
+ * previously copy-pasted inline in each console action.
+ *
+ * WHAT THIS GATE IS, AND IS NOT (docs/03 #19). It is a UI gate, not a security
+ * boundary, and the console surfaces are built so that this is safe: every
+ * query they run is issued on the caller's OWN RLS-enforced client, so it is
+ * one the caller could already make against PostgREST directly. Bypassing this
+ * check therefore grants nothing. That property holds only while no console
+ * surface calls a SECURITY DEFINER function or a service-role client — the
+ * moment one does, this becomes the only thing standing between a user and data
+ * RLS would have refused, which is exactly what docs/03 #18 forbids.
+ */
+export async function requireSuperadmin() {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) notFound()
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('is_superadmin')
+    .eq('user_id', user.id)
+    .single()
+  if (!profile?.is_superadmin) notFound()
+
+  return { supabase, userId: user.id }
+}
+
 export async function getProfile() {
   const supabase = await createClient()
   const {

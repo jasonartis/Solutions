@@ -172,3 +172,24 @@ an org-A location to spoof membership), live-verified 4/4 as real users, and
 covered by a tracked RLS test (non-member gets `false`) plus the e2e
 (customer booking honored) — RLS 15/15, e2e still 31 (test extended, not
 added).
+
+## Data-browser findings (2026-08-03)
+
+Building the per-person data browser (docs/13, docs/03 #19) surfaced two facts about this
+module's schema that are worth recording here, because both are easy to re-derive wrongly.
+
+- **`sal_bills` has no customer column.** The only link to the person who was billed is
+  `appointment_id -> sal_appointments.customer_id -> sal_customers.user_id` — two hops. The
+  four person columns it *does* carry (`created_by`, `paid_by`, `voided_by`, `refunded_by`)
+  are all STAFF: `paid_by` is stamped `auth.uid()` by the trigger on the transition to paid,
+  so it is whoever rang it up, not who handed over the money. Anything asking "what do we
+  hold about this customer?" must walk the chain; a review caught the data browser showing a
+  customer with a real account their appointments and **zero bills** because of this.
+  `sal_bill_items` is one hop deeper again.
+- **Walk-in customers are not findable by user account, and that is intended.**
+  `sal_customers.user_id` is nullable and most rows identify a person by free-text
+  `full_name`/`phone`/`email` only. Requiring an account was considered and rejected
+  (founder, 2026-08-03) — it works against how a salon operates, where a walk-in gets served
+  rather than onboarded. The clean fix, if this ever needs closing, is to let a salon **link**
+  an existing walk-in record to an account when that person signs up (a one-time claim), not
+  to demand one at the counter. Recorded as a known gap in the data browser's declaration.

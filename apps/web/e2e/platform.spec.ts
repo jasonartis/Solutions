@@ -486,6 +486,11 @@ test('classroom module: GA reaches the manage console but sees no professor cont
 })
 
 test('matchmaking module: single sees seeded matches and can answer; admin recomputes', async ({ page }) => {
+  // Long test: six sign-ins, several server actions, and data-heavy server
+  // components on an unbuilt dev server. Same profile as the speed-dating test
+  // fixed on 2026-07-30, and the same remedy — the budget is the problem, not
+  // the assertions.
+  test.slow()
   // Dana shares one answer with her matches (wait on the POST per CLAUDE.md).
   await signIn(page, 'dana@demo.local')
   await page.goto('/o/demo-match/m/matchmaking')
@@ -613,7 +618,18 @@ test('matchmaking module: single sees seeded matches and can answer; admin recom
   posted = page.waitForResponse((r) => r.request().method() === 'POST')
   await frankRow2.getByRole('button', { name: 'Withdraw interest' }).click()
   await posted
-  await expect(frankRow2.getByRole('button', { name: 'Express interest' })).toBeVisible()
+  // Longer than the 5s default on purpose. Diagnosed 2026-08-03: this assertion
+  // was failing intermittently (~40% on a fresh seed), and the database state
+  // captured immediately after a failure was IDENTICAL TO THE SEED — i.e. the
+  // withdraw had always succeeded and the row was already gone. The failure is
+  // the server-action re-render not landing within 5s, not a lost write, so a
+  // longer wait is the honest fix rather than papering over a real bug.
+  // `waitForResponse` above does not close the gap: it resolves on the first
+  // POST after the click, which is not necessarily the action response that
+  // carries the new RSC payload.
+  await expect(frankRow2.getByRole('button', { name: 'Express interest' })).toBeVisible({
+    timeout: 20_000,
+  })
 
   // Matchmaker Mel (assigned to Charlie and Dana) sees their mutual pair.
   // Scope to the mutual-interest section's list — the regular matches list
@@ -1502,6 +1518,76 @@ test('view-as: a GA gets no tab into a student (peers), and a student gets no vi
   await signIn(page, 'charlie@demo.local')
   await page.goto('/o/demo-a/m/classroom/view-as')
   await expect(page.getByText(/has a declared view-as edge below it/)).toBeVisible()
+})
+
+test('data browser: superadmin looks a person up; the answer is labelled, searchable, and honest', async ({
+  page,
+}) => {
+  await signIn(page, 'owner@demo.local')
+  await page.goto('/console/data-browser')
+
+  // THE LABELLING IS THE REQUIREMENT, not decoration (founder, 2026-08-02):
+  // this tool must never read as "what they see", which is view-as.
+  await expect(page.getByText('What I can see about this person')).toBeVisible()
+  await expect(page.getByText(/This is not what they see/)).toBeVisible()
+
+  await page.getByLabel('Organisation').selectOption({ label: 'Demo Org A' })
+  await page.getByRole('button', { name: 'Show' }).click()
+  // Select by the option's own value rather than a label string: the label is
+  // built from display_name + email, so pinning it here would make this test
+  // fail the day someone renames a seed user.
+  const personSelect = page.getByLabel('Person')
+  const charlieValue = await personSelect
+    .locator('option', { hasText: 'charlie@demo.local' })
+    .getAttribute('value')
+  await personSelect.selectOption(charlieValue!)
+  await page.getByRole('button', { name: /Show|Refresh/ }).click()
+
+  // Charlie is a seeded classroom student, so his enrolment and submission are
+  // both real rows — the sections must actually be populated, or this test
+  // would pass on an empty page and prove nothing (docs/03 #18).
+  await expect(page.getByRole('button', { name: /Class enrolments/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: /Homework submissions/ })).toBeVisible()
+  await expect(page.getByText(/row(s)? across/)).toBeVisible()
+
+  // Search narrows across every table at once (founder ask: the answer can get
+  // large, so it must stay findable).
+  await page.getByPlaceholder('Search every table…').fill('zzz-no-such-value')
+  // The empty state distinguishes "the search excluded everything" from "we hold
+  // nothing about this person at all" — two very different answers from a tool
+  // whose whole job is being believed about emptiness.
+  await expect(page.getByText('Nothing matches the current search or filters.')).toBeVisible()
+
+  // The honesty panel belongs to speed-dating, and Demo Org A does not have
+  // that module — so it correctly does NOT appear here. Asserting its absence
+  // is what makes the presence check below mean something.
+  await expect(page.getByText(/readable by nobody/)).not.toBeVisible()
+
+  // Switch to the org that DOES have speed-dating. sd_notes can hold rows about
+  // Charlie that nobody — not the organizer, not this superadmin — may read,
+  // and saying so out loud is the entire reason `neverReadable` exists: "no
+  // rows" and "rows nobody may read" are different answers.
+  await page.getByLabel('Organisation').selectOption({ label: 'Demo Dating' })
+  await page.getByRole('button', { name: /Show|Refresh/ }).click()
+  const datingSelect = page.getByLabel('Person')
+  const charlieDating = await datingSelect
+    .locator('option', { hasText: 'charlie@demo.local' })
+    .getAttribute('value')
+  await datingSelect.selectOption(charlieDating!)
+  await page.getByRole('button', { name: /Show|Refresh/ }).click()
+
+  await expect(page.getByText(/readable by nobody/)).toBeVisible()
+  await expect(page.getByText('sd_notes', { exact: true })).toBeVisible()
+  await expect(page.getByText(/no staff arm anywhere/i)).toBeVisible()
+})
+
+test('data browser: a non-superadmin cannot reach it', async ({ page }) => {
+  // The gate is a UI gate over data the caller could already read (docs/03
+  // #19) — but it must still be shut, or the page is simply wrong about who
+  // it is for.
+  await signIn(page, 'alice@demo.local')
+  await page.goto('/console/data-browser')
+  await expect(page.getByText('What I can see about this person')).not.toBeVisible()
 })
 
 test('unauthenticated visitors are redirected to login', async ({ page }) => {

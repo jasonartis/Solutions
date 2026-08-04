@@ -581,6 +581,90 @@ vocabulary gets locked.
 
 ## Decisions log
 
+- **2026-08-03 (PER-PERSON DATA BROWSER BUILT — the first half of docs/13's Owner
+  Console pair; Opus session, two Fable adversarial reviews):** `/console/data-browser`,
+  superadmin-only, answering *"what do I hold about this person?"* — every row the
+  VIEWER may read that names the subject. Rules → docs/03 **#19**.
+
+  **ZERO MIGRATIONS, and that is the design, not a shortcut.** Three things could have
+  forced SQL and all were already open: `is_org_admin()` short-circuits on
+  `is_superadmin()` so a superadmin's own client reaches every org; `profiles_select_own`
+  carries an `is_superadmin()` arm so the person picker works; `module_roles_select_member`
+  likewise. So the feature is presentation over the caller's own RLS client — the same
+  keystone as slice 5, and the reason a god-mode surface needed no new read path.
+
+  **The security argument, stated so it can be attacked later.** Every query the page
+  issues is one the caller could already issue against PostgREST as themselves.
+  Therefore bypassing `requireSuperadmin()` grants nothing, and the gate does not need
+  to be a security boundary. This does NOT contradict docs/03 #18's "the app layer is
+  not a gate" — that rule was about view-as, where starting a session was a real
+  PostgREST-reachable WRITE. **The invariant it rests on: no `.rpc()` and no
+  service-role client on this path, ever.** One definer call and the app gate silently
+  becomes the only thing between a user and data RLS would have refused. Source-scanned
+  by `scripts/verify-data-browser.mts` probe [6]. Both reviewers attacked this claim
+  directly — `.or()` injection from the URL param, existence leaks through the
+  two-step `via` resolution, cross-org bleed through an unfiltered child lookup — and
+  neither could break it.
+
+  **The honesty problem this feature has and view-as does not.** Its failure mode is
+  UNDER-reporting, and an incomplete answer looks exactly like a complete one. Hence
+  three decisions: `select *` rather than an allow-list (founder, 2026-08-03 — the tool
+  exists to be complete, and RLS is row-level anyway, so a UI allow-list would be
+  comfort not protection); a catalog-driven completeness check that fails CI on any
+  undeclared person column; and a `neverReadable` list so `sd_notes` is reported as
+  *"rows nobody may read"* rather than rendering as *"nothing here"*.
+
+  **What the two reviews found — the useful part.** No ship-blocker on the security
+  claim. One ship-blocker on the honesty claim: **`sal_bills` has no customer column at
+  all**, so the path to a paying customer is two hops
+  (`bills.appointment_id -> appointments.customer_id -> customers.user_id`) and the
+  single-hop `via` could not express it — a real customer WITH an account saw their
+  appointments and zero bills. Fixed with `PersonVia.then`, live-probed. Distinct from
+  the documented walk-in gap, which is about people with no account at all. Also fixed:
+  module selection filtered on `enabled = true`, so **disabling a module hid its entire
+  history at exactly the moment someone opened this tool to decide what to export before
+  deprecating it** (docs/03's own deprecation flow starts with disabling); a `via`
+  lookup that swallowed its error, turning "we could not check" into a silent "no rows"
+  for precisely the via-only tables that hold the sensitive data; an uncapped
+  intermediate hop; and a confidently wrong note claiming `mm_can_manage` reads
+  `mm_answers` when that table has no admin arm at all (the gate is a matchmaker
+  ASSIGNMENT). That last one is the second instance of the mistake docs/15's 2026-08-02
+  entry records — **a note asserting who can read something is a factual claim and must
+  be checked against the policy, not reasoned from rank.**
+
+  **`neverReadable` moved into the CI suite, not just the probe script.** Review 1's
+  sharpest structural point: `scripts/*.mts` are not run by CI, so the only automated
+  check on a claim the UI states as fact was that the entry was well-FORMED. A migration
+  adding `or is_superadmin()` to `sd_notes_all_own` would have left everything green.
+  `rls.test.ts` now builds a real note as its author and asserts staff and the
+  superadmin both get nothing — and a declared table with no fixture recipe FAILS rather
+  than being skipped, so the next entry cannot ship unprovable.
+
+  **Self-caught while building, worth recording because both are repeatable traps:**
+  the catalog query must use `pg_catalog`, not `information_schema` —
+  `constraint_column_usage` does not expose constraints targeting the `auth` schema, so
+  the information_schema form returns ZERO rows and the check passes vacuously (it did,
+  on the first run). And the coverage check's own second tier initially excluded
+  self-referential FKs as noise, which immediately hid
+  `sd_participants.mentee_participant_id`, a genuine person link.
+
+  **Verification:** typecheck 9/9, db suite **82/82** (77 → +4 coverage, +1
+  neverReadable), **22/22 live probes** with zero skips
+  (`scripts/verify-data-browser.mts`), 2 new e2e as real users, full clean-seed e2e
+  suite green. **Not done, deliberately:** the Owner Console view-as half (next,
+  founder-sequenced); walk-in salon customers; scope-narrowing org-admin reads of the
+  session log (parked in docs/13).
+
+  **Unrelated fix that rode along:** the matchmaking e2e test had been failing ~40% of
+  the time on a fresh seed and 100% on a dirty one. Confirmed pre-existing by stashing
+  all new work and reproducing on clean `master`. Diagnosed rather than patched blind:
+  the database state captured immediately after a failure was IDENTICAL TO THE SEED, so
+  the withdraw had always succeeded and the failure was the server-action re-render not
+  landing inside the 5s `expect` default. Fixed with `test.slow()` plus a 20s timeout on
+  that one assertion; 5/5 fresh-seed runs green after. Note `test.slow()` alone would
+  NOT have been enough — it raises the TEST timeout, not the `expect` timeout, which is
+  what was actually expiring.
+
 - **2026-08-02 (TERMINOLOGY — say "view-as", not "impersonation"; founder):** Mode 2
   is **READ-ONLY** (§8.1 point 2) and always has been: the viewer sees the target's
   surface, cannot write anything, cannot act on their behalf, and no row anywhere

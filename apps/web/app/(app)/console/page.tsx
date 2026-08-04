@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { moduleRegistry } from '@platform/core'
 import { createClient } from '@/lib/supabase/server'
@@ -40,7 +41,19 @@ export default async function ConsolePage() {
 
   return (
     <div>
-      <h1 className="mb-6 text-2xl font-semibold">Owner Console</h1>
+      <h1 className="mb-2 text-2xl font-semibold">Owner Console</h1>
+
+      {/* Superadmin-only tools that deliberately live OUTSIDE the module tab
+          strips, so those stay strictly by-the-rules (docs/13, 2026-08-02). */}
+      <nav className="mb-6 flex flex-wrap gap-3 text-sm">
+        <Link href="/console/data-browser" className="text-blue-600 hover:underline">
+          Data browser
+        </Link>
+        <span className="text-gray-300">·</span>
+        <span className="text-gray-400" title="What I can see about a person, vs. what a person sees">
+          what I hold about a person
+        </span>
+      </nav>
 
       <section className="mb-8 rounded-lg border border-gray-200 bg-white p-5">
         <h2 className="mb-3 text-lg font-medium">Create organization</h2>

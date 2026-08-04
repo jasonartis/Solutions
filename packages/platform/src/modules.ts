@@ -4,6 +4,8 @@
 
 import { viewAsDeclarations } from './view-as-modules'
 import type { ViewAsDeclaration } from './view-as'
+import { dataBrowserDeclarations } from './data-browser-modules'
+import type { DataBrowserDeclaration } from './data-browser'
 
 export type ModuleManifest = {
   /** Stable key — matches org_modules.module_key and the mm_/cls_/… table prefix docs. */
@@ -22,6 +24,15 @@ export type ModuleManifest = {
    * in the test suite alongside the SQL rank-parity check.
    */
   viewAs: ViewAsDeclaration
+  /**
+   * Data browser: which of this module's tables can hold rows naming a person,
+   * and how (docs/13, founder decision 2026-08-02). A DIFFERENT question from
+   * `viewAs` — "what do I hold about this person?" rather than "what does this
+   * person see?" — so it needs no surfaces and works for every module on day
+   * one. Declared in data-browser-modules.ts; the real completeness check is
+   * catalog-driven and lives in the db test suite.
+   */
+  dataBrowser: DataBrowserDeclaration
 }
 
 export const stubModule: ModuleManifest = {
@@ -31,6 +42,7 @@ export const stubModule: ModuleManifest = {
   roles: ['user', 'admin'],
   nav: [{ label: 'Home', path: '' }],
   viewAs: viewAsDeclarations['stub']!,
+  dataBrowser: dataBrowserDeclarations['stub']!,
 }
 
 export const synagogueSchedulesModule: ModuleManifest = {
@@ -43,6 +55,7 @@ export const synagogueSchedulesModule: ModuleManifest = {
     { label: 'Setup', path: 'setup' },
   ],
   viewAs: viewAsDeclarations['synagogue-schedules']!,
+  dataBrowser: dataBrowserDeclarations['synagogue-schedules']!,
 }
 
 export const classroomModule: ModuleManifest = {
@@ -56,6 +69,7 @@ export const classroomModule: ModuleManifest = {
     { label: 'Manage', path: 'manage' },
   ],
   viewAs: viewAsDeclarations['classroom']!,
+  dataBrowser: dataBrowserDeclarations['classroom']!,
 }
 
 export const matchmakingModule: ModuleManifest = {
@@ -66,6 +80,7 @@ export const matchmakingModule: ModuleManifest = {
   roles: ['single', 'matchmaker', 'admin'],
   nav: [{ label: 'Questions', path: '' }],
   viewAs: viewAsDeclarations['matchmaking']!,
+  dataBrowser: dataBrowserDeclarations['matchmaking']!,
 }
 
 export const nailSalonModule: ModuleManifest = {
@@ -76,6 +91,7 @@ export const nailSalonModule: ModuleManifest = {
   roles: ['admin', 'manager', 'cashier', 'worker', 'customer'],
   nav: [{ label: 'Salon', path: '' }],
   viewAs: viewAsDeclarations['nail-salon']!,
+  dataBrowser: dataBrowserDeclarations['nail-salon']!,
 }
 
 export const speedDatingModule: ModuleManifest = {
@@ -86,6 +102,7 @@ export const speedDatingModule: ModuleManifest = {
   roles: ['admin', 'organizer', 'host', 'participant'],
   nav: [{ label: 'Events', path: '' }],
   viewAs: viewAsDeclarations['speed-dating']!,
+  dataBrowser: dataBrowserDeclarations['speed-dating']!,
 }
 
 // Module 0 — the living template (docs/03, modules/sample/SPEC.md). Kept in
@@ -97,6 +114,7 @@ export const sampleModule: ModuleManifest = {
   roles: ['manager', 'member'],
   nav: [{ label: 'Sample', path: '' }],
   viewAs: viewAsDeclarations['sample']!,
+  dataBrowser: dataBrowserDeclarations['sample']!,
 }
 
 export const visualMessagingModule: ModuleManifest = {
@@ -107,6 +125,7 @@ export const visualMessagingModule: ModuleManifest = {
   roles: ['admin', 'moderator', 'member'],
   nav: [{ label: 'Conversations', path: '' }],
   viewAs: viewAsDeclarations['visual-messaging']!,
+  dataBrowser: dataBrowserDeclarations['visual-messaging']!,
 }
 
 const allModules: readonly ModuleManifest[] = [
