@@ -411,6 +411,40 @@ edit anywhere else, that's a missing platform primitive — extract it, don't fo
       DEFINER call turns the app gate into the only thing standing between a user and data RLS
       would have refused. Source-scanned by `scripts/verify-data-browser.mts`.
 
+## Test discipline: the vacuity rule (generalised 2026-08-03)
+
+> **A passing NEGATIVE assertion proves nothing unless something nearby proves the
+> subject exists.**
+
+#18 already states this for one case ("every 'X cannot read this' assertion needs a
+non-emptiness control"). It was generalised after the same failure appeared three times
+in a single session wearing three different costumes, none of which looked like the
+others:
+
+- **An RLS check on an empty table.** "The GA sees nothing" passes because the table has
+  no rows, not because RLS hides them. → Assert a privileged reader sees rows FIRST, and
+  create a fixture if the seed has none.
+- **A catalog query that returns zero rows.** The first version of the data browser's
+  completeness check used `information_schema.constraint_column_usage`, which does not
+  expose constraints targeting the `auth` schema. It returned ZERO person columns and the
+  "every column is declared" assertion passed against an empty set. → Assert a floor on
+  the row count (`expect(rows.length).toBeGreaterThan(40)`), so an empty result is a
+  failure rather than a pass.
+- **A UI absence assertion after a wording change.** `expect(getByText('...')).not.
+  toBeVisible()` keeps passing forever once that string no longer exists anywhere.
+  Renaming a heading during a review fix silently converted a real check into a no-op. →
+  Pair every `not.toBeVisible()` with a positive assertion of the SAME text somewhere it
+  should appear, and key both to a stable substring rather than a full sentence.
+
+The shared shape: **absence is only evidence when presence was demonstrated under the
+same conditions.** Whenever a test asserts something is missing, ask what would have to be
+true for it to pass on an empty universe — and then assert that the universe is not empty.
+
+Related, and the reason this keeps mattering: a vacuous test does not merely fail to catch
+a bug, it actively reports that the bug is absent. That is worse than having no test, which
+is why "no silent skips" is enforced in the probe scripts (a skipped probe prints loudly
+and is never counted as a pass).
+
 ## Hard rules
 
 1. **Never fork a platform primitive.** If the notifications/files/workflow primitive almost fits, extend it in `packages/platform` (benefiting every module) — don't copy it into the module.

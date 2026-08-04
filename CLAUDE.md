@@ -185,6 +185,21 @@ in the sections below.
 - Docker Desktop's WSL backend crashed under parallel image pulls → `C:\Users\yarmishj\.wslconfig` caps WSL at 8GB/4CPU (delete to revert); pull images sequentially if it recurs; zero-log segfaulting containers (exit 139) = corrupted image layers, `docker rmi` + re-pull.
 - **Reproducing a flaky/order-dependent e2e failure: `db:reset` + `pnpm seed` immediately before the reproduction run, not just once at the start of the session.** Several e2e tests are documented non-idempotent (assume fresh seed state). Running a suspect test in isolation first (to confirm it currently passes) mutates that seed data; a subsequent full-suite reproduction attempt then fails for the mundane reason of stale state from your OWN prior run — which looks like the bug you're chasing but isn't (hit in a 2026-07-30 session validating the speed-dating flaky-test fix: an isolated run advanced the seeded event to `complete`, then the very next full-suite run failed at the first "Register" step instead of reproducing the real timing issue).
 - **`ON DELETE SET NULL` fires the referencing table's BEFORE UPDATE triggers** — Postgres implements the FK action as a real UPDATE. So an append-only `before update or delete ... raise exception` trigger silently makes every row the table has ever referenced UNDELETABLE (the parent DELETE aborts), including whole orgs via a cascading `org_id`. Enforce append-only with GRANTS instead (no UPDATE/DELETE to api roles → `42501`), which is why `vm_moderation_log` has no such trigger. Found live in the 2026-07-31 view-as review, one review after `set null` had been (correctly) required.
+- **A passing NEGATIVE assertion proves nothing unless something nearby proves the subject
+  exists** — the vacuity rule, generalised in docs/03 after it appeared three times in one
+  session in three unrecognisably different forms (an RLS check on an empty table, a
+  catalog query whose view silently excluded the `auth` schema and returned zero rows, and
+  a `not.toBeVisible()` on text a wording change had deleted everywhere). A vacuous test
+  does not just miss a bug, it reports the bug's absence. Full version + the three worked
+  cases: docs/03 "Test discipline".
+- **Don't edit files while a backgrounded `git add -A && git commit` is in flight** — the
+  add races the edit and the change silently misses the commit while `git log` looks
+  correct. Hit 2026-08-03; caught only because the next step grepped `git show HEAD` for
+  the change rather than trusting that the commit had run.
+- **A one-off script run with `tsx` must live INSIDE the repo** — Node resolves
+  dependencies from the script's own location, not the cwd, so a scratchpad script
+  importing `@supabase/supabase-js` fails with ERR_MODULE_NOT_FOUND however you invoke it.
+  Write it to the repo root and delete it after, or give it zero third-party imports.
 - **`test.slow()` does NOT extend an `expect()` timeout** — it triples the TEST timeout only.
   A flaky Playwright assertion that reports `Expect "toBeVisible" with timeout 5000ms` is
   hitting the per-assertion default and will keep failing however slow you mark the test;

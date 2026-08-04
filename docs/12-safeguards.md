@@ -102,6 +102,21 @@ commit when the UI changes.
 
 Found in a deliberate "what haven't we thought of" pass; ordered by urgency.
 
+0. **Branch protection is configured but NOT blocking (observed 2026-08-03).**
+   Every push to `master` reports
+   `remote: Bypassed rule violations for refs/heads/master: - Required status
+   check "check" is expected.` — GitHub wants CI green before the push lands, and
+   lets it through anyway because the pusher can bypass. So the rule is currently
+   advisory, not a gate. **This has not caused a problem and may be exactly what
+   the founder wants** (a one-person team pushing straight to `master`, with the
+   real gate being that Vercel's `deploy` job has `needs: check`, so a broken
+   commit deploys nothing and prod keeps serving the previous build). Recorded
+   because the failure mode is non-obvious: the protection LOOKS enforced in the
+   GitHub UI, so a future session — or a second contributor who cannot bypass —
+   could reasonably assume a green `master` is guaranteed. Decide deliberately:
+   either enforce it (uncheck "allow bypass" / include administrators) or drop the
+   rule so it stops implying a guarantee it does not give.
+
 1. **Supabase free-tier auto-pause (availability landmine).** Free projects
    PAUSE after ~7 days without activity — the production site would break
    until manually restored. Mitigations: an UptimeRobot monitor pinging
