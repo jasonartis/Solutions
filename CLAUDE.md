@@ -19,41 +19,63 @@ A multi-tenant modular platform: each client engagement produces a **module** bu
      and update only the compact "Now / Next / Standing rules" below. A fresh chat must never
      pay for the full journal. See "Session hygiene". -->
 
-**Now (2026-08-03):** Live on prod. **PER-PERSON DATA BROWSER BUILT — NOT YET PUSHED.**
-`/console/data-browser`, superadmin-only; first half of docs/13's Owner Console pair (founder
-re-sequenced 2026-08-03: data browser first, Owner Console view-as next). Answers *"what do I
-hold about this person?"* — every row the VIEWER may read that names the subject — as opposed to
-view-as's *"what does this person see?"*. **ZERO MIGRATIONS**: `is_org_admin()` already
-short-circuits on `is_superadmin()`, so the whole feature is presentation over the caller's own
-RLS client. **The superadmin gate is therefore a UI gate, and that is sound HERE** — every query
-is one the caller could already issue via PostgREST. That does NOT contradict docs/03 #18 (which
-was about view-as, where starting a session was a real WRITE). **The invariant it rests on: no
-`.rpc()` and no service-role client on this path, ever** — source-scanned by a probe. Two Fable
-reviews: no ship-blocker on the security claim; one on honesty — **`sal_bills` has no customer
-column**, so reaching a paying customer takes TWO hops and a customer with an account saw zero
-bills (fixed: `PersonVia.then`). Verification: typecheck 9/9, db **82/82**, **22/22 live probes**
-zero skips, 2 new e2e, full clean-seed suite. Rules → docs/03 **#19**; decisions → docs/15
-(2026-08-03); record → journal. **Rode along:** the matchmaking e2e flake — confirmed pre-existing
-on clean `master`, diagnosed (post-failure DB state identical to seed, so only the re-render was
-late), fixed with `test.slow()` + a 20s `expect` timeout. `test.slow()` alone is NOT enough — it
-raises the TEST timeout, not the `expect` timeout.
+**Now (2026-08-04):** Live on prod. **NAIL-SALON VIEW-AS SURFACE REVIEW DONE — UNCOMMITTED
+IN THE WORKING TREE; ONE MIGRATION AWAITING COMMIT AND PROD (`20260804010000`).** Module 5's
+own §8.1 point 9 review, the follow-on the founder sequenced ahead of the Owner Console: nine
+pairs answered, three surfaces written, all 12 `sal_` tables classified per position.
+**Mode 1 ON for all five staff-to-staff pairs, mode 2 additionally for the two into `worker`,
+all four customer pairs OFF (re-decided, not inherited).**
 
-**Previously:** **slice 5 (VIEW-AS) is ON PROD and PROD-VERIFIED** (`20260731010000` +
-`20260802010000`, commit `ad8e989`; 29/29 prod probes) — declarations for all 8 modules, edges ON
-for classroom only, professor→student ON and founder-confirmed, no new read path. **The ACL
-HARDENING SWEEP is ON PROD and PROD-VERIFIED** (`20260728010000`, commit `a16f4a5`; 39/39) —
-`anon` holds nothing in `public`, `authenticated` lost TRUNCATE (RLS cannot gate it). Full
-blow-by-blow for both → docs/history/platform-journal.md; rules → docs/03 #17/#18.
+**The finding, which generalises past this module: mode 1 answers "what can this POSITION
+see?", mode 2 answers "what does this PERSON see?", and mode 2 is only honest where RLS
+narrows PER PERSON.** Salon narrows per LOCATION for manager/cashier (so no row is about
+either as a person — filtering an authorship stamp would UNDER-show the tab, and
+`viewAsCompleteness()` refuses mode 2 without a per-person table) and per PERSON only for
+worker. The migration is just those two ON pairs, because `module_view_as_edge()` mirrors
+MODE 2 only — it gates the session INSERT, and mode 1 writes nothing.
+
+Full reasoning, the surface findings (a cashier reads ZERO revenue rows; a worker cannot read
+even the earnings carrying their own `worker_id`), the two rode-along honesty fixes, and what
+the review deliberately left open → **docs/15 (2026-08-04)**, journal, module-5 spec; reusable
+rules → **docs/03 #18** (six new bullets) + its Test-discipline section. Verification:
+typecheck 9/9, RLS **90/90**, **36/36 probes zero skips**, 3 new e2e; floor raised (e2e 42 /
+rls 86). **Two Opus adversarial reviews: no ship-blocker on the
+mechanism, but four FALSE factual claims in the notes and a keystone test that only proved the
+query parsed — all fixed.**
+
+**Then four founder-approved follow-ups, same session (2026-08-05 — full reasoning in docs/15's
+2026-08-05 entry):** (a) the dead `columns?` field on `PersonalLayer`/`ExcludedFromSurface` is
+GONE — the overlap check made it unusable, so column decisions live in the role allow-list plus
+a caveat, and `excluded: []` means "no whole table withheld", not "nothing withheld";
+(b) **the CI test-count ratchet now counts TESTS** — its RLS half was an unanchored
+`grep -c "it("` that also matched every `.limit(` line (real 90, measured 105), now anchored
+with an exact floor (docs/12); (c) **the salon seed gained a paid visit, the bookkeeping rows,
+and a salon ADMIN (frank)** — which closes the review's one open gap, since only an `admin` can
+open the Manager tab and there was nobody to sign in as; a new e2e renders it and asserts a real
+earnings row; (d) **e2e timeouts are now environment-dependent and CI is deliberately STRICTER**
+(local `expect` 15s / test 45s; CI keeps 5s, because it serves a PREBUILT app where slow means
+slow). **Still known-open, on purpose:** the 12-table accounting is hand-checked, not
+machine-enforced — see the Next list.
+
+**Previously:** the **per-person data browser is ON PROD** (`070a73b`, zero migrations —
+Vercel production `READY`, which proves CI was green since `deploy` has `needs: check`);
+`/console/data-browser`, superadmin-only, answering *"what do I hold about this person?"* as
+against view-as's *"what does this person see?"*. Its UI gate is sound only because nothing
+on that path may ever call `.rpc()` or a service-role client — source-scanned by a probe.
+**Slice 5 (VIEW-AS) is ON PROD and PROD-VERIFIED** (`20260731010000` + `20260802010000`,
+`ad8e989`; 29/29 prod probes). **The ACL HARDENING SWEEP is ON PROD and PROD-VERIFIED**
+(`20260728010000`, `a16f4a5`; 39/39) — `anon` holds nothing in `public`, `authenticated` lost
+TRUNCATE. Blow-by-blow for all three → docs/history/platform-journal.md; rules → docs/03
+#17/#18/#19.
 
 **Next / open (pick WITH the founder — do not start unprompted; details in docs/15 §11).
-RECOMMENDED ORDER as of 2026-08-03 — the first two are done, next is a bigger design/RLS
-piece (Opus/Fable territory, not Sonnet), then unranked follow-ons:**
+RECOMMENDED ORDER as of 2026-08-04 — items 1–3 are done; the next real piece is the Owner
+Console view-as (Opus territory, not Sonnet), then unranked follow-ons:**
 
-- ~~**1. Confirm CI/deploy for slice 5.**~~ **DONE 2026-08-02** — all three pushes
-  (`ad8e989`, `1f2fc05`, `01d7339`) are `READY` in Vercel production, which proves CI was
-  green (the `deploy` job has `needs: check`). Prod app and prod schema are in sync.
-- ~~**2. Students cannot see peer-review comments on their own homework.**~~ **DONE 2026-08-03**
-  (see the dated bullet below).
+- ~~**1. Confirm CI/deploy for slice 5.**~~ **DONE 2026-08-02** — prod app and prod schema in
+  sync; a `READY` production deploy proves CI was green (`deploy` has `needs: check`).
+- ~~**2. Students cannot see peer-review comments on their own homework.**~~ **DONE
+  2026-08-03** — UI-only, no migration; details in the journal + module-2 spec.
 - **3. The speed-dating waitlist flake** (details in its own bullet below). Only truly urgent
   if it is what broke CI, which is now ruled out by item 1. **CI has `retries: 1` and runs the
   PREBUILT server (`pnpm start`), while local runs the dev server with JIT compilation and 0
@@ -62,37 +84,59 @@ piece (Opus/Fable territory, not Sonnet), then unranked follow-ons:**
   `db:reset` → seed → full e2e run on 2026-08-03 (verifying the peer-review-comments fix)
   reproduced BOTH speed-dating tests passing cleanly — so the flake, when it happens, is
   intermittent even under the documented failure-inducing order, not a hard regression.
-- **4. The superadmin console + per-person data browser.** ~~Data browser half~~ **DONE
-  2026-08-03** (see Now). **NEXT UP IS NOT THIS — founder 2026-08-03 put the nail-salon
-  view-as surface review first** (own bullet below); the console needs surfaces to have
-  anything to render. **STILL TO BUILD after that: the Owner Console view-as** — a superadmin
-  surface that bypasses every declared edge, kept out of the in-module tab strips, and
-  unlogged. Founder answers on record: **all three modes** (mode 1, mode 2, and a third
-  "this position's surface with no person filter", which is what you actually want when
-  debugging) with the choice made obvious in the UI; plus fold in docs/13's cheap read-only
-  positions/ranks/pair-grid viewer. **Two things the code says that the spec did not:**
+- **4. THE OWNER CONSOLE VIEW-AS — this is now the next real piece.** (Its sibling, the
+  per-person data browser, is done and on prod; the nail-salon surface review that had to
+  come first is done as of 2026-08-04.) A superadmin surface that bypasses every declared
+  edge, kept out of the in-module tab strips, and unlogged. Founder answers on record: **all
+  three modes** (mode 1, mode 2, and a third "this position's surface with no person filter")
+  with the choice made obvious in the UI; plus fold in docs/13's cheap read-only
+  positions/ranks/pair-grid viewer. **Three things the code says that the spec did not:**
   (a) `renderSurface` intersects the target's scope with what the CALLER governs, and a
   superadmin holds NO module grants, so a scoped target renders EMPTY — bypassing edges is
   not enough, the scope intersection needs an explicit authority parameter (a discriminated
   union, so no caller can invoke the renderer without naming which gate it passed);
-  (b) the bypass can only render a position that has a declared SURFACE, so today it lights
-  up classroom `student`/`ga` and nothing else — the permanently-banned speed-dating
-  `participant` pair renders blank regardless. Expect it to be SMALL. **Model note:** still
-  Opus 4.8+ (edge-bypass design), and the adversarial review beat is Fable.
+  (b) the bypass can only render a position that has a declared SURFACE — now classroom
+  `student`/`ga` **plus salon `manager`/`cashier`/`worker`**, five positions instead of two,
+  which is exactly what the salon review was sequenced first to provide (the
+  permanently-banned speed-dating `participant` pair still renders blank regardless);
+  (c) **NEW, from the salon review: the third mode is not a convenience, it is the answer to
+  a need that review identified and deliberately refused to fake** — viewing ONE NAMED
+  holder's SCOPE-narrowed console (the Uptown manager's back office) is impossible today,
+  because mode 1 renders the caller's own scope and mode 2 needs a per-person column that a
+  location-narrowed position does not have. Spec it as "position + optional person + optional
+  scope", not "position + person". Expect it to be SMALL. **Model note:** still Opus 4.8+
+  (edge-bypass design), and the adversarial review beat is Fable.
 
 Everything below is open but unranked:
-- **Slice 5 remaining follow-ons:** the **nail-salon** view-as surface review (its 9 pairs are
-  enumerated and OFF — manager→worker/cashier looks straightforward) and then
-  **speed-dating**'s 6; and decide whether view-as **targets are notified** (§8.1 point 6
-  leaves it a per-module product call). *(professor→student, the `is_org_admin` question and
-  the prod push are all SETTLED — see Now and docs/15's 2026-08-02 entry.)*
-  **FOUNDER DECISION 2026-08-03: the nail-salon surface review comes BEFORE the Owner
-  Console view-as (item 4).** Reason: the console can only render a position that HAS a
-  declared surface, so today it would light up classroom `student`/`ga` and nothing else —
-  the surface review is what gives the console something to show, not the other way round.
-  Note the salon's own data-browser findings (docs/modules/module-5-nail-salon.md,
-  2026-08-03) are relevant input: `sal_bills` reaches a customer only through the
-  appointment, and most customers are account-less walk-ins.
+- **Slice 5 remaining follow-ons:** ~~the nail-salon surface review~~ **DONE 2026-08-04**
+  (see Now). Left: **speed-dating's 6 pairs** — and note its review is genuinely harder than
+  the salon's, because a host deliberately cannot read `sd_interest`/`sd_matches` while an
+  organizer can, so an organizer rendering a host tab must respect an exclusion their own
+  ambient reach does not impose (the salon had no equivalent: manager ⊇ cashier ⊇ worker with
+  one clean exception). Its four `participant` pairs stay permanently OFF. Also still open:
+  whether view-as **targets are notified** (§8.1 point 6 leaves it a per-module product
+  call). *(professor→student, the `is_org_admin` question and the slice-5 prod push are all
+  SETTLED.)* **Reusable lesson from the salon review, worth carrying into speed-dating's:**
+  ask of each position whether its reach is a function of WHO it is or only of WHAT SCOPE it
+  covers — mode 2 is only honest for the former, and a mode-1-only pair needs no migration
+  arm at all.
+- ~~**Seed the salon's back office.**~~ **DONE 2026-08-05** — see Now. (Salon demo logins are
+  now: **frank = admin**, alice = manager, eve = cashier, dana = worker, charlie = customer.)
+- **STILL OPEN, and the one gap the salon review deliberately did not close: machine-enforce
+  "every module table is classified on every surface."** Today it is HAND-checked —
+  `viewAsCompleteness()` only refuses a table appearing in two lists; it never enumerates the
+  module's real tables and never inspects `embed`. So a future `sal_tips` migration leaves all
+  three surfaces silently incomplete with CI green, and §8.1 point 9's "unclassified defaults
+  to PERSONAL" fails open. Not a leak (view-as can only render what is declared) — a false
+  CLAIM, which the next reader trusts. The pattern to copy is
+  `packages/db/src/data-browser-coverage.test.ts` (reads `pg_catalog`, never
+  `information_schema`). **The catch that makes it more than an afternoon: classroom would FAIL
+  it today** — its student/GA surfaces were never classified table-by-table the way salon's
+  were. Recommended shape: **baseline-and-ratchet** — snapshot today's unclassified set as an
+  accepted list and fail only on anything NEW (the data browser's own test already reports its
+  backlog without failing, so there is precedent). That gets the guarantee going forward
+  without forcing the classroom back-classification. Opus; ~2 hours as a ratchet, ~half a day
+  if classroom is classified properly at the same time.
 - Slice 3 remainder: **entity-level joinPolicy** (invite-only/request-approval/open per
   class/location/event) — deferred follow-on. Slice 4 (defaults-on-join) is the only
   unbuilt slice left.
@@ -102,21 +146,25 @@ Everything below is open but unranked:
   them will FAIL THE BUILD until every newly-implied pair is explicitly answered. That is the
   2026-07-30 amendment working as designed, not an obstacle — but budget for it.
 - **Flaky e2e test — FIXED 2026-07-30** (`speed-dating module: register → round → mutual
-  interest → reveal`): diagnosed as genuine timing/load, not RLS-suite data contamination or
-  the test's own non-idempotency (full reasoning in docs/history/platform-journal.md's
-  2026-07-30 entry). Fixed with a scoped `test.slow()`; verified via clean `db:reset` → seed →
-  full RLS suite → full e2e suite reproduction (the exact failure-inducing order) — now passes.
-- **New, unstarted (2026-08-02, surfaced by slice 5's clean-seed full-suite run):** a SECOND
-  speed-dating test in the same flaky family — `speed-dating module: two-sided event enforces
-  per-side capacity and waitlist promotion` — fails at the end of a full sequential run
-  (timeout waiting for the event link after `signIn`) but **passes in 29s in isolation on a
-  fresh seed**. Same symptom and shape as the sibling fixed 2026-07-30 (many sign-ins,
-  data-heavy server components, unbuilt dev server, late in a long run), so a scoped
-  `test.slow()` is the likely one-line fix — but that diagnosis has NOT been established the
-  way the sibling's was (error-context analysis), so it was deliberately not applied blind.
-  Unrelated to view-as: nothing in slice 5 is reachable from this flow. Note the earlier
-  5-failure run in the same session was the documented order-dependency trap (the RLS suite
-  ran immediately before e2e without a reset), not a real regression.
+  interest → reveal`): genuine timing/load, not data contamination; scoped `test.slow()`,
+  verified in the exact failure-inducing order. Reasoning → journal, 2026-07-30.
+- ~~**The local e2e suite loses ONE test per full run, a DIFFERENT one each time.**~~ **FIXED
+  AT THE HARNESS LEVEL 2026-08-05** — and the diagnosis is the part worth keeping. Three
+  clean-seed full runs on 2026-08-04 each lost exactly one test and it was a different test
+  every time (classroom homework, then speed-dating waitlist), each passing in isolation. **A
+  moving failure is environmental, not a set of test bugs** — the local dev server compiles
+  routes mid-test — which is why per-test patches were whack-a-mole. The family has **two
+  sub-shapes needing two DIFFERENT knobs**, and confusing them is how a session wastes an hour:
+  1. **the assertion after a navigation times out** (the link is in the DOM, the page just has
+     not changed yet) → `expect.timeout`, now 15s locally. `test.slow()` does NOT help here: it
+     raises the TEST timeout, not the per-assertion one.
+  2. **the `.click()` ACTION stalls to the test timeout** (log ends at "element is visible,
+     enabled and stable, scrolling into view if needed") → `test.slow()` or a longer test
+     timeout; an `expect` timeout cannot fix it.
+  **CI is deliberately left STRICTER (5s expect, 30s test)** because it serves a PREBUILT app
+  where a slow assertion means something is genuinely slow — the split is what keeps this from
+  becoming a blanket "wait longer" that hides a regression. **Still judge a flake by CI, not
+  locally.**
 - Low-priority verification: the **worker** was not exercised after the ACL sweep (neither the RLS
   suite nor e2e touches it). It should be unaffected — `service_role`'s privileges are provably
   unchanged (the verifier asserts they can't shrink), it makes zero `.rpc()` calls, and pg-boss
@@ -132,13 +180,9 @@ Everything below is open but unranked:
   compilation happens mid-test). A test that flakes locally may be reliably green in CI, and
   vice versa — judge by the actual CI run, not the local one. Both settings are in
   `apps/web/playwright.config.ts:9,15`.
-- ~~**Founder decision 2026-08-02, small and unbuilt:** a student must see the COMMENTS on
-  their own homework but never the peer GRADES given to them.~~ **BUILT 2026-08-03** — UI-only,
-  no migration/grant change needed (`cls_comments_for_my_submission()` already had the right
-  RLS-equivalent filter and its `authenticated` grant). The homework page now renders a
-  "Peer review comments" section via that RPC; extended the existing grading-workflow e2e
-  rather than adding a new one. Typecheck 9/9, full clean-seed e2e suite 37/37. Details →
-  docs/modules/module-2-classroom.md's 2026-08-03 entry.
+  *(The 2026-08-02 founder decision behind item 2 — a student sees the COMMENTS on their own
+  homework but never the peer GRADES — was BUILT 2026-08-03; `cls_comments_for_my_submission()`
+  already had the right filter and grant. Details → module-2 spec, 2026-08-03.)*
 - ~~**The per-person data browser.**~~ **DONE 2026-08-03** — see Now and item 4. The Owner
   Console view-as half is what remains of that pair; its detail now lives in item 4.
   **Known gaps recorded rather than closed:** walk-in salon customers (no account, so not

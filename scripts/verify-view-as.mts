@@ -1,6 +1,13 @@
 // Live adversarial probes for view-as, as REAL signed-in users over PostgREST
 // (the same surface an attacker has). Not a substitute for the RLS suite —
 // these are the cross-layer checks that suite does not cover.
+//
+// RUN IT AS:  pnpm exec tsx --env-file=.env scripts/verify-view-as.mts
+// Without --env-file it dies with "supabaseKey is required" — unlike the vitest
+// suite, which loads the repo-root .env itself (packages/db/vitest.config.ts).
+// Probes [3] and [8] additionally need `pnpm dev` running on :3000; they SKIP
+// loudly rather than pass if it is not, so a clean run means 33 passed / 0
+// skipped, and anything less is a real gap in coverage.
 import { createClient } from '@supabase/supabase-js'
 
 const url = process.env.SUPABASE_URL ?? 'http://127.0.0.1:54321'
@@ -68,8 +75,19 @@ console.log('\n[2] The edge mirror is fail-closed for every pair nobody declared
     ['classroom', 'professor', 'student', true],
     ['classroom', 'ga', 'student', false],
     ['classroom', 'student', 'professor', false],
+    // Nail-salon after its 2026-08-04 surface review (20260804010000). The
+    // mirror encodes MODE 2, so the four mode-1-only staff pairs read false
+    // here and only the two into `worker` are true. Both halves are listed on
+    // purpose: a review that turned everything on would fail these.
+    ['nail-salon', 'admin', 'worker', true],
+    ['nail-salon', 'manager', 'worker', true],
     ['nail-salon', 'admin', 'manager', false],
-    ['nail-salon', 'manager', 'worker', false],
+    ['nail-salon', 'admin', 'cashier', false],
+    ['nail-salon', 'manager', 'cashier', false],
+    ['nail-salon', 'manager', 'admin', false], // upward
+    ['nail-salon', 'cashier', 'worker', false], // equal rank (peers)
+    ['nail-salon', 'manager', 'customer', false],
+    ['nail-salon', 'worker', 'customer', false],
     ['speed-dating', 'organizer', 'participant', false],
     ['visual-messaging', 'admin', 'member', false],
     ['no-such-module', 'a', 'b', false],
@@ -217,6 +235,126 @@ console.log('\n[6] The audit log outlives what it describes — AND does not blo
   check('...and every session row survived it', after === before, `${before} -> ${after}`)
 
   await alice.from('org_members').delete().eq('org_id', cleanup!.orgA).eq('user_id', cleanup!.bobId)
+}
+
+console.log('\n[7] Nail-salon scope intersection: a location-scoped manager cannot reach another store')
+{
+  // The salon analogue of probe [5], and the reason the manager -> worker pair is
+  // safe to enable for a SCOPED manager rather than only a global one. The
+  // entity tree here is org -> location, so "another course" becomes "another
+  // store". All three refusals below are the guard's, not the app's.
+  const salon = (await alice.from('orgs').select('id').eq('slug', 'demo-salon').single()).data!
+  const uidOf = async (email: string) =>
+    (await alice.rpc('org_find_user_by_email', { check_org_id: salon.id, target_email: email }))
+      .data![0].user_id as string
+  const bobId = await uidOf('bob@demo.local')
+  const danaId = await uidOf('dana@demo.local')
+  const charlieId = await uidOf('charlie@demo.local')
+
+  await alice.from('org_members').upsert({ org_id: salon.id, user_id: bobId, role: 'member' })
+  const bobClient = await signIn('bob@demo.local')
+  await bobClient.rpc('org_accept_invite', { check_org_id: salon.id }) // slice 3: pending -> active
+
+  const mkLoc = async (name: string) =>
+    (await alice.from('sal_locations').insert({ org_id: salon.id, name }).select('id, scope_node_id').single()).data!
+  const l1 = await mkLoc('VA-Probe-Store-1')
+  const l2 = await mkLoc('VA-Probe-Store-2')
+
+  await alice.from('module_roles').insert([
+    { org_id: salon.id, user_id: bobId, module_key: 'nail-salon', role: 'manager', scope_ref: l1.scope_node_id },
+    { org_id: salon.id, user_id: danaId, module_key: 'nail-salon', role: 'worker', scope_ref: l1.scope_node_id },
+    { org_id: salon.id, user_id: charlieId, module_key: 'nail-salon', role: 'worker', scope_ref: l2.scope_node_id },
+  ])
+
+  const session = (target: string, scope: string | null) =>
+    bobClient.from('view_as_sessions').insert({
+      org_id: salon.id,
+      module_key: 'nail-salon',
+      actor_user_id: bobId,
+      target_user_id: target,
+      target_role: 'worker',
+      target_scope_ref: scope,
+    })
+
+  // try/finally, and grants deleted EXPLICITLY rather than through the node
+  // cascade: charlie is the seeded salon CUSTOMER used by the customer-booking
+  // e2e paths, and any throw above the cleanup would leave him a nail-salon
+  // WORKER. Relying on `module_roles.scope_ref on delete cascade` also made the
+  // two-step delete order load-bearing (sal_locations.scope_node_id is
+  // `set null`, so dropping the location does not drop its node).
+  try {
+    const own = await session(danaId, l1.scope_node_id as string)
+    check('a store-1 manager CAN open a person view on a store-1 worker', own.error == null, JSON.stringify(own.error))
+
+    const other = await session(charlieId, l2.scope_node_id as string)
+    check('...but NOT on a worker at store 2', other.error != null, JSON.stringify(other.error))
+    check(
+      '   ...refused for the scope/edge reason, not by accident',
+      /outranks, covers, and declares/.test(other.error?.message ?? ''),
+      other.error?.message ?? '',
+    )
+
+    // A GLOBAL grant is not covered by a scoped one (module_scope_covers(node,
+    // null) is false), so a one-store manager cannot view the chain-wide worker
+    // grant either — worth asserting because it is the case that would silently
+    // widen a scoped manager into a global one. The MESSAGE matters here: dana
+    // does hold a global worker grant in the seed, so this must fail on scope
+    // coverage and not on "no such grant to view as", which is what it would
+    // report if that seed grant ever went away.
+    const global = await session(danaId, null)
+    check('...and NOT on the same worker’s GLOBAL grant', global.error != null, JSON.stringify(global.error))
+    check(
+      '   ...refused on scope coverage, not because the grant is missing',
+      /outranks, covers, and declares/.test(global.error?.message ?? ''),
+      global.error?.message ?? '',
+    )
+  } finally {
+    await alice
+      .from('module_roles')
+      .delete()
+      .eq('org_id', salon.id)
+      .eq('module_key', 'nail-salon')
+      .in('scope_ref', [l1.scope_node_id as string, l2.scope_node_id as string])
+    await alice.from('sal_locations').delete().in('id', [l1.id as string, l2.id as string])
+    await alice.from('module_scope_nodes').delete().in('id', [l1.scope_node_id as string, l2.scope_node_id as string])
+    await alice.from('org_members').delete().eq('org_id', salon.id).eq('user_id', bobId)
+    const stray = (
+      await alice
+        .from('module_roles')
+        .select('user_id, role')
+        .eq('org_id', salon.id)
+        .eq('module_key', 'nail-salon')
+        .eq('user_id', charlieId)
+    ).data
+    check(
+      'cleanup: the seeded customer holds no leftover worker grant',
+      (stray ?? []).every((r) => r.role === 'customer'),
+      JSON.stringify(stray),
+    )
+  }
+}
+
+console.log('\n[8] The salon view-as route refuses an unauthenticated mode=2 request')
+{
+  // WEAKEST PROBE HERE, and worth saying so: an unauthenticated request never
+  // reaches the renderer, so "the body lacks Charlie C" would also hold if the
+  // route 500'd or the path were mistyped. The redirect check below is what makes
+  // it mean anything — it proves the request reached the app and was turned away
+  // at auth rather than answered. The real mode-2-needs-a-cookie proof for an
+  // AUTHENTICATED caller is the e2e (a session must exist to render a person),
+  // plus the guard test in the RLS suite. Same shape as probe [3].
+  try {
+    const res = await fetch('http://localhost:3000/o/demo-salon/m/nail-salon/view-as?tab=worker&mode=2', {
+      redirect: 'manual',
+    })
+    const body = res.status >= 300 && res.status < 400 ? '' : await res.text()
+    const bounced = res.status >= 300 && res.status < 400 && (res.headers.get('location') ?? '').includes('/login')
+    check('an unauthenticated mode=2 request is bounced to /login', bounced, `status ${res.status} -> ${res.headers.get('location')}`)
+    check('...and leaks no worker rows on the way', !body.includes('Charlie C'), `status ${res.status}`)
+  } catch {
+    skip('an unauthenticated mode=2 request is bounced to /login', 'dev server not running on :3000')
+    skip('...and leaks no worker rows on the way', 'dev server not running on :3000')
+  }
 }
 
 console.log(`\n${pass} passed, ${fail} failed`)

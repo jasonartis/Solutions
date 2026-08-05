@@ -322,13 +322,18 @@ Implementation notes:
   "auto-enrolled, nobody has reviewed them yet" queue — and the column is needed for
   audit anyway, so the feature is nearly free.
 
-## 8. View-as and audit — **[BUILT 2026-07-31, classroom only]**
+## 8. View-as and audit — **[BUILT 2026-07-31; classroom + nail-salon reviewed]**
 
-*(Declarations exist for all 8 modules; edges are ON for classroom alone. See
-the 2026-07-31 decisions entry for what was resolved at build time — including
-professor→student, which point 11 below left open, and a correction to the
-"personal layer" vocabulary. Everything in §8/§8.1 that describes intent still
-describes intent; where the build diverged or sharpened it, that entry says so.)*
+*(Declarations exist for all 8 modules. Edges are ON for **classroom** (2026-07-31)
+and **nail-salon** (2026-08-04, its own surface review); speed-dating's six pairs
+are enumerated and still await theirs. See the 2026-07-31 decisions entry for what
+was resolved at build time — including professor→student, which point 11 below left
+open, and a correction to the "personal layer" vocabulary — and the 2026-08-04 entry
+for the distinction the salon review added: mode 1 answers "what can this POSITION
+see?", mode 2 answers "what does this PERSON see?", and the second is only
+meaningful where RLS narrows per person rather than per scope. Everything in §8/§8.1
+that describes intent still describes intent; where a build diverged or sharpened
+it, that entry says so.)*
 
 
 Any higher position can see and act in the capacities below it, via per-position tabs
@@ -564,12 +569,13 @@ All of this is RLS/trigger territory ⇒ **Opus + full docs/03 #12 rhythm**, sli
    layer in `packages/platform/src/view-as{,-modules}.ts` + the generic renderer in
    `apps/web/{lib/view-as.ts,components/view-as/}`.]** Declarations are
    **platform-wide** (all 8 modules — the completeness check is only a check if no
-   module can opt out); **edges are ON for classroom only**, because §8.1 point 9
-   makes a position's surface classification a per-module security review and
-   classroom is the module that had one. Both classroom pairs answered:
+   module can opt out); **edges are ON only in a module that has had its own §8.1
+   point 9 surface review** — at this build, classroom alone; **since 2026-08-04,
+   classroom AND nail-salon** (five staff pairs, mode 2 on the two into `worker`;
+   see that decisions entry). Both classroom pairs answered:
    professor→GA ON (already settled in §8) and **professor→student ON**, the pair
-   point 11 left open. Nail-salon (9 pairs) and speed-dating (6) are enumerated and
-   explicitly OFF with reasons; the other five vocabularies are entirely rank 0 in
+   point 11 left open. Speed-dating's 6 pairs are enumerated and
+   explicitly OFF with reasons, still awaiting its review; the other five vocabularies are entirely rank 0 in
    SQL so they imply no pairs at all — and rank-mapping any of them will break the
    build until every newly-implied pair is answered, which is the amendment working.
    No new database read path (§8.1 point 1): one append-only session-log table, its
@@ -580,6 +586,165 @@ Each slice independently shippable; module specs get dated decision entries as t
 vocabulary gets locked.
 
 ## Decisions log
+
+- **2026-08-05 (NAIL-SALON REVIEW FOLLOW-UPS — four founder decisions, all taken on the
+  review's own findings rather than new work):**
+
+  1. **`ExcludedFromSurface.columns` and `PersonalLayer.columns` DELETED.** Both were dead on
+     arrival: the overlap check refuses one table in both `role` and an off-surface list, so a
+     column-level exclusion on a table that IS rendered was unrepresentable, and every such
+     decision the salon review made had to be a `caveat` anyway. A dead optional field only
+     invites someone to set it and assume it does something. **The mechanism for columns is the
+     role surface's `columns` ALLOW-LIST plus a caveat naming what was left off and why** — and
+     the consequence to state plainly is that `excluded: []` means "no whole table is withheld",
+     not "nothing is withheld".
+  2. **The CI test-count ratchet now measures test counts.** Its RLS half was
+     `grep -c "it("` — unanchored, so it also matched every `.limit(` line; the day it was found
+     the real count was 90 and the ratchet read 105. Fixed to `grep -cE "^[[:space:]]+it\("`
+     with the floor set to the EXACT count. Recorded in docs/12 because a loose ratchet is worse
+     than none: deleting real tests could be masked by unrelated churn, and a refactor removing
+     `.limit()` calls could fail CI having deleted nothing.
+  3. **The salon seed gained a paid visit, the bookkeeping rows, and a salon ADMIN.** The
+     review's one open verification gap was that the **Manager tab had never been rendered in a
+     browser** — a manager holds no edge into their own position, so only an `admin` can open it,
+     and there was no salon admin to sign in as. Frank (a plain org MEMBER, so his reads go
+     through the module ladder rather than short-circuiting on `is_org_admin()`) now holds it,
+     and an e2e renders the tab and asserts a real earnings row in it. **The admin had to be
+     someone other than alice**: granting her both `manager` and `admin` would have made her
+     Manager tab appear and silently inverted the e2e assertion that it does not. The visit is
+     dated YESTERDAY so the day board — which queries today only — is untouched, and the bill is
+     inserted `open` then updated to `paid` because `sal_feed_earnings` is an AFTER UPDATE
+     trigger keyed on the transition; inserting it as `paid` would have left the ledger empty,
+     which is the section the seed exists to fill.
+  4. **E2E timeouts are now environment-dependent, and CI is deliberately left STRICTER.** Three
+     clean-seed full runs each lost exactly one test, a different one every time — which is what
+     proves the cause environmental (the local dev server compiling routes mid-test) rather than
+     a set of test bugs, and why per-test patches were whack-a-mole. Local gets
+     `expect.timeout: 15s` and `timeout: 45s`; **CI keeps the 5s expect default**, because CI
+     serves a PREBUILT app where a slow assertion means something is genuinely slow. That split
+     is what stops the fix from becoming a blanket "wait longer everywhere" that hides a real
+     regression. Two sub-shapes needed the two different remedies: an ASSERTION timing out after
+     a navigation (covered by `expect.timeout`) versus the `.click()` ACTION itself stalling to
+     the test timeout (covered by a scoped `test.slow()`, which raises the TEST budget only).
+
+- **2026-08-04 (NAIL-SALON VIEW-AS SURFACE REVIEW — module 5's own §8.1 point 9
+  review; Opus session, adversarial review at Opus tier because this is a copy of
+  an audited pattern, not a new mechanism):** All nine of nail-salon's
+  rank-differential pairs answered, surfaces written for the three positions that
+  gained an edge, one one-function migration (`20260804010000`). Rules → docs/03
+  **#18** (amended); the record → the journal.
+
+  **THE FINDING, and it generalises past this module: mode 1 and mode 2 answer
+  different questions, and only one of them needs a person.** Mode 1 ("as if I held
+  that position") answers *what can this POSITION see?* — including the answers that
+  are absences. Mode 2 ("what does Smith see") answers *what does this PERSON see?*
+  and is only meaningful where RLS narrows **per person**. In nail-salon it narrows
+  **per location** for manager and cashier (`sal_can_manage_location` /
+  `sal_can_operate_location` ask only "does your grant cover this location", so every
+  row one cashier reads is readable by every other cashier at that location) and
+  **per person** only for worker (`sal_appointments.worker_id = auth.uid()`, own
+  time-off, only the customers they are booked with). Hence:
+
+  | pair | mode 1 | mode 2 |
+  |---|---|---|
+  | admin → manager | ON | off — no per-person column |
+  | admin → cashier | ON | off — no per-person column |
+  | admin → worker | ON | **ON** |
+  | manager → cashier | ON | off — no per-person column |
+  | manager → worker | ON | **ON** |
+  | admin/manager/cashier/worker → customer | off | off |
+
+  The mode-2 refusals are not squeamishness. The only sal_ columns naming a manager
+  or cashier are authorship stamps (`created_by`, `paid_by` — the latter stamped by
+  a trigger as *whoever rang it up*), and filtering on one would **under-show** the
+  tab, hiding rows the target genuinely reads; rendering unfiltered instead is honest
+  but is not mode 2, which point 3 defines as rows ABOUT the target.
+  `viewAsCompleteness()` independently refuses mode 2 on a surface with no
+  per-person table, which is the code saying the same thing. **What an admin
+  actually wants there — one named manager's LOCATION-scoped console — is the third
+  Owner-Console mode the founder specified on 2026-08-03 ("this position's surface
+  with no person filter"), and it belongs there rather than mislabelled as a person
+  view.** That is now a concrete requirement for that build, not a nice-to-have.
+
+  **The four customer pairs stay OFF and were re-decided, not inherited.** The
+  product reason still holds (a customer's history is received as themselves, not
+  duty output; operators already read every operational row). The review added three
+  mechanical reasons: (1) **identity-key mismatch** — a mode-2 target is a
+  (person, position, scope) GRANT triple, but customer read access keys on
+  `sal_customers.user_id` via `sal_owns_customer`/`sal_owns_bill` and never on the
+  `module_roles` customer grant, so the picker would list the wrong population and a
+  grant-holder with no customer row would render empty; (2) **walk-ins are the
+  majority** and hold no grant at all (2026-08-03 data-browser finding), so this
+  could never be the general answer; (3) for **worker → customer** specifically the
+  surface would be strictly poorer than an operator's, since a worker cannot read
+  `sal_bills` or `sal_bill_items` at all. The tool that answers "what do we hold
+  about this customer" is the data browser (docs/03 #19) — a different question by
+  design.
+
+  **What the surfaces made visible (each checked against the policy SQL, never
+  inferred from staff rank — the mistake made twice before):** a **cashier cannot
+  read one revenue row** (`sal_earnings_ledger_select_manage` is the module's only
+  manage-tier read, with no operate arm) while writing expenses freely — the
+  module's clearest asymmetric read (not its only one — a worker reading every
+  colleague's org-wide schedule while blind to their own earnings is a second); a **worker cannot read the earnings rows
+  that carry their own `worker_id`**, nor bills, bill items, promotions, expenses or
+  the shopping list; and a worker **can** read every colleague's profile and weekly
+  schedule (`sal_worker_profiles_select_member` is org-wide), so the worker tab's
+  narrowing to their own profile is OURS and is labelled as such rather than passed
+  off as a policy.
+
+  **No new mechanism was needed, and the one place it nearly was is recorded.**
+  `subjectColumn` names a column holding a user id, so a table reaching its person
+  through a child row cannot be subject-filtered. Two salon tables are like that and
+  both were answered honestly rather than by extending the type: `sal_worker_time_off`
+  is embedded under the profile it belongs to (the hop is already made, so the rows
+  are right in both modes), and `sal_customers` is `excluded` from the worker surface
+  with the customer's name rendered through the appointment's embed — exactly how the
+  worker's own console renders it. Rendering a standalone customer list would have
+  been **falsely permissive**, the one failure mode a mode-2 tab must not have. If a
+  future surface genuinely needs a hop-filtered section, the shape to copy is the
+  data browser's `PersonVia.then`, and it is a platform change with its own review.
+
+  **Two things fixed while here, both small and both honesty fixes.** (1) The
+  **third off-surface list was never rendered** — `unreadableByPosition` was
+  declared and test-enforced from slice 5 but invisible on screen, which on the
+  cashier tab would have hidden the single most useful sentence on it. All three
+  lists now render with distinct badges and a line explaining that they are three
+  claims about three different readers. (2) `formatCell` collapses an embedded
+  object to its `title`/`name` key, so a multi-column embed silently drops columns
+  from the screen while still being declared; the salon embeds use PostgREST column
+  aliasing (`name:full_name`) so the declaration lists exactly what renders.
+
+  **Verification:** typecheck 9/9; RLS suite **90/90** (was 82, +8 salon-specific,
+  including the keystone asserted as a real non-org-admin MANAGER, since alice owns
+  demo-salon and every read of hers would otherwise short-circuit through
+  `is_org_admin` and prove nothing about the position, and stated as "wherever a table HAS
+  rows the manager reads them", with alice as the control — an error-is-null check would
+  have passed on every table RLS emptied); **36/36 live probes** with
+  **zero skips** (was 21/21 at slice 5 — +15 assertions: seven more edge-mirror cases, a
+  six-check two-store scope-intersection probe, and a two-check unauthenticated fetch); 2 new
+  e2e tests, green in each of THREE clean-seed full runs — every one of which also lost ONE
+  UNRELATED test to the local dev-server navigation flake, a different test each time and each
+  passing in isolation. That moving target is what proved it environmental rather than a set of
+  test bugs, and it is what the 2026-08-05 follow-up fixed at the harness level.
+  **ALL SIX tables behind the seven "cannot read" claims HAD zero rows on a clean seed** (the
+  seventh claim is `sal_earnings_ledger` a second time, on the other surface), so fixtures were
+  built for every one — without them each assertion would have passed on an empty universe
+  (docs/03's vacuity rule). The seed gained those rows on 2026-08-05; the fixtures stay, so the
+  assertions never depend on the seed keeping them.
+
+  **What the review did NOT close, recorded rather than implied:** the twelve-table
+  accounting is HAND-checked — `viewAsCompleteness()` only refuses a table appearing in two
+  lists, never enumerates the module's real tables, and never inspects `embed`, so a future
+  `sal_tips` migration would leave all three surfaces silently incomplete with CI green. The
+  fix that exists in the repo already is the data browser's `pg_catalog` coverage test
+  (docs/03 #19); switching on the analogue is platform-wide work, because classroom's
+  surfaces do not classify every `cls_` table. Also: **`ExcludedFromSurface.columns` is
+  unusable** — the overlap check forbids one table in both `role` and `excluded`, so every
+  column-level exclusion here is a caveat, and `excluded: []` means "no whole table is
+  withheld", not "nothing is withheld". And the **Manager tab has never been rendered in a
+  browser** (no seeded salon admin); it was verified at the data layer, all 11 sections, as a
+  temporarily self-granted admin.
 
 - **2026-08-03 (PER-PERSON DATA BROWSER BUILT — the first half of docs/13's Owner
   Console pair; Opus session, two Fable adversarial reviews):** `/console/data-browser`,

@@ -153,15 +153,22 @@ export type SurfaceTable = {
 }
 
 /**
- * A table (or named columns of one) that a position can see but which is
- * NEVER rendered upward: RLS-unreadable to every position holding a mode-2
- * edge into this one. This is §8.1 point 1's strict sense of "personal layer"
- * — the test suite asserts the unreadability, so the claim cannot rot.
+ * A table that a position can see but which is NEVER rendered upward:
+ * RLS-unreadable to every position holding a mode-2 edge into this one. This is
+ * §8.1 point 1's strict sense of "personal layer" — the test suite asserts the
+ * unreadability, so the claim cannot rot.
+ *
+ * WHOLE TABLES ONLY, deliberately (a `columns?` field was removed 2026-08-04
+ * after the salon review proved it could never be used). The overlap check below
+ * refuses one table appearing in both `role` and an off-surface list, so a
+ * column-level exclusion on a table that IS rendered was unrepresentable — and
+ * every such decision the salon review made had to be a `caveat` anyway. The
+ * honest mechanism for columns is the role surface's `columns` ALLOW-LIST plus a
+ * caveat saying what was left off and why; a dead optional field only invited
+ * someone to set it and assume it did something.
  */
 export type PersonalLayer = {
   table: string
-  /** Named columns only; omit when the whole table is personal. */
-  columns?: readonly string[]
   why: string
 }
 
@@ -180,13 +187,17 @@ export type PersonalLayer = {
  */
 export type ExcludedFromSurface = {
   table: string
-  columns?: readonly string[]
   /**
    * Why it is off the surface. STRICTLY the "viewer can read it, we choose not
    * to render it" case — the test suite asserts it really is readable, so this
    * label can never quietly absorb something the viewer cannot see.
    */
   why: string
+  // A `columns?` field lived here until 2026-08-04 and was DEAD ON ARRIVAL: the
+  // overlap check refuses one table in both `role` and `excluded`, so it could
+  // only ever describe a table that is not rendered at all — for which naming
+  // columns is meaningless. Column-level decisions belong in the role table's
+  // `columns` allow-list plus a `caveat`. See PersonalLayer above.
 }
 
 /**

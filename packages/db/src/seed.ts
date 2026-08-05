@@ -522,13 +522,24 @@ async function main() {
   const salon = await ensureOrg('Demo Salon', 'demo-salon')
   await admin.from('org_members').upsert([
     { org_id: salon, user_id: aliceId, role: 'owner' },
+    { org_id: salon, user_id: frankId, role: 'member' },
     { org_id: salon, user_id: eveId, role: 'member' },
     { org_id: salon, user_id: danaId, role: 'member' },
     { org_id: salon, user_id: charlieId, role: 'member' },
   ])
   await admin.from('org_modules').upsert({ org_id: salon, module_key: 'nail-salon', enabled: true })
+  // FRANK IS THE SALON ADMIN, and it has to be someone OTHER than alice
+  // (added 2026-08-04, founder-approved). The nail-salon view-as review gave
+  // admin an edge into `manager`, so the Manager tab only exists for a caller
+  // holding `admin` — and alice holds `manager`, whose own tabs are Cashier and
+  // Worker. Granting alice both would have made her Manager tab appear and
+  // silently inverted the e2e assertion that it does NOT (a manager cannot view
+  // as a manager: equal rank, no pair). Frank also keeps the ladder honest: he
+  // is a plain org MEMBER, so his reads go through the module grant rather than
+  // short-circuiting on is_org_admin() the way the owner's do.
   await upsertModuleRoles([
     { org_id: salon, user_id: aliceId, module_key: 'nail-salon', role: 'manager' },
+    { org_id: salon, user_id: frankId, module_key: 'nail-salon', role: 'admin' },
     { org_id: salon, user_id: eveId, module_key: 'nail-salon', role: 'cashier' },
     { org_id: salon, user_id: danaId, module_key: 'nail-salon', role: 'worker' },
     { org_id: salon, user_id: charlieId, module_key: 'nail-salon', role: 'customer' },
@@ -605,6 +616,91 @@ async function main() {
     reason: 'Vacation',
   })
   if (timeOffErr) throw new Error(`Salon worker time-off seed failed: ${timeOffErr.message}`)
+
+  // --- Back office: one finished, paid visit + the bookkeeping rows ---------
+  // Added 2026-08-04 (founder-approved) because the view-as surface review
+  // exposed a demo gap, not a code gap: a clean seed had ZERO rows in
+  // sal_bills / sal_bill_items / sal_earnings_ledger / sal_promotions /
+  // sal_expenses / sal_shopping_list, so 6 of the Manager tab's 11 sections read
+  // "Nothing here." and an operator could not tell a correct empty section from
+  // a broken one. Six tables' worth of "cannot read" assertions in the RLS suite
+  // also had to build their own fixtures for the same reason.
+  //
+  // DATED YESTERDAY on purpose: the day board queries TODAY only, so this visit
+  // never appears there and the "booked → paid" lifecycle e2e still finds
+  // exactly the one booked appointment it walks.
+  const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1, 10, 0, 0)
+  const { data: pastAppt, error: pastApptErr } = await admin
+    .from('sal_appointments')
+    .insert({
+      org_id: salon,
+      location_id: loc!.id,
+      customer_id: cust!.id,
+      service_id: manicure.id,
+      worker_id: danaId,
+      scheduled_start: yesterday.toISOString(),
+      scheduled_end: new Date(yesterday.getTime() + 30 * 60000).toISOString(),
+      state: 'paid',
+    })
+    .select('id')
+    .single()
+  if (pastApptErr) throw new Error(`Salon past appointment seed failed: ${pastApptErr.message}`)
+
+  // Inserted OPEN then UPDATED to paid, deliberately: sal_feed_earnings is an
+  // AFTER UPDATE trigger keyed on the state transition, so a bill inserted
+  // directly as 'paid' would leave the earnings ledger empty — which is the very
+  // section this seed exists to fill.
+  const { data: bill, error: billErr } = await admin
+    .from('sal_bills')
+    .insert({ org_id: salon, location_id: loc!.id, appointment_id: pastAppt!.id, subtotal: 40, total: 40 })
+    .select('id')
+    .single()
+  if (billErr) throw new Error(`Salon bill seed failed: ${billErr.message}`)
+  const { error: itemErr } = await admin.from('sal_bill_items').insert({
+    org_id: salon,
+    location_id: loc!.id,
+    bill_id: bill!.id,
+    service_id: manicure.id,
+    description: 'Manicure',
+    quantity: 1,
+    unit_price: 40,
+    line_total: 40,
+  })
+  if (itemErr) throw new Error(`Salon bill item seed failed: ${itemErr.message}`)
+  const { error: paidErr } = await admin
+    .from('sal_bills')
+    .update({ state: 'paid', payment_method: 'card' })
+    .eq('id', bill!.id)
+  if (paidErr) throw new Error(`Salon bill payment seed failed: ${paidErr.message}`)
+
+  const { error: promoErr } = await admin.from('sal_promotions').insert({
+    org_id: salon,
+    location_id: loc!.id,
+    name: 'Every 5th visit — 15% off',
+    kind: 'visit_count',
+    threshold: 5,
+    discount_type: 'percent',
+    discount_value: 15,
+  })
+  if (promoErr) throw new Error(`Salon promotion seed failed: ${promoErr.message}`)
+
+  const { error: expErr } = await admin.from('sal_expenses').insert({
+    org_id: salon,
+    location_id: loc!.id,
+    category: 'supplies',
+    description: 'Nail files (bulk)',
+    amount: 18.5,
+  })
+  if (expErr) throw new Error(`Salon expense seed failed: ${expErr.message}`)
+
+  const { error: shopErr } = await admin.from('sal_shopping_list').insert({
+    org_id: salon,
+    location_id: loc!.id,
+    item: 'Cotton pads',
+    quantity: 2,
+    estimated_cost: 6,
+  })
+  if (shopErr) throw new Error(`Salon shopping-list seed failed: ${shopErr.message}`)
 
   // --- Demo speed dating for module 6 --------------------------------------
   // alice organizes; charlie/dana/eve/frank are participants. One event with
@@ -687,7 +783,9 @@ async function main() {
   console.log('  Platform Self-Test (platform-self-test): stub module only — the M0 entitlement-chain proof, not a real walkthrough')
   console.log('  Demo Synagogue (demo-shul): synagogue-schedules enabled, alice is maker')
   console.log('  Demo Match (demo-match): matchmaking enabled — singles charlie/dana/eve/frank, matchmaker mel')
-  console.log('  Demo Salon (demo-salon): nail-salon — manager alice, cashier eve, worker dana, customer charlie')
+  console.log(
+    '  Demo Salon (demo-salon): nail-salon — admin frank, manager alice, cashier eve, worker dana, customer charlie',
+  )
   console.log('  Demo Visual (demo-visual): visual-messaging — admin alice, members charlie/dana')
   console.log('  Demo Dating (demo-dating): speed-dating — organizer alice, participants charlie/dana/eve/frank')
 }

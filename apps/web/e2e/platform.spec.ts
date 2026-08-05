@@ -973,6 +973,15 @@ test('speed-dating module: two-sided event lets a participant pick a side at reg
 // definer RPC (20260716020000) — the fresh registrant's own session can't
 // see other participants, so the count goes through the RPC.
 test('speed-dating module: two-sided event enforces per-side capacity and waitlist promotion', async ({ page }) => {
+  // Same remedy as its 2026-07-30 sibling above, applied 2026-08-04 after this
+  // test failed on a clean-seed full run for the second time (2026-08-02, then
+  // again on the third run of 2026-08-04) and passed in 29s in isolation both
+  // times. This one's failure shape is the `.click()` ACTION stalling — the log
+  // ends at "element is visible, enabled and stable, scrolling into view if
+  // needed" — so it is the TEST budget that runs out, which is exactly what
+  // test.slow() extends. Many sign-ins, data-heavy server components, and an
+  // unbuilt dev server compiling routes mid-test.
+  test.slow()
   // Organizer creates a two-sided event with a tiny capacity (1 per side) so
   // a second registrant on the same side is trivially forced to waitlist.
   await signIn(page, 'alice@demo.local')
@@ -1517,6 +1526,162 @@ test('view-as: a GA gets no tab into a student (peers), and a student gets no vi
   // Charlie is a student — bottom of the ladder, nothing below him.
   await signIn(page, 'charlie@demo.local')
   await page.goto('/o/demo-a/m/classroom/view-as')
+  await expect(page.getByText(/has a declared view-as edge below it/)).toBeVisible()
+})
+
+// Nail-salon view-as (surface review 2026-08-04). The module's own critical
+// path, and it is deliberately a DIFFERENT shape from classroom's because the
+// review's central finding is that salon RLS narrows by LOCATION for
+// manager/cashier and by PERSON only for worker:
+//   * the Cashier tab is MODE 1 ONLY — it answers "what can a cashier see?",
+//     and the most important part of that answer is an absence (no revenue),
+//     which must be stated on the page, not left as an empty section;
+//   * the Nail worker tab is the one with a person view, because a worker's rows
+//     really are their own.
+// Opening the "what this leaves out" disclosure IDEMPOTENTLY, which matters as
+// soon as one test opens it more than once. `<details open>` is DOM state React
+// does not control (the component passes no `open` prop), and an App Router
+// client-side navigation reconciles rather than replaces the element — so the
+// disclosure stays open across a tab switch and a second `.click()` CLOSES it.
+// The failure looks like "the element is there but hidden", which reads as a
+// rendering bug rather than as the test undoing itself.
+async function openLeavesOut(page: Page) {
+  const summary = page.getByText('What this view deliberately leaves out')
+  const details = page.locator('details').filter({ has: summary })
+  if (await details.evaluate((d) => !(d as HTMLDetailsElement).open)) await summary.click()
+  await expect(details).toHaveAttribute('open', '')
+}
+
+test('view-as: salon manager gets a mode-1-only cashier tab and a person view on a worker', async ({
+  page,
+}) => {
+  // Alice is the seeded nail-salon MANAGER at Demo Salon — and also its org OWNER,
+  // so `sal_can_manage_location` short-circuits through `is_org_admin()` for her.
+  // This test therefore proves the UI and the tab logic, NOT that the manager
+  // POSITION can read these tables; that proof is the RLS suite's bob, a plain
+  // member holding only a global manager grant (docs/03 #18, last bullet).
+  await signIn(page, 'alice@demo.local')
+  await page.goto('/o/demo-salon/m/nail-salon')
+  await page.getByRole('link', { name: 'View as' }).click()
+  await expect(page.getByRole('heading', { name: 'View as' })).toBeVisible()
+
+  // The strip is the declared edges and nothing else. A manager holds
+  // manager -> cashier and manager -> worker; there is no Manager tab, because
+  // manager -> manager is not a rank-differential pair. The positive assertions
+  // on the same line of reasoning are what keep the negative from being vacuous.
+  await expect(page.getByRole('link', { name: /^Cashier/ })).toBeVisible()
+  await expect(page.getByRole('link', { name: /^Nail worker/ })).toBeVisible()
+  await expect(page.getByRole('link', { name: /^Manager/ })).not.toBeVisible()
+
+  // Cashier tab. It is the default because cashier is declared before worker and
+  // the tab sort is stable — NOT because it outranks worker; the two are equal
+  // rank (1), which is also why neither gets a tab into the other.
+  await page.getByRole('link', { name: /^Cashier/ }).click()
+  await expect(page.getByText('Cashier — as you would hold it')).toBeVisible()
+  await expect(page.getByText(/Viewing a specific person in this capacity is not enabled/)).toBeVisible()
+
+  // The surface renders real operational rows...
+  await expect(page.getByText('Appointment book (the day board)')).toBeVisible()
+  await expect(page.getByText('Charlie C').first()).toBeVisible()
+
+  // ...and the third off-surface list is on screen: a cashier cannot read the
+  // earnings ledger. This is the reason the disclosure now renders all three
+  // lists — it was declared and test-enforced from slice 5 but invisible.
+  // Scoped to the LIST ITEM on purpose: the disclosure's own explanatory
+  // paragraph contains the words "not readable by this position" too, so an
+  // unscoped locator would pass whenever the disclosure renders at all — even if
+  // the third list were dropped again, which is the regression this guards.
+  await openLeavesOut(page)
+  const earningsEntry = page.locator('li').filter({ hasText: 'sal_earnings_ledger' })
+  await expect(earningsEntry.getByText('not readable by this position')).toBeVisible()
+
+  // Nail worker tab — mode 1 first: alice holds no worker profile and no
+  // assigned appointments, so her own chair view is empty (§8.1 point 8, and it
+  // must not create anything). Keyed to the same string asserted present below,
+  // so the absence is evidence rather than a no-op.
+  await page.getByRole('link', { name: /^Nail worker/ }).click()
+  await expect(page.getByText('Nail worker — as you would hold it')).toBeVisible()
+  await expect(page.getByText('Charlie C')).not.toBeVisible()
+
+  // Mode 2 on a named worker. The picker lists grant triples, so Dana's option
+  // carries her position and scope.
+  const picker = page.getByLabel('Or view as a specific person:')
+  const danaOption = picker.locator('option', { hasText: 'Dana D' }).first()
+  await expect(danaOption).toHaveText(/worker/)
+  await picker.selectOption((await danaOption.getAttribute('value'))!)
+  await page.getByRole('button', { name: 'View as' }).click()
+
+  await expect(page.getByText(/Viewing as/)).toBeVisible()
+  await expect(page.getByText('read-only')).toBeVisible()
+  await expect(page.getByText(/This session is recorded/)).toBeVisible()
+
+  // Dana's actual chair view: her appointment, with the customer named through
+  // the embed — which is how her own console renders it, and the reason
+  // sal_customers is `excluded` rather than given a section it cannot filter.
+  await expect(page.getByText('Their appointments (the chair view)')).toBeVisible()
+  await expect(page.getByText('Charlie C').first()).toBeVisible()
+
+  // What her tab leaves out, in both senses, stated on the page.
+  await openLeavesOut(page)
+  await expect(page.getByText('sal_customers').first()).toBeVisible()
+  await expect(page.getByText('sal_bills', { exact: true })).toBeVisible()
+
+  await page.getByRole('button', { name: 'Stop viewing as' }).click()
+  await expect(page.getByText(/Viewing as/)).not.toBeVisible()
+  await expect(page.getByText('Nail worker — as you would hold it')).toBeVisible()
+})
+
+test('view-as: the salon admin gets the Manager tab, and it shows the money a cashier cannot see', async ({
+  page,
+}) => {
+  // The tab the surface review could NOT render until the seed gained a salon
+  // admin (2026-08-04): a manager holds no edge into their own position, so only
+  // `admin` can open it. Frank is a plain org MEMBER holding the admin grant, so
+  // his reads go through the module ladder rather than short-circuiting on
+  // is_org_admin() — which makes this the browser-level counterpart to the RLS
+  // suite's keystone test.
+  await signIn(page, 'frank@demo.local')
+  await page.goto('/o/demo-salon/m/nail-salon/view-as')
+
+  // An admin outranks all three staff positions, so all three tabs exist.
+  await expect(page.getByRole('link', { name: /^Manager/ })).toBeVisible()
+  await expect(page.getByRole('link', { name: /^Cashier/ })).toBeVisible()
+  await expect(page.getByRole('link', { name: /^Nail worker/ })).toBeVisible()
+
+  await page.getByRole('link', { name: /^Manager/ }).click()
+  await expect(page.getByText('Manager — as you would hold it')).toBeVisible()
+
+  // THE POINT OF THE TAB: the earnings ledger is on the manager surface and is
+  // the one salon table gated on manage tier. The seeded paid bill fed it
+  // through sal_feed_earnings, so this asserts a real row rather than a heading
+  // over an empty table — and it is the same section the cashier tab declares
+  // unreadable, which is the contrast the two tabs exist to draw.
+  await expect(page.getByText('Earnings ledger (revenue)')).toBeVisible()
+  const earnings = page.locator('section').filter({ hasText: 'Earnings ledger (revenue)' })
+  await expect(earnings.locator('tbody tr')).not.toHaveCount(0)
+  await expect(earnings).toContainText('sale')
+
+  // Mode 2 is off for this pair, and the page says so in words.
+  await expect(page.getByText(/Viewing a specific person in this capacity is not enabled/)).toBeVisible()
+
+  // The same admin's Cashier tab must NOT carry that section — the positive
+  // above is what stops this negative from being vacuous.
+  await page.getByRole('link', { name: /^Cashier/ }).click()
+  await expect(page.getByText('Cashier — as you would hold it')).toBeVisible()
+  await expect(page.getByText('Earnings ledger (revenue)')).not.toBeVisible()
+})
+
+test('view-as: a salon cashier has no edge below them, and no View as link at all', async ({ page }) => {
+  // Eve is the seeded cashier. Her only rank-differential pair is
+  // cashier -> customer, which the review confirmed OFF — so she has no tab and
+  // no entry point. (Worker is her peer at rank 1, so that pair cannot exist.)
+  await signIn(page, 'eve@demo.local')
+  await page.goto('/o/demo-salon/m/nail-salon')
+  await expect(page.getByRole('heading', { name: /Nail Salon/ })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'View as' })).not.toBeVisible()
+
+  await page.goto('/o/demo-salon/m/nail-salon/view-as')
+  await expect(page.getByRole('heading', { name: 'View as' })).toBeVisible()
   await expect(page.getByText(/has a declared view-as edge below it/)).toBeVisible()
 })
 

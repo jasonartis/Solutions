@@ -90,7 +90,15 @@ console.log('\n[4] The edge mirror answers correctly ON PROD, and fails closed')
     ['classroom', 'professor', 'student', true],
     ['classroom', 'ga', 'student', false],
     ['classroom', 'student', 'professor', false],
+    // Nail-salon's surface review (2026-08-04) turned mode 2 on for the two
+    // pairs into `worker` and left the other seven off. THESE TWO `true` CASES
+    // REQUIRE 20260804010000 TO BE DEPLOYED — if this script fails only here,
+    // prod's schema is behind the repo, which is exactly what it should say.
+    ['nail-salon', 'admin', 'worker', true],
+    ['nail-salon', 'manager', 'worker', true],
     ['nail-salon', 'admin', 'manager', false],
+    ['nail-salon', 'manager', 'cashier', false],
+    ['nail-salon', 'manager', 'customer', false],
     ['speed-dating', 'organizer', 'participant', false],
     ['speed-dating', 'admin', 'participant', false],
     ['visual-messaging', 'admin', 'member', false],

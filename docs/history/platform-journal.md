@@ -6,6 +6,116 @@ lean. Newest first. Durable *decisions/conventions* live in their own docs (docs
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
 
 
+- **2026-08-05 (NAIL-SALON REVIEW FOLLOW-UPS — four founder decisions, all on findings the
+  review itself produced; same Opus session):** Durable reasoning → docs/15's 2026-08-05 entry;
+  docs/12 for the ratchet. Headlines:
+  - **Dead API removed:** `columns?` on `PersonalLayer` / `ExcludedFromSurface` could never be
+    used (the overlap check forbids one table in both `role` and an off-surface list), so every
+    column-level decision was a caveat anyway. Deleted rather than left to mislead.
+  - **The CI test-count ratchet now counts tests.** Its RLS half was an unanchored
+    `grep -c "it("`, matching every `.limit(` line too: real 90, measured 105. Anchored, floor
+    set exact. Founder-approved because it is a guard (docs/12 rule).
+  - **The salon seed gained a paid visit + bookkeeping rows + a salon ADMIN (frank).** Closes the
+    review's one open verification gap: the Manager tab had never been browser-rendered, because
+    only an `admin` can open it. A new e2e now renders it and asserts a REAL earnings row — which
+    exists because the seeded bill is inserted `open` and then updated to `paid`, the only way
+    the AFTER UPDATE `sal_feed_earnings` trigger fires. The admin could not be alice (she holds
+    `manager`; giving her both would have inverted the "no Manager tab" assertion), and the visit
+    is dated yesterday so the day board is untouched.
+  - **Rode along, and it is the kind of thing that eats a session:** the slice-5 fixture that
+    seeds a `cls_review_assignments` row **failed the whole describe with a duplicate key** when
+    the RLS suite ran straight after e2e without a reset — the classroom grading-workflow e2e
+    creates the same (homework, reviewer, submission) triple. It reads as a broken security test
+    when it is only stale state (the documented trap). The fixture now inserts if it can and
+    otherwise ADOPTS the existing row, leaving it alone in `afterAll` — all it ever owed the
+    tests was that the table is not empty. The suite is now 90/90 in BOTH orders, where before
+    it needed a reset.
+  - **E2E timeouts are now environment-dependent, CI deliberately STRICTER.** Local gets
+    `expect.timeout: 15s` / `timeout: 45s`; CI keeps the 5s expect default, because it serves a
+    PREBUILT app where a slow assertion means something is genuinely slow. That split is what
+    keeps the fix from becoming a blanket "wait longer" that hides regressions. The two
+    sub-shapes need the two different knobs: an assertion timing out after a navigation
+    (`expect.timeout`) versus the `.click()` action stalling to the test timeout (`test.slow()`).
+
+- **2026-08-04 (NAIL-SALON VIEW-AS SURFACE REVIEW — slice 5's follow-on, sequenced ahead of
+  the Owner Console by founder decision 2026-08-03; Opus session, review kept at Opus tier
+  because this is a copy of an audited pattern, not a new mechanism):** Module 5's own §8.1
+  point 9 review. Nine pairs answered, three surfaces written, twelve tables classified per
+  position, one one-function migration (`20260804010000_nail_salon_view_as_edges.sql`).
+  Durable decisions → **docs/15's decisions log, 2026-08-04**; reusable rules → docs/03
+  **#18** (six new bullets); module record → docs/modules/module-5-nail-salon.md. Headlines:
+  - **Mode 1 ON for all five staff-to-staff pairs; mode 2 additionally for the two into
+    `worker`; all four customer pairs OFF and re-decided rather than inherited.** The
+    finding that drove it, and it generalises: salon RLS narrows **per location** for
+    manager/cashier and **per person** only for worker, so "what does this PERSON see" has
+    no referent for the first two. Mode 1 answers "what can this POSITION see", which is
+    useful for all three. The two ways to force mode 2 onto a scope-narrowed position both
+    fail — filtering on an authorship stamp UNDER-shows the tab, rendering unfiltered is
+    not mode 2 — and `viewAsCompleteness()` refuses the configuration independently.
+  - **The migration is two ON pairs inside one module arm.** `module_view_as_edge()` mirrors MODE 2
+    specifically (it gates the session INSERT), so the four mode-1-only pairs need no SQL:
+    mode 1 writes nothing and reads only through the caller's RLS. The parity test compares
+    SQL against `mode2` over every ordered pair, so this stayed in step by construction.
+  - **A cashier cannot read one revenue row** (`sal_earnings_ledger` is the module's only
+    manage-tier read) while writing expenses freely — the module's clearest asymmetric read, and
+    the cashier tab now says so. **A worker cannot read the earnings rows carrying their own
+    `worker_id`**, nor bills/items/promotions/expenses/shopping list: six
+    `unreadableByPosition` entries. **A worker CAN read every colleague's profile and weekly
+    schedule** (org-member-wide policy), so the worker tab's narrowing is ours and is
+    labelled as such.
+  - **No new mechanism needed, and the near-miss is on record.** `subjectColumn` names a
+    user-id column, so `sal_worker_time_off` (links via `worker_profile_id`) and
+    `sal_customers` (reachable only through an appointment) cannot be subject-filtered.
+    Answered honestly: time-off as an embed under the profile that makes the hop, the
+    customer's name as an embed on the appointment — which is how the worker's own console
+    renders it. A standalone customer section would have been FALSELY PERMISSIVE, the one
+    failure mode a mode-2 tab must not have.
+  - **Two honesty fixes rode along.** (1) The third off-surface list
+    (`unreadableByPosition`) was declared and test-enforced from slice 5 but **never
+    rendered** — it would have hidden the most useful sentence on the cashier tab. All
+    three lists now render with distinct badges plus a line saying they are three claims
+    about three different readers. (2) `formatCell` collapses an embedded object to its
+    `title`/`name` key, so a multi-column embed silently dropped columns from the screen
+    while still being declared; the salon embeds use PostgREST aliasing (`name:full_name`)
+    so the allow-list lists exactly what renders.
+  - **Verification:** typecheck 9/9; RLS **90/90** (was 82); **36/36 live probes, zero
+    skips** (was 21/21 at slice 5 — +7 edge-mirror cases, a two-store scope-intersection
+    probe, an unauthenticated mode-2 page fetch); 2 new e2e; THREE clean-seed full e2e runs, all four view-as tests green in every one; each run also lost ONE unrelated test to the local dev-server navigation flake, a DIFFERENT test each time and each passing in isolation (recorded in CLAUDE.md — the moving target is why it is environmental, not a test bug). All SIX tables
+    behind the seven "cannot read" claims are **empty on a clean seed**, so fixtures exist for
+    all of them — the vacuity rule, applied before it could bite. The keystone test runs as
+    a plain member granted `manager`, not as alice: she owns demo-salon, so her reads
+    short-circuit through `is_org_admin()` and would prove nothing about the position.
+  - **A third reusable lesson, in docs/03's "Test discipline" rather than under #18: A TEST
+    THAT UNDOES ITS OWN SETUP.** The new e2e opened the "what this leaves out" disclosure on
+    one tab, switched tabs, and clicked it again — which CLOSED it, because `<details open>`
+    is DOM state React does not control and an App Router client-side navigation reconciles
+    the element rather than replacing it, so `open` survives the switch. It failed as "the
+    element is present but hidden", i.e. it read as a rendering bug; the same trap would
+    silently make a `not.toBeVisible()` pass. Fix: make any toggle interaction idempotent
+    (read state, act if needed, assert state) instead of assuming a fresh render resets it.
+  - **Also found while here, and left for the founder because it is a CI gate:** the
+    test-count ratchet's RLS half greps `"it("` UNANCHORED (`ci.yml:55`), so it counts every
+    `.limit(` line too — the real suite is 90 while the ratchet reads 105. Deleting real
+    tests can therefore be masked by unrelated churn, and a refactor removing `.limit()`
+    calls can fail CI having deleted nothing. Recorded in docs/12 with the one-line fix; the
+    floor was raised in the same change (e2e 41, rls 104, one below the measurement as the
+    previous session did).
+  - **Observed, not caused, and not blind-fixed: a THIRD member of the flaky-navigation
+    family.** `classroom: student sees published materials and can submit homework files`
+    failed on the second of three clean-seed full runs — the homework link is present and
+    correct in the DOM, but the page is still the class list when the heading assertion fires,
+    i.e. a `.click()` whose navigation did not complete inside the 5s `expect`. It passes in
+    **5.1s in isolation** on a fresh seed and passed on the other two full runs the same day.
+    Nothing in this change is reachable from that flow (the shared view-as component is used
+    by the view-as ROUTE, not the class list). Recorded in CLAUDE.md beside the two siblings,
+    with the matchmaking fix named as the template for the shape — and deliberately left
+    unfixed, because that sibling's fix was earned by error-context analysis and this one has
+    not had it.
+  - **Concrete requirement handed to the Owner Console build:** its third mode ("this
+    position's surface with no person filter") is now the answer to a real need this review
+    identified and deliberately did not fake — viewing one named manager's LOCATION-scoped
+    console. Not a nice-to-have any more.
+
 - **2026-08-03 (PER-PERSON DATA BROWSER BUILT — docs/13's Owner Console pair, first half;
   Opus session, two Fable adversarial reviews; NOT YET PUSHED):** `/console/data-browser`,
   superadmin-only. Answers *"what do I hold about this person?"* — every row the VIEWER may

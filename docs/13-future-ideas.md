@@ -449,7 +449,8 @@ to the superadmin read-only view; do them together if either is picked up.
 > **Build order changed, founder 2026-08-03:** data browser first, Owner Console
 > after. The reason is in the sizing note at the bottom of this entry, sharpened by
 > reading the code: the console's edge bypass can only render positions that have a
-> declared SURFACE, and today that is classroom `student` and `ga` alone. The banned
+> declared SURFACE, and at the time of writing that was classroom `student` and `ga`
+> alone (since 2026-08-04, plus nail-salon `manager`/`cashier`/`worker`). The banned
 > speed-dating `participant` pair it was meant to bypass has no surface, so the console
 > renders it blank regardless. The data browser needs no surfaces and worked on all
 > eight modules on day one — so it delivers first.
@@ -533,9 +534,10 @@ rather than contradicting it.
   exactly what an auditor asks about.
 - **Surfaces gate the content, and are separate from edges.** A position with no
   declared surface renders BLANK, because a surface is the content definition,
-  not a permission. Today only classroom `student` and `ga` have one; a
-  `professor` surface would need writing. Every other module is blank until its
-  per-module surface review (§8.1 point 9) happens.
+  not a permission. **Updated 2026-08-04:** five positions now have one — classroom
+  `student`/`ga` plus nail-salon `manager`/`cashier`/`worker`. A classroom
+  `professor` surface would still need writing, and speed-dating is blank until
+  its per-module surface review (§8.1 point 9) happens.
 
 **The companion idea — a per-person data browser ("C").** Founder: *"C sounds
 valuable too and perhaps should go along with view-as, wherever view-as goes."*
@@ -610,7 +612,8 @@ the two are never confused.
 5. Does the data browser overlap the existing per-hat data export (docs/03 "Data
    export")? Possibly the same query with a different renderer.
 
-**Sizing:** the console view against classroom alone is small (the renderer is
+**Sizing:** the console view against the surfaces that exist is small (the renderer is
 already generic — `renderSurface` in `apps/web/lib/view-as.ts` takes a surface
 and a subject). Writing surfaces for the remaining modules is the substantial
-part, and speed-dating's are the delicate ones (interest marks, safety reports).
+part — **as of 2026-08-04 that is speed-dating only**, and its are the delicate ones
+(interest marks, safety reports; a host deliberately cannot read what an organizer can).

@@ -1,6 +1,12 @@
 import { describe, expect, it, beforeAll, afterAll, afterEach } from 'vitest'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
-import { dataBrowserDeclarations, getModule, moduleRegistry, viewAsCompleteness } from '@platform/core'
+import {
+  dataBrowserDeclarations,
+  getModule,
+  moduleRegistry,
+  viewAsCompleteness,
+  viewAsTabsFor,
+} from '@platform/core'
 
 // RLS isolation test (M0 acceptance, docs/04): a user in org B must see
 // nothing of org A. Runs against the seeded local stack:
@@ -1454,6 +1460,16 @@ describe('view-as: the personal / excluded split is honest (slice 5)', () => {
     const target = sub[0]!
     const reviewer = sub[1]?.student_id ?? target.student_id
 
+    // ORDER-INDEPENDENT ON PURPOSE (hardened 2026-08-05). All this fixture owes
+    // the tests below is that cls_review_assignments is NOT EMPTY, so the
+    // "a GA cannot read it" assertion is not vacuous. It used to insist on
+    // inserting its own row, which made the whole describe fail with a duplicate
+    // key whenever the e2e suite had run first without a reset — the classroom
+    // grading-workflow test creates a peer-review assignment for the same
+    // (homework, reviewer, submission) triple. That reads as a broken security
+    // test when it is only a stale-state collision (the trap CLAUDE.md's
+    // gotchas list records). So: insert if we can, otherwise adopt whatever row
+    // is already there and leave it alone in afterAll.
     const asg = await alice
       .from('cls_review_assignments')
       .insert({
@@ -1465,8 +1481,22 @@ describe('view-as: the personal / excluded split is honest (slice 5)', () => {
       })
       .select('id')
       .single()
-    if (asg.error) throw new Error(`view-as fixture (review assignment): ${asg.error.message}`)
-    fixture.assignmentId = asg.data.id as string
+    if (asg.error) {
+      if (!/duplicate key/i.test(asg.error.message)) {
+        throw new Error(`view-as fixture (review assignment): ${asg.error.message}`)
+      }
+      const existing = await alice.from('cls_review_assignments').select('id').limit(1)
+      if ((existing.data ?? []).length === 0) {
+        throw new Error(
+          'view-as fixture: the review-assignment insert reported a duplicate but no row is ' +
+            'readable — the non-emptiness control below would be vacuous',
+        )
+      }
+      // Deliberately NOT recorded in `fixture`, so afterAll does not delete a
+      // row this run did not create.
+    } else {
+      fixture.assignmentId = asg.data.id as string
+    }
 
     const svy = await alice
       .from('cls_surveys')
@@ -1594,6 +1624,452 @@ describe('view-as: the personal / excluded split is honest (slice 5)', () => {
         const { error } = await alice.from(t.table).select(t.columns.join(', ')).limit(1)
         expect(error, `${position}/${t.table}: ${JSON.stringify(error)}`).toBeNull()
       }
+    }
+  })
+})
+
+describe('view-as: nail-salon surfaces (module 5 review, 2026-08-04)', () => {
+  // The salon's own surface security review (§8.1 point 9). Four things need
+  // proving here that the generic per-module tests structurally cannot:
+  //
+  //  1. THE KEYSTONE AS A REAL MANAGER. alice OWNS demo-salon, so every read of
+  //     hers short-circuits through is_org_admin and proves nothing about the
+  //     manager POSITION. bob gets a global, non-admin manager grant instead.
+  //  2. THE unreadableByPosition CLAIMS, AS THE REAL CASHIER AND WORKER. When
+  //     this block was written, a clean seed had ZERO rows in ALL SIX tables
+  //     involved (bills, bill items, earnings, promotions, expenses, shopping
+  //     list), so every one of these "cannot read" assertions would have passed
+  //     on an empty universe — docs/03's vacuity rule. The seed gained a paid
+  //     visit and the bookkeeping rows later the same day, so the tables are no
+  //     longer empty; the fixtures below are KEPT anyway, deliberately, so these
+  //     assertions never depend on the seed continuing to carry them. The
+  //     non-emptiness control inside the test is what actually enforces it either
+  //     way, and it is scoped to demo-salon.
+  //  3. THE WORKER NARROWINGS ARE REAL, not just declared: the worker surface
+  //     rests on "dana sees only her own appointments / her own time off / only
+  //     the customers she is booked with". Each gets a second row belonging to
+  //     someone else, so the narrowing is demonstrated rather than asserted.
+  //  4. THE mode-1-only PAIRS ARE REFUSED BY THE DATABASE. The five staff pairs
+  //     have mode 1 on and mode 2 off for three of them; the app not offering a
+  //     picker is not a gate (docs/03 #18), so the guard must refuse a forged
+  //     session insert on manager -> cashier while allowing manager -> worker.
+  let salonOrg: string
+  let bobMgr: SupabaseClient // GLOBAL manager, plain member — no is_org_admin bypass
+  let eveCashier: SupabaseClient
+  let danaWorker: SupabaseClient
+  const uid: Record<string, string> = {}
+  const fx: Record<string, string> = {}
+
+  const salon = () => getModule('nail-salon')!.viewAs
+
+  beforeAll(async () => {
+    eveCashier = await signIn('eve@demo.local')
+    danaWorker = await signIn('dana@demo.local')
+    bobMgr = await signIn('bob@demo.local')
+    salonOrg = (await alice.from('orgs').select('id').eq('slug', 'demo-salon').single()).data!.id
+
+    for (const e of ['bob', 'eve', 'dana', 'charlie']) {
+      const { data } = await alice.rpc('org_find_user_by_email', {
+        check_org_id: salonOrg,
+        target_email: `${e}@demo.local`,
+      })
+      uid[e] = data![0].user_id as string
+    }
+
+    // bob is not a salon member (he lives in demo-b). Invite + ACCEPT — since
+    // slice 3 an unaccepted invite leaves him `pending`, which satisfies no
+    // membership predicate and would make his reads below fail for a reason
+    // that has nothing to do with the manager position.
+    await alice.from('org_members').upsert({ org_id: salonOrg, user_id: uid.bob, role: 'member' })
+    await acceptInviteAs('bob@demo.local', salonOrg)
+    const g = await alice
+      .from('module_roles')
+      .insert({ org_id: salonOrg, user_id: uid.bob, module_key: 'nail-salon', role: 'manager', scope_ref: null })
+    if (g.error) throw new Error(`salon view-as fixture (bob manager grant): ${g.error.message}`)
+
+    // The seeded location, service and customer (Downtown / Manicure / Charlie).
+    const loc = (
+      await alice.from('sal_locations').select('id').eq('org_id', salonOrg).order('created_at').limit(1).single()
+    ).data!
+    fx.loc = loc.id as string
+    fx.service = (
+      await alice.from('sal_services').select('id').eq('location_id', fx.loc).order('sort').limit(1).single()
+    ).data!.id as string
+    fx.customer = (
+      await alice.from('sal_customers').select('id').eq('location_id', fx.loc).eq('user_id', uid.charlie).single()
+    ).data!.id as string
+
+    // A SECOND customer at the location, with no appointment with dana. This is
+    // the control behind the worker surface's `excluded` entry for
+    // sal_customers: the claim "rendering it unfiltered would be falsely
+    // permissive" is only checkable if a customer dana must NOT see exists.
+    const cust2 = await alice
+      .from('sal_customers')
+      .insert({ org_id: salonOrg, location_id: fx.loc, full_name: 'View-as fixture walk-in' })
+      .select('id')
+      .single()
+    if (cust2.error) throw new Error(`salon view-as fixture (2nd customer): ${cust2.error.message}`)
+    fx.otherCustomer = cust2.data.id as string
+
+    // A SECOND worker profile (bob) with its own time-off row — the control
+    // behind "a worker reads only their own time off", which the surface renders
+    // as an embed under the profile.
+    const wp = await alice
+      .from('sal_worker_profiles')
+      .insert({ org_id: salonOrg, location_id: fx.loc, user_id: uid.bob, display_name: 'View-as fixture worker' })
+      .select('id')
+      .single()
+    if (wp.error) throw new Error(`salon view-as fixture (2nd worker profile): ${wp.error.message}`)
+    fx.otherProfile = wp.data.id as string
+    const to = await alice.from('sal_worker_time_off').insert({
+      org_id: salonOrg,
+      location_id: fx.loc,
+      worker_profile_id: fx.otherProfile,
+      starts_at: new Date(Date.now() + 6 * 864e5).toISOString(),
+      ends_at: new Date(Date.now() + 6 * 864e5 + 36e5).toISOString(),
+      reason: 'view-as fixture',
+    })
+    if (to.error) throw new Error(`salon view-as fixture (2nd time off): ${to.error.message}`)
+
+    // An appointment with NO worker assigned, so it never joins dana's chair
+    // view even if a failed run leaves it behind — and so it doubles as the
+    // control for "dana sees only her own appointments".
+    const start = new Date(Date.now() + 5 * 864e5)
+    const appt = await alice
+      .from('sal_appointments')
+      .insert({
+        org_id: salonOrg,
+        location_id: fx.loc,
+        customer_id: fx.otherCustomer,
+        service_id: fx.service,
+        worker_id: null,
+        scheduled_start: start.toISOString(),
+        scheduled_end: new Date(start.getTime() + 30 * 60000).toISOString(),
+      })
+      .select('id')
+      .single()
+    if (appt.error) throw new Error(`salon view-as fixture (appointment): ${appt.error.message}`)
+    fx.appt = appt.data.id as string
+
+    // The money chain: bill -> line item -> an earnings row. All three are empty
+    // on a clean seed, and all three are declared unreadable to the worker (the
+    // ledger to the cashier as well).
+    const bill = await alice
+      .from('sal_bills')
+      .insert({ org_id: salonOrg, location_id: fx.loc, appointment_id: fx.appt, subtotal: 40, total: 40 })
+      .select('id')
+      .single()
+    if (bill.error) throw new Error(`salon view-as fixture (bill): ${bill.error.message}`)
+    fx.bill = bill.data.id as string
+
+    const item = await alice.from('sal_bill_items').insert({
+      org_id: salonOrg,
+      location_id: fx.loc,
+      bill_id: fx.bill,
+      service_id: fx.service,
+      description: 'View-as fixture line',
+      quantity: 1,
+      unit_price: 40,
+      line_total: 40,
+    })
+    if (item.error) throw new Error(`salon view-as fixture (bill item): ${item.error.message}`)
+
+    // Inserted directly rather than by paying the bill: sal_feed_earnings is
+    // covered elsewhere, and an explicit row is easier to clean up (bill_id is
+    // ON DELETE SET NULL, so the ledger outlives its bill by design).
+    const earn = await alice
+      .from('sal_earnings_ledger')
+      .insert({
+        org_id: salonOrg,
+        location_id: fx.loc,
+        appointment_id: fx.appt,
+        bill_id: fx.bill,
+        kind: 'sale',
+        amount: 40,
+      })
+      .select('id')
+      .single()
+    if (earn.error) throw new Error(`salon view-as fixture (earnings): ${earn.error.message}`)
+    fx.earning = earn.data.id as string
+
+    const promo = await alice
+      .from('sal_promotions')
+      .insert({
+        org_id: salonOrg,
+        location_id: fx.loc,
+        name: 'View-as fixture promo',
+        kind: 'visit_count',
+        threshold: 5,
+        discount_type: 'percent',
+        discount_value: 10,
+      })
+      .select('id')
+      .single()
+    if (promo.error) throw new Error(`salon view-as fixture (promotion): ${promo.error.message}`)
+    fx.promo = promo.data.id as string
+
+    const exp = await alice
+      .from('sal_expenses')
+      .insert({ org_id: salonOrg, location_id: fx.loc, category: 'view-as fixture', amount: 7 })
+      .select('id')
+      .single()
+    if (exp.error) throw new Error(`salon view-as fixture (expense): ${exp.error.message}`)
+    fx.expense = exp.data.id as string
+
+    const shop = await alice
+      .from('sal_shopping_list')
+      .insert({ org_id: salonOrg, location_id: fx.loc, item: 'View-as fixture cotton pads' })
+      .select('id')
+      .single()
+    if (shop.error) throw new Error(`salon view-as fixture (shopping item): ${shop.error.message}`)
+    fx.shopping = shop.data.id as string
+  })
+
+  afterAll(async () => {
+    // Ledger first: bill_id/appointment_id are ON DELETE SET NULL, so it would
+    // otherwise survive its parents and pollute later runs.
+    if (fx.earning) await alice.from('sal_earnings_ledger').delete().eq('id', fx.earning)
+    if (fx.appt) await alice.from('sal_appointments').delete().eq('id', fx.appt) // cascades bill -> items
+    if (fx.promo) await alice.from('sal_promotions').delete().eq('id', fx.promo)
+    if (fx.expense) await alice.from('sal_expenses').delete().eq('id', fx.expense)
+    if (fx.shopping) await alice.from('sal_shopping_list').delete().eq('id', fx.shopping)
+    if (fx.otherProfile) await alice.from('sal_worker_profiles').delete().eq('id', fx.otherProfile) // cascades time off
+    if (fx.otherCustomer) await alice.from('sal_customers').delete().eq('id', fx.otherCustomer)
+    await alice
+      .from('module_roles')
+      .delete()
+      .eq('org_id', salonOrg)
+      .eq('module_key', 'nail-salon')
+      .eq('user_id', uid.bob)
+      .eq('role', 'manager')
+      .is('scope_ref', null)
+    await alice.from('org_members').delete().eq('org_id', salonOrg).eq('user_id', uid.bob)
+  })
+
+  it('every declared salon surface column and embed path RESOLVES (not a readability claim)', async () => {
+    // Deliberately narrow, and titled for what it proves: a select that RLS
+    // empties returns `data: []` with `error: null`, so this asserts only that
+    // the allow-list names real columns and every `embed` alias/FK path resolves.
+    // That is worth its own test — it is the only place a typo in an embed is
+    // caught before an operator sees a red section — but it is NOT the keystone.
+    // The keystone is the next test.
+    let checked = 0
+    for (const [position, surface] of Object.entries(salon().surfaces)) {
+      for (const t of surface.role) {
+        const embeds = (t.embed ?? []).map((e) => `${e.alias}:${e.table}(${e.columns.join(',')})`)
+        const select = [...t.columns, ...embeds].join(', ')
+        const { error } = await bobMgr.from(t.table).select(select).limit(1)
+        expect(error, `${position}/${t.table}: ${JSON.stringify(error)}`).toBeNull()
+        checked++
+      }
+    }
+    expect(checked, 'no salon surface tables were checked').toBeGreaterThan(20)
+  })
+
+  it('the keystone: wherever a surface table HAS rows, a real manager actually reads them', async () => {
+    // §8.1 point 1 as a positive with a real control, and as the POSITION rather
+    // than as an org admin (alice owns demo-salon, so her reads short-circuit
+    // through is_org_admin and would prove nothing — docs/03 #18, last bullet).
+    //
+    // The control is alice: for every declared surface table she can see a row
+    // in, bob-the-manager must see one too. Tables that are empty even for her
+    // are SKIPPED rather than silently counted as passes, and the number
+    // actually compared is asserted, so this cannot decay into a no-op the way a
+    // bare error-is-null check does.
+    let compared = 0
+    const empty: string[] = []
+    for (const [position, surface] of Object.entries(salon().surfaces)) {
+      for (const t of surface.role) {
+        const ctl = await alice.from(t.table).select('id').eq('org_id', salonOrg).limit(1)
+        expect(ctl.error, `control read of ${t.table}: ${JSON.stringify(ctl.error)}`).toBeNull()
+        if ((ctl.data ?? []).length === 0) {
+          empty.push(`${position}/${t.table}`)
+          continue
+        }
+        const mgr = await bobMgr.from(t.table).select('id').eq('org_id', salonOrg).limit(1)
+        expect(mgr.error, `${position}/${t.table} as manager: ${JSON.stringify(mgr.error)}`).toBeNull()
+        expect(
+          (mgr.data ?? []).length,
+          `${position}/${t.table}: the org owner reads rows but the MANAGER POSITION reads none — ` +
+            `a gap in the ladder's RLS, which is never something view-as may bridge (§8.1 point 1)`,
+        ).toBeGreaterThan(0)
+        compared++
+      }
+    }
+    // 11 + 10 + 4 = 25 declared sections; the fixtures give every salon table at
+    // least one row, so nothing should land in `empty`. Asserted as a floor plus
+    // an explicit report, so a table quietly emptying out is visible rather than
+    // being absorbed as a skip.
+    expect(compared, `only ${compared} sections had rows to compare; empty: ${empty.join(', ')}`).toBe(25)
+  })
+
+  it('every table marked UNREADABLE-BY-POSITION on a salon surface really is, with a non-emptiness control', async () => {
+    const holder: Record<string, SupabaseClient> = { cashier: eveCashier, worker: danaWorker }
+    let checked = 0
+    let declared = 0
+    for (const [position, surface] of Object.entries(salon().surfaces)) {
+      declared += (surface.unreadableByPosition ?? []).length
+      const client = holder[position]
+      if (!client) continue
+      for (const u of surface.unreadableByPosition ?? []) {
+        // Control FIRST, and SCOPED TO THE SALON ORG: without a row in the org
+        // whose cashier/worker is then asserted blind, "sees nothing" is true of
+        // an empty table and the assertion proves nothing. alice belongs to
+        // several orgs, so an unscoped control could be satisfied by a row the
+        // salon staffer was never anywhere near.
+        const { data: seeded } = await alice.from(u.table).select('id').eq('org_id', salonOrg).limit(1)
+        expect(
+          (seeded ?? []).length,
+          `${u.table} has no rows in demo-salon, so the check below is vacuous — fix the fixture`,
+        ).toBeGreaterThan(0)
+
+        const { data, error } = await client.from(u.table).select('*').limit(1)
+        // An ERROR must not be mistaken for "RLS hid the rows". Every one of these
+        // tables is granted to `authenticated`, so the honest outcome is an empty
+        // result; if the query errored, the assertion below would pass for the
+        // wrong reason — a typo'd table name would "prove" unreadability.
+        expect(error, `salon ${position} reading ${u.table} errored instead of returning nothing`).toBeNull()
+        expect((data ?? []).length, `salon ${position} can read ${u.table}, declared unreadable to them`).toBe(0)
+        checked++
+      }
+    }
+    // Every declared entry belongs to cashier or worker, so a mismatch means a
+    // position gained entries with no holder to check them as.
+    expect(checked, 'salon unreadableByPosition entries were not all checked').toBe(declared)
+    expect(checked, 'the salon claims fewer unreadable tables than the review found').toBeGreaterThanOrEqual(7)
+  })
+
+  it('a cashier cannot read one single revenue row — the fact the cashier tab exists to state', async () => {
+    // Called out on its own because it is the module's clearest asymmetric
+    // read: the whole operate tier writes expenses but only manage-tier reads
+    // takings. Both halves asserted, so neither can rot into a half-truth.
+    const { data: mgrSees } = await bobMgr.from('sal_earnings_ledger').select('id, amount')
+    expect((mgrSees ?? []).length, 'the manager control read no earnings rows').toBeGreaterThan(0)
+
+    const { data: eveEarnings } = await eveCashier.from('sal_earnings_ledger').select('id')
+    expect((eveEarnings ?? []).length).toBe(0)
+
+    // …while the same cashier DOES read the expense side, which is why expenses
+    // are on her surface and the ledger is not.
+    const { data: eveExpenses } = await eveCashier.from('sal_expenses').select('id')
+    expect((eveExpenses ?? []).length, 'a cashier should read expenses (operate tier)').toBeGreaterThan(0)
+  })
+
+  it('the worker surface narrowings are real: own appointments, own time off, only booked customers', async () => {
+    // Appointments: the seeded one is dana's; the fixture one has no worker.
+    const { data: allAppts } = await bobMgr.from('sal_appointments').select('id, worker_id')
+    expect((allAppts ?? []).length, 'control: the manager sees more than one appointment').toBeGreaterThan(1)
+    const { data: danaAppts } = await danaWorker.from('sal_appointments').select('id, worker_id')
+    expect((danaAppts ?? []).length).toBeGreaterThan(0)
+    expect(
+      (danaAppts ?? []).every((a) => a.worker_id === uid.dana),
+      'a worker read an appointment that is not assigned to her',
+    ).toBe(true)
+    expect((danaAppts ?? []).some((a) => a.id === fx.appt), 'the unassigned fixture appointment leaked').toBe(false)
+
+    // Time off: hers is seeded, the fixture added another worker's.
+    const { data: allOff } = await bobMgr.from('sal_worker_time_off').select('id, worker_profile_id')
+    expect((allOff ?? []).length, 'control: the manager sees more than one time-off row').toBeGreaterThan(1)
+    const { data: danaOff } = await danaWorker.from('sal_worker_time_off').select('id, worker_profile_id')
+    expect((danaOff ?? []).length).toBeGreaterThan(0)
+    expect(
+      (danaOff ?? []).every((r) => r.worker_profile_id !== fx.otherProfile),
+      "a worker read another worker's time off",
+    ).toBe(true)
+
+    // Customers: she is booked with Charlie and not with the fixture walk-in.
+    // This is the control behind declaring sal_customers `excluded` on her
+    // surface rather than rendering it unfiltered.
+    const { data: danaCust } = await danaWorker.from('sal_customers').select('id')
+    expect((danaCust ?? []).some((c) => c.id === fx.customer), 'a worker lost her own chair customer').toBe(true)
+    expect(
+      (danaCust ?? []).some((c) => c.id === fx.otherCustomer),
+      'a worker read a customer she has no appointment with — the falsely-permissive case',
+    ).toBe(false)
+
+    // And the wider read the surface's caveat admits to, asserted so the caveat
+    // cannot quietly become false: worker profiles ARE org-member readable.
+    const { data: profiles } = await danaWorker.from('sal_worker_profiles').select('id')
+    expect(
+      (profiles ?? []).some((p) => p.id === fx.otherProfile),
+      "the worker surface caveat claims a worker reads colleagues' profiles; they did not",
+    ).toBe(true)
+  })
+
+  it('mode 2 is refused by the DATABASE for the mode-1-only pairs, and allowed for manager -> worker', async () => {
+    // `string | undefined` because noUncheckedIndexedAccess types every lookup
+    // in the uid map that way; an undefined target would fail the guard's
+    // grant-existence check anyway, which is the correct outcome.
+    const start = (target: string | undefined, role: string) =>
+      bobMgr
+        .from('view_as_sessions')
+        .insert({
+          org_id: salonOrg,
+          module_key: 'nail-salon',
+          actor_user_id: uid.bob,
+          target_user_id: target,
+          target_role: role,
+          target_scope_ref: null,
+        })
+        .select('id, actor_user_id')
+        .single()
+
+    // manager -> worker: mode 2 ON, and bob's global grant covers dana's.
+    const ok = await start(uid.dana, 'worker')
+    expect(ok.error, `manager -> worker should be allowed: ${JSON.stringify(ok.error)}`).toBeNull()
+    expect(ok.data!.actor_user_id).toBe(uid.bob)
+
+    // manager -> cashier: mode 1 only. The UI never offers a picker, but the UI
+    // is not a gate — the guard must refuse the raw insert.
+    const refused = await start(uid.eve, 'cashier')
+    expect(refused.error, 'manager -> cashier is mode-1-only and must be refused').not.toBeNull()
+    expect(refused.error!.message).toMatch(/declares an edge/)
+  })
+
+  it('the nine pairs answer exactly as the review decided — including every customer pair OFF', async () => {
+    const decl = salon()
+    const on1 = (a: string, b: string) => decl.edges[a]?.[b]?.mode1 === true
+    const on2 = (a: string, b: string) => decl.edges[a]?.[b]?.mode2 === true
+
+    // Five staff pairs: mode 1 on all, mode 2 only into worker (the one position
+    // whose RLS narrows per person rather than per location).
+    for (const [a, b] of [
+      ['admin', 'manager'],
+      ['admin', 'cashier'],
+      ['admin', 'worker'],
+      ['manager', 'cashier'],
+      ['manager', 'worker'],
+    ] as const) {
+      expect(on1(a, b), `${a} -> ${b} mode 1`).toBe(true)
+      expect(on2(a, b), `${a} -> ${b} mode 2`).toBe(b === 'worker')
+    }
+
+    // All four customer pairs off, in both modes.
+    for (const a of ['admin', 'manager', 'cashier', 'worker'] as const) {
+      const edge = decl.edges[a]?.customer
+      expect(edge, `${a} -> customer must be declared`).toBeDefined()
+      expect(edge!.mode1, `${a} -> customer mode 1`).toBe(false)
+      expect(edge!.mode2, `${a} -> customer mode 2`).toBe(false)
+    }
+
+    // Tabs follow from the edges, so assert the strip a real caller would see —
+    // with the empty cases, which is where an accidental edge would show up.
+    expect(viewAsTabsFor(decl, ['admin']).map((t) => t.position)).toEqual(['manager', 'cashier', 'worker'])
+    expect(viewAsTabsFor(decl, ['manager']).map((t) => t.position)).toEqual(['cashier', 'worker'])
+    expect(viewAsTabsFor(decl, ['cashier'])).toEqual([])
+    expect(viewAsTabsFor(decl, ['worker'])).toEqual([])
+    expect(viewAsTabsFor(decl, ['customer'])).toEqual([])
+  })
+
+  it('salon declares no personal layer, and that emptiness is the finding', async () => {
+    // §8.1 point 1: `personal` means RLS-unreadable to the viewer. Nail-salon has
+    // no sd_notes analogue — a manager reads every salon table inside the
+    // locations they govern — so marking anything personal here would be the
+    // spec violation point 1 names. Asserted rather than commented, because a
+    // future migration adding a genuinely private table should make this fail
+    // and force a conscious classification.
+    for (const [position, surface] of Object.entries(salon().surfaces)) {
+      expect(surface.personal, `salon/${position} declares a personal layer`).toEqual([])
     }
   })
 })

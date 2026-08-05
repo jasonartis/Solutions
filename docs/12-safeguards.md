@@ -179,6 +179,18 @@ Guards against well-meaning but confused sessions (any AI, any tool):
   below `tests-floor.json`, CI fails. Deleting or weakening a test to get a
   green build is never the fix; the founder approves any deliberate lowering.
   When ADDING tests, raise the floor in the same commit.
+  **Both counters are ANCHORED, and the RLS one only became so on 2026-08-04
+  (founder-approved).** It had been a bare `grep -c "it("`, which matched every
+  line containing that substring — including every `.limit(` call, of which the
+  suite has dozens — so it was never a test count: the day it was found, the real
+  count was 90 and the ratchet measured 105. That is worse than no counter,
+  because deleting real tests could be masked by unrelated `.limit()` churn while
+  a pure refactor removing `.limit()` calls could fail CI having deleted nothing.
+  It is now `grep -cE "^[[:space:]]+it\(" packages/db/src/rls.test.ts`, the floor
+  is the EXACT count (no slack is needed once the metric is precise), and both
+  halves count only real test declarations. If a legitimate reorganisation ever
+  lowers the count — folding several `it()` into one `it.each`, say — that is a
+  deliberate lowering and needs founder approval like any other.
 - **When a guard blocks you, the guard is right.** Stop, report, and ask —
   do not work around CI, markers, or protections.
 - **Edit sources, not derivatives:** module UI lives in `modules/<key>/ui`

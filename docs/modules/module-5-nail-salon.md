@@ -173,6 +173,84 @@ covered by a tracked RLS test (non-member gets `false`) plus the e2e
 (customer booking honored) — RLS 15/15, e2e still 31 (test extended, not
 added).
 
+## View-as surface review (2026-08-04) — edges ON for staff, OFF for customers
+
+Module 5's own §8.1 point 9 review, the second module to have one (classroom was
+first). All nine rank-differential pairs answered with a note each, surfaces
+written for the three positions that gained an edge, and every one of the twelve
+`sal_` tables classified for each of those positions. One migration
+(`20260804010000`), one function, no schema change.
+
+**What is ON.** Mode 1 for all five staff-to-staff pairs (admin → manager /
+cashier / worker, manager → cashier / worker); mode 2 additionally for the two
+pairs into `worker`. All four pairs into `customer` are OFF.
+
+**Why the split — the fact about this module's RLS.** Salon policies narrow by
+**location** for manager and cashier (`sal_can_manage_location` /
+`sal_can_operate_location` ask only "does your grant cover this location") and by
+**person** only for worker (`worker_id = auth.uid()`, own time-off,
+`sal_worker_sees_customer`). So "what does *this* cashier see" has no per-person
+answer — every cashier at a store reads the same rows — while "what does *this*
+worker see" does. Mode 1 answers "what can the POSITION see", which is useful for
+all three; mode 2 answers "what does this PERSON see", which is honest only for
+worker. Full reasoning, and why the alternatives (filtering on `created_by` /
+`paid_by`) would have UNDER-shown the tab, in docs/15's 2026-08-04 entry.
+
+**Three facts about this module the review pinned down, each read off the policy
+SQL rather than inferred from rank:**
+
+- **A cashier cannot read one single revenue row.** `sal_earnings_ledger_select_manage`
+  is the module's only manage-tier-read table, with no operate arm — yet the same
+  cashier writes `sal_expenses` freely (deliberate, 20260709030000: "cashiers commonly
+  log purchases"). Money out, not money in. This is the module's one genuinely
+  asymmetric read (not its only one) and it is now stated on the cashier tab.
+- **A worker cannot read the earnings rows that carry their own `worker_id`** — nor
+  bills, bill items, promotions, expenses, or the shopping list. Six tables, declared
+  `unreadableByPosition` so the absence is a stated fact rather than an empty section.
+  Consistent with tips/commissions being out of v1, but worth knowing before anyone
+  promises a worker an earnings screen.
+- **A worker CAN read every colleague's profile and weekly schedule**, because
+  `sal_worker_profiles_select_member` is org-member-wide (the founder's deliberate
+  "customers see all stores" choice, 20260726010000 §4). The worker tab narrows to the
+  target's own profile because their own schedule is what it is for — that narrowing is
+  the tab's, not RLS's, and it says so.
+
+**Customers stay OFF, re-decided rather than inherited.** Beyond the product reason
+(a customer's history is received as themselves, not duty output), two mechanics from
+this module make the pair wrong: customer read access keys on `sal_customers.user_id`,
+never on the `module_roles` customer grant, so a mode-2 GRANT triple is the wrong key
+entirely; and most customers are **login-less walk-ins** (see the data-browser finding
+below), so this could never be the general answer to "what does my customer see". The
+question "what do we hold about this customer" is the data browser's, by design.
+
+**Verification:** RLS suite 90/90 (8 new salon tests), 36/36 live probes with zero
+skips including a two-store scope-intersection probe, 2 new e2e tests, full
+clean-seed e2e runs (see below). All SIX tables behind the seven "cannot read" claims are
+**empty on a clean seed** (the seventh claim is the earnings ledger a second time, on the
+other surface), so fixtures were built for all of them — otherwise every
+assertion would have passed vacuously.
+
+**Two limits of that verification — both CLOSED 2026-08-05 (founder-approved):**
+
+- **The Manager tab had never been rendered in a browser**, because the seed had no salon
+  `admin` and a manager holds no edge into their own position. It was verified at the data
+  layer at the time (all 11 sections replayed as a temporarily self-granted admin, using the
+  query shape `renderSurface` builds — all clean). Now **frank is the seeded salon admin** and
+  an e2e opens the tab for real. He is a plain org MEMBER on purpose, so his reads go through
+  the module ladder rather than short-circuiting on `is_org_admin()`. It could not be alice:
+  she holds `manager`, and adding `admin` to her would make her Manager tab appear and
+  silently invert the e2e assertion that it does not.
+- **A clean seed left 6 of the manager tab's 11 sections empty** (bills, bill items,
+  promotions, earnings, expenses, shopping list), so most of the back office read "Nothing
+  here." and a correct empty section was indistinguishable from a broken one. The seed now
+  carries **a completed, paid visit dated YESTERDAY** (so the day board, which queries today
+  only, is untouched) plus a promotion, an expense and a shopping item. Two details worth
+  keeping: the bill is inserted `open` and then UPDATED to `paid`, because `sal_feed_earnings`
+  is an AFTER UPDATE trigger keyed on the transition — insert it as `paid` and the earnings
+  ledger stays empty, which is the section the whole change exists to fill; and the seeded
+  visit reuses Charlie and Dana, so it also gives the worker surface a second, older
+  appointment to render.
+
 ## Data-browser findings (2026-08-03)
 
 Building the per-person data browser (docs/13, docs/03 #19) surfaced two facts about this

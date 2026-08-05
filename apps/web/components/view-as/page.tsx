@@ -307,11 +307,28 @@ export async function ViewAsPage({ moduleKey, params, searchParams }: Props) {
 
       {rendered?.sections.map((s) => <SectionTable key={s.table} section={s} />)}
 
-      {surface && (surface.personal.length > 0 || surface.excluded.length > 0) && (
+      {surface &&
+        (surface.personal.length > 0 ||
+          surface.excluded.length > 0 ||
+          (surface.unreadableByPosition?.length ?? 0) > 0) && (
         <details className="mt-6 rounded-lg border border-gray-200 bg-white p-4 text-sm">
           <summary className="cursor-pointer font-medium text-gray-700">
             What this view deliberately leaves out
           </summary>
+          {/* All THREE off-surface lists are rendered, not two. The third was
+              declared and test-enforced from slice 5 but never shown, which made
+              the most useful sentence on some tabs invisible — nail-salon's
+              cashier surface exists largely to say "a cashier cannot read the
+              earnings ledger", and that is an unreadableByPosition entry. The
+              badges keep the three claims apart on screen exactly as docs/03 #18
+              keeps them apart in the declaration, because they are about three
+              different readers. */}
+          <p className="mt-3 text-xs text-gray-500">
+            Three different claims, deliberately not merged: <strong>personal</strong> — you cannot
+            read it either; <strong>excluded</strong> — you can read it and this tab declines to
+            render it; <strong>not readable by this position</strong> — the position itself has no
+            read path, so the absence describes their permissions, not this page.
+          </p>
           <ul className="mt-3 space-y-2 text-xs text-gray-600">
             {surface.personal.map((p) => (
               <li key={p.table}>
@@ -327,6 +344,14 @@ export async function ViewAsPage({ moduleKey, params, searchParams }: Props) {
                   excluded
                 </span>
                 <span className="font-mono">{e.table}</span> — {e.why}
+              </li>
+            ))}
+            {(surface.unreadableByPosition ?? []).map((u) => (
+              <li key={u.table}>
+                <span className="mr-2 rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-700">
+                  not readable by this position
+                </span>
+                <span className="font-mono">{u.table}</span> — {u.why}
               </li>
             ))}
           </ul>

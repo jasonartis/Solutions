@@ -54,9 +54,20 @@ export default async function NailSalonPage(props: { params: Promise<{ orgSlug: 
       <div className="mb-6 flex items-baseline gap-4">
         <h1 className="text-2xl font-semibold">Nail Salon{location ? ` — ${location.name}` : ''}</h1>
         {canManage && (
-          <Link href={`/o/${orgSlug}/m/nail-salon/manage`} className="text-sm text-blue-600 hover:underline">
-            Manage
-          </Link>
+          <>
+            <Link href={`/o/${orgSlug}/m/nail-salon/manage`} className="text-sm text-blue-600 hover:underline">
+              Manage
+            </Link>
+            {/* View-as (docs/15 §8, salon surfaces reviewed 2026-08-04). Gated on
+                the same coarse manage check as Manage because admin and manager
+                are the only positions holding a declared edge below them — a
+                cashier's only pair (-> customer) is off. The page itself
+                re-resolves the caller's real grants and says so when there is
+                nothing below them, so this link is convenience, never a gate. */}
+            <Link href={`/o/${orgSlug}/m/nail-salon/view-as`} className="text-sm text-blue-600 hover:underline">
+              View as
+            </Link>
+          </>
         )}
       </div>
 

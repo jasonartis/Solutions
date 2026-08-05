@@ -51,8 +51,14 @@ jobs:
       # tests to get green trips this; raising the floor is a deliberate act.
       - name: Test-count ratchet
         run: |
+          # Both counters are ANCHORED. The RLS one used to be a bare `grep -c "it("`,
+          # which matched every `.limit(` line too — the suite read 105 when there
+          # were 90 tests (founder-approved fix, 2026-08-04, docs/12). A loose
+          # counter is worse than none here: deleting real tests could be masked by
+          # unrelated `.limit()` churn, and a refactor that removed `.limit()` calls
+          # could fail CI having deleted no test at all.
           e2e=$(grep -c "^test(" apps/web/e2e/platform.spec.ts)
-          rls=$(grep -c "it(" packages/db/src/rls.test.ts)
+          rls=$(grep -cE "^[[:space:]]+it\(" packages/db/src/rls.test.ts)
           floor_e2e=$(node -p "require('./tests-floor.json').e2e")
           floor_rls=$(node -p "require('./tests-floor.json').rls")
           echo "e2e $e2e (floor $floor_e2e) · rls $rls (floor $floor_rls)"

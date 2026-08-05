@@ -281,7 +281,7 @@ edit anywhere else, that's a missing platform primitive — extract it, don't fo
       gap, which is why `packages/db/src/rls.test.ts` now has an explicit `anon`-role
       block — before the sweep the suite had never once tested a not-logged-in caller.
 
-## View-as (user-model slice 5, proven by classroom — 2026-07-31)
+## View-as (user-model slice 5, proven by classroom 2026-07-31 + nail-salon 2026-08-04)
 
 18. **Every module declares view-as, and the declaration is exhaustive by
     construction.** A module may not opt out: the rank-differential completeness
@@ -345,7 +345,50 @@ edit anywhere else, that's a missing platform primitive — extract it, don't fo
       of an ambient one.
     - **An edge may only be ON in a module whose surfaces have had a security review**
       (§8.1 point 9). Enumerate the pairs, set them OFF with a note saying why, and turn
-      them on when that module's review happens. Classroom is the worked example.
+      them on when that module's review happens. Classroom is the worked example;
+      nail-salon (2026-08-04) is the second and the one to read for the mode-1-only case.
+    - **Mode 1 and mode 2 answer different questions, so decide them separately.**
+      Mode 1 = *what can this POSITION see?* Mode 2 = *what does this PERSON see?*, which
+      is only meaningful where RLS narrows **per person**. Ask of each position: is its
+      reach a function of WHO it is, or only of WHAT SCOPE it covers? Nail-salon narrows
+      per location for manager/cashier and per person only for worker, so five staff pairs
+      are `{mode1: true, mode2: false}` and two are full. The two wrong ways to force mode
+      2 onto a scope-narrowed position: filter on an authorship stamp (`created_by`,
+      `paid_by`), which **under-shows** the tab by hiding rows the target genuinely reads;
+      or render unfiltered, which is honest but is not mode 2. `viewAsCompleteness()`
+      refuses mode 2 on a surface with no per-person table — treat that error as the
+      design telling you something, not as an obstacle. The real need behind it (one named
+      holder's SCOPE-narrowed console) is the Owner Console's no-person-filter mode.
+    - **A mode-1-only pair still needs no migration arm.** `module_view_as_edge()` mirrors
+      MODE 2 specifically, because mode 2 is the only mode that writes (a session row).
+      Mode 1 creates nothing and reads only through the caller's RLS, so it has no
+      database gate and needs none. The parity test compares SQL against `mode2`, so a
+      mode-1-only pair reads `false` in SQL exactly like an undeclared one — the manifest
+      note is where the difference is recorded.
+    - **The failure mode a surface must never have is FALSELY PERMISSIVE.** A section that
+      shows rows the target cannot see turns the tab into a lie in the one direction that
+      matters: an operator debugging "why can't she see this?" sees it and concludes
+      nothing is wrong. Under-showing is a usability cost; over-showing is a correctness
+      bug. When `subjectColumn` cannot express a narrowing (it names a user-id column, so a
+      table reaching its person through a child row is out of reach), the honest options
+      are an **embed under the row that makes the hop** — the hop is already made, so the
+      children are the right ones in both modes — or `excluded` with the reason. Never
+      `subjectColumn: null` on a table the position reads only part of.
+    - **Render all THREE off-surface lists, not two.** `unreadableByPosition` was declared
+      and test-enforced from slice 5 but never shown on screen until 2026-08-04 — which
+      would have hidden the single most useful fact on nail-salon's cashier tab ("a
+      cashier cannot read the earnings ledger"). A declaration nobody can read is
+      documentation, not disclosure.
+    - **Watch what `formatCell` does to embeds.** It collapses an embedded object to its
+      `title`/`name` key and otherwise stringifies JSON, so a multi-column embed silently
+      drops columns from the screen while still being declared. Use PostgREST column
+      aliasing (`name:full_name`) so the allow-list lists exactly what renders. Classroom's
+      embeds select `title` — that met the constraint by luck, not by design.
+    - **Verify the keystone as the POSITION, not as an org admin.** Every module gate
+      except the view-as guard short-circuits on `is_org_admin()`, and the seeded
+      module-level staffer is often also the org owner (alice is both manager and owner of
+      demo-salon). A keystone test run as her proves nothing about the manager position:
+      grant a plain member the position for the test instead.
 
 ## The data browser (docs/13, built 2026-08-03)
 
@@ -435,6 +478,16 @@ others:
   Renaming a heading during a review fix silently converted a real check into a no-op. →
   Pair every `not.toBeVisible()` with a positive assertion of the SAME text somewhere it
   should appear, and key both to a stable substring rather than a full sentence.
+
+- **A test that undoes its own setup** (the near relative, found 2026-08-04). A Playwright
+  test opened the view-as "what this leaves out" disclosure on one tab, switched tabs, and
+  clicked it again — which CLOSED it, because `<details open>` is DOM state React does not
+  control and an App Router client-side navigation reconciles the element rather than
+  replacing it, so `open` survives the tab switch. The failure reads as "the element is
+  present but hidden", i.e. as a rendering bug, and would just as easily have gone the other
+  way (a `not.toBeVisible()` passing because the test had closed the thing itself). → Make
+  any toggle interaction IDEMPOTENT — read the state, act only if needed, then assert the
+  state — rather than assuming a fresh render resets it.
 
 The shared shape: **absence is only evidence when presence was demonstrated under the
 same conditions.** Whenever a test asserts something is missing, ask what would have to be
