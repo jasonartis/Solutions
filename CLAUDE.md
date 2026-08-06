@@ -91,7 +91,14 @@ Console view-as (Opus territory, not Sonnet), then unranked follow-ons:**
   edge, kept out of the in-module tab strips, and unlogged. Founder answers on record: **all
   three modes** (mode 1, mode 2, and a third "this position's surface with no person filter")
   with the choice made obvious in the UI; plus fold in docs/13's cheap read-only
-  positions/ranks/pair-grid viewer. **Three things the code says that the spec did not:**
+  positions/ranks/pair-grid viewer. **UNLOGGED NEEDS A DATED DECISION, NOT AN ASSUMPTION
+  (raised 2026-08-06, unresolved):** §8.1 point 6 calls the mode-2 session log a *security
+  requirement from v1*, not the later audit upgrade — so a surface that bypasses every declared
+  edge AND writes no log is a real tension with the spec, not a free choice. The case FOR
+  unlogged: the superadmin is the platform operator and the data browser is likewise unlogged.
+  The case AGAINST: point 6's own wording, and this surface is strictly more powerful than the
+  logged one. Settle it explicitly either way when this is built — it is the single most
+  review-worthy question in the piece. **Three things the code says that the spec did not:**
   (a) `renderSurface` intersects the target's scope with what the CALLER governs, and a
   superadmin holds NO module grants, so a scoped target renders EMPTY — bypassing edges is
   not enough, the scope intersection needs an explicit authority parameter (a discriminated
