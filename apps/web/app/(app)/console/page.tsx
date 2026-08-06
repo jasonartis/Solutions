@@ -49,9 +49,15 @@ export default async function ConsolePage() {
         <Link href="/console/data-browser" className="text-blue-600 hover:underline">
           Data browser
         </Link>
-        <span className="text-gray-300">·</span>
         <span className="text-gray-400" title="What I can see about a person, vs. what a person sees">
           what I hold about a person
+        </span>
+        <span className="text-gray-300">·</span>
+        <Link href="/console/view-as" className="text-blue-600 hover:underline">
+          View as anything
+        </Link>
+        <span className="text-gray-400" title="Any position's declared surface in any org, ignoring the declared view-as edges">
+          what a position or person sees
         </span>
       </nav>
 

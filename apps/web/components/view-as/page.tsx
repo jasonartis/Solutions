@@ -2,7 +2,8 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { getModule } from '@platform/core'
 import { requireOrgModule } from '@/lib/module-gate'
-import { formatCell } from '@/lib/format-cell'
+import { SectionTable } from './section-table'
+import { OffSurfaceLists } from './off-surface'
 import {
   activeSession,
   heldGrants,
@@ -13,7 +14,6 @@ import {
   sessionStillAuthorised,
   tabsFor,
   targetsFor,
-  type RenderedSection,
 } from '@/lib/view-as'
 import { endViewAs, startViewAs } from './actions'
 
@@ -32,75 +32,6 @@ type Props = {
   moduleKey: string
   params: Promise<{ orgSlug: string }>
   searchParams: Promise<{ tab?: string; mode?: string }>
-}
-
-// Shared with the data browser, which renders the same kind of generic row
-// table — see lib/format-cell.ts for why it was extracted.
-const fmtCell = formatCell
-
-function SectionTable({ section }: { section: RenderedSection }) {
-  const embedKeys = section.rows.length
-    ? Object.keys(section.rows[0]!.values).filter((k) => !section.columns.includes(k))
-    : []
-  const headers = [...section.columns, ...embedKeys]
-
-  return (
-    <section className="mb-6 rounded-lg border border-gray-200 bg-white p-4">
-      <div className="mb-2 flex items-baseline justify-between gap-3">
-        <h3 className="text-sm font-medium uppercase tracking-wide text-gray-500">{section.label}</h3>
-        <span className="font-mono text-[10px] text-gray-400">{section.table}</span>
-      </div>
-      {section.caveat && <p className="mb-2 text-xs italic text-gray-500">{section.caveat}</p>}
-      {section.error && (
-        <p className="mb-2 rounded bg-red-50 p-2 text-xs text-red-700">
-          This table could not be read: {section.error}. Under the keystone rule that is a gap in
-          the ladder&rsquo;s RLS or a wrong surface declaration — never something view-as should bridge.
-        </p>
-      )}
-      {section.rows.length === 0 && !section.error && (
-        <p className="text-sm text-gray-400">Nothing here.</p>
-      )}
-      {section.rows.length > 0 && (
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead>
-              <tr className="border-b border-gray-200 text-gray-400">
-                {headers.map((c) => (
-                  <th key={c} className="py-1 pr-3 font-medium">
-                    {c}
-                  </th>
-                ))}
-                <th className="py-1" />
-              </tr>
-            </thead>
-            <tbody>
-              {section.rows.map((row, i) => (
-                <tr key={i} className="border-b border-gray-100 last:border-0">
-                  {headers.map((c) => (
-                    <td key={c} className="py-1 pr-3 text-gray-700">
-                      {fmtCell(row.values[c])}
-                    </td>
-                  ))}
-                  <td className="py-1">
-                    {row.windowState === 'not-yet' && (
-                      <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700">
-                        not visible yet
-                      </span>
-                    )}
-                    {row.windowState === 'expired' && (
-                      <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
-                        window closed
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </section>
-  )
 }
 
 export async function ViewAsPage({ moduleKey, params, searchParams }: Props) {
@@ -167,7 +98,10 @@ export async function ViewAsPage({ moduleKey, params, searchParams }: Props) {
       surface,
       org.id,
       nodes,
-      grants,
+      // The in-module path is always the ordinary one: §8.1 point 10's
+      // intersection with what the CALLER governs. The Owner Console's
+      // edge-bypassing authority is deliberately not reachable from here.
+      { kind: 'module-grants', grants },
       inMode2 ? session!.targetScopeRef : null,
       inMode2 ? session!.targetUserId : user.id,
     )
@@ -301,62 +235,34 @@ export async function ViewAsPage({ moduleKey, params, searchParams }: Props) {
         </p>
       )}
 
+      {/* The scope resolver's two honest failure states. Both used to render as
+          an ordinary empty page, which is the one thing a view-as tab must not
+          do: every scoped section below comes back "Nothing here" and looks like
+          a finding about the target's permissions. */}
+      {rendered?.scopeError && (
+        <p className="mb-4 rounded bg-red-50 p-2 text-xs text-red-700">
+          Could not read {rendered.entityTable} ({rendered.scopeError}), so the sections below are
+          empty for a reason that has nothing to do with this position. Treat this as a bug, not a
+          result.
+        </p>
+      )}
+      {rendered?.blinded && !rendered.scopeError && (
+        <p className="mb-4 rounded bg-amber-50 p-2 text-xs text-amber-800">
+          No {rendered.entityTable} rows resolved, although this module does have scope nodes here —
+          so every scoped section below is empty either because there is genuinely nothing, or
+          because your own permissions cannot read {rendered.entityTable}. This page cannot tell
+          which, and says so rather than showing you a confident blank.
+        </p>
+      )}
+
       {!surface && (
         <p className="text-gray-500">This position has no declared surface, so there is nothing to render.</p>
       )}
 
       {rendered?.sections.map((s) => <SectionTable key={s.table} section={s} />)}
 
-      {surface &&
-        (surface.personal.length > 0 ||
-          surface.excluded.length > 0 ||
-          (surface.unreadableByPosition?.length ?? 0) > 0) && (
-        <details className="mt-6 rounded-lg border border-gray-200 bg-white p-4 text-sm">
-          <summary className="cursor-pointer font-medium text-gray-700">
-            What this view deliberately leaves out
-          </summary>
-          {/* All THREE off-surface lists are rendered, not two. The third was
-              declared and test-enforced from slice 5 but never shown, which made
-              the most useful sentence on some tabs invisible — nail-salon's
-              cashier surface exists largely to say "a cashier cannot read the
-              earnings ledger", and that is an unreadableByPosition entry. The
-              badges keep the three claims apart on screen exactly as docs/03 #18
-              keeps them apart in the declaration, because they are about three
-              different readers. */}
-          <p className="mt-3 text-xs text-gray-500">
-            Three different claims, deliberately not merged: <strong>personal</strong> — you cannot
-            read it either; <strong>excluded</strong> — you can read it and this tab declines to
-            render it; <strong>not readable by this position</strong> — the position itself has no
-            read path, so the absence describes their permissions, not this page.
-          </p>
-          <ul className="mt-3 space-y-2 text-xs text-gray-600">
-            {surface.personal.map((p) => (
-              <li key={p.table}>
-                <span className="mr-2 rounded bg-purple-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-purple-700">
-                  personal
-                </span>
-                <span className="font-mono">{p.table}</span> — {p.why}
-              </li>
-            ))}
-            {surface.excluded.map((e) => (
-              <li key={e.table}>
-                <span className="mr-2 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-600">
-                  excluded
-                </span>
-                <span className="font-mono">{e.table}</span> — {e.why}
-              </li>
-            ))}
-            {(surface.unreadableByPosition ?? []).map((u) => (
-              <li key={u.table}>
-                <span className="mr-2 rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-700">
-                  not readable by this position
-                </span>
-                <span className="font-mono">{u.table}</span> — {u.why}
-              </li>
-            ))}
-          </ul>
-        </details>
-      )}
+      {surface && <OffSurfaceLists surface={surface} />}
+
     </div>
   )
 }

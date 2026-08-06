@@ -380,14 +380,36 @@ export function viewAsCompleteness(
       if (!edge.mode2) continue
       const surface = decl.surfaces[b]
       if (!surface) continue
-      const anySubject = surface.role.some((t) => t.subjectColumn !== null)
-      if (!anySubject) {
+      if (!surfaceIsPersonFilterable(surface)) {
         say(`pair ${a} -> ${b} enables mode 2 but ${b}'s surface has no per-person table`)
       }
     }
   }
 
   return problems
+}
+
+/**
+ * Can "the rows ABOUT one named person" be expressed on this surface at all?
+ *
+ * True only if at least one role table names a person. §8.1 point 3 defines
+ * mode 2 as rows ABOUT the target, so a surface with no per-person column
+ * cannot express it: filtering on an authorship stamp (`created_by`, `paid_by`)
+ * UNDER-shows the tab by hiding rows the target genuinely reads, and rendering
+ * unfiltered is honest but is not mode 2. That is the nail-salon review's
+ * central finding (2026-08-04, docs/03 #18) — manager and cashier are
+ * location-narrowed, so no row is about either as a person.
+ *
+ * ONE definition, TWO consumers, deliberately. `viewAsCompleteness()` below
+ * refuses a declared mode-2 edge into such a surface; the Owner Console
+ * (apps/web/lib/console-view-as.ts) refuses to OFFER its person mode there.
+ * They must not be able to disagree: the Owner Console exists to bypass
+ * declared EDGES, and if it silently bypassed this too it would render every
+ * holder's rows under one person's name — the falsely-permissive failure
+ * docs/03 #18 says a surface must never have.
+ */
+export function surfaceIsPersonFilterable(surface: PositionSurface): boolean {
+  return surface.role.some((t) => t.subjectColumn !== null)
 }
 
 /** (position, rank) pairs to check against SQL's `module_position_rank`. */

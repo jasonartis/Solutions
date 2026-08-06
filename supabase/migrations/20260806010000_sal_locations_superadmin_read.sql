@@ -1,0 +1,72 @@
+-- Owner Console view-as (docs/13) — the ONE database change it needs.
+--
+-- `sal_locations` is the only table on the whole platform that a platform
+-- superadmin cannot SELECT while being able to UPDATE and DELETE it. That
+-- anomaly is pre-existing and unrelated to view-as; it is fixed here because it
+-- silently breaks the Owner Console, and because a table you may erase but not
+-- read is wrong on its own terms.
+--
+-- HOW IT AROSE. `20260709030000` created one read policy:
+--     sal_locations_select_member : is_org_member(org_id)
+-- and `is_org_member()` has no `is_superadmin()` arm (deliberately — org
+-- MEMBERSHIP is a fact about seats, not about rank). Every OTHER member-readable
+-- salon table — `sal_services`, `sal_worker_profiles` — also carries a blanket
+-- `for all ... using (sal_can_manage_location(...))` write policy, and in
+-- Postgres a `for all` policy's USING clause applies to SELECT as well, so those
+-- two picked up a manage-tier read arm as a side effect. `20260726010000`
+-- replaced `sal_locations`' blanket policy with three command-specific ones
+-- (insert/update/delete), which was right for writes and accidentally removed
+-- that inherited read arm. Nobody noticed because every org MEMBER still reads
+-- every location; only a non-member can fail, and the only non-member who ever
+-- reads a tenant's data is the platform superadmin.
+--
+-- WHY IT IS FATAL RATHER THAN COSMETIC. `resolveScope()` in
+-- apps/web/lib/view-as.ts turns a scope node into the module's own entity ids by
+-- reading the scopeEntity table ON THE CALLER'S OWN CLIENT — that is the
+-- keystone (§8.1 point 1), not an implementation detail. With zero readable
+-- locations it resolves to zero entity ids, and since `viewAsCompleteness()`
+-- REQUIRES every role table to carry a `scopeColumn` once a module declares a
+-- scopeEntity, all three nail-salon surfaces (manager, cashier, worker) then
+-- render 100% empty, section by section, with no error anywhere — while the
+-- underlying `sal_appointments` / `sal_bills` / `sal_earnings_ledger` rows are
+-- perfectly readable to that same client. Verified live, 2026-08-06: 1 location
+-- to `service_role`, 0 to the superadmin, no error. The salon surfaces are three
+-- of the five that exist, and the Uptown-manager case is the whole reason the
+-- console's no-person-filter mode was specified, so "just don't support it" is
+-- not available.
+--
+-- WHAT THIS GRANTS THAT WAS NOT ALREADY HELD: nothing of substance. A superadmin
+-- already reads all eleven other `sal_` tables in every org, because each of
+-- their policies routes through `sal_can_manage_location` /
+-- `sal_can_operate_location` -> `is_org_admin` -> `is_superadmin`. This closes an
+-- inconsistency rather than opening a door; `sal_locations` holds a name, a
+-- timezone and a scope node.
+--
+-- WHY `is_superadmin()` AND NOT `sal_can_manage_location(org_id, id)`: the two
+-- are equivalent in effect (the only reader either adds is a non-member, and a
+-- non-member org admin cannot exist), and `is_superadmin()` is the narrower,
+-- more legible half — it matches the idiom of the five platform tables the Owner
+-- Console already depends on, every one of which reads
+-- `is_org_member(...) or is_superadmin()`: `orgs`, `org_members`, `profiles`,
+-- `module_roles`, `module_scope_nodes`. It also avoids putting a function that
+-- itself reads `sal_locations` into a policy ON `sal_locations`.
+--
+-- DIRECTION OF CHANGE, stated plainly per docs/13's rule ("anything that WIDENS
+-- reach belongs in code; anything that only NARROWS it can be a runtime
+-- switch"): this WIDENS, so it is a migration under review, not a setting.
+--
+-- No ACL change is needed or made: `20260728010000` already grants
+-- `select, insert, update, delete on public.sal_locations to authenticated`, and
+-- this migration touches no function and creates no object.
+--
+-- ONE THING CHANGES AND ONLY ONE. The policy is recreated with its original role
+-- clause (absent, i.e. PUBLIC — as every other `sal_` policy has) rather than
+-- tightened to `to authenticated` on the way past. `anon` holds no privilege on
+-- this table at all after the 2026-07-29 ACL sweep, so the role clause is inert;
+-- changing it here would make a reviewer check two things instead of one, and
+-- narrowing policy roles module-wide is its own decision with its own diff.
+
+drop policy sal_locations_select_member on public.sal_locations;
+
+create policy sal_locations_select_member on public.sal_locations
+  for select using (public.is_org_member(org_id) or public.is_superadmin());
