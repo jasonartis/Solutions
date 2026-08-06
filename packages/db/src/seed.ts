@@ -54,8 +54,10 @@ const DEMO_PASSWORD = process.env.DEMO_PASSWORD ?? 'password123'
 
 // module_roles gained a surrogate PK in 20260723010000, so upsert must name
 // the scoped-identity conflict target explicitly (the old implicit target was
-// the composite PK). All seed grants are global (scope_ref null), so
-// NULLS-NOT-DISTINCT keeps this idempotent across re-seeds. Every seed
+// the composite PK). Most seed grants are global (scope_ref null) and rely on
+// NULLS-NOT-DISTINCT to stay idempotent across re-seeds; the SCOPED ones —
+// classroom students at their class node, and the salon's Uptown manager — key
+// on a real node id and are idempotent the ordinary way. Every seed
 // module_roles upsert goes through this helper.
 const upsertModuleRoles = (rows: object | object[]) =>
   admin.from('module_roles').upsert(rows, { onConflict: 'org_id,user_id,module_key,role,scope_ref' })
@@ -364,11 +366,66 @@ async function main() {
   // Both students already submitted, so grading/peer-review workflow e2e
   // coverage has real rows to move through the states without needing the
   // upload UI (that flow is covered separately by the submission-upload test).
-  const { error: submissionErr } = await admin.from('cls_submissions').insert([
-    { org_id: orgA, class_id: klass!.id, homework_id: homework!.id, student_id: charlieId },
-    { org_id: orgA, class_id: klass!.id, homework_id: homework!.id, student_id: danaId },
-  ])
+  const { data: submissions, error: submissionErr } = await admin
+    .from('cls_submissions')
+    .insert([
+      { org_id: orgA, class_id: klass!.id, homework_id: homework!.id, student_id: charlieId },
+      { org_id: orgA, class_id: klass!.id, homework_id: homework!.id, student_id: danaId },
+    ])
+    .select('id, student_id')
   if (submissionErr) throw new Error(`Submission seed failed: ${submissionErr.message}`)
+  const charlieSub = submissions!.find((s) => s.student_id === charlieId)!
+  const danaSub = submissions!.find((s) => s.student_id === danaId)!
+
+  // --- Peer review with REAL rows, added 2026-08-06 -------------------------
+  // cls_review_assignments, cls_review_comments and cls_grades were all ZERO-row
+  // on a clean seed, which made the student and GA view-as surfaces render
+  // largely blank — indistinguishable from the surface being broken, and
+  // unfalsifiable either way (the vacuity rule, docs\03 Test discipline).
+  //
+  // CROSS-AUTHORED ON PURPOSE: charlie reviews dana's submission and dana
+  // reviews charlie's. That is what makes the peer-review comment leak
+  // detectable at all — with comments on only ONE submission, a surface that
+  // forgets to filter by submission owner looks identical to one that filters
+  // correctly. Rendering charlie's student surface must show the comment on
+  // CHARLIE's submission and never the one on dana's.
+  const { error: reviewErr } = await admin.from('cls_review_assignments').insert([
+    { org_id: orgA, class_id: klass!.id, homework_id: homework!.id, reviewer_id: charlieId, submission_id: danaSub.id },
+    { org_id: orgA, class_id: klass!.id, homework_id: homework!.id, reviewer_id: danaId, submission_id: charlieSub.id },
+  ])
+  if (reviewErr) throw new Error(`Review assignment seed failed: ${reviewErr.message}`)
+
+  const { error: commentErr } = await admin.from('cls_review_comments').insert([
+    {
+      org_id: orgA,
+      class_id: klass!.id,
+      submission_id: charlieSub.id,
+      author_id: danaId,
+      file_path: 'analysis.R',
+      line_start: 12,
+      body: 'Your median is computed before the NA filter — the two disagree.',
+    },
+    {
+      org_id: orgA,
+      class_id: klass!.id,
+      submission_id: danaSub.id,
+      author_id: charlieId,
+      file_path: 'report.Rmd',
+      line_start: 4,
+      body: 'Nice summary table, but the units are missing on the y-axis.',
+    },
+  ])
+  if (commentErr) throw new Error(`Review comment seed failed: ${commentErr.message}`)
+
+  // A peer grade and an instructor grade on the SAME homework, because the
+  // 2026-08-02 founder decision splits them: a student sees the COMMENTS on
+  // their own work but never the peer GRADES. One row of each is what makes
+  // that distinction testable rather than asserted.
+  const { error: gradeErr } = await admin.from('cls_grades').insert([
+    { org_id: orgA, class_id: klass!.id, homework_id: homework!.id, student_id: charlieId, source: 'peer', score: 82, graded_by: danaId, is_final: false, visible: false },
+    { org_id: orgA, class_id: klass!.id, homework_id: homework!.id, student_id: charlieId, source: 'instructor', score: 88, graded_by: aliceId, is_final: true, visible: true },
+  ])
+  if (gradeErr) throw new Error(`Grade seed failed: ${gradeErr.message}`)
 
   const { error: annErr } = await admin.from('cls_announcements').insert({
     org_id: orgA,
@@ -400,13 +457,27 @@ async function main() {
   })
   if (pubErr) throw new Error(`Publication seed failed: ${pubErr.message}`)
 
-  const { error: surveyErr } = await admin.from('cls_surveys').insert({
-    org_id: orgA,
-    class_id: klass!.id,
-    question: 'Which lab time do you prefer?',
-    results_visible: false,
-  })
+  const { data: survey, error: surveyErr } = await admin
+    .from('cls_surveys')
+    .insert({
+      org_id: orgA,
+      class_id: klass!.id,
+      question: 'Which lab time do you prefer?',
+      results_visible: false,
+    })
+    .select('id')
+    .single()
   if (surveyErr) throw new Error(`Survey seed failed: ${surveyErr.message}`)
+
+  // Answers from BOTH students while `results_visible` stays false — the survey
+  // surface's whole point is that a student sees their own answer and not their
+  // classmate's until the professor publishes. Zero-row before 2026-08-06, so
+  // neither half of that was observable.
+  const { error: answerErr } = await admin.from('cls_survey_answers').insert([
+    { org_id: orgA, class_id: klass!.id, survey_id: survey!.id, user_id: charlieId, answer: 'Tuesday 14:00' },
+    { org_id: orgA, class_id: klass!.id, survey_id: survey!.id, user_id: danaId, answer: 'Thursday 10:00' },
+  ])
+  if (answerErr) throw new Error(`Survey answer seed failed: ${answerErr.message}`)
 
   // --- Demo matchmaking for module 1 ---------------------------------------
   // A separate org so the matchmaking role vocabulary (single/matchmaker/admin)
@@ -516,18 +587,31 @@ async function main() {
   ])
 
   // --- Demo nail salon for module 5 ----------------------------------------
-  // alice = manager, eve = cashier, dana = worker, charlie = customer.
-  // One location, two services, a worker profile, a customer, and a booked
-  // appointment for today so the day-board has something to show.
+  // alice = manager (ORG-WIDE), frank = admin, eve = cashier, dana = worker,
+  // charlie = customer, grace = manager SCOPED TO UPTOWN.
+  // TWO locations (Downtown + Uptown). Downtown carries the full demo — services,
+  // a worker profile, a customer, a booked appointment for today, and the paid
+  // back-office visit. Uptown is deliberately SPARSE: see its block below.
   const salon = await ensureOrg('Demo Salon', 'demo-salon')
+  const graceId = await ensureUser('grace@demo.local', DEMO_PASSWORD, 'Grace G')
   await admin.from('org_members').upsert([
     { org_id: salon, user_id: aliceId, role: 'owner' },
     { org_id: salon, user_id: frankId, role: 'member' },
     { org_id: salon, user_id: eveId, role: 'member' },
     { org_id: salon, user_id: danaId, role: 'member' },
     { org_id: salon, user_id: charlieId, role: 'member' },
+    { org_id: salon, user_id: graceId, role: 'member' },
   ])
   await admin.from('org_modules').upsert({ org_id: salon, module_key: 'nail-salon', enabled: true })
+  // A DISABLED entitlement, on purpose (2026-08-06). `enabled` has exactly one
+  // app write path (superadmin `toggleModule`) and NO RLS policy anywhere reads
+  // it — it is a routing gate, not a data gate — so before this row every seed
+  // module was enabled and nothing exercised the disabled path at all. The Owner
+  // Console deliberately RENDERS disabled modules (badged), because disabling is
+  // step ONE of docs\03's deprecation sequence and the moment you most need to
+  // see what a position could read is when deciding what to export before
+  // deleting. This row is what makes that badge testable.
+  await admin.from('org_modules').upsert({ org_id: salon, module_key: 'visual-messaging', enabled: false })
   // FRANK IS THE SALON ADMIN, and it has to be someone OTHER than alice
   // (added 2026-08-04, founder-approved). The nail-salon view-as review gave
   // admin an edge into `manager`, so the Manager tab only exists for a caller
@@ -553,6 +637,76 @@ async function main() {
     .select('id')
     .single()
   if (locErr) throw new Error(`Salon location seed failed: ${locErr.message}`)
+
+  // --- Uptown: the SECOND location, added 2026-08-06 ------------------------
+  // Until this existed the salon had exactly ONE scope node, which made the
+  // whole scope-narrowing axis untestable: "all locations" and "this one
+  // location" rendered identically, so a test asserting either passed while
+  // proving nothing (the vacuity rule, docs\03 Test discipline). It is the
+  // headline case for the Owner Console's third view-as mode — "the Uptown
+  // manager's back office" — which is exactly the view that was impossible
+  // before that mode existed (docs\15, 2026-08-04).
+  //
+  // Uptown is deliberately SPARSE and shares NO rows with Downtown. It gets only
+  // the four tables no e2e flow walks (service / promotion / expense / shopping
+  // list) and deliberately NO appointment, bill, worker profile or customer —
+  // the day-board, booking-enforcement and booked-to-paid lifecycle tests all
+  // assume exactly one of each, and giving Uptown its own would break them for
+  // reasons having nothing to do with what this fixture is for. Sparse is also
+  // the point: Downtown-vs-Uptown row counts DIFFER, so a scope filter that
+  // silently does nothing now shows up as a wrong number rather than an
+  // identical one.
+  const { data: uptown, error: upErr } = await admin
+    .from('sal_locations')
+    .insert({ org_id: salon, name: 'Uptown', timezone: 'America/New_York' })
+    .select('id, scope_node_id')
+    .single()
+  if (upErr) throw new Error(`Salon Uptown location seed failed: ${upErr.message}`)
+
+  // GRACE IS SCOPED, and that is the entire reason she exists rather than
+  // reusing alice. alice is an ORG-WIDE manager, so rendering her surface can
+  // never demonstrate scope narrowing — she covers every location by
+  // construction. Grace holds the same POSITION at one node, so "same position,
+  // different reach" becomes observable. Her grant has to live here rather than
+  // with the other salon grants above because it needs Uptown's scope node,
+  // which the sal_locations_node trigger only mints on insert.
+  await upsertModuleRoles([
+    { org_id: salon, user_id: graceId, module_key: 'nail-salon', role: 'manager', scope_ref: uptown!.scope_node_id },
+  ])
+
+  const { error: upSvcErr } = await admin
+    .from('sal_services')
+    .insert({ org_id: salon, location_id: uptown!.id, name: 'Gel Manicure', price: 55, approx_duration_minutes: 45, sort: 0 })
+  if (upSvcErr) throw new Error(`Salon Uptown service seed failed: ${upSvcErr.message}`)
+
+  const { error: upPromoErr } = await admin.from('sal_promotions').insert({
+    org_id: salon,
+    location_id: uptown!.id,
+    name: 'Uptown opening — 10% off',
+    kind: 'visit_count',
+    threshold: 1,
+    discount_type: 'percent',
+    discount_value: 10,
+  })
+  if (upPromoErr) throw new Error(`Salon Uptown promotion seed failed: ${upPromoErr.message}`)
+
+  const { error: upExpErr } = await admin.from('sal_expenses').insert({
+    org_id: salon,
+    location_id: uptown!.id,
+    category: 'rent',
+    description: 'Uptown deposit',
+    amount: 900,
+  })
+  if (upExpErr) throw new Error(`Salon Uptown expense seed failed: ${upExpErr.message}`)
+
+  const { error: upShopErr } = await admin.from('sal_shopping_list').insert({
+    org_id: salon,
+    location_id: uptown!.id,
+    item: 'Gel lamps',
+    quantity: 3,
+    estimated_cost: 120,
+  })
+  if (upShopErr) throw new Error(`Salon Uptown shopping-list seed failed: ${upShopErr.message}`)
 
   const { data: svcRows, error: svcErr } = await admin
     .from('sal_services')

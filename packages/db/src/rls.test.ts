@@ -577,20 +577,26 @@ describe('nail-salon worker availability RPC', () => {
     const charlie = await signIn('charlie@demo.local') // salon customer (org member)
     // alice administers demo-salon (operate tier), so she can read the fixtures
     // + the seeded time-off row to compute in/out-of-window probe times.
-    const { data: salon } = await alice.from('orgs').select('id').eq('slug', 'demo-salon').single()
-    const { data: loc } = await alice.from('sal_locations').select('id').eq('org_id', salon!.id).single()
     const { data: dana } = await alice.from('profiles').select('user_id').eq('email', 'dana@demo.local').single()
+    // Take the location FROM the time-off row rather than querying
+    // sal_locations for the org's only one. The salon gained a second location
+    // (Uptown) on 2026-08-06 and the old `.eq('org_id', …).single()` started
+    // returning null, failing this test for a reason unrelated to what it
+    // tests. Deriving it is also strictly more correct: the RPC answers a
+    // (worker, location) question, and the right location is the one the block
+    // being probed actually sits at, not "the org's location".
     const { data: timeOff } = await alice
       .from('sal_worker_time_off')
-      .select('starts_at, ends_at')
+      .select('starts_at, ends_at, location_id')
       .order('starts_at')
       .limit(1)
       .single()
+    expect(timeOff, 'seed must provide a worker time-off block').not.toBeNull()
 
     const at = (base: string, offsetMs: number) => new Date(new Date(base).getTime() + offsetMs).toISOString()
     const args = (ws: string, we: string) => ({
       check_worker_id: dana!.user_id,
-      check_location_id: loc!.id,
+      check_location_id: timeOff!.location_id,
       window_start: ws,
       window_end: we,
     })
