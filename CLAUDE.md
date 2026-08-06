@@ -19,8 +19,9 @@ A multi-tenant modular platform: each client engagement produces a **module** bu
      and update only the compact "Now / Next / Standing rules" below. A fresh chat must never
      pay for the full journal. See "Session hygiene". -->
 
-**Now (2026-08-04):** Live on prod. **NAIL-SALON VIEW-AS SURFACE REVIEW DONE — UNCOMMITTED
-IN THE WORKING TREE; ONE MIGRATION AWAITING COMMIT AND PROD (`20260804010000`).** Module 5's
+**Now (2026-08-05):** **NAIL-SALON VIEW-AS SURFACE REVIEW IS ON PROD AND PROD-VERIFIED**
+(commit `89fae0a`, migration `20260804010000`; **33/33 prod probes**, and the Vercel production
+deploy is `READY`, which proves CI was green since `deploy` has `needs: check`). Module 5's
 own §8.1 point 9 review, the follow-on the founder sequenced ahead of the Owner Console: nine
 pairs answered, three surfaces written, all 12 `sal_` tables classified per position.
 **Mode 1 ON for all five staff-to-staff pairs, mode 2 additionally for the two into `worker`,

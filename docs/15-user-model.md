@@ -588,7 +588,8 @@ vocabulary gets locked.
 ## Decisions log
 
 - **2026-08-05 (NAIL-SALON REVIEW FOLLOW-UPS — four founder decisions, all taken on the
-  review's own findings rather than new work):**
+  review's own findings rather than new work. The review itself SHIPPED the same day: commit
+  `89fae0a` with migration `20260804010000`, applied to prod and prod-verified 33/33.)**
 
   1. **`ExcludedFromSurface.columns` and `PersonalLayer.columns` DELETED.** Both were dead on
      arrival: the overlap check refuses one table in both `role` and an off-surface list, so a

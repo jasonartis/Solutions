@@ -6,8 +6,10 @@ lean. Newest first. Durable *decisions/conventions* live in their own docs (docs
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
 
 
-- **2026-08-05 (NAIL-SALON REVIEW FOLLOW-UPS — four founder decisions, all on findings the
-  review itself produced; same Opus session):** Durable reasoning → docs/15's 2026-08-05 entry;
+- **2026-08-05 (NAIL-SALON REVIEW FOLLOW-UPS + PROD PUSH — four founder decisions, all on
+  findings the review itself produced; same Opus session). SHIPPED: commit `89fae0a`, migration
+  `20260804010000` applied to prod and prod-verified **33/33**, Vercel production `READY` —
+  which proves CI was green, since `deploy` has `needs: check`.** Durable reasoning → docs/15's 2026-08-05 entry;
   docs/12 for the ratchet. Headlines:
   - **Dead API removed:** `columns?` on `PersonalLayer` / `ExcludedFromSurface` could never be
     used (the overlap check forbids one table in both `role` and an off-surface list), so every
