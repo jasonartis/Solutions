@@ -490,7 +490,8 @@ export const nailSalonViewAs = declareViewAs({
           'differs from every other worker\'s. Neither mode widens: every table on the surface ' +
           'is readable within the locations the viewer governs (asserted in the RLS suite as a ' +
           'real non-org-admin MANAGER; admin transfers because `sal_can_manage_location` gates ' +
-          'on rank >= 2, and the seed has no salon admin to sign in as), and the SIX tables a ' +
+          'on rank >= 2 — and since 2026-08-05 the seed also carries a real salon admin, frank, ' +
+          'so an e2e renders the Manager tab as one), and the SIX tables a ' +
           'worker cannot reach at all — bills, bill items, earnings, promotions, expenses, ' +
           'shopping list — are declared ' +
           '`unreadableByPosition`, not silently omitted, so an admin reading the tab is told ' +

@@ -740,12 +740,14 @@ vocabulary gets locked.
   `sal_tips` migration would leave all three surfaces silently incomplete with CI green. The
   fix that exists in the repo already is the data browser's `pg_catalog` coverage test
   (docs/03 #19); switching on the analogue is platform-wide work, because classroom's
-  surfaces do not classify every `cls_` table. Also: **`ExcludedFromSurface.columns` is
-  unusable** — the overlap check forbids one table in both `role` and `excluded`, so every
-  column-level exclusion here is a caveat, and `excluded: []` means "no whole table is
-  withheld", not "nothing is withheld". And the **Manager tab has never been rendered in a
-  browser** (no seeded salon admin); it was verified at the data layer, all 11 sections, as a
-  temporarily self-granted admin.
+  surfaces do not classify every `cls_` table. **Of the three gaps this entry recorded, only
+  that one is still open** — the other two were closed the next day (see the 2026-08-05 entry):
+  `ExcludedFromSurface.columns` was unusable and has been DELETED (the overlap check forbids one
+  table in both `role` and `excluded`, so every column-level exclusion is a caveat, and
+  `excluded: []` means "no whole table is withheld", not "nothing is withheld"); and the
+  **Manager tab had never been rendered in a browser** for want of a seeded salon admin — it was
+  verified at the data layer here, all 11 sections, as a temporarily self-granted admin, and is
+  now rendered by a real e2e as the seeded admin.
 
 - **2026-08-03 (PER-PERSON DATA BROWSER BUILT — the first half of docs/13's Owner
   Console pair; Opus session, two Fable adversarial reviews):** `/console/data-browser`,
