@@ -33,7 +33,14 @@ rot; pipelines don't.
 4. **RLS is the tenancy floor.** 7 isolation tests + per-module guard-trigger
    verifications; the web app has no service-role key to leak (worker only).
 5. **Prod seeding is demo-scoped.** The seed's deletes are keyed to the demo
-   orgs' ids; it cannot touch a real client org's rows.
+   orgs' ids; it cannot touch a real client org's rows. **The one exception,
+   found and fixed 2026-08-07:** the invite-accept status flip
+   (`org_members.update({status:'active'}).neq('status','active')`) was
+   UNSCOPED — global across every org, not demo-scoped — so a real client's
+   pending invite would have been silently force-accepted by any remote
+   reseed. Checked against a pre-reseed backup and found harmless BY LUCK
+   (every row on prod already happened to be `'active'`), not by design. Now
+   `.in('org_id', demoOrgIds)` like every delete already was.
 
 ## The never-do list (for every future session)
 

@@ -986,7 +986,20 @@ async function main() {
   // any added later, and runs as service-role so the hierarchy/last-admin
   // guards are bypassed. (Invite-accept itself is exercised by the RLS suite,
   // not the seed.)
-  await admin.from('org_members').update({ status: 'active', accepted_at: new Date().toISOString() }).neq('status', 'active')
+  //
+  // SCOPED TO THE DEMO ORGS, not global — docs/12 guard 5 claims "the seed's
+  // deletes are keyed to the demo orgs' ids; it cannot touch a real client
+  // org's rows", and an unscoped update here would have silently force-accepted
+  // ANY pending invite in ANY org (a real client's included) on every remote
+  // reseed. Found harmless only by luck on the 2026-08-07 prod reseed — every
+  // row on prod already happened to be 'active' — but the gap was real. The
+  // demo orgs' own ids are all in scope by this point in the function.
+  const demoOrgIds = [orgA, orgB, platformSelfTest, shul, match, salon, dating, visual]
+  await admin
+    .from('org_members')
+    .update({ status: 'active', accepted_at: new Date().toISOString() })
+    .neq('status', 'active')
+    .in('org_id', demoOrgIds)
 
   console.log('Seed complete:')
   console.log('  owner@demo.local / <demo password>  (superadmin)')

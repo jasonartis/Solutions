@@ -77,13 +77,12 @@ TRUNCATE. Blow-by-blow for all three → docs/history/platform-journal.md; rules
 #17/#18/#19.
 
 **Next / open (pick WITH the founder — do not start unprompted; details in docs/15 §11).
-AS OF 2026-08-07: numbered items 1–5 are ALL DONE — the Owner Console view-as shipped and is
-prod-verified, which was the last ranked piece. What remains is item 6 (a founder decision,
-not a task) plus the unranked list below it. THE RECOMMENDED NEXT REAL PIECE IS NOW THE
-SUPERADMIN LOOKUP LOG (item 4a — Opus, specced, and on docs/12's pre-launch checklist because
-a log started later can never cover the period before it existed). The numbered items are kept
-struck-through rather than deleted because several carry the dated reasoning that produced
-them:**
+AS OF 2026-08-07: numbered items 1–6 are ALL DONE — prod's demo data is refreshed and
+prod-verified, which was the last mechanical piece. What remains is the unranked list below.
+THE RECOMMENDED NEXT REAL PIECE IS NOW THE SUPERADMIN LOOKUP LOG (item 4a — Opus, specced, and
+on docs/12's pre-launch checklist because a log started later can never cover the period before
+it existed). The numbered items are kept struck-through rather than deleted because several
+carry the dated reasoning that produced them:**
 
 - ~~**1. Confirm CI/deploy for slice 5.**~~ **DONE 2026-08-02** — prod app and prod schema in
   sync; a `READY` production deploy proves CI was green (`deploy` has `needs: check`).
@@ -123,17 +122,36 @@ them:**
   Same founder principle as (a), own migration, own review.
 - ~~**5. Push and prod-verify.**~~ **DONE 2026-08-07** — see Now. Backup at
   `backups/2026-08-07T22-05-54/` before the migration, per docs/12.
-- **6. PROD'S DEMO DATA IS STALE relative to the 2026-08-06 fixtures — a founder decision,
-  not a task to start unprompted.** Measured on prod 2026-08-07: **no `grace@demo.local`, 1
-  salon location, 0 `cls_review_comments`** (10 profiles total as the non-emptiness control).
-  Consequence: `scripts/verify-console-view-as.mts` **cannot meaningfully run against prod**
-  — it fails at grace's sign-in and its second-location / cross-authored-comment controls
-  would report honest skips, which under the no-silent-skips rule proves nothing. The same
-  gap is on the SCREEN: prod's mode-3 scope case has one location to narrow, and the
-  classroom peer-comment fix has no comments to filter, so neither shipped behaviour is
-  observable there. **That is the exact vacuity the fixtures closed locally, now sitting on
-  prod.** Fix is `SEED_ALLOW_REMOTE=yes` + `PROD_DEMO_PASSWORD` (deletes are demo-org-scoped,
-  docs/12 guard 5) — but it WRITES TO PRODUCTION, so it needs an explicit go-ahead. Sonnet.
+- ~~**6. PROD'S DEMO DATA IS STALE relative to the 2026-08-06 fixtures.**~~ **DONE
+  2026-08-07 — Sonnet session.** Backup first (`backups/2026-08-07T23-00-47/`), then
+  `SEED_ALLOW_REMOTE=yes` + `DEMO_PASSWORD=<PROD_DEMO_PASSWORD>` against prod; confirmed
+  read-only afterward: `grace@demo.local` exists, 2 salon locations (Downtown + Uptown), 2
+  `cls_review_comments` rows on two DIFFERENT students' submissions (the falsifiability
+  control). `scripts/verify-console-view-as.mts` **35/35 → prod 34/35, zero skips** (the
+  script no longer hardcoded `password123` — parameterised to `VERIFY_DEMO_PASSWORD` /
+  `VERIFY_SUPERADMIN_EMAIL` / `VERIFY_SUPERADMIN_PASSWORD`, since prod's superadmin is the
+  founder's REAL account, never `owner@demo.local` — the remote-seed guard in `seed.ts`
+  deliberately sets that account's `is_superadmin` to `false` off-localhost).
+  **The one FAIL was a genuine pre-existing fact, not a regression:** the founder's real
+  account already held `org_members` rows in 3 orgs on prod (owner of a real org
+  `Solutions`/`pozne`, member of `demo-a`, admin of `demo-b` — all predating this session,
+  confirmed against the pre-reseed backup). Harmless for view-as specifically (his
+  `module_roles` are still empty, so view-as GRANTS are still empty — org membership plays
+  no part in that ladder), but it meant the console's mode-1 blurb premise ("the superadmin
+  belongs to no org") was not literally true for this account. **Founder decision, same day:
+  keep `Solutions` (his real org), drop the `demo-a`/`demo-b` residue** — done, fresh backup
+  first (`backups/2026-08-07T23-34-43/`). **Prod is now 34/35, permanently, by design** —
+  not a target to chase to 35/35: he genuinely owns a real org, so `is_org_member` genuinely
+  returns true for him there, and forcing that premise to hold would mean he could never use
+  his own account to run a real org on his own platform. The check stays in the script because
+  it is still telling the truth; its FAIL is now the expected, understood steady state.
+  **A REAL SAFEGUARD GAP FOUND AND FIXED ALONG THE WAY:** `seed.ts`'s invite-accept status
+  flip (`org_members.update({status:'active'}).neq('status','active')`) was UNSCOPED —
+  global across every org, not demo-scoped, contradicting docs/12 guard 5's claim that prod
+  seeding "cannot touch a real client org's rows." Checked against the pre-reseed backup:
+  every row on prod already happened to be `'active'`, so this run changed nothing — harmless
+  by luck, not by design. Now scoped to `.in('org_id', demoOrgIds)`. The seed's DELETES were
+  already org-scoped (verified before running); only this one UPDATE was not.
 
 Everything below is open but unranked:
 - **Slice 5 remaining follow-ons:** ~~the nail-salon surface review~~ **DONE 2026-08-04**

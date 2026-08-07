@@ -45,9 +45,19 @@ const url = process.env.SUPABASE_URL ?? fromDotEnv('SUPABASE_URL') ?? 'http://12
 const anonKey = process.env.SUPABASE_ANON_KEY ?? fromDotEnv('SUPABASE_ANON_KEY')
 if (!anonKey) throw new Error('SUPABASE_ANON_KEY not set and not in .env — run `pnpm dev` once')
 
-async function signIn(email: string) {
+// Parameterised so this script can point at prod without editing it ad hoc
+// (docs/12: prod's demo password is deliberately different from local's, and
+// prod's superadmin is the founder's REAL account, never a demo one — see
+// seed.ts's remote-seed guard, which sets owner@demo.local's is_superadmin to
+// FALSE on any non-local run). Defaults reproduce the original local-only
+// behaviour exactly.
+const demoPassword = process.env.VERIFY_DEMO_PASSWORD ?? 'password123'
+const superadminEmail = process.env.VERIFY_SUPERADMIN_EMAIL ?? 'owner@demo.local'
+const superadminPassword = process.env.VERIFY_SUPERADMIN_PASSWORD ?? demoPassword
+
+async function signIn(email: string, password: string) {
   const c = createClient(url, anonKey, { auth: { persistSession: false } })
-  const { error } = await c.auth.signInWithPassword({ email, password: 'password123' })
+  const { error } = await c.auth.signInWithPassword({ email, password })
   if (error) throw new Error(`${email}: ${error.message}`)
   return c
 }
@@ -68,10 +78,10 @@ async function userId(c: SupabaseClient) {
   return (await c.auth.getUser()).data.user!.id
 }
 
-const owner = await signIn('owner@demo.local') // the local superadmin
-const alice = await signIn('alice@demo.local') // professor (demo-a), org-wide salon manager
-const grace = await signIn('grace@demo.local') // salon manager SCOPED to Uptown (2026-08-06 fixture)
-const charlie = await signIn('charlie@demo.local') // student (demo-a), salon customer
+const owner = await signIn(superadminEmail, superadminPassword) // the platform superadmin
+const alice = await signIn('alice@demo.local', demoPassword) // professor (demo-a), org-wide salon manager
+const grace = await signIn('grace@demo.local', demoPassword) // salon manager SCOPED to Uptown (2026-08-06 fixture)
+const charlie = await signIn('charlie@demo.local', demoPassword) // student (demo-a), salon customer
 
 const ownerId = await userId(owner)
 
@@ -79,7 +89,7 @@ const ownerId = await userId(owner)
 console.log('\n[1] The three premises the whole design rests on')
 {
   const prof = (await owner.from('profiles').select('is_superadmin').eq('user_id', ownerId).single()).data
-  check('owner@demo.local is the local superadmin (probe precondition)', prof?.is_superadmin === true)
+  check(`${superadminEmail} is the platform superadmin (probe precondition)`, prof?.is_superadmin === true)
 
   // If either of these ever stops being true, the Owner Console stops being the
   // thing this code documents: `renderSurface`'s scope intersection would start

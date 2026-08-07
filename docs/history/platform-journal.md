@@ -6,6 +6,68 @@ lean. Newest first. Durable *decisions/conventions* live in their own docs (docs
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
 
 
+- **2026-08-07 (PROD DEMO REFRESH + PROD-VERIFY, Sonnet session — closed CLAUDE.md's Next
+  item 6. Also: cross-checked docs/15's 2026-08-06/07 entry and `apps/web/lib/view-as.ts`'s
+  comments against the running code — no mismatches found.)**
+  - **The cross-check, done first.** Every checkable claim in the 2026-08-06/07 decisions-log
+    entry and the `view-as.ts`/`console-view-as.ts`/`platform.ts` header comments was verified
+    against the actual code: the "four things bypassed" list, `SuperadminGate`'s
+    `declare const unique symbol` mechanism, `personFilter`/`scopeFilter`'s exact branching in
+    `renderSurface`/`resolveScope`, the `cls_review_comments` embed-under-`cls_submissions`
+    fix, the db suite counts (97/97, RLS 93/93 — recounted live and matched exactly), and the
+    probe counts (35 console-view-as checks, 22 data-browser checks — recounted call-by-call
+    against the scripts' control flow and matched exactly). Nothing needed fixing.
+  - **The refresh.** Backed up prod first (`backups/2026-08-07T23-00-47/`), then
+    `SEED_ALLOW_REMOTE=yes` + `DEMO_PASSWORD=<PROD_DEMO_PASSWORD from .env.deploy>` against
+    prod. Confirmed read-only afterward via the REST API with the service-role key: `grace@
+    demo.local` now exists, `sal_locations` now has 2 rows (Downtown + Uptown), and
+    `cls_review_comments` now has 2 rows on two DIFFERENT students' submissions — closing
+    exactly the vacuity CLAUDE.md's item 6 named (prod's mode-3 scope case had nothing to
+    narrow; the classroom peer-comment fix had nothing to filter).
+  - **The probe script had to be parameterised, not just pointed at prod.** It hardcoded
+    `password123` for every signed-in account, including "the superadmin." That collides with
+    a real safeguard: `seed.ts`'s remote-seed guard deliberately sets `owner@demo.local`'s
+    `is_superadmin` to `false` off-localhost, precisely so a demo password can never guard
+    platform-wide power in production (docs/12). So on prod the superadmin is the founder's
+    REAL account, with its OWN password, distinct from the demo accounts' password. Added
+    `VERIFY_DEMO_PASSWORD` / `VERIFY_SUPERADMIN_EMAIL` / `VERIFY_SUPERADMIN_PASSWORD`, all
+    defaulting to the exact original local behaviour. Re-ran locally first (35/35 unchanged)
+    before touching prod.
+  - **Prod result: 34/35, zero skips.** The one FAIL — `"the superadmin is a member of NO
+    org"` — was a genuine pre-existing fact, not a regression or a bug in this session's work:
+    the founder's real account already held `org_members` rows in 3 orgs on prod (owner of a
+    real org `Solutions`/`pozne`, member of `demo-a`, admin of `demo-b`), confirmed against the
+    PRE-reseed backup so it predates everything done here. Harmless for view-as specifically —
+    his `module_roles` are still empty (the OTHER premise, which passed), and view-as
+    authority runs off that ladder, never off org membership — but it meant the console's
+    mode-1 blurb premise ("the superadmin belongs to no org") was not literally true for this
+    account.
+  - **Founder decision, same session: keep `Solutions`, drop the `demo-a`/`demo-b` residue.**
+    Fresh backup first (`backups/2026-08-07T23-34-43/` — the prior one predated the reseed, so
+    a new one was taken immediately before this second prod write), then a targeted delete of
+    the two `org_members` rows by `user_id` + `org_id`, verified before/after via a read-only
+    query. Re-ran the probe script afterward: still 34/35 — the remaining FAIL is `Solutions`
+    itself, which is correct and permanent, not a target to chase to 35/35. He genuinely owns a
+    real org on his own platform, so `is_org_member` genuinely returns true for him there; the
+    probe is still telling the truth, and its FAIL is now the understood steady state rather
+    than test residue.
+  - **A real safeguard gap, found by the pre-reseed backup and fixed.** `seed.ts`'s
+    invite-accept status flip — `org_members.update({status:'active'}).neq('status',
+    'active')` — was UNSCOPED: global across every org on the target database, not demo-org
+    scoped, directly contradicting docs/12 guard 5's claim that prod seeding "cannot touch a
+    real client org's rows." That guard's own wording is about the seed's DELETES (which
+    really are org-scoped, checked line-by-line before running anything remote); this UPDATE
+    was the one exception. Checked against the backup taken immediately before this session's
+    reseed: every `org_members` row on prod already happened to be `'active'`, so this run
+    changed nothing — harmless BY LUCK on a platform with no real customers yet, not by
+    design. Fixed to `.in('org_id', demoOrgIds)`, using the demo org ids already in scope at
+    that point in the function. Local reseed re-run to confirm behaviour-preserving (unchanged
+    output). Not yet pushed to prod as a migration — it is app-side seed code, not schema.
+  - **Verification:** local `verify-console-view-as.mts` 35/35 zero skips (post-refactor,
+    pre-prod); prod run 34/35 zero skips (one pre-existing, explained fact, not a defect).
+    `verify-data-browser.mts` deliberately NOT run against prod — it creates fixtures and
+    docs/12 has no guard proving those stay demo-scoped the way the seed's do.
+
 - **2026-08-06/07 (THE OWNER CONSOLE VIEW-AS — built, adversarially reviewed, findings
   applied, verified, SHIPPED. Commit `6a90110`, migration `20260806010000`; prod backup
   first, migration applied to prod, policy confirmed live, then pushed — Vercel production
