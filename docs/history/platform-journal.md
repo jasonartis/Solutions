@@ -7,8 +7,9 @@ decision log, docs/03 conventions, docs/12 safeguards) — this is the chronolog
 
 
 - **2026-08-06/07 (THE OWNER CONSOLE VIEW-AS — built, adversarially reviewed, findings
-  applied, verified. NOT YET PUSHED at time of writing: three commits sat local while the
-  verification beats ran, because `deploy` runs on master pushes.)** Durable reasoning →
+  applied, verified, SHIPPED. Commit `6a90110`, migration `20260806010000`; prod backup
+  first, migration applied to prod, policy confirmed live, then pushed — Vercel production
+  `READY`, which proves CI was green since `deploy` has `needs: check`.)** Durable reasoning →
   docs/15's 2026-08-06/07 entry; reusable rules → docs/03 #18 (seven new bullets) + its
   Test-discipline section; the log follow-on → docs/12 item 9. Headlines:
   - **What shipped:** `/console/view-as`, superadmin-only, deliberately absent from the
@@ -72,6 +73,16 @@ decision log, docs/03 conventions, docs/12 safeguards) — this is the chronolog
     label; it now asserts one entry from each list that really populates that panel, plus
     both halves of the embed (Dana's comment on Charlie's work present, Charlie's on Dana's
     absent). Rule → docs/03 Test discipline.
+  - **The prod push found two more things, both recorded rather than fixed on the spot.**
+    (1) `prod-verify-migration.ts` reported "0 failures" for `20260806010000` while asserting
+    NOTHING about it — the script checks FUNCTIONS only, and this migration defines none, so
+    its pass was vacuous for a policy-only change. The policy was confirmed separately with a
+    direct read-only `pg_policies` query carrying a count control. Now in CLAUDE.md's gotchas.
+    (2) **Prod's demo data predates the 2026-08-06 fixtures** — no `grace@demo.local`, 1
+    salon location, 0 review comments — so neither the mode-3 scope case nor the classroom
+    peer-comment fix is observable on prod, and the console probe script cannot meaningfully
+    run there. The vacuity the fixtures closed locally is still sitting on prod. A founder
+    decision (it writes to production), on the Next list.
   - **A process cost worth not repeating — and the first diagnosis was WRONG.** Two full e2e
     runs (~50 min) failed with EVERY test timing out at sign-in, the button stuck on
     "Working…". The first was blamed on editing source mid-run, which was a real mistake but

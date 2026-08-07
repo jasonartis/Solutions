@@ -19,8 +19,10 @@ A multi-tenant modular platform: each client engagement produces a **module** bu
      and update only the compact "Now / Next / Standing rules" below. A fresh chat must never
      pay for the full journal. See "Session hygiene". -->
 
-**Now (2026-08-07):** **THE OWNER CONSOLE VIEW-AS IS BUILT, REVIEWED AND VERIFIED —
-LOCAL AND UNPUSHED.** `/console/view-as`, superadmin-only, absent from the in-module tab
+**Now (2026-08-07):** **THE OWNER CONSOLE VIEW-AS IS ON PROD AND PROD-VERIFIED** (commit
+`6a90110`, migration `20260806010000`; Vercel production `READY`, which proves CI was green
+since `deploy` has `needs: check`; prod policy confirmed live as
+`(is_org_member(org_id) OR is_superadmin())` against 200 visible policies as the control). `/console/view-as`, superadmin-only, absent from the in-module tab
 strips. Renders any declared position's surface in any org, bypassing **four** things — the
 declared edge, the rank/scope-coverage conditions, §8.1 point 10's caller-scope intersection,
 and `org_modules.enabled` — and **never RLS, never the surface declaration**. The three
@@ -132,11 +134,19 @@ Console view-as (Opus territory, not Sonnet), then unranked follow-ons:**
   — caught only because it hit the scope-entity table, whose symptom is loud.
   **(c) Should `view_as_sessions`' own whole-org admin read be narrowed by hierarchy too?**
   Same founder principle as (a), own migration, own review.
-- **5. PUSH THE THREE LOCAL COMMITS** (the build, the fixtures, this session's apply beat).
-  Held back on purpose while the verification beats ran, since `deploy` runs on master
-  pushes. Then confirm the Vercel production deploy is `READY` (which proves CI was green —
-  `deploy` has `needs: check`) and run the two probe scripts against prod's schema where they
-  apply. **One migration ships with it: `20260806010000`.**
+- ~~**5. Push and prod-verify.**~~ **DONE 2026-08-07** — see Now. Backup at
+  `backups/2026-08-07T22-05-54/` before the migration, per docs/12.
+- **6. PROD'S DEMO DATA IS STALE relative to the 2026-08-06 fixtures — a founder decision,
+  not a task to start unprompted.** Measured on prod 2026-08-07: **no `grace@demo.local`, 1
+  salon location, 0 `cls_review_comments`** (10 profiles total as the non-emptiness control).
+  Consequence: `scripts/verify-console-view-as.mts` **cannot meaningfully run against prod**
+  — it fails at grace's sign-in and its second-location / cross-authored-comment controls
+  would report honest skips, which under the no-silent-skips rule proves nothing. The same
+  gap is on the SCREEN: prod's mode-3 scope case has one location to narrow, and the
+  classroom peer-comment fix has no comments to filter, so neither shipped behaviour is
+  observable there. **That is the exact vacuity the fixtures closed locally, now sitting on
+  prod.** Fix is `SEED_ALLOW_REMOTE=yes` + `PROD_DEMO_PASSWORD` (deletes are demo-org-scoped,
+  docs/12 guard 5) — but it WRITES TO PRODUCTION, so it needs an explicit go-ahead. Sonnet.
 
 Everything below is open but unranked:
 - **Slice 5 remaining follow-ons:** ~~the nail-salon surface review~~ **DONE 2026-08-04**
@@ -320,7 +330,7 @@ in the sections below.
   bug is a late re-render, not a lost mutation — which turns "mystery flake" into a timeout
   question and avoids patching blind.
 - **Since slice 3, a test fixture that adds an org member must ACCEPT the invite** (`org_accept_invite`, as that user) or the member stays `pending` and satisfies no membership predicate. A negative assertion then passes for the mundane reason that the user isn't a member yet — proving nothing about the thing under test. Hit while verifying view-as scope isolation 2026-07-31: "a course-A professor cannot view a course-B student" passed vacuously until the fixture accepted.
-- Tables created in CLI migrations do NOT inherit Supabase's default API-role grants — every migration must `grant` explicitly (see 20260706120000_core.sql). **Functions are the inverse trap and dev/prod DIVERGE:** Postgres grants `EXECUTE` to `PUBLIC` at CREATE (so anon can call), and on PROD `ALTER DEFAULT PRIVILEGES FOR ROLE postgres` ALSO grants `EXECUTE` directly to `anon`/`authenticated` — which `revoke ... from public` does NOT remove. Local lacks that default, so a function locked down with only `revoke ... from public` looks closed locally but is open on prod (the 2026-07-22 `module_scope_covers` gap → `20260722010000`). Rule: state the full intended ACL explicitly (`revoke execute ... from public, anon, authenticated;` then `grant` to exactly who needs it), and verify security-sensitive ACLs against PROD — the local RLS suite can't catch this. See docs/03 convention #1. **`pnpm exec tsx scripts/prod-verify-migration.ts <migration>` now automates that prod check** (read-only: per-function body md5, secdef, pinned search_path, real EXECUTE ACL incl. anon).
+- Tables created in CLI migrations do NOT inherit Supabase's default API-role grants — every migration must `grant` explicitly (see 20260706120000_core.sql). **Functions are the inverse trap and dev/prod DIVERGE:** Postgres grants `EXECUTE` to `PUBLIC` at CREATE (so anon can call), and on PROD `ALTER DEFAULT PRIVILEGES FOR ROLE postgres` ALSO grants `EXECUTE` directly to `anon`/`authenticated` — which `revoke ... from public` does NOT remove. Local lacks that default, so a function locked down with only `revoke ... from public` looks closed locally but is open on prod (the 2026-07-22 `module_scope_covers` gap → `20260722010000`). Rule: state the full intended ACL explicitly (`revoke execute ... from public, anon, authenticated;` then `grant` to exactly who needs it), and verify security-sensitive ACLs against PROD — the local RLS suite can't catch this. See docs/03 convention #1. **`pnpm exec tsx scripts/prod-verify-migration.ts <path-to-migration.sql>` now automates that prod check** (read-only: per-function body md5, secdef, pinned search_path, real EXECUTE ACL incl. anon). **It takes a PATH, not a version — and it checks FUNCTIONS ONLY, so for a migration that defines none (a policy, a grant, an index) its "0 failures" is VACUOUS.** Hit 2026-08-07 on `20260806010000`, a policy-only migration: the run passed while asserting nothing about the policy. Verify those with a direct read-only `pg_policies` query against prod, and carry a control (count all policies) so an empty result is a real absence rather than a broken catalog read.
 
 ## Key standing decisions
 
