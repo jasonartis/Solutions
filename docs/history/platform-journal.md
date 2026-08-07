@@ -10,7 +10,7 @@ decision log, docs/03 conventions, docs/12 safeguards) — this is the chronolog
   applied, verified, SHIPPED. Commit `6a90110`, migration `20260806010000`; prod backup
   first, migration applied to prod, policy confirmed live, then pushed — Vercel production
   `READY`, which proves CI was green since `deploy` has `needs: check`.)** Durable reasoning →
-  docs/15's 2026-08-06/07 entry; reusable rules → docs/03 #18 (seven new bullets) + its
+  docs/15's 2026-08-06/07 entry; reusable rules → docs/03 #18 (FIVE new bullets) + THREE in its
   Test-discipline section; the log follow-on → docs/12 item 9. Headlines:
   - **What shipped:** `/console/view-as`, superadmin-only, deliberately absent from the
     in-module tab strips. Renders any declared position's surface in any org, bypassing the

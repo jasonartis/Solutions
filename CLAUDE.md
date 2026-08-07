@@ -51,7 +51,8 @@ hierarchy-governed visibility by the appointment rule). It is now **docs/12 chec
 **Verification:** typecheck 9/9, build clean, db suite **97/97 (RLS 93/93)**, e2e **47**,
 floor raised to **47/93**, **35/35 new console probes + 22/22 data-browser probes, zero
 skips** (`scripts/verify-console-view-as.mts`). Full detail → journal + docs/15's
-2026-08-06/07 entry; reusable rules → **docs/03 #18** (seven new bullets) + Test discipline.
+2026-08-06/07 entry; reusable rules → **docs/03 #18** (FIVE new bullets) + THREE more in its
+Test-discipline section, which also gained the vacuity rule’s search form.
 
 **Previously (2026-08-05):** **NAIL-SALON VIEW-AS SURFACE REVIEW ON PROD, PROD-VERIFIED**
 (`89fae0a`, migration `20260804010000`, 33/33 prod probes). Nine pairs answered, three
@@ -96,12 +97,15 @@ them:**
   `db:reset` → seed → full e2e run on 2026-08-03 (verifying the peer-review-comments fix)
   reproduced BOTH speed-dating tests passing cleanly — so the flake, when it happens, is
   intermittent even under the documented failure-inducing order, not a hard regression.
-  **More evidence, 2026-08-07: THREE full clean-seed suite runs in one session and the
-  speed-dating tests passed in every one** (the final run 47/47, exit 0). That is now five
-  clean full runs across two sessions with no reproduction. Not proof — the standing rule is
-  still *judge a flake by CI, not locally* — but enough that this should probably be CLOSED
-  at the next docs beat rather than carried indefinitely. Closing it would also let this
-  bullet and the two harness-fix bullets below collapse into one.
+  **More evidence, 2026-08-07: THREE full clean-seed suite runs in one session, speed-dating
+  green in all three** (final run 47/47, exit 0). What makes those three worth counting is
+  that they are the FIRST full runs SINCE the 2026-08-05 harness fix — so they are evidence
+  the fix worked, not evidence the flake never existed. **Do not tally them against older
+  runs:** 2026-08-04's three runs each lost a test and the waitlist test was one of them
+  (see the harness bullet below). Consistent with the fix holding; not proof. The standing
+  rule stands — *judge a flake by CI, not locally* — so consider closing this at a docs beat
+  only after CI has stayed green across several pushes, which would let this bullet and the
+  two harness bullets below collapse into one.
 - ~~**4. THE OWNER CONSOLE VIEW-AS.**~~ **DONE 2026-08-06/07 — see Now.** Three follow-ons
   it produced, all recorded rather than closed:
   **(a) THE SUPERADMIN LOOKUP LOG** — founder-decided, spec settled, now docs/12 item 9 and

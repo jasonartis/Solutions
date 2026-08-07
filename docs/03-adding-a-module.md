@@ -573,6 +573,19 @@ true for it to pass on an empty universe — and then assert that the universe i
 
 Related, and the reason this keeps mattering: a vacuous test does not merely fail to catch
 a bug, it actively reports that the bug is absent. That is worse than having no test, which
+**And it extends to the TALLIES YOU WRITE ABOUT YOUR OWN WORK (2026-08-07).** A count in a
+docs entry — "six new bullets", "five clean runs", "33/33 probes" — is a factual claim that
+the next reader will trust and act on, and it is exactly as checkable as a test assertion.
+Two shipped false in one session's own write-up: "seven new bullets" where five were added,
+and "five clean full runs across two sessions with no reproduction" — a tally that silently
+EXCLUDED three earlier runs, one of which had reproduced the very flake, and which was then
+used to recommend closing the open item. → **Before writing a number, produce it** (`grep -c`
+the diff, re-read the run log). → Be most careful with tallies that span sessions: the
+tempting ones are the ones that support the conclusion you already reached, and the honest
+version usually needs a qualifier about what changed between them. This is the same category
+as the "four FALSE factual claims in the notes" a prior review caught — self-authored prose
+is not exempt from verification just because you wrote it.
+
 **The rule extends past tests, to SEARCH (2026-08-07).** "Is this documented?" answered by a
 grep that returns hits is the same error in a different costume: the hits prove the vocabulary
 exists somewhere, not that the CLAIM does. Searching `rank remap` returned four confident
