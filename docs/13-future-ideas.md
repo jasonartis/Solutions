@@ -444,7 +444,45 @@ superadmin page in the entry above — same data, one renderer.
 
 **Status:** parked, founder-raised. Recommended shape is
 documentation-plus-tests, explicitly NOT generated policies. Natural companion
-to the superadmin read-only view; do them together if either is picked up.
+to the superadmin read-only view — which is now BUILT (see the entry above), so
+this is the remaining half.
+
+### The concrete gap this entry should close (found 2026-08-06, recorded 2026-08-07)
+
+A founder question — *how many hierarchies are there, and are they unified?* —
+produced a specific answer and one real hole.
+
+**The answer: ONE rank table (`module_position_rank`), read by FOUR different
+rules.** Appointment (strict `>`), view-as pair DOMAIN (strict `>`), RLS tier
+thresholds (`rank >= N`), and nothing at all for log reads. Plus two things that
+are NOT rank and must not be confused with it: view-as edges (hand-declared per
+pair — this MUST stay separate, §8.1 point 11: rank is cheap to change, view-as
+must never change silently), and name-based `has_module_role()` checks in
+never-rank-mapped modules (`vm_can_moderate_org` is the live example).
+
+**THE HOLE: tier thresholds are magic numbers scattered across per-module
+wrappers, and NOTHING verifies that a rank remap did not silently change what a
+tier wrapper admits.** Promote nail-salon `cashier` from rank 1 to 2 and it
+silently gains the earnings ledger — the module's single most documented
+asymmetry, the one its whole §8.1 point 9 review turned on. Today that case is
+caught only **BY ACCIDENT**: manager and cashier becoming equal rank breaks
+their view-as pair entry and fails typecheck. **Remap a position that has no
+pair entries and nothing catches it at all.** Verified for salon and classroom
+only — the other six modules are unchecked.
+
+Note how this differs from the checks that already exist and might be mistaken
+for it: the view-as completeness type and `viewAsRankParity()` prove the TS rank
+table matches SQL's `module_position_rank` and that every rank-differential PAIR
+is answered. Neither says anything about what a `rank >= N` wrapper ADMITS. The
+guarantee is missing exactly where the consequence is a silent widening of read
+access.
+
+**Two pieces, in order:** (1) an audit producing one table of every rank use
+across all eight modules — which wrapper, which threshold, which tables it
+gates; (2) a test that fails when a rank remap changes what a tier wrapper
+admits. Piece 1 is worth doing even if piece 2 is deferred, because right now
+nobody can answer "what does rank 2 mean in this module?" without reading SQL.
+Opus — it is RLS-adjacent reasoning even though it ships no policy.
 
 ---
 

@@ -240,10 +240,18 @@ Everything below is open but unranked:
   they sign up, not requiring accounts up front); and whether an org admin's read of the
   view-as session log should be scope-narrowed (today it is whole-org, since org admin has
   no scope dimension — the browser makes that data findable where it was merely readable).
-- **Founder-raised 2026-08-02, parked in docs/13:** a superadmin **read-only** view of every
-  module's positions/ranks/view-as pair grid + surfaces (highest-value follow-on — those
-  decisions are real and tested but buried in a TS file), and generalising per-position
-  visibility as a *documented, test-proven* map rather than generated RLS. Both entries carry
+- **Founder-raised 2026-08-02, parked in docs/13.** The **read-only positions/ranks/pair-grid
+  viewer is DONE 2026-08-06** (folded into `/console/view-as`, where the operator is about to
+  step over one of those rules). What remains is generalising per-position visibility as a
+  *documented, test-proven* map rather than generated RLS — and it now has a CONCRETE gap to
+  close, recorded in docs/13 2026-08-07: **one rank table (`module_position_rank`) is read by
+  FOUR different rules, and nothing verifies that a rank remap did not silently change what a
+  `rank >= N` TIER WRAPPER admits.** Promote salon `cashier` from 1 to 2 and it silently gains
+  the earnings ledger — the module's key documented asymmetry. Caught today only BY ACCIDENT
+  (an equal-rank pair breaks the view-as entry and fails typecheck); **remap a position with
+  no pair entries and nothing catches it.** Note what does NOT cover this: the completeness
+  type and `viewAsRankParity()` prove rank PARITY and pair coverage, never what a wrapper
+  admits. Verified for salon/classroom only, six modules unchecked. Opus. Both entries carry
   the reusable line they produced: **anything that WIDENS reach belongs in code; anything that
   only NARROWS it can be a runtime switch.**
 - Everywhere role-clarity labels (founder testing-round items 31–42) — high value; the
