@@ -240,6 +240,19 @@ Everything below is open but unranked:
   locked not dropped; `service_role`'s retained TRUNCATE. Plus: generic scope-wrappers deriving
   org from the entity row; generalize coarse `<prefix>_can_manage(org)`; per-class storage
   scoping; per-module scoped-assignment UIs.
+- **What should actually gate `master`? — OPEN, raised 2026-08-07, full brief in docs/12
+  item 10.** Every direct push prints `Bypassed rule violations … Required status check
+  "check" is expected`. Two facts settle the panic and open the real question: **a required
+  status check can never be satisfied by a direct push** (the check is triggered BY the push,
+  so the commit has no result yet — it is a PR mechanism), and **prod is gated by `needs:
+  check` inside the workflow, not by any branch rule**, so "READY proves CI was green" still
+  holds exactly. The live exposure is only that a RED COMMIT CAN LAND ON MASTER. Wants a
+  comprehensive review of the balance (drop the misleading rule / PRs for
+  `supabase/migrations/` only / PRs wholesale / a pre-push hook), plus the deeper question of
+  whether an AI agent should hold bypass rights on master at all. **First step: find out what
+  the ruleset really enforces and against whom** — including whether force-push protection
+  (docs/12 guard 3) is bypassable too, which is now marked UNVERIFIED. Needs the GitHub UI or
+  a token; `gh` is not installed here. Opus tier; ends in a founder decision.
 - Pre-launch before real customers (docs/12 checklist): automated+tested backups, monitoring,
   2FA, privacy/terms, custom SMTP.
 

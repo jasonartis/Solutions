@@ -10,12 +10,26 @@ rot; pipelines don't.
 1. **CI gates every deploy.** Every push runs typecheck → build → RLS tests →
    the full e2e suite; the Vercel deploy job runs ONLY on green. A red build
    cannot reach production through the normal path.
+   **The mechanism is `needs: check` inside the workflow, NOT a branch rule** —
+   worth stating precisely, because the two get conflated. If `check` fails,
+   `deploy` never runs, so no production deployment is created; that is a
+   job-graph fact, independent of GitHub's branch rules and of anyone's bypass
+   rights. It is what makes the standing inference "a `READY` production deploy
+   proves CI was green" true. What it does NOT do is stop a red commit from
+   LANDING on master — see item 10 below.
 2. **Destructive-migration block.** CI fails any migration containing
    `DROP TABLE` / `TRUNCATE` / `DROP SCHEMA` unless the file carries the
    marker `DESTRUCTIVE-CHANGE-APPROVED` — which may only be added after the
    founder explicitly approves that specific change.
 3. **Branch protection on master.** Force-pushes and branch deletion are
    blocked at GitHub; history cannot be rewritten away.
+   **UNVERIFIED SINCE 2026-08-07 — do not quote this as fact until item 10 is
+   done.** The 2026-08-07 push proved the ruleset on `master` is BYPASSABLE by
+   the pushing account (it bypassed the required-status-check rule outright).
+   Whether the force-push and deletion rules are bypassable by that same role is
+   unknown, and cannot be checked from this machine — `gh` is not installed and
+   there is no GitHub token in `.env.deploy`. A safeguard doc asserting a
+   protection nobody has tested is the same failure as a vacuous test.
 4. **RLS is the tenancy floor.** 7 isolation tests + per-module guard-trigger
    verifications; the web app has no service-role key to leak (worker only).
 5. **Prod seeding is demo-scoped.** The seed's deletes are keyed to the demo
@@ -179,6 +193,72 @@ Found in a deliberate "what haven't we thought of" pass; ordered by urgency.
    append-only by GRANTS, never a trigger, with `service_role` named in the
    revoke). It is a new table with RLS and grants, so it runs the full docs/03
    #12 rhythm: Opus, ~2h plus its own adversarial review.
+
+10. **What should actually gate `master`? — OPEN, needs a comprehensive review
+    (raised 2026-08-07; NOT launch-blocking, but decide it deliberately rather
+    than by habit).** Every direct push prints
+    `Bypassed rule violations for refs/heads/master: Required status check
+    "check" is expected.` — and the balance behind that is unexamined.
+
+    **Established facts, so a reviewer does not re-derive them:**
+    (a) The wording is GitHub *rulesets*, not classic branch protection, and
+    `is expected` means "no result reported for this commit yet", not "failed".
+    (b) **A required status check can NEVER be satisfied by a direct push,
+    structurally.** The `check` job is triggered BY the push (`on: push:
+    branches: [master]`), so at rule-evaluation time the commit has zero status
+    results and the rule is violated by construction. Required checks are a
+    PULL-REQUEST mechanism. So this is not drift — the rule is doing the only
+    thing it can do in a push-to-master workflow.
+    (c) **Production is not at risk either way:** `deploy` has `needs: check`
+    (item 1 above). The exposure is that a RED COMMIT CAN LAND ON MASTER — it
+    just never deploys.
+    (d) The rule is not inert everywhere: it would genuinely block merging a PR.
+    Only the direct-push path can do nothing with it.
+    (e) The real cost today is a false signal in two directions — the repo
+    settings imply master is gated when the path actually used bypasses them,
+    and every push prints an alarming line that is always benign. **A warning
+    you always ignore has stopped being a warning**, which is the same failure
+    this document's other guards exist to avoid.
+
+    **What the review must actually answer** — the question is a BALANCE, not a
+    toggle, which is why it is a review and not a one-line fix:
+    - Should an AI agent hold bypass rights on `master` at all? That is the
+      deeper question under the surface one, and it is a judgement about how
+      this repo is worked, not about GitHub.
+    - Is red-on-master acceptable given a solo founder and a `needs: check`
+      deploy gate? (Recovery is one more commit; the cost is a confusing
+      history and a broken starting point for the next session.)
+    - Options seen so far, none yet endorsed: drop the required-check rule as
+      misleading; require PRs only for the changes where red-master is expensive
+      (`supabase/migrations/`) and keep direct pushes elsewhere; adopt PRs
+      wholesale with a merge queue; or keep the status quo and formalise the
+      pre-push local verification this session did by hand. A pre-push hook
+      running the ratchet + typecheck is a fifth option nobody has costed.
+    - **First concrete step regardless: find out what the ruleset really
+      enforces and against whom** — including whether force-push and deletion
+      (item 3) are bypassable by the same role. That needs the GitHub web UI or
+      a token; neither `gh` nor a token exists on this machine.
+
+    **This item ends in a SHIPPED PROCESS, not a memo.** Deliverables: (1) the
+    facts above confirmed against the real ruleset, (2) a recommendation with
+    its trade-off stated, (3) the founder's decision recorded here as a dated
+    entry, and (4) the change actually made — settings, workflow, hook, or
+    CONTRIBUTING note as the decision requires — plus whatever this document and
+    CLAUDE.md must say afterwards.
+
+    **BLOCKED ON ACCESS, and this is the first thing to sort out.** Both reading
+    the ruleset and changing it need GitHub admin access that this machine does
+    not have: `gh` is not installed and `.env.deploy` holds no GitHub token.
+    Either provision a PAT with repo-admin scope into `.env.deploy` (same
+    pattern as `VERCEL_TOKEN`, and note it widens what a session can do to the
+    repo — that trade-off is itself part of this item's question), or the
+    founder makes the change in the web UI from the recommendation. Do not start
+    this one expecting to finish it from the terminal alone.
+
+    **Model:** Opus tier — cross-cutting process/infra design touching the one
+    inference every session relies on ("READY proves CI was green"). Not Fable:
+    no novel RLS/trigger mechanism is involved. The mechanical follow-through
+    once the decision is made (workflow edit, hook, docs) is Sonnet work.
 
 ## Low-context assistant protections (2026-07-10)
 
