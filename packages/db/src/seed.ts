@@ -377,6 +377,46 @@ async function main() {
   const charlieSub = submissions!.find((s) => s.student_id === charlieId)!
   const danaSub = submissions!.find((s) => s.student_id === danaId)!
 
+  // --- A SECOND, ALREADY-FINISHED HOMEWORK (2026-08-07) ---------------------
+  // The peer-review fixtures live on their OWN homework, and that separation is
+  // load-bearing rather than tidiness. They were first hung on Homework 1 — the
+  // very homework the grading-workflow e2e drives from `submitted` all the way
+  // to `done`. The collision did not fail that test, it made it VACUOUS: the
+  // test clicks "Move GA-graded → peer review" and then asserts the roster shows
+  // "Dana D: pending", which the SEEDED assignments already satisfied, so the
+  // assertion passed whether or not the action worked. It surfaced two steps
+  // later as a missing Finalize button, because the homework had never actually
+  // left `ga_grading`. A fixture that makes another test's assertion true for
+  // the wrong reason is the vacuity rule pointed at the seed (docs/03).
+  //
+  // So: Homework 0 is finished and carries every peer-review row; Homework 1
+  // stays pristine for the workflow test to drive.
+  const lastWeek = new Date()
+  lastWeek.setDate(lastWeek.getDate() - 7)
+  const { data: hw0, error: hw0Err } = await admin
+    .from('cls_homeworks')
+    .insert({
+      org_id: orgA,
+      class_id: klass!.id,
+      title: 'Homework 0 — Warm-up (graded)',
+      due_at: lastWeek.toISOString(),
+      sort: -1,
+    })
+    .select('id')
+    .single()
+  if (hw0Err) throw new Error(`Homework 0 seed failed: ${hw0Err.message}`)
+
+  const { data: subs0, error: subs0Err } = await admin
+    .from('cls_submissions')
+    .insert([
+      { org_id: orgA, class_id: klass!.id, homework_id: hw0!.id, student_id: charlieId },
+      { org_id: orgA, class_id: klass!.id, homework_id: hw0!.id, student_id: danaId },
+    ])
+    .select('id, student_id')
+  if (subs0Err) throw new Error(`Homework 0 submission seed failed: ${subs0Err.message}`)
+  const charlieSub0 = subs0!.find((s) => s.student_id === charlieId)!
+  const danaSub0 = subs0!.find((s) => s.student_id === danaId)!
+
   // --- Peer review with REAL rows, added 2026-08-06 -------------------------
   // cls_review_assignments, cls_review_comments and cls_grades were all ZERO-row
   // on a clean seed, which made the student and GA view-as surfaces render
@@ -390,8 +430,8 @@ async function main() {
   // correctly. Rendering charlie's student surface must show the comment on
   // CHARLIE's submission and never the one on dana's.
   const { error: reviewErr } = await admin.from('cls_review_assignments').insert([
-    { org_id: orgA, class_id: klass!.id, homework_id: homework!.id, reviewer_id: charlieId, submission_id: danaSub.id },
-    { org_id: orgA, class_id: klass!.id, homework_id: homework!.id, reviewer_id: danaId, submission_id: charlieSub.id },
+    { org_id: orgA, class_id: klass!.id, homework_id: hw0!.id, reviewer_id: charlieId, submission_id: danaSub0.id },
+    { org_id: orgA, class_id: klass!.id, homework_id: hw0!.id, reviewer_id: danaId, submission_id: charlieSub0.id },
   ])
   if (reviewErr) throw new Error(`Review assignment seed failed: ${reviewErr.message}`)
 
@@ -399,7 +439,7 @@ async function main() {
     {
       org_id: orgA,
       class_id: klass!.id,
-      submission_id: charlieSub.id,
+      submission_id: charlieSub0.id,
       author_id: danaId,
       file_path: 'analysis.R',
       line_start: 12,
@@ -408,7 +448,7 @@ async function main() {
     {
       org_id: orgA,
       class_id: klass!.id,
-      submission_id: danaSub.id,
+      submission_id: danaSub0.id,
       author_id: charlieId,
       file_path: 'report.Rmd',
       line_start: 4,
@@ -422,8 +462,8 @@ async function main() {
   // their own work but never the peer GRADES. One row of each is what makes
   // that distinction testable rather than asserted.
   const { error: gradeErr } = await admin.from('cls_grades').insert([
-    { org_id: orgA, class_id: klass!.id, homework_id: homework!.id, student_id: charlieId, source: 'peer', score: 82, graded_by: danaId, is_final: false, visible: false },
-    { org_id: orgA, class_id: klass!.id, homework_id: homework!.id, student_id: charlieId, source: 'instructor', score: 88, graded_by: aliceId, is_final: true, visible: true },
+    { org_id: orgA, class_id: klass!.id, homework_id: hw0!.id, student_id: charlieId, source: 'peer', score: 82, graded_by: danaId, is_final: false, visible: false },
+    { org_id: orgA, class_id: klass!.id, homework_id: hw0!.id, student_id: charlieId, source: 'instructor', score: 88, graded_by: aliceId, is_final: true, visible: true },
   ])
   if (gradeErr) throw new Error(`Grade seed failed: ${gradeErr.message}`)
 
@@ -469,13 +509,31 @@ async function main() {
     .single()
   if (surveyErr) throw new Error(`Survey seed failed: ${surveyErr.message}`)
 
-  // Answers from BOTH students while `results_visible` stays false — the survey
-  // surface's whole point is that a student sees their own answer and not their
-  // classmate's until the professor publishes. Zero-row before 2026-08-06, so
-  // neither half of that was observable.
+  // A SECOND survey, already answered, for the same reason Homework 0 exists
+  // (2026-08-07). `cls_survey_answers` was zero-row before 2026-08-06, so the
+  // survey surface's whole point — a student sees their own answer and not their
+  // classmate's until the professor publishes — was unobservable. The answers
+  // were first seeded onto the survey ABOVE, which is the one the e2e has a
+  // student answer for the first time: charlie arrived already answered, so the
+  // form offered "Update" where the test clicked "Submit". Same vacuity-in-the-
+  // seed shape as Homework 0 — a fixture must not pre-satisfy another test's
+  // starting condition. The survey above stays UNANSWERED; this one carries the
+  // rows.
+  const { data: answeredSurvey, error: survey2Err } = await admin
+    .from('cls_surveys')
+    .insert({
+      org_id: orgA,
+      class_id: klass!.id,
+      question: 'How was the warm-up homework?',
+      results_visible: false,
+    })
+    .select('id')
+    .single()
+  if (survey2Err) throw new Error(`Second survey seed failed: ${survey2Err.message}`)
+
   const { error: answerErr } = await admin.from('cls_survey_answers').insert([
-    { org_id: orgA, class_id: klass!.id, survey_id: survey!.id, user_id: charlieId, answer: 'Tuesday 14:00' },
-    { org_id: orgA, class_id: klass!.id, survey_id: survey!.id, user_id: danaId, answer: 'Thursday 10:00' },
+    { org_id: orgA, class_id: klass!.id, survey_id: answeredSurvey!.id, user_id: charlieId, answer: 'Tuesday 14:00' },
+    { org_id: orgA, class_id: klass!.id, survey_id: answeredSurvey!.id, user_id: danaId, answer: 'Thursday 10:00' },
   ])
   if (answerErr) throw new Error(`Survey answer seed failed: ${answerErr.message}`)
 

@@ -8,7 +8,14 @@ import type { RenderedSection } from '@/lib/view-as'
 // especially one that badged its narrowing on one page and not the other — would
 // be worse than either alone.
 
-export function SectionTable({ section }: { section: RenderedSection }) {
+export function SectionTable({
+  section,
+  entityTable,
+}: {
+  section: RenderedSection
+  /** The module's scope-entity table, so the scope badge can name what it is not narrowed to. */
+  entityTable?: string
+}) {
   const embedKeys = section.rows.length
     ? Object.keys(section.rows[0]!.values).filter((k) => !section.columns.includes(k))
     : []
@@ -30,6 +37,20 @@ export function SectionTable({ section }: { section: RenderedSection }) {
           {section.personFilter === 'not-narrowed' && (
             <span className="rounded bg-orange-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-orange-800">
               all holders — not one person
+            </span>
+          )}
+          {/* THE OTHER AXIS. Without this the badge above was a promise the page
+              could not keep for the two positions the no-person-filter mode was
+              built for: salon manager and cashier are location-narrowed and have
+              no per-person column anywhere, so every section is
+              `not-per-person` and nothing was ever badged while every location's
+              rows were being combined (review finding 5, 2026-08-06). Worded as
+              a fact about the render — an org-wide grant really does see every
+              location, so claiming "more than one holder sees" would be the
+              opposite lie. */}
+          {section.scopeFilter === 'not-narrowed' && (
+            <span className="rounded bg-orange-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-orange-800">
+              every {entityTable ?? 'scope'} — no scope filter
             </span>
           )}
           <span className="font-mono text-[10px] text-gray-400">{section.table}</span>

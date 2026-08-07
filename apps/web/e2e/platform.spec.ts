@@ -345,9 +345,13 @@ test('classroom module: grading workflow — GA grade, peer review, finalize, pu
   await signIn(page, 'charlie@demo.local')
   await page.getByRole('link', { name: 'Classroom' }).click()
   await expect(page.getByText('Peer reviews assigned to you')).toBeVisible()
-  // The homework title also links to the (different) submission-upload page —
-  // scope to the review-route href to avoid the ambiguous duplicate link text.
-  await page.locator('a[href*="/classroom/review/"]').click()
+  // The homework title also links to the (different) submission-upload page, so
+  // scope to the review-route href — AND to this homework's title, because the
+  // seed now carries a finished Homework 0 whose peer review is also assigned to
+  // Charlie (2026-08-07). Two axes of ambiguity, one locator.
+  await page
+    .locator('a[href*="/classroom/review/"]', { hasText: 'Homework 1 — Descriptive statistics' })
+    .click()
   await expect(page.getByRole('heading', { name: 'Peer review' })).toBeVisible()
 
   await page.getByPlaceholder('Add a comment…').fill('Nice work!')
@@ -413,7 +417,16 @@ test('classroom module: student answers a survey, professor reveals aggregate re
   // Professor flips results visible.
   await signIn(page, 'alice@demo.local')
   await page.goto('/o/demo-a/m/classroom/manage')
-  await page.getByRole('button', { name: 'Show results to class' }).click()
+  // Scoped to THIS survey: the seed carries a second, already-answered one
+  // (2026-08-07), so an unscoped "Show results to class" is ambiguous. Scoped by
+  // LIST ITEM, not by the `div ... .last()` idiom the student side uses — the
+  // manage page renders each survey as an <li>, and the innermost matching div
+  // there still wraps both of them, so `.last()` narrowed nothing.
+  await page
+    .getByRole('listitem')
+    .filter({ hasText: 'Which lab time do you prefer?' })
+    .getByRole('button', { name: 'Show results to class' })
+    .click()
   await expect(page.getByRole('button', { name: 'Hide results' })).toBeVisible()
 
   // Student now sees the aggregated count for their answer.
@@ -1496,13 +1509,29 @@ test('view-as: professor tabs, mode 1, and a logged read-only mode 2 on a named 
   // materials, and grades he can see.
   await expect(page.getByText('Statistics 101 — Fall')).toBeVisible()
   await expect(page.getByText('Enrolled classes')).toBeVisible()
-  await expect(page.getByText('Their submissions')).toBeVisible()
+  await expect(page.getByText('Their submissions, and the peer-review comments on each')).toBeVisible()
+
+  // PEER-REVIEW COMMENTS ARE NOW AN EMBED UNDER THE SUBMISSION (2026-08-06),
+  // not a section of their own — which is what makes them HIS rather than the
+  // whole class's. Both halves asserted, because the old standalone section
+  // rendered every student's comments and looked exactly the same: Dana's
+  // comment on Charlie's work is here, Charlie's comment on Dana's work is not.
+  await expect(page.getByText(/Your median is computed before/)).toBeVisible()
+  await expect(page.getByText(/Nice summary table/)).not.toBeVisible()
 
   // The exclusions are stated on the page, not silently applied — a
   // professor must be able to see what the view is NOT showing them.
+  //
+  // This used to assert `cls_review_comments` here and PASSED FOR THE WRONG
+  // REASON: getByText searches the whole page, and the string matched the
+  // then-standalone role section's own table-name label rather than anything in
+  // the leaves-out panel. Now it names one entry from each of the two lists
+  // that actually populate it — `excluded` (the viewer CAN read it; we decline
+  // to render) and `unreadableByPosition` (the POSITION cannot read it at all),
+  // which are different claims about different readers.
   await page.getByText('What this view deliberately leaves out').click()
   await expect(page.getByText('cls_survey_answers')).toBeVisible()
-  await expect(page.getByText('cls_review_comments')).toBeVisible()
+  await expect(page.getByText('cls_courses')).toBeVisible()
 
   // Leaving drops the session; the banner goes with it.
   await page.getByRole('button', { name: 'Stop viewing as' }).click()
@@ -1753,6 +1782,162 @@ test('data browser: a non-superadmin cannot reach it', async ({ page }) => {
   await signIn(page, 'alice@demo.local')
   await page.goto('/console/data-browser')
   await expect(page.getByText('What I can see about this person')).not.toBeVisible()
+})
+
+// ---------------------------------------------------------------------------
+// The Owner Console view-as (docs/13, built 2026-08-06). The superadmin surface
+// that bypasses every declared edge. These tests exist for the halves the db
+// suite structurally cannot reach: what the OPERATOR is told on screen.
+//
+// The org select carries uuids, so orgs are picked by label; everything else is
+// picked by the option's VALUE (the position key, the mode number), which is
+// stable across copy changes.
+// ---------------------------------------------------------------------------
+test('owner console view-as: mode 3 on a location-narrowed position badges the open scope axis', async ({
+  page,
+}) => {
+  await signIn(page, 'owner@demo.local')
+  await page.goto('/console/view-as')
+
+  // The operator must always know which of the two console tools they are in
+  // and which rules this one stands outside of.
+  await expect(page.getByText('bypasses declared edges')).toBeVisible()
+  await expect(page.getByText('not logged')).toBeVisible()
+
+  await page.getByLabel('Organisation').selectOption({ label: 'Demo Salon' })
+  await page.getByRole('button', { name: 'Render' }).click()
+  await page.getByLabel('Module').selectOption('nail-salon')
+  await page.getByRole('button', { name: 'Render' }).click()
+  // The form reveals one control at a time — the Mode select only exists once a
+  // position is in the URL — so each choice needs its own submit.
+  await page.getByLabel('Position').selectOption('manager')
+  await page.getByRole('button', { name: 'Render' }).click()
+  await page.getByLabel('Mode').selectOption('3')
+  await page.getByRole('button', { name: 'Render' }).click()
+
+  // THE FINDING-5 REGRESSION. `personFilter` alone could never badge this
+  // surface — salon manager is narrowed by LOCATION and declares
+  // `subjectColumn: null` on every table — so before 2026-08-06 the page
+  // combined both locations while claiming "affected sections say so".
+  await expect(page.getByText('every sal_locations — no scope filter').first()).toBeVisible()
+
+  // NON-VACUITY: both locations really are combined here. Pedicure is
+  // Downtown-only and the opening promotion is Uptown-only, so seeing both is
+  // what makes the narrowing below observable.
+  //
+  // SCOPED TO THE CATALOG SECTION, not the page: an earlier salon test runs an
+  // appointment through to paid, so "Pedicure" also appears as a bill line item
+  // by the time the full suite reaches here. Unscoped it passes in isolation and
+  // trips strict mode in a full run — which is worse than either.
+  const catalog = page.locator('section').filter({ hasText: 'Service catalog' })
+  await expect(catalog.getByText('Pedicure', { exact: true })).toBeVisible()
+  await expect(page.getByText(/Uptown opening/)).toBeVisible()
+
+  // Narrow to one location: the badge must disappear and the other location's
+  // rows with it. A scope filter that silently did nothing would leave both.
+  await page.getByLabel('Scope').selectOption({ label: 'Uptown' })
+  await page.getByRole('button', { name: 'Render' }).click()
+  await expect(page.getByText(/Uptown opening/)).toBeVisible()
+  await expect(catalog.getByText('Pedicure', { exact: true })).not.toBeVisible()
+  await expect(page.getByText('every sal_locations — no scope filter')).not.toBeVisible()
+})
+
+test('owner console view-as: mode 2 is refused where no row is about a person, and names the mode that answers', async ({
+  page,
+}) => {
+  // The one thing the edge bypass deliberately does NOT bypass. The reason is a
+  // property of the SURFACE, not of the edge: filtering a location-narrowed
+  // position on an authorship stamp would UNDER-show the tab, and rendering it
+  // unfiltered would be mode 3 wearing mode 2's label.
+  await signIn(page, 'owner@demo.local')
+  await page.goto('/console/view-as')
+  await page.getByLabel('Organisation').selectOption({ label: 'Demo Salon' })
+  await page.getByRole('button', { name: 'Render' }).click()
+  await page.getByLabel('Module').selectOption('nail-salon')
+  await page.getByRole('button', { name: 'Render' }).click()
+  await page.getByLabel('Position').selectOption('manager')
+  await page.getByRole('button', { name: 'Render' }).click()
+
+  await expect(
+    page.getByTitle('This surface has no per-person table, so a person view cannot be expressed'),
+  ).toBeVisible()
+
+  // And asking for it anyway — a pasted link, which this page's whole GET-form
+  // design invites — refuses in words rather than rendering something plausible.
+  // Built with URLSearchParams rather than a string replace: `mode` is absent
+  // from the URL entirely until the Mode select has been submitted once.
+  const asked = new URL(page.url())
+  asked.searchParams.set('mode', '2')
+  await page.goto(asked.toString())
+  await expect(page.getByText(/has no answer to give/)).toBeVisible()
+  await expect(page.getByText(/the mode this case exists for/)).toBeVisible()
+})
+
+test('owner console view-as: a disabled module still renders, and says no holder can open it', async ({
+  page,
+}) => {
+  // The FOURTH bypass (review finding 4 + founder decision, 2026-08-06):
+  // `org_modules.enabled` is a routing gate this page steps over on purpose,
+  // because disabling is step one of deprecation and that is exactly when
+  // someone needs to see what a position could reach. Rendering it unbadged
+  // would be the false claim.
+  await signIn(page, 'owner@demo.local')
+  await page.goto('/console/view-as')
+  await page.getByLabel('Organisation').selectOption({ label: 'Demo Salon' })
+  await page.getByRole('button', { name: 'Render' }).click()
+  await page.getByLabel('Module').selectOption('visual-messaging')
+  await page.getByRole('button', { name: 'Render' }).click()
+
+  await expect(page.getByText('Visual Messaging is disabled for this organisation.')).toBeVisible()
+  await expect(page.getByText(/No holder of any position below can open these tabs/)).toBeVisible()
+
+  // CONTROL: the badge is about THIS entitlement, not about every module.
+  await page.getByLabel('Module').selectOption('nail-salon')
+  await page.getByRole('button', { name: 'Render' }).click()
+  await expect(page.getByText(/is disabled for this organisation/)).not.toBeVisible()
+})
+
+test('owner console view-as: a student tab shows the comments on THEIR work and no one else’s', async ({
+  page,
+}) => {
+  // Review finding 1, at the surface an operator actually reads.
+  // `cls_review_comments` used to be a standalone role table with no reviewee
+  // column, so every student's tab showed the whole class's peer feedback.
+  await signIn(page, 'owner@demo.local')
+  await page.goto('/console/view-as')
+  await page.getByLabel('Organisation').selectOption({ label: 'Demo Org A' })
+  await page.getByRole('button', { name: 'Render' }).click()
+  await page.getByLabel('Module').selectOption('classroom')
+  await page.getByRole('button', { name: 'Render' }).click()
+  await page.getByLabel('Position').selectOption('student')
+  await page.getByRole('button', { name: 'Render' }).click()
+  await page.getByLabel('Mode').selectOption('2')
+  await page.getByRole('button', { name: 'Render' }).click()
+
+  // The Person select appears only once mode 2 is in the URL AND the surface can
+  // express a person view — both true here, unlike the salon manager above.
+  // Located by NAME, not by label: `getByLabel('Person')` also matches the Mode
+  // select, whose accessible name includes its option text "What one named
+  // person sees".
+  const person = page.locator('select[name="person"]')
+  const charlie = await person.locator('option', { hasText: 'Charlie' }).first().getAttribute('value')
+  await person.selectOption(charlie!)
+  await page.getByRole('button', { name: 'Render' }).click()
+
+  // The seed cross-authors these deliberately: dana comments on charlie's
+  // submission and charlie on dana's. With comments on one submission only, a
+  // broken filter would look exactly like a working one.
+  await expect(page.getByText(/Your median is computed before/)).toBeVisible()
+  await expect(page.getByText(/Nice summary table/)).not.toBeVisible()
+})
+
+test('owner console view-as: a non-superadmin cannot reach it', async ({ page }) => {
+  // Same shape as the data browser's gate test. It is a UI gate over data the
+  // caller could already read (docs/03 #19) — but it must still be shut, and it
+  // must 404 without leaking that the page exists.
+  await signIn(page, 'alice@demo.local')
+  await page.goto('/console/view-as')
+  await expect(page.getByRole('heading', { name: 'View as anything' })).not.toBeVisible()
 })
 
 test('unauthenticated visitors are redirected to login', async ({ page }) => {

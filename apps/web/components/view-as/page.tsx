@@ -259,7 +259,9 @@ export async function ViewAsPage({ moduleKey, params, searchParams }: Props) {
         <p className="text-gray-500">This position has no declared surface, so there is nothing to render.</p>
       )}
 
-      {rendered?.sections.map((s) => <SectionTable key={s.table} section={s} />)}
+      {rendered?.sections.map((s) => (
+        <SectionTable key={s.table} section={s} entityTable={rendered.entityTable} />
+      ))}
 
       {surface && <OffSurfaceLists surface={surface} />}
 

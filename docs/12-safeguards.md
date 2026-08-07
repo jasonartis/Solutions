@@ -163,6 +163,23 @@ Found in a deliberate "what haven't we thought of" pass; ordered by urgency.
    — see "Low-context assistant protections" below); this item upgrades
    "recoverable by discipline" to "recoverable by tested automation."
 
+9. **Superadmin lookup log — MUST exist before the first paying customer
+   (founder-decided 2026-08-06; spec in docs/15's 2026-08-06/07 entry).** Both
+   Owner Console tools currently write nothing: `/console/view-as` renders any
+   position's surface in any org bypassing every declared edge, and
+   `/console/data-browser` is `select *` over every row naming a person. Shipping
+   them unlogged was a deliberate, dated decision for a single owner-operator
+   superadmin, not an oversight — but it has an expiry that is structural rather
+   than a promise: **a log started later can never cover the period before it
+   existed.** The conditions that force it are named — a second superadmin, an
+   external audit, expanding either surface beyond the superadmin, or a real
+   customer whose data is in there.
+   Shape and rules are settled (new table, not `view_as_sessions`; written by
+   BOTH tools; visibility by the appointment rule — strict rank + scope coverage;
+   append-only by GRANTS, never a trigger, with `service_role` named in the
+   revoke). It is a new table with RLS and grants, so it runs the full docs/03
+   #12 rhythm: Opus, ~2h plus its own adversarial review.
+
 ## Low-context assistant protections (2026-07-10)
 
 Guards against well-meaning but confused sessions (any AI, any tool):

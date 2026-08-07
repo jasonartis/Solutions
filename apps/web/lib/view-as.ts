@@ -10,6 +10,10 @@
 
 import { cookies } from 'next/headers'
 import type { SupabaseClient } from '@supabase/supabase-js'
+// Type-only, so there is no runtime import cycle with lib/platform.ts (which
+// imports nothing from here). The token's definition lives next to the check
+// that mints it, deliberately.
+import type { SuperadminGate } from '@/lib/platform'
 import {
   mayViewAsPerson,
   mayRenderPosition,
@@ -299,6 +303,31 @@ export type RenderedSection = {
    *                     she see this?" sees it and concludes nothing is wrong.
    */
   personFilter: 'applied' | 'not-per-person' | 'not-narrowed'
+  /**
+   * The SECOND axis of the same honesty question — and the reason the first one
+   * alone was a false promise (adversarial review finding 5, 2026-08-06).
+   *
+   * `personFilter` is a pure function of `subjectColumn !== null`, so it says
+   * nothing about scope. Salon `manager` and `cashier` are LOCATION-narrowed and
+   * declare `subjectColumn: null` on every table, so every section of theirs is
+   * `not-per-person` and NO section could ever be badged — while a mode-3 render
+   * with scope "all" was quietly combining every location's rows. The page copy
+   * "affected sections say so" was therefore false 100% of the time for exactly
+   * the two positions the third mode was built for.
+   *
+   * `applied`      — narrowed to a resolved set of entity ids.
+   * `not-scoped`   — the table is not entity-scoped (`scopeColumn: null`), so
+   *                  there is no scope axis to narrow.
+   * `not-narrowed` — the table IS entity-scoped and no entity filter was
+   *                  applied, so it holds every entity in the org. Reachable
+   *                  only from superadmin authority asking for the whole module.
+   *
+   * It states a fact about the RENDER, not an inference about holders: an
+   * org-wide grant genuinely does see every location, so "more than one holder
+   * sees" would be the opposite lie. The page pairs the badge with the holder's
+   * own grant scope, which is what makes the comparison.
+   */
+  scopeFilter: 'applied' | 'not-scoped' | 'not-narrowed'
 }
 
 export type RenderedSurface = {
@@ -323,6 +352,12 @@ export type RenderedSurface = {
  * optional flag, so no caller can invoke the renderer without naming its
  * authority — the two paths intersect scope differently and a boolean would let
  * a future call site get the bypass by accident.
+ *
+ * NAMING THE GATE IS NOT PASSING IT, which is why the superadmin arm carries a
+ * `SuperadminGate` token rather than being a bare literal (adversarial review
+ * finding 2, 2026-08-06). That token has no constructor: `requireSuperadmin()`
+ * is the only thing that can produce one, so this union is now unwritable
+ * without the check. See lib/platform.ts for the mechanism and its limits.
  *
  * `module-grants` is the ordinary in-module path: §8.1 point 10's intersection
  * of the target's surface with WHAT THE CALLER GOVERNS, labelled partial in the
@@ -349,7 +384,7 @@ export type RenderedSurface = {
  */
 export type RenderAuthority =
   | { kind: 'module-grants'; grants: readonly HeldGrant[] }
-  | { kind: 'platform-superadmin' }
+  | { kind: 'platform-superadmin'; gate: SuperadminGate }
 
 type ScopeResolution = {
   /** Entity ids to filter on, or null for "no entity restriction". */
@@ -374,6 +409,22 @@ type ScopeResolution = {
    * entity rows yet trips it too, and the page words it as a question.
    */
   blinded: boolean
+  /**
+   * NO node restriction was applied, although the module HAS scope nodes — so
+   * the render spans every entity in the org rather than one scope's worth.
+   *
+   * Deliberately NOT derived from `entityIds === null`, which was the first and
+   * wrong attempt: the whole-module superadmin bypass skips the node FILTER but
+   * still fetches and returns the full id list, so `entityIds` is an array
+   * either way and the two cases are indistinguishable from outside. Caught by
+   * the e2e test that asserts the badge — the page rendered both salon
+   * locations and badged nothing, which is the exact failure the badge exists
+   * to prevent.
+   *
+   * Gated on the tree having nodes at all, so a module with nothing to narrow
+   * by never claims an axis was left open.
+   */
+  wholeTree: boolean
 }
 
 /**
@@ -398,7 +449,7 @@ async function resolveScope(
 ): Promise<ScopeResolution> {
   const entity = decl.scopeEntity
   if (!entity) {
-    return { entityIds: null, cutoffs: new Map(), partial: false, note: '', blinded: false }
+    return { entityIds: null, cutoffs: new Map(), partial: false, note: '', blinded: false, wholeTree: false }
   }
 
   // Nodes under the target grant's scope (global grant => the whole tree).
@@ -427,11 +478,18 @@ async function resolveScope(
   // refuses a null node outright).
   const wholeModuleBypass = authority.kind === 'platform-superadmin' && targetScopeRef === null
 
+  // Whether a node restriction is actually APPLIED, which is what the per-section
+  // scope badge reports. Tracked explicitly rather than inferred from the result,
+  // because the bypass below still RETURNS every id — see ScopeResolution.wholeTree.
+  let nodeFilterApplied = false
+
   let query = supabase.from(entity.table).select(columns.join(', ')).eq('org_id', orgId)
   if (wholeModuleBypass) {
     // no node restriction at all
-  } else if (governed.length > 0) query = query.in(entity.nodeColumn, governed.map((n) => n.id))
-  else if (targetScopeRef !== null) {
+  } else if (governed.length > 0) {
+    query = query.in(entity.nodeColumn, governed.map((n) => n.id))
+    nodeFilterApplied = true
+  } else if (targetScopeRef !== null) {
     // A scoped request resolving to no nodes at all. For the ordinary path that
     // is "you govern no part of this grant's scope"; for a superadmin, who
     // governs everything, the only way here is a scope node that does not exist
@@ -445,6 +503,7 @@ async function resolveScope(
           ? 'that scope node could not be resolved'
           : 'You govern no part of this grant’s scope.',
       blinded: authority.kind === 'platform-superadmin',
+      wholeTree: false,
     }
   }
 
@@ -461,6 +520,7 @@ async function resolveScope(
       note: `could not read ${entity.table}`,
       error: error.message,
       blinded: false,
+      wholeTree: false,
     }
   }
 
@@ -476,7 +536,14 @@ async function resolveScope(
   // No error and no rows, yet the scope tree has nodes here: the two are read
   // under different policies, so this is the shape of a read the caller's RLS
   // silently emptied rather than a scope that is genuinely bare.
-  return { entityIds, cutoffs, partial, note, blinded: rows.length === 0 && targetNodes.length > 0 }
+  return {
+    entityIds,
+    cutoffs,
+    partial,
+    note,
+    blinded: rows.length === 0 && targetNodes.length > 0,
+    wholeTree: !nodeFilterApplied && nodes.size > 0,
+  }
 }
 
 /**
@@ -570,6 +637,14 @@ export async function renderSurface(
       : subjectUserId
         ? 'applied'
         : 'not-narrowed'
+    // `wholeTree` and not `entityIds === null`: the whole-module bypass skips the
+    // node FILTER but still returns every id, so the result set cannot tell you
+    // whether narrowing happened. resolveScope tracks it directly.
+    const scopeFilter: RenderedSection['scopeFilter'] = !spec.scopeColumn
+      ? 'not-scoped'
+      : scope.wholeTree
+        ? 'not-narrowed'
+        : 'applied'
     // Column ALLOW-LIST, never `select *` — a column added by a future
     // migration must not be able to join a view-as surface by accident.
     const embeds = (spec.embed ?? []).map((e) => `${e.alias}:${e.table}(${e.columns.join(',')})`)
@@ -588,6 +663,7 @@ export async function renderSurface(
           rows: [],
           caveat: spec.caveat,
           personFilter,
+          scopeFilter,
         })
         continue
       }
@@ -608,6 +684,7 @@ export async function renderSurface(
         caveat: spec.caveat,
         error: error.message,
         personFilter,
+        scopeFilter,
       })
       continue
     }
@@ -623,6 +700,7 @@ export async function renderSurface(
       columns: spec.columns,
       caveat: spec.caveat,
       personFilter,
+      scopeFilter,
       rows: rows.map((r) => ({
         values: r,
         windowState: spec.visibilityWindow ? windowStateOf(spec.visibilityWindow, r) : null,

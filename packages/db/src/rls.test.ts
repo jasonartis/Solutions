@@ -1,5 +1,9 @@
+import { readFileSync } from 'node:fs'
+import { dirname, resolve as resolvePath } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it, beforeAll, afterAll, afterEach } from 'vitest'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import postgres from 'postgres'
 import {
   dataBrowserDeclarations,
   getModule,
@@ -1627,7 +1631,15 @@ describe('view-as: the personal / excluded split is honest (slice 5)', () => {
     const decl = getModule('classroom')!.viewAs
     for (const position of ['student', 'ga'] as const) {
       for (const t of decl.surfaces[position]!.role) {
-        const { error } = await alice.from(t.table).select(t.columns.join(', ')).limit(1)
+        // EMBEDS INCLUDED, since 2026-08-06. They were not, and that mattered
+        // the moment cls_review_comments moved from a role table to an embed
+        // under cls_submissions (review finding 1): a table reachable only
+        // through an embed would otherwise have dropped out of the keystone
+        // check entirely, and this is the assertion that proves there is no gap
+        // for view-as to bridge. Built the same way renderSurface builds it.
+        const embeds = (t.embed ?? []).map((e) => `${e.alias}:${e.table}(${e.columns.join(',')})`)
+        const select = [...t.columns, ...embeds].join(', ')
+        const { error } = await alice.from(t.table).select(select).limit(1)
         expect(error, `${position}/${t.table}: ${JSON.stringify(error)}`).toBeNull()
       }
     }
@@ -2305,6 +2317,268 @@ describe('data browser: the neverReadable claim is TRUE, not just declared', () 
       } finally {
         await fixture.cleanup()
       }
+    }
+  })
+})
+
+// ---------------------------------------------------------------------------
+// The Owner Console view-as (docs/13; built 2026-08-06). These are the
+// adversarial review's findings turned into tests — the beat that turns "we
+// reasoned about it" into "CI will notice".
+//
+// Deliberately here and not only in scripts/verify-console-view-as.mts:
+// `scripts/*.mts` are NOT run by CI, and docs/03 #19's own lesson is that
+// anything stated as fact to an operator belongs somewhere CI runs.
+// ---------------------------------------------------------------------------
+describe('Owner Console view-as (2026-08-06)', () => {
+  // The console path, as the source scan sees it. Adding a file to this surface
+  // means adding it here — the list IS the claim.
+  const CONSOLE_PATH = [
+    'apps/web/lib/console-view-as.ts',
+    'apps/web/lib/view-as.ts',
+    'apps/web/app/(app)/console/view-as/page.tsx',
+    'apps/web/components/view-as/section-table.tsx',
+    'apps/web/components/view-as/off-surface.tsx',
+    'apps/web/components/view-as/page.tsx',
+  ]
+  const repoRoot = resolvePath(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
+  const sourceOf = (f: string) => readFileSync(resolvePath(repoRoot, f), 'utf8')
+  /** Comments stripped, so a rule's own explanation cannot trip it. */
+  const codeOf = (f: string) =>
+    sourceOf(f)
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^\s*\/\/.*$/gm, '')
+
+  const dbUrl = process.env.DATABASE_URL ?? 'postgresql://postgres:postgres@127.0.0.1:54322/postgres'
+
+  it('no file on the console view-as path calls .rpc() or names a service-role key', () => {
+    // THE INVARIANT THAT MAKES THE UI GATE SOUND. Every query this surface
+    // issues is one the superadmin could already issue against PostgREST as
+    // themselves, so `requireSuperadmin()` grants nothing and bypassing it takes
+    // nothing away. One SECURITY DEFINER read and the app gate silently becomes
+    // the only thing between a user and data RLS would have refused — which
+    // docs/03 #18 forbids outright. No runtime probe can catch this after the
+    // fact, so it is a source scan (review finding 3, 2026-08-06: the existing
+    // scan in verify-data-browser.mts hardcodes three data-browser paths and
+    // never saw these files).
+    let scanned = 0
+    for (const f of CONSOLE_PATH) {
+      const code = codeOf(f)
+      expect(/\.rpc\s*\(/.test(code), `${f} makes an .rpc() call`).toBe(false)
+      expect(/service_role|SERVICE_ROLE/.test(code), `${f} names a service-role key`).toBe(false)
+      scanned++
+    }
+    // The vacuity guards: a renamed file, or a scan whose comment-stripping ate
+    // the whole file, would otherwise pass by checking nothing at all.
+    expect(scanned, 'the source scan checked no files').toBe(CONSOLE_PATH.length)
+    expect(codeOf('apps/web/lib/console-view-as.ts').length, 'the scanned source is empty').toBeGreaterThan(500)
+  })
+
+  it('the superadmin render authority has exactly ONE mint, next to the check it attests to', () => {
+    // Review finding 2: `{ kind: 'platform-superadmin' }` used to be a bare
+    // structurally-typed literal, so any future action or script could type it
+    // and call renderSurface() having checked nothing. It now carries a
+    // `SuperadminGate` token whose only source is the `as SuperadminGate` cast
+    // directly under the is_superadmin check. TypeScript enforces this at every
+    // call site; this test guards the one place a cast could multiply.
+    const platform = sourceOf('apps/web/lib/platform.ts')
+    const mints = platform.match(/as SuperadminGate/g) ?? []
+    expect(
+      mints.length,
+      'SuperadminGate is minted more than once — the gate is only as good as its single source',
+    ).toBe(1)
+    expect(/is_superadmin/.test(platform), 'the mint is not in the file that runs the check').toBe(true)
+
+    // And no file on the path may construct the authority as a BARE literal —
+    // `kind` immediately followed by the closing brace, with no gate property.
+    // (TypeScript already refuses; this catches the version of the mistake that
+    // reaches for a cast to get around the refusal.) A trailing comma is the
+    // CORRECT shape, since the gate comes after it — matching on `[},]` here
+    // would flag the one legitimate call site, which it did on first run.
+    for (const f of CONSOLE_PATH) {
+      const bare = codeOf(f).match(/kind:\s*'platform-superadmin'\s*\}/g) ?? []
+      expect(bare.length, `${f} builds the superadmin authority without a gate token`).toBe(0)
+    }
+    // CONTROL: the pattern the assertion is written against really does occur,
+    // so a rename of the `kind` field cannot make this pass by matching nothing.
+    const page = codeOf('apps/web/app/(app)/console/view-as/page.tsx')
+    expect(
+      /kind:\s*'platform-superadmin'/.test(page),
+      'the console page no longer builds a platform-superadmin authority at all — this test is vacuous',
+    ).toBe(true)
+  })
+
+  it('no RLS policy anywhere consults org_modules — enablement is a routing gate, not a reach gate', async () => {
+    // Review finding 4's load-bearing premise, and the reason the console may
+    // render a DISABLED module at all: disabling changes what `requireOrgModule`
+    // routes, never what a policy returns. Machine-checked because the founder's
+    // decision (render + badge) rests on it, and a future policy keying on
+    // entitlement would silently make the badge's wording wrong — it tells the
+    // operator the rows are unaffected.
+    const sql = postgres(dbUrl)
+    try {
+      const rows = await sql<{ tablename: string; policyname: string }[]>`
+        select tablename, policyname
+        from pg_policies
+        where schemaname = 'public'
+          and (coalesce(qual, '') like '%org_modules%' or coalesce(with_check, '') like '%org_modules%')
+      `
+      expect(
+        rows.map((r) => `${r.tablename}.${r.policyname}`),
+        'a policy now consults org_modules — the Owner Console badge claims the rows are unaffected by disabling',
+      ).toEqual([])
+      // CONTROL: the query really can see policies, so the empty result above is
+      // a fact about org_modules and not about a catalog read that returns
+      // nothing (the exact vacuity trap docs/03's test-discipline section
+      // records from the 2026-08-04 session).
+      const [row] = await sql<{ count: number }[]>`
+        select count(*)::int as count from pg_policies where schemaname = 'public'
+      `
+      expect(row!.count, 'pg_policies returned almost nothing — the assertion above is vacuous').toBeGreaterThan(50)
+    } finally {
+      await sql.end()
+    }
+  })
+
+  it('the classroom student surface reaches review comments through the SUBMISSION, never as a bare table', () => {
+    // Review finding 1, as a declaration test. `cls_review_comments` was a
+    // standalone role table with `subjectColumn: null` — directly under a
+    // comment saying the rows are ABOUT the student as reviewee — so a student's
+    // tab rendered EVERY student's peer-review comments, badged "not per-person"
+    // like a class-wide announcement. The fix mirrors
+    // cls_comments_for_my_submission(): an embed under a parent whose subject
+    // column IS the reviewee.
+    const student = getModule('classroom')!.viewAs.surfaces.student!
+    const bare = student.role.find((t) => t.table === 'cls_review_comments')
+    expect(
+      bare,
+      'cls_review_comments is a standalone role table on the student surface again — it carries no ' +
+        'column naming the reviewee, so it can only render class-wide (docs/03 #18)',
+    ).toBeUndefined()
+
+    const parent = student.role.find((t) => (t.embed ?? []).some((e) => e.table === 'cls_review_comments'))
+    expect(
+      parent,
+      'nothing embeds cls_review_comments — the student surface no longer shows peer feedback at all',
+    ).toBeDefined()
+    expect(parent!.table).toBe('cls_submissions')
+    // The whole point of the hop: the PARENT is per-person, so the embed
+    // inherits the filter. An embed under an unfiltered parent leaks exactly as
+    // the bare table did.
+    expect(
+      parent!.subjectColumn,
+      'the parent of the review-comment embed is not per-person, so the embed is unfiltered',
+    ).toBe('student_id')
+  })
+
+  it('and that hop really filters: one student’s render shows no other student’s comments', async () => {
+    // The declaration test above cannot tell you the join works. This renders
+    // the surface exactly as apps/web/lib/view-as.ts builds it, as the
+    // superadmin — the caller the Owner Console actually uses.
+    const owner = await signIn('owner@demo.local')
+    const charlie = await signIn('charlie@demo.local')
+    const charlieId = (await charlie.auth.getUser()).data.user!.id
+    const orgId = (await alice.from('orgs').select('id').eq('slug', 'demo-a').single()).data!.id
+
+    const { data: every, error } = await owner
+      .from('cls_review_comments')
+      .select('id, submission:cls_submissions(student_id)')
+      .eq('org_id', orgId)
+    expect(error).toBeNull()
+    const all = (every ?? []) as unknown as { id: string; submission: { student_id: string } | null }[]
+
+    // TWO CONTROLS, both load-bearing. Comments must exist, and they must sit on
+    // MORE THAN ONE student's submission — with comments on a single submission
+    // a broken filter is indistinguishable from a working one, which is why the
+    // 2026-08-06 fixture seeded them CROSS-AUTHORED.
+    expect(all.length, 'no review comments seeded — this test would prove nothing').toBeGreaterThan(0)
+    const reviewees = new Set(all.map((r) => r.submission?.student_id).filter(Boolean))
+    expect(
+      reviewees.size,
+      'every comment sits on ONE student’s submission — the filter is unfalsifiable',
+    ).toBeGreaterThan(1)
+
+    const { data: rendered } = await owner
+      .from('cls_submissions')
+      .select('id, student_id, peer_review_comments:cls_review_comments(id)')
+      .eq('org_id', orgId)
+      .eq('student_id', charlieId)
+    const subs = (rendered ?? []) as unknown as { student_id: string; peer_review_comments: { id: string }[] }[]
+    expect(subs.length, 'the subject has no submissions in this class').toBeGreaterThan(0)
+    expect(subs.every((s) => s.student_id === charlieId)).toBe(true)
+    const shown = new Set(subs.flatMap((s) => (s.peer_review_comments ?? []).map((c) => c.id)))
+    expect(shown.size, 'the render shows NO comments at all — the negative below would be vacuous').toBeGreaterThan(0)
+
+    const others = all.filter((r) => r.submission && r.submission.student_id !== charlieId)
+    expect(others.length, 'no comments on other students exist to leak').toBeGreaterThan(0)
+    for (const o of others) {
+      expect(
+        shown.has(o.id),
+        `a comment on another student’s submission is rendered on this student’s surface`,
+      ).toBe(false)
+    }
+  })
+
+  it('the superadmin can read every declared surface table — including embeds', async () => {
+    // §8.1 point 1 as a POSITIVE, for the caller the Owner Console uses. The
+    // in-module version of this test asserts it for the professor; nothing
+    // asserted it for the superadmin, and that is exactly how `sal_locations`
+    // came to return zero rows to them with NO ERROR after 20260726010000 split
+    // a `for all` policy per-command (the whole reason 20260806010000 exists).
+    const owner = await signIn('owner@demo.local')
+    let checked = 0
+    for (const mod of moduleRegistry) {
+      const decl = mod.viewAs
+      for (const [position, surface] of Object.entries(decl.surfaces)) {
+        for (const t of surface.role) {
+          const embeds = (t.embed ?? []).map((e) => `${e.alias}:${e.table}(${e.columns.join(',')})`)
+          const { error } = await owner
+            .from(t.table)
+            .select([...t.columns, ...embeds].join(', '))
+            .limit(1)
+          expect(error, `${mod.key}/${position}/${t.table}: ${JSON.stringify(error)}`).toBeNull()
+          checked++
+        }
+      }
+      if (decl.scopeEntity) {
+        const { error } = await owner.from(decl.scopeEntity.table).select(decl.scopeEntity.idColumn).limit(1)
+        expect(error, `${mod.key} scopeEntity ${decl.scopeEntity.table}: ${JSON.stringify(error)}`).toBeNull()
+        checked++
+      }
+    }
+    expect(checked, 'no surface tables were checked').toBeGreaterThan(0)
+  })
+
+  it('the scope entity is not merely error-free for the superadmin but actually RETURNS rows', async () => {
+    // The error-free assertion above would have PASSED throughout the
+    // sal_locations outage: the read succeeded and returned zero rows. That is
+    // the vacuity rule in its nastiest form — a passing test whose subject is
+    // invisible. So: for every module whose entity table holds rows at all, the
+    // superadmin must see some. A silent empty scope-entity read empties every
+    // scoped section of every surface at once and looks like a finding about the
+    // position rather than a policy gap.
+    const owner = await signIn('owner@demo.local')
+    const sql = postgres(dbUrl)
+    try {
+      let checked = 0
+      for (const mod of moduleRegistry) {
+        const entity = mod.viewAs.scopeEntity
+        if (!entity) continue
+        // CONTROL, read past RLS entirely: does the table hold anything?
+        const [row] = await sql<{ count: number }[]>`select count(*)::int as count from ${sql(entity.table)}`
+        if (row!.count === 0) continue // genuinely empty; nothing to prove here
+        const { data, error } = await owner.from(entity.table).select(entity.idColumn).limit(1)
+        expect(error, `${mod.key}/${entity.table}: ${JSON.stringify(error)}`).toBeNull()
+        expect(
+          (data ?? []).length,
+          `${entity.table} holds ${row!.count} rows but the superadmin reads none — every scoped ` +
+            `section of every ${mod.key} surface renders blank, and the page cannot tell you why`,
+        ).toBeGreaterThan(0)
+        checked++
+      }
+      expect(checked, 'no module scope entity was checked').toBeGreaterThan(0)
+    } finally {
+      await sql.end()
     }
   })
 })

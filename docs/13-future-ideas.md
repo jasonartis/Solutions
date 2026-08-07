@@ -350,6 +350,17 @@ self-host only if privacy demands it.
 
 ## Superadmin config UI for the user model — and where the line goes
 
+> **STATUS 2026-08-06: the READ-ONLY half — the highest-value row in the table
+> below — is BUILT**, folded into `/console/view-as` rather than given its own
+> page. Positions, ranks, each position's declared surface and the full pair grid
+> with every note render in a collapsible panel at the foot of that screen. That
+> placement is the point: the operator is there to bypass an edge, and the grid is
+> what tells them which rule they are stepping over and why it was written. Zero
+> queries — it is all manifest data. Everything about the WRITABLE rows below is
+> unchanged and still refused; turning an edge on is deliberately not a switch,
+> because the completeness check's whole value is that flipping one drags the
+> decision through a diff, a reviewer and a test run.
+
 *Founder question, 2026-08-02, immediately after slice 5 (view-as) was built:
 "The config edges that we discussed that must be filled out and the module
 position hierarchy — should we make a superuser UI for setting these configs?
@@ -439,12 +450,20 @@ to the superadmin read-only view; do them together if either is picked up.
 
 ## Superadmin "view as anything" console + a per-person data browser
 
-> **STATUS 2026-08-03: the DATA BROWSER half is BUILT** (`/console/data-browser`,
-> superadmin-only, zero migrations). Rules extracted to docs/03 **#19**; the dated
-> record is in docs/15's decisions log and the journal. The **Owner Console view-as**
-> half is next, founder-sequenced. Everything below is kept as the reasoning that
-> produced it — where the build sharpened or corrected it, docs/15's 2026-08-03 entry
-> says so.
+> **STATUS 2026-08-06: BOTH HALVES ARE NOW BUILT.** The data browser shipped
+> 2026-08-03 (`/console/data-browser`, superadmin-only, zero migrations); the
+> **Owner Console view-as** shipped 2026-08-06 (`/console/view-as`, one migration,
+> `20260806010000`), with all three founder-specified modes modelled as one axis
+> and docs/13's own read-only pair-grid viewer folded in. Rules extracted to
+> docs/03 **#19** and **#18**; the dated record is in docs/15's decisions log
+> (2026-08-03 and 2026-08-06/07 entries) and the journal. **Three answers this
+> entry gave were revised by the build and are corrected in docs/15's 2026-08-06/07
+> entry, not here:** "unlogged" is now a description of what shipped rather than
+> the platform's answer (the log gets built, hierarchy-read, as a follow-on); the
+> scope intersection needed an explicit AUTHORITY parameter, and naming it was not
+> enough — it needed a token the check alone can mint; and the bypass turned out to
+> be four things, not three. Everything below is kept as the reasoning that
+> produced it.
 >
 > **Build order changed, founder 2026-08-03:** data browser first, Owner Console
 > after. The reason is in the sizing note at the bottom of this entry, sharpened by

@@ -239,14 +239,55 @@ export const classroomViewAs = declareViewAs({
         },
         {
           table: 'cls_submissions',
-          label: 'Their submissions',
+          label: 'Their submissions, and the peer-review comments on each',
           columns: ['id', 'class_id', 'homework_id', 'student_id', 'state', 'submitted_at', 'visible_override_until'],
+          // THE HOP-FILTER, and the reason the comments live here rather than in
+          // a section of their own (adversarial review finding 1, 2026-08-06).
+          //
+          // `cls_review_comments` was a standalone role table with
+          // `subjectColumn: null`, directly under a comment saying the rows are
+          // ABOUT the student as reviewee — which is the contradiction. The
+          // subject column names a person ON THE ROW, and a comment names its
+          // AUTHOR, not its reviewee; the reviewee is one hop away through
+          // `submission_id`. With no hop mechanism the entry fell back to "not
+          // per-person", so a student's tab rendered EVERY student's peer-review
+          // comments in the class, badged like a class-wide announcement. That is
+          // docs/03 #18's falsely-permissive failure: no data crossed a tenancy
+          // boundary (the professor already reads every comment in their course,
+          // and only the view-as surface reads the raw table — the live student
+          // page goes through the definer below), but the tab's claim to show
+          // what the STUDENT sees was false.
+          //
+          // Embedding under the submission mirrors
+          // `cls_comments_for_my_submission()` condition for condition — it is
+          // `join cls_submissions s on s.id = c.submission_id where s.student_id
+          // = auth.uid()`, and the parent's `subjectColumn: 'student_id'` is
+          // exactly that join. Not `excluded`: the student genuinely is meant to
+          // see their own (founder, 2026-08-02 — the comments, never the peer
+          // grades). Retention comes along for free, since a submission the
+          // student can no longer see takes its comments with it.
+          embed: [
+            {
+              alias: 'peer_review_comments',
+              table: 'cls_review_comments',
+              columns: ['id', 'author_id', 'file_path', 'line_start', 'line_end', 'body', 'created_at'],
+            },
+          ],
           subjectColumn: 'student_id',
           scopeColumn: 'class_id',
           hiddenWhen: {
             scopeCutoffColumn: 'submissions_hidden_from',
             overrideUntilColumn: 'visible_override_until',
           },
+          caveat:
+            'The comments are shown WITH author_id, which is deliberately more than the ' +
+            'student sees: the live student page calls cls_comments_for_my_submission(), a ' +
+            'definer whose return type has no author column at all, because anonymity runs ' +
+            'from other students and the GA — not from the professor, who runs the process ' +
+            '(founder, 2026-08-02). The row SET is the same as that function returns. Being ' +
+            'a to-many embed it renders as JSON in one cell rather than as its own table ' +
+            '(the formatCell array-branch limitation noted for the salon surfaces); the ' +
+            'alternative was leaving it a section that showed the whole class.',
         },
         {
           table: 'cls_grades',
@@ -280,26 +321,15 @@ export const classroomViewAs = declareViewAs({
             '2026-08-02: peer review is anonymous from other STUDENTS and from the GA, not ' +
             'from the professor, who runs the process and already reads the whole matrix.',
         },
-        {
-          table: 'cls_review_comments',
-          label: 'Peer-review comments on their work',
-          columns: [
-            'id', 'class_id', 'submission_id', 'author_id',
-            'file_path', 'line_start', 'line_end', 'body', 'created_at',
-          ],
-          // The rows are ABOUT the student as the reviewee, so the surface keys
-          // on the submission's owner rather than on author_id.
-          subjectColumn: null,
-          scopeColumn: 'class_id',
-          caveat:
-            'Deliberately MORE than the student sees — the reviewer\'s name is shown because ' +
-            'anonymity runs from other students and the GA, not from the professor (founder, ' +
-            '2026-08-02). Note what the student actually sees today is NOTHING: no ' +
-            'student-facing view of peer feedback exists, and the anonymizing definer ' +
-            'cls_comments_for_my_submission has no callers (it is one of the dead functions ' +
-            'the 2026-07-29 ACL sweep listed). So this tab shows the professor feedback the ' +
-            'student cannot currently reach at all.',
-        },
+        // cls_review_comments WAS a standalone role table here. It is now an
+        // embed under cls_submissions above — see the long note there. Two claims
+        // its caveat made are also dead and are recorded as corrections rather
+        // than quietly deleted, because both were repeated elsewhere: the definer
+        // `cls_comments_for_my_submission` is NOT callerless (the student
+        // homework page has called it since 2026-08-03), and a student-facing
+        // view of peer feedback therefore DOES exist. The 2026-07-29 ACL sweep's
+        // "dead function" list was true when written and stale by the time this
+        // surface quoted it.
         {
           table: 'cls_exam_papers',
           label: 'Their exam scans',

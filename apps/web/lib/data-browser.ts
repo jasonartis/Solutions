@@ -288,11 +288,43 @@ export async function browsableModuleKeys(
   supabase: SupabaseClient,
   orgId: string,
 ): Promise<string[]> {
+  return (await orgModuleEntitlements(supabase, orgId)).map((e) => e.moduleKey)
+}
+
+/** One org's module entitlement rows, enablement INCLUDED. */
+export type OrgModuleEntitlement = { moduleKey: string; enabled: boolean }
+
+/**
+ * The same read as `browsableModuleKeys`, keeping the flag it used to discard.
+ *
+ * `enabled` is a ROUTING gate and nothing else — established live 2026-08-06 and
+ * worth stating because it is the whole justification for rendering a disabled
+ * module at all: ZERO RLS policies anywhere reference `org_modules` (checked
+ * against `pg_policies.qual`/`with_check`), so the caller's reach into the
+ * module's data is byte-identical either way. What disabling removes is
+ * `requireOrgModule`'s 404 (lib/module-gate.ts) — i.e. whether a HOLDER can open
+ * the tabs, not what the rows say.
+ *
+ * The Owner Console view-as needs the flag because rendering a disabled
+ * module's surface unbadged is a false claim: the operator is looking at a tab
+ * no holder can currently reach. Suppressing it would be the worse error — see
+ * the note above `browsableModuleKeys`; disabling is documented as step ONE of
+ * deprecation, so the moment you most need to know what a manager could see is
+ * the moment the module is already off. Render it, and say so. (Adversarial
+ * review finding 4 + founder decision, both 2026-08-06.)
+ */
+export async function orgModuleEntitlements(
+  supabase: SupabaseClient,
+  orgId: string,
+): Promise<OrgModuleEntitlement[]> {
   const { data } = await supabase
     .from('org_modules')
     .select('module_key, enabled')
     .eq('org_id', orgId)
-  return (data ?? []).map((r) => (r as { module_key: string }).module_key)
+  return ((data ?? []) as unknown as { module_key: string; enabled: boolean }[]).map((r) => ({
+    moduleKey: r.module_key,
+    enabled: r.enabled,
+  }))
 }
 
 /**

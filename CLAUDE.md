@@ -19,7 +19,39 @@ A multi-tenant modular platform: each client engagement produces a **module** bu
      and update only the compact "Now / Next / Standing rules" below. A fresh chat must never
      pay for the full journal. See "Session hygiene". -->
 
-**Now (2026-08-05):** **NAIL-SALON VIEW-AS SURFACE REVIEW IS ON PROD AND PROD-VERIFIED**
+**Now (2026-08-07):** **THE OWNER CONSOLE VIEW-AS IS BUILT, REVIEWED AND VERIFIED —
+LOCAL AND UNPUSHED.** `/console/view-as`, superadmin-only, absent from the in-module tab
+strips. Renders any declared position's surface in any org, bypassing **four** things — the
+declared edge, the rank/scope-coverage conditions, §8.1 point 10's caller-scope intersection,
+and `org_modules.enabled` — and **never RLS, never the surface declaration**. The three
+founder-specified modes are **ONE AXIS, not three code paths**: the mode picks the PERSON
+axis (me / one named holder / nobody) and scope is an independent picker in every mode, which
+is what makes mode 3 answer the case the salon review refused to fake. docs/13's read-only
+positions/ranks/pair-grid viewer is folded into the same screen. One migration
+(`20260806010000`) restores the superadmin's SELECT on `sal_locations` — **a `for all`
+policy's USING also covers SELECT, so splitting one per-command silently drops an inherited
+read arm.**
+
+**The adversarial review's 8 findings are all applied.** Two are worth carrying forward:
+**finding 1 was a LIVE DEFECT outside the diff** (classroom's student surface declared
+`cls_review_comments` with `subjectColumn: null`, so every student's tab showed the whole
+class's peer feedback — a FALSE CLAIM, not a leak, since the live student UI uses a definer
+that filters and strips the author; now an embed under `cls_submissions` keyed on
+`student_id`), and **finding 2 gave the reusable mechanism: naming a gate is not passing
+one** — `RenderAuthority`'s superadmin arm now carries a `SuperadminGate`, a `declare const
+unique symbol` brand that only `requireSuperadmin()` can mint.
+
+**UNLOGGED GOT ITS DATED DECISION, not an assumption: this build ships unlogged and says so
+on screen; THE LOG GETS BUILT as a follow-on** (own table, written by BOTH console tools,
+hierarchy-governed visibility by the appointment rule). It is now **docs/12 checklist item 9**
+— a log started later can never cover the period before it existed.
+
+**Verification:** typecheck 9/9, build clean, db suite **97/97 (RLS 93/93)**, e2e **47**,
+floor raised to **47/93**, **35/35 new console probes + 22/22 data-browser probes, zero
+skips** (`scripts/verify-console-view-as.mts`). Full detail → journal + docs/15's
+2026-08-06/07 entry; reusable rules → **docs/03 #18** (seven new bullets) + Test discipline.
+
+**Previously (2026-08-05):** **NAIL-SALON VIEW-AS SURFACE REVIEW IS ON PROD AND PROD-VERIFIED**
 (commit `89fae0a`, migration `20260804010000`; **33/33 prod probes**, and the Vercel production
 deploy is `READY`, which proves CI was green since `deploy` has `needs: check`). Module 5's
 own §8.1 point 9 review, the follow-on the founder sequenced ahead of the Owner Console: nine
@@ -85,35 +117,26 @@ Console view-as (Opus territory, not Sonnet), then unranked follow-ons:**
   `db:reset` → seed → full e2e run on 2026-08-03 (verifying the peer-review-comments fix)
   reproduced BOTH speed-dating tests passing cleanly — so the flake, when it happens, is
   intermittent even under the documented failure-inducing order, not a hard regression.
-- **4. THE OWNER CONSOLE VIEW-AS — this is now the next real piece.** (Its sibling, the
-  per-person data browser, is done and on prod; the nail-salon surface review that had to
-  come first is done as of 2026-08-04.) A superadmin surface that bypasses every declared
-  edge, kept out of the in-module tab strips, and unlogged. Founder answers on record: **all
-  three modes** (mode 1, mode 2, and a third "this position's surface with no person filter")
-  with the choice made obvious in the UI; plus fold in docs/13's cheap read-only
-  positions/ranks/pair-grid viewer. **UNLOGGED NEEDS A DATED DECISION, NOT AN ASSUMPTION
-  (raised 2026-08-06, unresolved):** §8.1 point 6 calls the mode-2 session log a *security
-  requirement from v1*, not the later audit upgrade — so a surface that bypasses every declared
-  edge AND writes no log is a real tension with the spec, not a free choice. The case FOR
-  unlogged: the superadmin is the platform operator and the data browser is likewise unlogged.
-  The case AGAINST: point 6's own wording, and this surface is strictly more powerful than the
-  logged one. Settle it explicitly either way when this is built — it is the single most
-  review-worthy question in the piece. **Three things the code says that the spec did not:**
-  (a) `renderSurface` intersects the target's scope with what the CALLER governs, and a
-  superadmin holds NO module grants, so a scoped target renders EMPTY — bypassing edges is
-  not enough, the scope intersection needs an explicit authority parameter (a discriminated
-  union, so no caller can invoke the renderer without naming which gate it passed);
-  (b) the bypass can only render a position that has a declared SURFACE — now classroom
-  `student`/`ga` **plus salon `manager`/`cashier`/`worker`**, five positions instead of two,
-  which is exactly what the salon review was sequenced first to provide (the
-  permanently-banned speed-dating `participant` pair still renders blank regardless);
-  (c) **NEW, from the salon review: the third mode is not a convenience, it is the answer to
-  a need that review identified and deliberately refused to fake** — viewing ONE NAMED
-  holder's SCOPE-narrowed console (the Uptown manager's back office) is impossible today,
-  because mode 1 renders the caller's own scope and mode 2 needs a per-person column that a
-  location-narrowed position does not have. Spec it as "position + optional person + optional
-  scope", not "position + person". Expect it to be SMALL. **Model note:** still Opus 4.8+
-  (edge-bypass design), and the adversarial review beat is Fable.
+- ~~**4. THE OWNER CONSOLE VIEW-AS.**~~ **DONE 2026-08-06/07 — see Now.** Three follow-ons
+  it produced, all recorded rather than closed:
+  **(a) THE SUPERADMIN LOOKUP LOG** — founder-decided, spec settled, now docs/12 item 9 and
+  must exist before the first paying customer. New table (not `view_as_sessions`: different
+  event, and a `view_as_sessions` row IS a capability), written by BOTH console tools,
+  visibility by the APPOINTMENT rule (strict rank + scope coverage), append-only by GRANTS
+  with `service_role` named in the revoke. The trap: a log row names TWO people — hierarchy
+  answers who may read by ACTOR; reading by TARGET is §8.1 point 6's notify question, still
+  open. Opus, ~2h + its own review (new table with RLS and grants ⇒ full docs/03 #12).
+  **(b) `blinded` CHECKS ONE TABLE PER MODULE** (the `scopeEntity`), never per role table, so
+  a future migration dropping an `is_org_admin` arm on an ordinary role table gives a silent,
+  error-free, UNBADGED empty section. `20260806010000` is proof the category already bit once
+  — caught only because it hit the scope-entity table, whose symptom is loud.
+  **(c) Should `view_as_sessions`' own whole-org admin read be narrowed by hierarchy too?**
+  Same founder principle as (a), own migration, own review.
+- **5. PUSH THE THREE LOCAL COMMITS** (the build, the fixtures, this session's apply beat).
+  Held back on purpose while the verification beats ran, since `deploy` runs on master
+  pushes. Then confirm the Vercel production deploy is `READY` (which proves CI was green —
+  `deploy` has `needs: check`) and run the two probe scripts against prod's schema where they
+  apply. **One migration ships with it: `20260806010000`.**
 
 Everything below is open but unranked:
 - **Slice 5 remaining follow-ons:** ~~the nail-salon surface review~~ **DONE 2026-08-04**
@@ -235,6 +258,29 @@ in the sections below.
 - After `supabase db reset`, Kong can hold a stale route to the recreated auth container (502 on `/auth/v1/*` while `rest` works) → `docker restart supabase_kong_Solutions_Platform`.
 - `import.meta.dirname` is `undefined` under tsx — use `dirname(fileURLToPath(import.meta.url))`.
 - Docker Desktop's WSL backend crashed under parallel image pulls → `C:\Users\yarmishj\.wslconfig` caps WSL at 8GB/4CPU (delete to revert); pull images sequentially if it recurs; zero-log segfaulting containers (exit 139) = corrupted image layers, `docker rmi` + re-pull.
+- **`pnpm test` OOM-crashes on this host under turbo's 5-way parallelism** (`FATAL ERROR:
+  Committing semi space failed`, at absurdly small heaps with ~7GB free). It is NOT the
+  `node-compile-cache` corruption below — clearing that does not help. **Use `pnpm exec turbo
+  run test --concurrency=1`.** Never read a parallel-run failure as a real one.
+- **EVERY e2e test failing at sign-in ("Sign in" stuck on `Working…`) is an INFRASTRUCTURE
+  symptom, never a code one.** Two causes, both hit on 2026-08-06, and the wasted hour came
+  from theorising instead of measuring:
+  1. **A stale dev server.** The local Playwright config REUSES whatever is already on
+     :3000. One left over from a session three days earlier was silently serving every run.
+     `netstat -ano | grep :3000` then `Get-CimInstance Win32_Process -Filter "ProcessId=N"`
+     shows its **CreationDate** — if it predates your work, kill it and let Playwright start
+     a fresh one.
+  2. **Kong's stale auth route after `db:reset`** (the gotcha below). `docker restart
+     supabase_kong_...` must come AFTER the reset, not before — resetting recreates the auth
+     container and re-staleness the route.
+  **Measure first:** `curl -X POST "$SUPABASE_URL/auth/v1/token?grant_type=password" -H
+  "apikey: $ANON" -d '{"email":"owner@demo.local","password":"password123"}'` — 502 is Kong,
+  400 means the seed did not run, 200 means auth is fine and the problem is the app server.
+  Working order: `db:reset` → restart Kong → `seed` → curl says 200 → run.
+- **Do NOT edit app source while the e2e suite is running** (the local config serves
+  `pnpm dev`, so an edit lands mid-run on a half-compiled app). Editing `docs/*.md` is safe.
+  Related: piping the run through `| tail -N` swallows its exit code, so a failing suite
+  reports success to the shell — redirect to a file and check `$?` instead.
 - **Reproducing a flaky/order-dependent e2e failure: `db:reset` + `pnpm seed` immediately before the reproduction run, not just once at the start of the session.** Several e2e tests are documented non-idempotent (assume fresh seed state). Running a suspect test in isolation first (to confirm it currently passes) mutates that seed data; a subsequent full-suite reproduction attempt then fails for the mundane reason of stale state from your OWN prior run — which looks like the bug you're chasing but isn't (hit in a 2026-07-30 session validating the speed-dating flaky-test fix: an isolated run advanced the seeded event to `complete`, then the very next full-suite run failed at the first "Register" step instead of reproducing the real timing issue).
 - **`ON DELETE SET NULL` fires the referencing table's BEFORE UPDATE triggers** — Postgres implements the FK action as a real UPDATE. So an append-only `before update or delete ... raise exception` trigger silently makes every row the table has ever referenced UNDELETABLE (the parent DELETE aborts), including whole orgs via a cascading `org_id`. Enforce append-only with GRANTS instead (no UPDATE/DELETE to api roles → `42501`), which is why `vm_moderation_log` has no such trigger. Found live in the 2026-07-31 view-as review, one review after `set null` had been (correctly) required.
 - **A passing NEGATIVE assertion proves nothing unless something nearby proves the subject

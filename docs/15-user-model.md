@@ -587,6 +587,158 @@ vocabulary gets locked.
 
 ## Decisions log
 
+- **2026-08-06/07 (THE OWNER CONSOLE VIEW-AS — the superadmin surface that bypasses every
+  declared edge, built, adversarially reviewed, and shipped with the review's findings
+  applied. Opus session; review requested as Fable, model UNVERIFIED — see the provenance
+  note below.)** `/console/view-as`, superadmin-only, deliberately absent from the in-module
+  tab strips so those stay strictly by-the-rules. Six decisions worth keeping:
+
+  1. **THE THREE FOUNDER-SPECIFIED MODES ARE ONE AXIS, NOT THREE CODE PATHS.** The mode picks
+     the PERSON axis only — me / one named holder / nobody — and SCOPE is an independent
+     picker available in every mode. That is the 2026-08-04 entry's "position + optional
+     person + optional scope" taken literally, and it is what makes mode 3 the answer to the
+     need the nail-salon review identified and refused to fake: viewing ONE NAMED holder's
+     LOCATION-narrowed back office, which mode 1 cannot give (it renders the caller's own
+     scope) and mode 2 cannot give (a location-narrowed position has no per-person column).
+  2. **WHAT IT BYPASSES IS FOUR THINGS, NOT THREE** — and the count is stated in the code
+     because an exhaustive-sounding list that is not exhaustive is worse than no list. The
+     declared EDGE; the strict-rank and scope-coverage conditions; §8.1 point 10's
+     caller-scope INTERSECTION; and — found by the review, not by the build —
+     `org_modules.enabled`, the routing gate `requireOrgModule` 404s on. It bypasses NEITHER
+     RLS NOR the surface declaration, and it does not bypass mode 2's per-person requirement
+     either, because that is a property of the SURFACE rather than of the edge.
+  3. **A DISABLED MODULE RENDERS, AND IS BADGED** (founder, 2026-08-06). Suppressing it would
+     lose the deprecation-time value that made the data browser's identical choice right —
+     the moment you most need to know what a manager could see is when deciding what to
+     export before deleting, and disabling is documented as step ONE of that sequence.
+     Rendering it unbadged would be a false claim, since a holder can open none of those
+     tabs. The premise that makes this free is machine-checked now: **zero RLS policies
+     anywhere reference `org_modules`** (a `pg_policies` test), so enablement changes
+     ROUTING and never REACH.
+  4. **NAMING A GATE IS NOT PASSING ONE.** `RenderAuthority`'s superadmin arm was the bare
+     literal `{ kind: 'platform-superadmin' }`. The mandatory `kind` closed the ACCIDENTAL
+     bypass — no defaulting boolean can hand a caller edge-bypassing authority by omission —
+     but any future action or script could type that literal and call `renderSurface()`
+     having checked nothing. It now carries a `SuperadminGate`: a `declare const unique
+     symbol` brand with NO runtime value anywhere, so the type cannot be written as an object
+     literal at all and the single `as` cast inside `requireSuperadmin()` is its only source.
+     A compile-time control, not a runtime one — `as never` still defeats it, and it is not
+     trying to stop that. It stops the plausible accident: a new call site copying the
+     literal without noticing the check was what the literal stood for.
+  5. **THIS BUILD SHIPS UNLOGGED; THE LOG GETS BUILT AS A FOLLOW-ON** (founder, 2026-08-06,
+     settling the tension CLAUDE.md had flagged as needing a dated decision rather than an
+     assumption). §8.1 point 6 makes the mode-2 session log a security requirement from v1,
+     and this surface is strictly MORE powerful than the logged one — so inheriting
+     "unlogged" from the data browser without argument was exactly the assumption to refuse.
+     What dissolved the objection was the founder's counter-proposal: **hierarchy-governed
+     log visibility**. The load-bearing objection had been the AUDIENCE (logging into
+     `view_as_sessions` publishes superadmin activity into every tenant's audit view); a
+     separate, superadmin-read-only table changes the audience and the objection goes with
+     it. The on-screen badge says "not logged" and is accurate for what shipped; the log is
+     purely additive. **Spec for the follow-on:** a NEW table, not `view_as_sessions` —
+     decisively because it is a DIFFERENT EVENT (it covers BOTH console tools, and the data
+     browser has no session, target_role, scope_ref or expiry), and because a
+     `view_as_sessions` row IS a capability, so mixing non-capability rows in makes safety
+     depend on a downstream re-check instead of on the row not existing. Shape roughly
+     `(actor_user_id, tool, org_id, module_key?, subject_user_id?, position?, scope_ref?,
+     created_at)`. Written by BOTH Owner Console tools — logging only the narrower one while
+     the `select *` data browser stays silent is the incoherent option. Visibility by the
+     **APPOINTMENT rule** (strict rank + scope coverage), NOT view-as's per-pair declaration:
+     a log row is metadata with no surface and no third-party secret, so per-pair entries
+     would be ceremony with no decision behind them, while "if you can remove someone, you
+     can review what they did" is one rule that derives for every module and brings scope
+     narrowing along for free. Append-only by GRANTS, never a trigger (`on delete set null`
+     fires BEFORE UPDATE triggers — docs/03 #18), and name `service_role` in the revoke.
+     **The trap:** a log row names TWO people; hierarchy answers who may read by ACTOR
+     (oversight), and reading by TARGET is §8.1 point 6's notify-the-target question, still
+     open. One table, two features; a single policy must not try to be both.
+  6. **THE PRINCIPLE THE FOUNDER STATED, which outlives this feature:** hierarchy-governed
+     visibility should apply to EVERY activity log on the platform. That implies a second,
+     independent question — should `view_as_sessions`' own whole-org admin read be narrowed
+     the same way? Same principle, own migration, own review. This is docs/13's parked
+     question, now with a principle attached.
+
+  **THE ADVERSARIAL REVIEW (2026-08-06), and what applying it changed.** Four parallel
+  subagents, one per claim cluster. *Provenance caveat, recorded because it matters more than
+  the finding count: requested as Fable, model UNVERIFIED — the subagent transcripts are 0
+  bytes on disk and the harness's injected "you are model X" string is demonstrably
+  unreliable. Treat as "Fable-requested, unverified".* **No ship-blocker inside the diff**;
+  claims 1, 4 and 7 survived, 2 and 3 broke, 5 survives but narrower than it read. What the
+  apply beat actually produced:
+
+  - **Finding 1 was a LIVE DEFECT OUTSIDE THE DIFF, in classroom code shipped 2026-07-31, and
+    it is the most reusable thing here.** The student surface declared `cls_review_comments`
+    a role table with `subjectColumn: null`, directly under a comment saying the rows are
+    ABOUT the student as reviewee. That is the contradiction: a subject column names a person
+    ON THE ROW, and a comment names its AUTHOR — the reviewee is one hop away through
+    `submission_id`. With no hop the entry fell back to "not per-person", so **every
+    student's tab rendered the whole class's peer-review comments, badged like a class-wide
+    announcement**. Severity, pinned down: a FALSE CLAIM, not a leak. The live student UI is
+    correct (it goes through `cls_comments_for_my_submission()`, whose return type has no
+    author column at all), only the view-as surface read the raw table, and a professor
+    already reads every comment in their course — so no data crossed a boundary. What broke
+    was the tab's claim to show what the STUDENT sees, which is the "a false claim the next
+    reader trusts" category. **Fix: an embed under `cls_submissions` keyed on `student_id`,
+    mirroring the definer's join condition for condition — not `excluded`, because the
+    student genuinely is meant to see their own** (the 2026-08-02 split: the COMMENTS on
+    their own work, never the peer GRADES). Retention comes along free, since a submission
+    the student can no longer see takes its comments with it.
+  - **Finding 5 was true and narrower than it read.** `personFilter` is a pure function of
+    `subjectColumn !== null`, so it says nothing about SCOPE. Salon `manager` and `cashier`
+    are location-narrowed and declare `subjectColumn: null` on every table — so every section
+    of theirs is "not per-person" and **no section could ever be badged**, while mode 3 with
+    scope "all" quietly combined every location. The page copy "affected sections say so" was
+    false 100% of the time for exactly the two positions mode 3 was built for. Fixed with a
+    second axis (`scopeFilter`), worded as a fact about the RENDER rather than an inference
+    about holders — an org-wide grant genuinely does see every location, so "more than one
+    holder sees" would be the opposite lie. **The fix shipped with its own instance of the
+    same bug, caught by the e2e test written for it:** the badge first keyed on the scope
+    resolver returning a null id list, but the whole-module bypass skips the node FILTER
+    while still RETURNING every id, so the two cases are indistinguishable from the result.
+    The page rendered both salon locations and badged nothing. `resolveScope` now tracks
+    `wholeTree` directly. Reusable form in docs/03: an honesty signal needs a test that
+    RENDERS it, because being visible to a human is its entire purpose.
+  - **Findings 2, 3 and 4 became the mechanisms above** (the gate token, the source scan, the
+    disabled-module badge). Finding 3 is worth restating as a rule: the existing
+    `.rpc()`/service-role source scan hardcoded three data-browser paths and **never saw the
+    new files**, and `scripts/*.mts` are not run by CI — so the invariant that makes the
+    whole UI gate sound rested on manual tracing. It is now in `rls.test.ts` too.
+  - **Finding 7 corrected a mechanism claim in this build's own header.** "A superadmin row
+    in `view_as_sessions` fails closed ONLY because `sessionStillAuthorised()` re-checks" is
+    an overstatement: the `view_as_guard_session()` BEFORE INSERT trigger rejects it outright,
+    first at `is_org_member(new.org_id)` (which the superadmin fails, because `is_org_member`
+    deliberately does NOT short-circuit on `is_superadmin` the way `is_org_admin` does) and
+    again at the `exists` over `module_roles`. Both conclusions were true; the stated
+    mechanism was the wrong one. Corrected in place so the follow-on's migration header does
+    not inherit it.
+  - **Finding 6 is RECORDED, NOT CLOSED, and is on the Next list.** `blinded` — the "your own
+    RLS may have emptied this" detector — is computed ONCE for the module's `scopeEntity`
+    table and never per role table. A future migration dropping an `is_org_admin` arm on an
+    ordinary role table yields a silent, error-free, UNBADGED empty section. The migration in
+    this very build (`20260806010000`) is proof the category already bit once; it was caught
+    only because it hit the scope-entity table, whose symptom is loud — every scoped section
+    empties at once.
+
+  **THE MIGRATION, and the general lesson in it.** `20260806010000_sal_locations_superadmin_read.sql`
+  restores the superadmin's SELECT on `sal_locations`, lost when `20260726010000` split a
+  `for all` policy per-command: **a `for all` policy's USING also covers SELECT, so splitting
+  one per-command silently drops an inherited read arm.** `sal_locations` was the ONLY table
+  in the whole schema where `service_role` saw rows and the superadmin saw ZERO WITH NO ERROR
+  — which renders every scoped salon section blank and reads as a finding about the position.
+  Two tests now stand behind it, and the second is the one that matters: the superadmin can
+  read every declared surface table *and* the scope entity **actually returns rows**. An
+  error-free assertion alone would have passed throughout the outage.
+
+  **VERIFICATION.** typecheck 9/9; `pnpm build` clean; db suite **97/97 (RLS 93/93)**; e2e
+  **47 tests**, floor raised to 47/93; **35/35 console probes and 22/22 data-browser probes,
+  zero skips** (`scripts/verify-console-view-as.mts`, new). The probe script earned its keep
+  on its first run by failing twice — once on a wrong table name, and once on a genuine
+  misreading worth recording: **the salon SERVICE CATALOG is `is_org_member(org_id)`,
+  org-wide on purpose (a customer must read services to book one), while the back-office
+  tables are `sal_can_operate_location`.** So the console's scope filter on the catalog
+  section is NARROWER than RLS — which is allowed, since a surface declaration may only
+  narrow — and comparing catalog row counts between two managers proves nothing about scope.
+
 - **2026-08-05 (NAIL-SALON REVIEW FOLLOW-UPS — four founder decisions, all taken on the
   review's own findings rather than new work. The review itself SHIPPED the same day: commit
   `89fae0a` with migration `20260804010000`, applied to prod and prod-verified 33/33.)**

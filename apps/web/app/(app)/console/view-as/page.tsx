@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { getModule, moduleRegistry } from '@platform/core'
 import { requireSuperadmin } from '@/lib/platform'
-import { browsableModuleKeys } from '@/lib/data-browser'
+import { orgModuleEntitlements } from '@/lib/data-browser'
 import { renderSurface, scopeNodes, type ScopeNode } from '@/lib/view-as'
 import {
   consolePositions,
@@ -51,12 +51,15 @@ const MODES: { value: ConsoleMode; label: string; blurb: string }[] = [
   {
     value: 3,
     label: 'The whole position surface',
-    blurb: 'No person filter: every row this position reads in the chosen scope. Shows MORE than any one holder sees — that is the point, and affected sections say so.',
+    blurb:
+      'No person filter: every row this position reads in the chosen scope. Shows MORE than any one holder sees unless you narrow it — that is the point. Sections say which axis was left open: “not one person”, “no scope filter”, or both. With no scope picked, a location-narrowed position combines every location, which no holder of it ever sees.',
   },
 ]
 
 export default async function ConsoleViewAsPage({ searchParams }: Props) {
-  const { supabase, userId } = await requireSuperadmin()
+  // `gate` is the proof this check ran — see SuperadminGate in lib/platform.ts.
+  // It is the only way to build the `platform-superadmin` authority below.
+  const { supabase, userId, gate } = await requireSuperadmin()
   const sp = await searchParams
   const mode: ConsoleMode = sp.mode === '2' ? 2 : sp.mode === '3' ? 3 : 1
 
@@ -68,11 +71,23 @@ export default async function ConsoleViewAsPage({ searchParams }: Props) {
 
   // Modules the org has EVER had, not `enabled = true` — the data browser's rule
   // (docs/03 #19), for the same reason: disabling a module must not hide the very
-  // history someone opens this tool to inspect.
-  const orgModuleKeys = org ? await browsableModuleKeys(supabase, org.id) : []
-  const modules = moduleRegistry.filter((m) => orgModuleKeys.includes(m.key))
+  // history someone opens this tool to inspect. Disabling is step ONE of
+  // deprecation, so the moment you most need to know what a manager could see is
+  // the moment the module is already off.
+  //
+  // THE FOURTH BYPASS, NAMED (review finding 4 + founder decision, 2026-08-06).
+  // `org_modules.enabled` is a routing gate that `requireOrgModule` 404s on, so a
+  // holder of a disabled module's position can open NOTHING — while this page
+  // renders their whole surface. That is deliberate, but it is only honest if the
+  // page says so, hence `entitlement.enabled` below. It is a routing gate and
+  // nothing more: no RLS policy anywhere references `org_modules`, so the rows
+  // themselves are identical either way.
+  const entitlements = org ? await orgModuleEntitlements(supabase, org.id) : []
+  const enabledOf = new Map(entitlements.map((e) => [e.moduleKey, e.enabled]))
+  const modules = moduleRegistry.filter((m) => enabledOf.has(m.key))
   const manifest = modules.find((m) => m.key === sp.module) ? getModule(sp.module!) : null
   const decl = manifest?.viewAs ?? null
+  const moduleDisabled = manifest ? enabledOf.get(manifest.key) === false : false
 
   const positions = decl ? consolePositions(decl) : []
   const chosen = positions.find((p) => p.position === sp.position) ?? null
@@ -113,11 +128,13 @@ export default async function ConsoleViewAsPage({ searchParams }: Props) {
           surface,
           org.id,
           nodes,
-          // THE BYPASS, named. See RenderAuthority in lib/view-as.ts: this skips
-          // the declared edge, the rank/coverage conditions and §8.1 point 10's
-          // caller-scope intersection — and nothing else. Not RLS, not the
-          // surface declaration.
-          { kind: 'platform-superadmin' },
+          // THE BYPASS, named — and now PROVEN: `gate` can only have come from
+          // requireSuperadmin(). See RenderAuthority in lib/view-as.ts. This
+          // skips the declared edge, the rank/coverage conditions, §8.1 point
+          // 10's caller-scope intersection, and (at the picker above, not here)
+          // the `org_modules.enabled` routing gate — and nothing else. Not RLS,
+          // not the surface declaration.
+          { kind: 'platform-superadmin', gate },
           plan.scopeRef,
           plan.subjectUserId,
         )
@@ -195,6 +212,7 @@ export default async function ConsoleViewAsPage({ searchParams }: Props) {
               {modules.map((m) => (
                 <option key={m.key} value={m.key}>
                   {m.name}
+                  {enabledOf.get(m.key) === false ? ' — disabled for this org' : ''}
                 </option>
               ))}
             </select>
@@ -269,6 +287,21 @@ export default async function ConsoleViewAsPage({ searchParams }: Props) {
           Render
         </button>
       </form>
+
+      {/* THE FOURTH BYPASS, said on screen. Rendering a disabled module is the
+          deliberate choice (its history is exactly what someone opens this tool
+          to inspect at deprecation time), but rendering it unbadged would be a
+          false claim: every tab below is one no holder can currently open. */}
+      {moduleDisabled && (
+        <div className="mb-6 rounded-lg border border-orange-300 bg-orange-50 p-4 text-sm text-orange-900">
+          <strong>{manifest!.name} is disabled for this organisation.</strong> No holder of any
+          position below can open these tabs today — <span className="font-mono">requireOrgModule</span>{' '}
+          404s them at the door. This page renders it anyway, on purpose: disabling is the first step
+          of deprecation, so this is exactly when someone needs to see what a position could reach
+          before deciding what to export or delete. The rows themselves are unaffected — enablement
+          is a routing gate and no RLS policy consults it.
+        </div>
+      )}
 
       {/* The mode explanation is shown for the CHOSEN mode rather than hidden in a
           tooltip: the founder's requirement for this surface was that the choice
@@ -350,7 +383,9 @@ export default async function ConsoleViewAsPage({ searchParams }: Props) {
         </p>
       )}
 
-      {rendered?.sections.map((s) => <SectionTable key={s.table} section={s} />)}
+      {rendered?.sections.map((s) => (
+        <SectionTable key={s.table} section={s} entityTable={rendered.entityTable} />
+      ))}
       {surface && rendered && <OffSurfaceLists surface={surface} />}
 
       {/* docs/13's read-only positions / ranks / pair-grid viewer, folded in

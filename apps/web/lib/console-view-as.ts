@@ -7,16 +7,41 @@
 // in the Owner Console and is deliberately absent from the in-module tab strips,
 // so those stay strictly by-the-rules.
 //
-// WHAT IT BYPASSES, PRECISELY — three things and no more:
+// WHAT IT BYPASSES, PRECISELY — four things and no more (it said THREE until
+// 2026-08-06; the adversarial review's finding 4 found the fourth, and the
+// count is stated because an exhaustive-sounding list that is not exhaustive is
+// worse than no list):
 //   1. the declared EDGE (`decl.edges[from][to]`), because there is no "from":
 //      a superadmin holds no module position at all;
 //   2. the strict-rank and scope-coverage conditions, for the same reason;
 //   3. the caller-scope INTERSECTION (§8.1 point 10), which for a caller with no
 //      grants resolves every scoped target to the empty set — see
-//      `RenderAuthority` in lib/view-as.ts.
+//      `RenderAuthority` in lib/view-as.ts;
+//   4. `org_modules.enabled` — the ROUTING gate `requireOrgModule` 404s on
+//      (lib/module-gate.ts). A disabled module renders here in full, which is
+//      the founder's decision (2026-08-06) because disabling is step ONE of
+//      deprecation and this is exactly when someone must see what a position
+//      could reach. It is badged on screen, since a holder can open none of
+//      those tabs. Safe to bypass for a reason worth writing down: ZERO RLS
+//      policies reference `org_modules`, so enablement changes routing and
+//      never reach.
 // It does NOT bypass RLS, and it does not bypass the SURFACE declaration. Every
 // query runs on the superadmin's own RLS-enforced client (§8.1 point 1's
 // keystone), and only a table some module declared can appear on screen.
+//
+// AND ONE THING IT DOES NOT BYPASS THAT LOOKS LIKE IT SHOULD: mode 2 is refused
+// on a surface with no per-person column, exactly as `viewAsCompleteness()`
+// refuses a declared mode-2 edge into one. The reason is a property of the
+// SURFACE, not of the edge, so an edge bypass cannot touch it.
+//
+// A KNOWN GAP, recorded rather than closed (review finding 6, 2026-08-06):
+// `blinded` — the "your own RLS may have emptied this" detector in
+// lib/view-as.ts — is computed ONCE, for the module's `scopeEntity` table, and
+// never per role table. A future migration that drops an `is_org_admin` arm on
+// an ordinary role table therefore yields a silent, error-free, UNBADGED empty
+// section. The migration in this very build is proof the category already bit
+// once; it was caught only because it hit the scope-entity table, which has the
+// loud symptom of emptying every scoped section at once. On the Next list.
 //
 // THE GATE IS A UI GATE, and that is sound here for exactly the reason docs/03
 // #19 gives for the data browser: every query this surface issues is one the
@@ -125,10 +150,19 @@
 //   2. In `view_as_sessions` a row IS A CAPABILITY, not merely a record: the
 //      in-module page resolves the cookie to a row and renders. Mixing
 //      non-capability rows in means a superadmin row could be replayed through
-//      that path. It fails closed today — `sessionStillAuthorised()` re-checks
-//      rank, scope and the declared edge against the caller's own grants, and a
-//      superadmin holds none — but for an audit table "cannot exist" beats "is
-//      rejected downstream".
+//      that path. It cannot exist today — CORRECTED 2026-08-06, review finding
+//      7: the earlier version of this line said it "fails closed only because
+//      `sessionStillAuthorised()` re-checks", which is an overstatement of the
+//      DOWNSTREAM defence and understates the real one. The
+//      `view_as_guard_session()` BEFORE INSERT trigger (20260731010000) rejects
+//      the row outright — first at `is_org_member(new.org_id)`, which the
+//      superadmin fails because `is_org_member` deliberately does NOT
+//      short-circuit on `is_superadmin`, and again at the `exists` over
+//      `module_roles`, which can never match for someone holding no grants. The
+//      app-layer re-check is a second line, not the line. Both conclusions
+//      stand; do not repeat the wrong mechanism in the follow-on's migration
+//      header. For an audit table "cannot be inserted" beats "is rejected
+//      downstream" either way.
 //   3. Retrofitting hierarchy reads onto `view_as_sessions` is its own migration:
 //      `view_as_sessions_select_org_admin` is whole-org today, narrowing it
 //      REMOVES reach tenants currently have, and it hits the wrinkle that parked

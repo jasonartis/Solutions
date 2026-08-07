@@ -6,6 +6,82 @@ lean. Newest first. Durable *decisions/conventions* live in their own docs (docs
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
 
 
+- **2026-08-06/07 (THE OWNER CONSOLE VIEW-AS — built, adversarially reviewed, findings
+  applied, verified. NOT YET PUSHED at time of writing: three commits sat local while the
+  verification beats ran, because `deploy` runs on master pushes.)** Durable reasoning →
+  docs/15's 2026-08-06/07 entry; reusable rules → docs/03 #18 (seven new bullets) + its
+  Test-discipline section; the log follow-on → docs/12 item 9. Headlines:
+  - **What shipped:** `/console/view-as`, superadmin-only, deliberately absent from the
+    in-module tab strips. Renders any declared position's surface in any org, bypassing the
+    declared edge, the rank/scope-coverage conditions, §8.1 point 10's caller-scope
+    intersection and `org_modules.enabled` — never RLS, never the surface declaration. The
+    three founder-specified modes are ONE AXIS (the mode picks the person axis; scope is an
+    independent picker in every mode), which is what makes mode 3 the answer to the case the
+    salon review refused to fake. docs/13's read-only positions/ranks/pair-grid viewer is
+    folded into the same screen, where the operator is about to step over one of those rules.
+  - **One migration,** `20260806010000_sal_locations_superadmin_read.sql`. The general
+    lesson: **a `for all` policy's USING also covers SELECT, so splitting one per-command
+    silently drops an inherited read arm.** `sal_locations` was the ONLY table in the schema
+    where `service_role` saw rows and the superadmin saw ZERO WITH NO ERROR — which empties
+    every scoped salon section and reads as a finding about the position.
+  - **The review found a live defect OUTSIDE the diff, in classroom code shipped 2026-07-31.**
+    The student surface declared `cls_review_comments` with `subjectColumn: null`, so every
+    student's tab rendered the whole class's peer-review comments. A FALSE CLAIM rather than a
+    leak — the live student page uses a definer that strips the author and filters to their
+    own submission, and a professor already reads every comment in scope — but the tab's
+    claim to show what the STUDENT sees was false. Now an embed under `cls_submissions` keyed
+    on `student_id`, mirroring that definer's join.
+  - **Two mechanisms worth reusing.** `SuperadminGate`: a `declare const unique symbol` brand
+    with no runtime value, so the privileged `RenderAuthority` arm cannot be written as an
+    object literal and `requireSuperadmin()`'s single cast is its only source — *naming a gate
+    is not passing one*. And the `.rpc()`/service-role **source scan**, which existed for the
+    data browser, hardcoded three paths, never saw these six files, and lived only in
+    `scripts/*.mts` — which CI does not run. It is in `rls.test.ts` now.
+  - **The unlogged question got its dated decision** instead of being inherited: this build
+    ships unlogged and says so on screen; the log GETS BUILT as a follow-on, in its own table,
+    with hierarchy-governed visibility (the founder's counter-proposal, which dissolved the
+    load-bearing objection by changing the audience rather than the rule). It is now docs/12
+    checklist item 9, because a log started later can never cover the period before it existed.
+  - **Verification:** typecheck 9/9, build clean, db suite **97/97 (RLS 93/93)**, e2e **47**,
+    floor raised to 47/93, **35/35 new console probes + 22/22 data-browser probes, zero
+    skips**. The new probe script failed twice on its first run and both were its own
+    mistakes — one wrong table name, and one real misreading: the salon SERVICE CATALOG is
+    `is_org_member(org_id)`, org-wide so customers can book, while the back office is
+    `sal_can_operate_location`. So the console's scope filter on that section is NARROWER
+    than RLS (allowed — declarations only narrow), and comparing catalog counts between two
+    managers proves nothing about scope.
+  - **The badge fix's OWN bug was caught by the test written for it,** which is the argument
+    for writing the test at the surface rather than only at the declaration. The first
+    implementation keyed the "no scope filter" badge on `scope.entityIds === null` — but the
+    whole-module bypass skips the node FILTER while still RETURNING every id, so the two
+    cases are indistinguishable from the result. The page rendered both salon locations and
+    badged nothing: the exact failure the badge exists to prevent, shipped inside the fix for
+    it. `resolveScope` now tracks `wholeTree` directly.
+  - **The full e2e run found that the 2026-08-06 FIXTURES had made two shipped tests
+    vacuous** — the sharpest finding of the apply beat, and it came from running the suite
+    rather than from reading. The peer-review rows were seeded onto the same homework the
+    grading-workflow e2e drives through its whole lifecycle. That did not fail the test; it
+    made it pass for the wrong reason (its "Dana D: pending" assertion was satisfied by the
+    SEED, not by the action under test) and surfaced two steps later as a missing Finalize
+    button. A seeded survey answer did the same to another test, whose student arrived
+    already answered. Fixed at the source: **Homework 0 (finished) and a second survey
+    (answered) now carry every fixture row, leaving the ones under test pristine.** Also
+    fixed an assertion that had been passing accidentally since 2026-07-31 — the view-as test
+    checked `cls_review_comments` appeared in the "deliberately leaves out" panel, but
+    `getByText` searches the whole page and it was matching the role section's own table
+    label; it now asserts one entry from each list that really populates that panel, plus
+    both halves of the embed (Dana's comment on Charlie's work present, Charlie's on Dana's
+    absent). Rule → docs/03 Test discipline.
+  - **A process cost worth not repeating — and the first diagnosis was WRONG.** Two full e2e
+    runs (~50 min) failed with EVERY test timing out at sign-in, the button stuck on
+    "Working…". The first was blamed on editing source mid-run, which was a real mistake but
+    not the cause. Measuring instead of theorising found two infrastructure faults: a dev
+    server left running from a session THREE DAYS earlier, which the local Playwright config
+    silently reuses, and Kong holding a stale auth route because the reset came after the
+    Kong restart rather than before. **Every-test-fails-at-sign-in is always infrastructure,
+    never code** — curl the auth token endpoint (502 = Kong, 400 = unseeded, 200 = the app
+    server) before forming any hypothesis. Both are now in CLAUDE.md's gotchas.
+
 - **2026-08-05 (NAIL-SALON REVIEW FOLLOW-UPS + PROD PUSH — four founder decisions, all on
   findings the review itself produced; same Opus session). SHIPPED: commit `89fae0a`, migration
   `20260804010000` applied to prod and prod-verified **33/33**, Vercel production `READY` —

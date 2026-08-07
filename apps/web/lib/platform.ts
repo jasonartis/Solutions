@@ -111,6 +111,33 @@ export async function requireOrgAdmin(orgSlug: string) {
 }
 
 /**
+ * PROOF THAT `requireSuperadmin()` ACTUALLY RAN — the token half of
+ * `RenderAuthority` (lib/view-as.ts).
+ *
+ * `declare const` means this symbol has NO runtime value ANYWHERE, including in
+ * this file, so a `SuperadminGate` cannot be written as an object literal at
+ * all. The single `as` cast inside `requireSuperadmin()` below is the only
+ * place in the codebase one can come from, and it sits directly under the
+ * `is_superadmin` check it attests to.
+ *
+ * WHY (adversarial review finding 2, 2026-08-06): `RenderAuthority`'s superadmin
+ * arm used to be the bare literal `{ kind: 'platform-superadmin' }`. The
+ * mandatory `kind` closed the ACCIDENTAL bypass — no defaulting boolean can give
+ * a caller edge-bypassing authority by omission — but NAMING a gate is not
+ * PASSING one: any future server action or script could type that literal and
+ * call `renderSurface()` having checked nothing, and it would type-check.
+ * docs/13 asked for a union no caller can invoke without naming the gate it
+ * passed; this is what makes the naming load-bearing.
+ *
+ * It is a compile-time control, not a runtime one — `as never` still defeats it,
+ * and it is not trying to stop that. What it stops is the plausible accident: a
+ * new call site that copies the literal out of this page without noticing that
+ * the check is what the literal was standing for.
+ */
+declare const superadminGate: unique symbol
+export type SuperadminGate = { readonly [superadminGate]: true }
+
+/**
  * The Owner Console gate: 404 unless the caller is the platform superadmin.
  *
  * Shared because there are now several superadmin-only pages, and the check was
@@ -139,7 +166,13 @@ export async function requireSuperadmin() {
     .single()
   if (!profile?.is_superadmin) notFound()
 
-  return { supabase, userId: user.id }
+  // THE ONE MINT of a SuperadminGate on the platform. Every line above is the
+  // check this token attests to; `notFound()` never returns, so reaching here
+  // IS the proof. Keep the cast here — moving it anywhere else would turn the
+  // token back into something a caller can fabricate.
+  const gate = {} as SuperadminGate
+
+  return { supabase, userId: user.id, gate }
 }
 
 export async function getProfile() {

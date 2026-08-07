@@ -305,3 +305,48 @@ full clean `db:reset` → seed → e2e suite run — 37/37 passed, including the
 speed-dating tests (docs/build-plan's open flake items are about test *ordering* sensitivity,
 not this change) — all via Playwright driving a real browser against the real local stack
 (no manual click-through session was done this pass).
+
+## Peer-review comments on the student surface — CORRECTED (2026-08-06)
+
+Found by the Owner Console view-as adversarial review, in code shipped 2026-07-31.
+
+**The defect.** The student surface declared `cls_review_comments` a role table with
+`subjectColumn: null`, directly under a comment saying the rows are ABOUT the student as
+reviewee. That is the contradiction: `subjectColumn` names a person ON THE ROW, and a
+comment names its AUTHOR — the reviewee is one hop away through `submission_id`. With no
+hop mechanism the entry fell back to "not per-person", so **any student's tab rendered
+EVERY student's peer-review comments in the class**, badged like a class-wide announcement.
+
+**Severity: a FALSE CLAIM, not a leak — and the distinction is the point.** The live student
+UI is correct and always was: `modules/classroom/ui/homework/[homeworkId]/page.tsx` calls
+`cls_comments_for_my_submission()`, a definer whose body is
+`join cls_submissions s ... where s.student_id = auth.uid()` and whose **return type has no
+author column at all**. Only the view-as surface read the raw table, and a professor already
+reads every comment in their course under their own RLS — so no data crossed a boundary.
+What broke was the tab's claim to show what the STUDENT sees, which is exactly the category
+docs/15 calls "a false claim the next reader trusts". It was invisible to every test because
+the table had zero seed rows until 2026-08-06.
+
+**The fix.** An embed under `cls_submissions` keyed on `student_id`, mirroring the definer's
+join condition for condition — the parent's subject column IS that join. NOT `excluded`: the
+student genuinely is meant to see their own, per the 2026-08-02 founder decision (a student
+sees the COMMENTS on their own homework, never the peer GRADES). Two properties come along
+for free: submission retention now hides a submission's comments with it, and the surface
+cannot drift from the definer without the parent's `subjectColumn` changing.
+
+**Deliberately unchanged: `author_id` is still shown.** That is more than the student sees,
+and it is correct — anonymity runs from other students and from the GA, never from the
+professor, who runs the process (founder, 2026-08-02). The row SET is now the same as the
+definer's; only the author column is additional, and the caveat says so.
+
+**Two stale claims in the old caveat are corrected rather than deleted**, because both were
+repeated elsewhere: `cls_comments_for_my_submission` is NOT callerless (the student homework
+page has called it since 2026-08-03), and a student-facing view of peer feedback therefore
+DOES exist. The 2026-07-29 ACL sweep's "dead function" list was true when written and stale
+by the time this surface quoted it.
+
+**Tests.** A declaration test (the table must not reappear as a bare role table; its embed
+parent must be per-person) plus a live one rendering the surface as the superadmin and
+asserting no other student's comment appears — with the fixture asserted CROSS-AUTHORED
+first, since with comments on one submission a broken filter looks identical to a working
+one. Also an e2e case at the Owner Console. Reusable rule → docs/03 #18.

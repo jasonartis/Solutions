@@ -389,6 +389,41 @@ edit anywhere else, that's a missing platform primitive — extract it, don't fo
       module-level staffer is often also the org owner (alice is both manager and owner of
       demo-salon). A keystone test run as her proves nothing about the manager position:
       grant a plain member the position for the test instead.
+    - **`subjectColumn` names the person ON THE ROW — if the person is one hop away, it is
+      an EMBED, never `null`.** A comment names its AUTHOR; the reviewee is reached through
+      the submission. Declaring `subjectColumn: null` because "no column fits" silently
+      reclassifies the table as class-wide, and the surface then renders every holder's rows
+      under one person's name — badged, misleadingly, exactly like a genuine announcement
+      table. The honest mechanism is an embed under a parent whose subject column IS that
+      person (mirroring whatever definer the live UI uses), or `excluded` if the target is
+      not meant to see it at all. Found live 2026-08-06 in classroom's student surface,
+      shipped 2026-07-31 and invisible to every test because the table had zero seed rows.
+    - **A per-person badge is only half the honesty; scope is the other half.** A position
+      narrowed by SCOPE rather than by PERSON has `subjectColumn: null` on every table, so a
+      person-filter badge can never fire for it — and a whole-module render then combines
+      every scope while the page claims "affected sections say so". Any surface that can be
+      rendered with an axis left open must badge THAT axis. State the badge as a fact about
+      the render ("no scope filter"), never as an inference about holders: a global grant
+      genuinely does see every scope, so "more than one holder sees" is the opposite lie.
+    - **Count your bypasses out loud, and expect the count to be wrong.** A superadmin
+      surface that says "it bypasses exactly these three things" is making a falsifiable
+      claim, which is why it is worth writing — the 2026-08-06 review found a fourth
+      (`org_modules.enabled`) precisely because the list invited the check. An
+      exhaustive-sounding list that is not exhaustive is worse than no list.
+    - **Naming a gate is not passing one.** A `{ kind: 'platform-superadmin' }` discriminated
+      union closes the ACCIDENTAL bypass (no defaulting boolean), but the literal is
+      structurally typeable by any future caller who checked nothing. Give the privileged arm
+      a token minted ONLY by the check itself — a `declare const unique symbol` brand has no
+      runtime value, so the type cannot be written as an object literal and one documented
+      cast inside the gate is its only source. It is a compile-time control (`as never` still
+      defeats it) and it is not trying to be more: it stops the plausible accident of a new
+      call site copying the literal without noticing the check was what it stood for.
+    - **An app-layer invariant that keeps a UI gate sound belongs in a SOURCE SCAN, and the
+      scan belongs where CI runs it.** "No `.rpc()` and no service-role client on this path"
+      cannot be caught by any runtime probe after the fact — by the time the call exists, the
+      gate has silently become a security boundary. Two failure modes, both hit: a scan that
+      hardcodes paths never sees the NEXT surface added (list the files, and assert the count
+      you scanned), and a scan living only in `scripts/*.mts` is not run by CI at all.
 
 ## The data browser (docs/13, built 2026-08-03)
 
@@ -488,6 +523,49 @@ others:
   way (a `not.toBeVisible()` passing because the test had closed the thing itself). → Make
   any toggle interaction IDEMPOTENT — read the state, act only if needed, then assert the
   state — rather than assuming a fresh render resets it.
+
+- **A negative that needs TWO subjects needs both of them seeded (2026-08-06).** "This
+  student's tab shows only their own peer-review comments" is unfalsifiable unless comments
+  exist on MORE THAN ONE student's submission: with comments on a single submission, a
+  surface that forgot to filter renders identically to one that filtered correctly. The
+  fixture was therefore seeded CROSS-AUTHORED on purpose, and the test asserts the
+  cross-authoring itself before asserting the absence. Same shape one level up: the second
+  salon location was seeded with DIFFERENT row counts from the first, so a scope filter that
+  silently does nothing shows as a wrong number rather than an identical one. → When the
+  claim is "A is shown and B is not", seed B and assert B exists first. → And when the
+  claim is about a READ RETURNING NOTHING, an error-free assertion is not enough: assert the
+  table holds rows (past RLS, via a direct SQL count) and that the caller sees some. The
+  `sal_locations` outage this build fixed would have passed an error-free check throughout.
+
+- **A FIXTURE MUST NOT PRE-SATISFY ANOTHER TEST'S STARTING CONDITION (2026-08-07).** The
+  vacuity rule usually bites a test; this is it biting the SEED. Peer-review rows were seeded
+  onto the same homework the grading-workflow e2e drives from `submitted` to `done`. That did
+  not fail the test — it made it PASS FOR THE WRONG REASON: the test clicks "Move GA-graded →
+  peer review" and asserts the roster shows "Dana D: pending", which the seeded assignments
+  already satisfied, so the assertion held whether or not the action worked. It surfaced two
+  steps later as a missing Finalize button, because the homework had never left `ga_grading`.
+  A seeded survey answer did the same to a different test, whose student arrived already
+  answered and was offered "Update" where it clicked "Submit". → When a fixture needs rows in
+  a table some test drives through a LIFECYCLE, give it **its own parent row** (a second,
+  already-finished homework; a second, already-answered survey) rather than adding rows to the
+  one under test. → And read a fixture addition as a question: *which existing assertion could
+  this now satisfy on its own?*
+  The same addition also produced three plain STRICT-MODE collisions — a second homework means
+  two review links, a second survey means two "Show results" buttons, and by the time the full
+  suite reaches the salon console an earlier test has put "Pedicure" on a bill as well as in
+  the catalog. → Scope every locator to its section or its subject, never to the page, and
+  remember that **an unscoped locator passes in isolation and trips only in a full run**,
+  which is the worse of the two failure modes.
+
+- **Test the BADGE at the surface, not only the declaration that feeds it (2026-08-06).** A
+  declaration test proves the surface is shaped right; it cannot prove the page says so. The
+  "no scope filter" badge's first implementation keyed on the resolver returning a null id
+  list — but the whole-module bypass skips the node FILTER while still RETURNING every id, so
+  the two cases were indistinguishable from the result and the badge never fired. The page
+  rendered every location and claimed nothing: the exact failure the badge exists to prevent,
+  shipped inside the fix for it, and caught only by the e2e case that opened the page and
+  looked. → Any honesty signal — a badge, a caveat, a "we could not check" — needs a test
+  that renders it, because its whole purpose is to be visible to a human.
 
 The shared shape: **absence is only evidence when presence was demonstrated under the
 same conditions.** Whenever a test asserts something is missing, ask what would have to be
