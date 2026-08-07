@@ -163,6 +163,15 @@ Everything below is open but unranked:
   arm at all.
 - ~~**Seed the salon's back office.**~~ **DONE 2026-08-05** — see Now. (Salon demo logins are
   now: **frank = admin**, alice = manager, eve = cashier, dana = worker, charlie = customer.)
+- **`cls_exam_papers` IS STILL ZERO-ROW, so the student/GA exam section is UNFALSIFIABLE.**
+  Carried over from the 2026-08-06 fixtures beat, which closed the other four classroom
+  zero-row tables and left this one deliberately: it needs a `cls_exams` parent that nothing
+  seeds. Consequence, in the vacuity rule's terms: that section renders empty on every
+  surface, and empty is indistinguishable from broken — the keystone test asserts only that
+  the read does not ERROR. Fix is a seeded exam plus a paper row for one student; the
+  classroom exam e2e already creates exams through the UI, so check for a collision with it
+  first (the 2026-08-07 lesson: a fixture must not pre-satisfy another test's starting
+  condition). Small — Sonnet.
 - **STILL OPEN, and the one gap the salon review deliberately did not close: machine-enforce
   "every module table is classified on every surface."** Today it is HAND-checked —
   `viewAsCompleteness()` only refuses a table appearing in two lists; it never enumerates the
