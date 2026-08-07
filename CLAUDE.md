@@ -53,44 +53,16 @@ floor raised to **47/93**, **35/35 new console probes + 22/22 data-browser probe
 skips** (`scripts/verify-console-view-as.mts`). Full detail → journal + docs/15's
 2026-08-06/07 entry; reusable rules → **docs/03 #18** (seven new bullets) + Test discipline.
 
-**Previously (2026-08-05):** **NAIL-SALON VIEW-AS SURFACE REVIEW IS ON PROD AND PROD-VERIFIED**
-(commit `89fae0a`, migration `20260804010000`; **33/33 prod probes**, and the Vercel production
-deploy is `READY`, which proves CI was green since `deploy` has `needs: check`). Module 5's
-own §8.1 point 9 review, the follow-on the founder sequenced ahead of the Owner Console: nine
-pairs answered, three surfaces written, all 12 `sal_` tables classified per position.
-**Mode 1 ON for all five staff-to-staff pairs, mode 2 additionally for the two into `worker`,
-all four customer pairs OFF (re-decided, not inherited).**
-
-**The finding, which generalises past this module: mode 1 answers "what can this POSITION
-see?", mode 2 answers "what does this PERSON see?", and mode 2 is only honest where RLS
-narrows PER PERSON.** Salon narrows per LOCATION for manager/cashier (so no row is about
-either as a person — filtering an authorship stamp would UNDER-show the tab, and
-`viewAsCompleteness()` refuses mode 2 without a per-person table) and per PERSON only for
-worker. The migration is just those two ON pairs, because `module_view_as_edge()` mirrors
-MODE 2 only — it gates the session INSERT, and mode 1 writes nothing.
-
-Full reasoning, the surface findings (a cashier reads ZERO revenue rows; a worker cannot read
-even the earnings carrying their own `worker_id`), the two rode-along honesty fixes, and what
-the review deliberately left open → **docs/15 (2026-08-04)**, journal, module-5 spec; reusable
-rules → **docs/03 #18** (six new bullets) + its Test-discipline section. Verification:
-typecheck 9/9, RLS **90/90**, **36/36 probes zero skips**, 3 new e2e; floor raised (e2e 42 /
-rls 86). **Two Opus adversarial reviews: no ship-blocker on the
-mechanism, but four FALSE factual claims in the notes and a keystone test that only proved the
-query parsed — all fixed.**
-
-**Then four founder-approved follow-ups, same session (2026-08-05 — full reasoning in docs/15's
-2026-08-05 entry):** (a) the dead `columns?` field on `PersonalLayer`/`ExcludedFromSurface` is
-GONE — the overlap check made it unusable, so column decisions live in the role allow-list plus
-a caveat, and `excluded: []` means "no whole table withheld", not "nothing withheld";
-(b) **the CI test-count ratchet now counts TESTS** — its RLS half was an unanchored
-`grep -c "it("` that also matched every `.limit(` line (real 90, measured 105), now anchored
-with an exact floor (docs/12); (c) **the salon seed gained a paid visit, the bookkeeping rows,
-and a salon ADMIN (frank)** — which closes the review's one open gap, since only an `admin` can
-open the Manager tab and there was nobody to sign in as; a new e2e renders it and asserts a real
-earnings row; (d) **e2e timeouts are now environment-dependent and CI is deliberately STRICTER**
-(local `expect` 15s / test 45s; CI keeps 5s, because it serves a PREBUILT app where slow means
-slow). **Still known-open, on purpose:** the 12-table accounting is hand-checked, not
-machine-enforced — see the Next list.
+**Previously (2026-08-05):** **NAIL-SALON VIEW-AS SURFACE REVIEW ON PROD, PROD-VERIFIED**
+(`89fae0a`, migration `20260804010000`, 33/33 prod probes). Nine pairs answered, three
+surfaces written, all 12 `sal_` tables classified: **mode 1 ON for all five staff-to-staff
+pairs, mode 2 additionally for the two into `worker`, all four customer pairs OFF.** Its
+generalisable finding — *mode 1 answers "what can this POSITION see?", mode 2 "what does this
+PERSON see?", and mode 2 is only honest where RLS narrows PER PERSON* — is a durable rule in
+**docs/03 #18**, not here. Four founder-approved follow-ups the same day (the dead `columns?`
+field removed; the CI ratchet fixed to count TESTS; the salon seed gained an admin; e2e
+timeouts made environment-dependent) → journal + docs/15's 2026-08-05 entry. Still open on
+purpose: the 12-table accounting is hand-checked, not machine-enforced — see the Next list.
 
 **Previously:** the **per-person data browser is ON PROD** (`070a73b`, zero migrations —
 Vercel production `READY`, which proves CI was green since `deploy` has `needs: check`);
@@ -104,8 +76,13 @@ TRUNCATE. Blow-by-blow for all three → docs/history/platform-journal.md; rules
 #17/#18/#19.
 
 **Next / open (pick WITH the founder — do not start unprompted; details in docs/15 §11).
-RECOMMENDED ORDER as of 2026-08-04 — items 1–3 are done; the next real piece is the Owner
-Console view-as (Opus territory, not Sonnet), then unranked follow-ons:**
+AS OF 2026-08-07: numbered items 1–5 are ALL DONE — the Owner Console view-as shipped and is
+prod-verified, which was the last ranked piece. What remains is item 6 (a founder decision,
+not a task) plus the unranked list below it. THE RECOMMENDED NEXT REAL PIECE IS NOW THE
+SUPERADMIN LOOKUP LOG (item 4a — Opus, specced, and on docs/12's pre-launch checklist because
+a log started later can never cover the period before it existed). The numbered items are kept
+struck-through rather than deleted because several carry the dated reasoning that produced
+them:**
 
 - ~~**1. Confirm CI/deploy for slice 5.**~~ **DONE 2026-08-02** — prod app and prod schema in
   sync; a `READY` production deploy proves CI was green (`deploy` has `needs: check`).
@@ -119,6 +96,12 @@ Console view-as (Opus territory, not Sonnet), then unranked follow-ons:**
   `db:reset` → seed → full e2e run on 2026-08-03 (verifying the peer-review-comments fix)
   reproduced BOTH speed-dating tests passing cleanly — so the flake, when it happens, is
   intermittent even under the documented failure-inducing order, not a hard regression.
+  **More evidence, 2026-08-07: THREE full clean-seed suite runs in one session and the
+  speed-dating tests passed in every one** (the final run 47/47, exit 0). That is now five
+  clean full runs across two sessions with no reproduction. Not proof — the standing rule is
+  still *judge a flake by CI, not locally* — but enough that this should probably be CLOSED
+  at the next docs beat rather than carried indefinitely. Closing it would also let this
+  bullet and the two harness-fix bullets below collapse into one.
 - ~~**4. THE OWNER CONSOLE VIEW-AS.**~~ **DONE 2026-08-06/07 — see Now.** Three follow-ons
   it produced, all recorded rather than closed:
   **(a) THE SUPERADMIN LOOKUP LOG** — founder-decided, spec settled, now docs/12 item 9 and
@@ -445,6 +428,24 @@ in the sections below.
   (docs/15 decision log, docs/03 conventions, docs/12 safeguards), not here. Same
   principle for the other always-loaded lists (gotchas, standing decisions): prune/merge
   rather than let them grow unbounded. A fresh chat should never pay for the full journal.
+- **DELETING A WORKING NOTE IS A STATE MIGRATION, NOT A CLEANUP (learned 2026-08-07, after
+  it nearly lost three things).** A handoff/scratch note holds two kinds of content: a task
+  list, and STATE — open items, known gaps, findings parked for later. Ticking off the task
+  list and running `git rm` silently drops the second kind. **Before deleting one, grep it
+  for open-state markers** (`STILL`, `OPEN`, `NOT`, `left`, `gap`, `empty`, `deliberately`,
+  `unresolved`, `follow-on`) **and check each hit against the repo.** Three real misses that
+  session: `cls_exam_papers` (zero-row, unfalsifiable surface section) and the rank/tier-
+  wrapper verification gap both lived ONLY in the deleted note; a third was self-inflicted.
+  Two traps that made them hard to see, both worth knowing on their own:
+  - **A grep that HITS is not proof the thing is documented — read the hits.** Searching
+    "rank remap" returned four confident-looking matches, all about a DIFFERENT mechanism
+    (the view-as pair check, which proves rank parity and pair coverage and says nothing
+    about what a `rank >= N` wrapper admits). Adjacent vocabulary manufactured a false
+    positive. This is the vacuity rule in search form: presence must be READ, not counted.
+  - **A status change is a multi-file edit until proven otherwise.** Marking docs/13's
+    read-only pair-grid viewer BUILT left CLAUDE.md still calling it parked, because the same
+    fact lived in two places. After flipping any DONE/BUILT/SHIPPED claim, grep for every
+    other reference to it.
 
 - Never build platform primitives speculatively — extract them when a second module needs the same thing.
 - Migrations: forward-only, additive-first, always run locally before cloud.

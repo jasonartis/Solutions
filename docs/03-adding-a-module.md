@@ -573,6 +573,15 @@ true for it to pass on an empty universe — and then assert that the universe i
 
 Related, and the reason this keeps mattering: a vacuous test does not merely fail to catch
 a bug, it actively reports that the bug is absent. That is worse than having no test, which
+**The rule extends past tests, to SEARCH (2026-08-07).** "Is this documented?" answered by a
+grep that returns hits is the same error in a different costume: the hits prove the vocabulary
+exists somewhere, not that the CLAIM does. Searching `rank remap` returned four confident
+matches — every one about the view-as pair check, a different mechanism that proves rank
+parity and pair coverage and says nothing about what a `rank >= N` tier wrapper admits. The
+gap read as covered and was nearly lost. → **Read the hits, never count them**, and be most
+suspicious when the matched vocabulary is adjacent to what you meant rather than identical to
+it. Adjacent vocabulary is what manufactures the false positive.
+
 is why "no silent skips" is enforced in the probe scripts (a skipped probe prints loudly
 and is never counted as a pass).
 

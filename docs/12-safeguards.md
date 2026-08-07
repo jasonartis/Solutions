@@ -44,6 +44,12 @@ rot; pipelines don't.
   additive-first (CLAUDE.md working agreements).
 - Never put the service-role key anywhere but the worker (docs/03 #14).
 - Never run bulk mutations against prod without a fresh backup (below).
+- **Never `git rm` a handoff/working note until its OPEN ITEMS have been diffed
+  into the repo** — not just its task list ticked off. Grep the file for
+  `STILL`/`OPEN`/`NOT`/`left`/`gap`/`empty`/`deliberately`/`follow-on` and check
+  each against the docs. Deleting one is a state migration, not a cleanup; the
+  2026-08-07 session nearly lost two real findings this way (CLAUDE.md session
+  hygiene has the full lesson and the two traps that hid them).
 - Never skip the docs/03 #12 rhythm for schema/RLS work: agent-draft →
   security-review → live verification, regardless of model.
 - **Never `migrate:prod` a slice whose APP commit is still unpushed.** Production
