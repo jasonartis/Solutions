@@ -587,6 +587,38 @@ vocabulary gets locked.
 
 ## Decisions log
 
+- **2026-08-09 (FOUNDER PRINCIPLE, stated plainly for the first time — recorded here because
+  this document is where anyone designing visibility will look, and it had only ever been
+  written down as an aside in a feature spec).** Reacting to a proposal that would have let a
+  salon customer see when the salon admin last signed in, the founder's words:
+
+  > **"There should never be any visibility to someone lower of someone higher!"**
+
+  Treat this as the default for any NEW visibility surface: reads flow DOWN a ladder and
+  sideways at best, never up. It is the same instinct behind the appointment rule (§4) and
+  behind the lookup log's "only the superadmin" read, now stated as a general value rather than
+  re-derived per feature.
+  **THE HONEST COMPLICATION, which is why this entry exists rather than a one-liner: the
+  platform already breaks it in one place, deliberately.** `profiles_select_shared_org`
+  (`20260708020000`) is FLAT — share any org, read the whole profile row, no rank arm at all.
+  Proven live 2026-08-09: charlie, a rank-0 salon customer, reads all 8 profiles he shares an
+  org with, including frank the rank-3 admin. That was a considered decision (a professor's
+  roster was rendering raw UUIDs) and it covers only static identity — name, email — which a
+  customer who books with frank already knows.
+  So the principle governs **behavioural** data, and identity lookup is the standing exception.
+  Two consequences already live:
+  - **RLS filters ROWS, NEVER COLUMNS**, and column privileges are per-ROLE not per-row. So any
+    column added to `profiles` inherits that flat visibility and there is no way to make it
+    private. This is why engagement monitoring's `last_sign_in_at` went onto a superadmin-only
+    table instead of the `profiles` mirror its own spec called for (docs/17 §5).
+  - **Whether to narrow `profiles_select_shared_org` itself is OPEN** and on CLAUDE.md's list.
+    It touches every roster in every module, so it needs its own migration and review.
+  **And the shape this principle takes when it is finally implemented as a rank arm is NOT the
+  obvious one** — see the 2026-08-07/08 entry below and docs/17 §7.1: `module_position_rank`
+  returns 0 for anyone unmapped and never null, so "I outrank the subject" silently lets every
+  rank-1 holder read everyone who is off the ladder entirely. *Unranked is not rank 0.* An arm
+  enforcing this principle must require both parties to be on the ladder and fail closed
+  otherwise.
 - **2026-08-09 (THE RANK ADMISSION MAP — the rank/tier-wrapper verification gap, CLOSED. No
   migration: one test plus one generated doc. Opus session; adversarial review run on the
   test itself, since a checker that lies is the exact failure mode it exists to prevent.)**
