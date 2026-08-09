@@ -88,8 +88,17 @@ decision log, docs/03 conventions, docs/12 safeguards) — this is the chronolog
     is on the open list. Nothing rests on it — both findings that mattered were independently
     checked against documented Postgres behaviour and the live catalog.
   - **Verification: typecheck 9/9, build clean, db 121/121 (real run, not cached), e2e 49/49
-    exit 0 CI-STRICT, prod pre-flight 11/11.** Local capture healthy under load (99 events across
-    a full suite run). Prod deploy + `scripts/prod-verify-login-events.mts` in the same session.
+    exit 0 CI-STRICT, prod pre-flight 11/11, PROD-VERIFY 51/51 — including the control that
+    matters most, CAPTURE PROVEN LIVE ON PROD** (signed in as a demo user against production and
+    watched a row appear; the whole document exists because a table can look right locally and be
+    permanently empty there). Prod ACL survived prod's default privileges: `anon` and
+    `service_role` hold NOTHING on both tables. CI green on `4ed2958` (production READY, and
+    `deploy` has `needs: check`). Local capture healthy under load (99 events across a full suite
+    run). **The worker's prune WRAPPER was exercised separately, because the RLS suite tests the
+    FUNCTION and not its only caller** — run against local with two 120-day rows planted, it
+    connected as the owner over `DATABASE_URL`, deleted exactly 2, logged correctly and returned a
+    real `number` (the driver hands back `bigint` as a string, so that conversion was worth
+    proving). So retention works end-to-end; only the prod worker DEPLOYMENT is outstanding.
 
 - **2026-08-09 (THE RANK ADMISSION MAP — docs/13's rank/tier-wrapper gap, closed. One test,
   one generated doc, zero migrations. Opus session, founder chose the mechanism from three
