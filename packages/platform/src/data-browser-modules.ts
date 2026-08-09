@@ -90,8 +90,29 @@ export const platformDataBrowser = declareDataBrowser({
       limit: 100,
       note:
         'Activity ABOUT the person, not data they entered: rows where they were viewed, and ' +
-        'rows where they did the viewing. Note what is NOT here — the Owner Console\'s ' +
-        'superadmin view-as is unlogged by founder decision, so it leaves no row to find.',
+        'rows where they did the viewing. This covers IN-MODULE view-as only; the Owner ' +
+        'Console\'s two superadmin tools record to superadmin_lookup_log instead (below), ' +
+        'because a console lookup is a different event and a view_as_sessions row is a ' +
+        'capability rather than merely a record.',
+    },
+    {
+      table: 'superadmin_lookup_log',
+      activity: true,
+      label: 'Owner Console lookups naming them',
+      personColumns: ['actor_user_id', 'subject_user_id'],
+      orgColumn: 'org_id',
+      orderBy: { column: 'created_at', ascending: false },
+      limit: 100,
+      note:
+        'Every time a platform superadmin used the Owner Console to look at this person, ' +
+        'with which tool. INCLUDED RATHER THAN OMITTED ON PURPOSE: this tool\'s promise is ' +
+        'to enumerate everything held about a person, and "we looked at you, on these dates" ' +
+        'is genuinely part of that answer — it is exactly what a subject-access request ' +
+        'would have to disclose. Leaving it out to keep the page tidy would make the ' +
+        'completeness claim false, which is the one failure this tool cannot afford. ' +
+        'Reading it still requires being a superadmin (its RLS has no subject arm), so ' +
+        'surfacing it here tells the SUBJECT nothing — whether to notify targets is still ' +
+        'an open product question (docs/15 §8.1 point 6).',
     },
   ],
   omitted: [],

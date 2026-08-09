@@ -12,6 +12,7 @@ import {
 } from '@/lib/console-view-as'
 import { SectionTable } from '@/components/view-as/section-table'
 import { OffSurfaceLists } from '@/components/view-as/off-surface'
+import { logSuperadminLookup } from '@/lib/superadmin-log'
 
 // The Owner Console view-as. Design, what it bypasses, and the dated UNLOGGED
 // decision all live in lib/console-view-as.ts's header — read that first; this
@@ -140,6 +141,31 @@ export default async function ConsoleViewAsPage({ searchParams }: Props) {
         )
       : null
 
+  // THE LOOKUP LOG (docs/15 2026-08-06/07 decision 5; lib/superadmin-log.ts).
+  //
+  // Written at exactly the point a surface is actually about to be shown — the
+  // same condition `rendered` is computed under, so merely populating the
+  // pickers logs nothing. A log of "opened the console" would bury the rows that
+  // matter in noise; a log row here means a real position surface was rendered.
+  //
+  // Awaited BEFORE the return rather than fired and forgotten: an unlogged
+  // lookup must not be able to overtake its own log entry on a slow write. The
+  // outcome is badged below rather than thrown — see the tradeoff argued in
+  // lib/superadmin-log.ts's header (breaking the console when the log hiccups
+  // would defeat the debuggability this pair of tools exists for; silently
+  // swallowing the failure would be worse than either).
+  const logged =
+    rendered && org && manifest && chosen
+      ? await logSuperadminLookup(supabase, {
+          tool: 'view-as',
+          orgId: org.id,
+          moduleKey: manifest.key,
+          subjectUserId: plan?.ok ? plan.subjectUserId : null,
+          position: chosen.position,
+          scopeRef: plan?.ok ? plan.scopeRef : null,
+        })
+      : null
+
   const qs = (over: Record<string, string | undefined>) => {
     const params = new URLSearchParams()
     const merged = {
@@ -180,8 +206,12 @@ export default async function ConsoleViewAsPage({ searchParams }: Props) {
         <span className="rounded bg-red-100 px-1.5 py-0.5 font-semibold uppercase tracking-wide text-red-800">
           bypasses declared edges
         </span>
+        {/* WAS "not logged" until 2026-08-07, and the badge was accurate for what
+            shipped on 2026-08-06. The log is now built (docs/15 decision 5), so
+            leaving the old badge would be a false claim on the operator's own
+            screen — the category this codebase treats as a first-class defect. */}
         <span className="rounded bg-gray-100 px-1.5 py-0.5 font-semibold uppercase tracking-wide text-gray-600">
-          not logged
+          logged
         </span>
         <span className="rounded bg-gray-100 px-1.5 py-0.5 font-semibold uppercase tracking-wide text-gray-600">
           read-only
@@ -358,6 +388,20 @@ export default async function ConsoleViewAsPage({ searchParams }: Props) {
             </span>
           )}
         </div>
+      )}
+
+      {/* A LOOKUP THAT COULD NOT BE LOGGED SAYS SO, LOUDLY. The render is allowed
+          to proceed (lib/superadmin-log.ts argues that tradeoff), but the
+          operator must never be left believing an unlogged lookup was recorded —
+          that is docs/03 #19's "render 'we could not check', never a confident
+          blank" applied to writing instead of reading. */}
+      {logged && !logged.logged && (
+        <p className="mb-4 rounded border border-red-300 bg-red-50 p-2 text-xs text-red-800">
+          <strong>This lookup was NOT recorded in the superadmin lookup log</strong> ({logged.error}).
+          The surface below still rendered, and everything you can see here you could already read —
+          but the audit trail has a hole where this view should be. Treat it as a bug worth chasing,
+          not a result.
+        </p>
       )}
 
       {rendered?.scopeError && (

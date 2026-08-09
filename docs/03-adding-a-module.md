@@ -330,6 +330,37 @@ edit anywhere else, that's a missing platform primitive — extract it, don't fo
       FK actions working, which is why `vm_moderation_log` has no such trigger. Found
       live by the second view-as review, after the first review had (correctly) required
       the `set null` FKs.
+      **THE RULE GENERALISES PAST TRIGGERS — learned again 2026-08-07, in a new disguise.**
+      A CHECK CONSTRAINT re-creates the identical trap, because a CHECK is re-evaluated on
+      every UPDATE *including the real UPDATE Postgres performs to satisfy an FK action*.
+      The superadmin lookup log's review proposed `subject_user_id is not null` for its
+      data-browser rows — obviously true of that tool, and it would have made **every person
+      ever browsed permanently undeletable**. General form: **any constraint that forbids the
+      null an FK action is about to write turns "the log outlives what it describes" into
+      "what it describes cannot die."** The test to apply to every clause of an audit table's
+      CHECK: could an `on delete set null` write a value this clause rejects? Prove it with a
+      test that deletes a referenced row and asserts BOTH halves — the delete succeeds, and
+      the log row survives with a nulled reference.
+    - **"Unranked" and "rank 0" are not the same thing** (2026-08-07, the superadmin lookup
+      log). `module_position_rank(module_key, role)` returns **0 for any unmapped pair and
+      never null** — its inner CASE falls through `coalesce` to the generic tier table, whose
+      `else` is 0. So a hierarchy test written as `rank(reader) > rank(actor)` treats anyone
+      OUTSIDE the ladder (a platform superadmin holds no module position at all) as sitting at
+      the BOTTOM of it, and every rank-1 holder on the platform then "strictly outranks" them.
+      For an oversight log that is a total inversion of the intended hierarchy, and it is
+      silent and error-free. **Before writing any rank comparison, ask what the function
+      returns for a participant who is not on the ladder at all** — and if the answer is 0,
+      the comparison needs an explicit `is not null` guard on a recorded position, or it needs
+      not to exist. Rank 0 is the bottom of a ladder; unranked is not on it.
+    - **An audit-log read arm keyed on WHO YOU WERE outlives the authority it was granted
+      for** (2026-08-07). `actor_user_id = auth.uid()` looks like the obvious way to let
+      someone review their own activity, and it is stamped once and never changes — while the
+      privilege that justified it (`profiles.is_superadmin`, a module seat, an org role) is a
+      separate mutable fact with nothing tying the two together. Demote the person and they
+      keep reading their own history forever, which is exactly the suspected-misuse case the
+      log exists for. Key read arms on who the caller **is**, not who they **were**. Note the
+      usual consequence: once conditioned on current authority, a self-read arm is often a
+      strict subset of the oversight arm and should simply be deleted rather than fixed.
     - **Every "X cannot read this" assertion needs a non-emptiness control.** A clean seed
       has no `cls_review_assignments` and no `cls_survey_answers`, so "the GA sees nothing"
       passes because the table is EMPTY, not because RLS hides it. Assert a privileged

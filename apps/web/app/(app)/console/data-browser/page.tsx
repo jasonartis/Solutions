@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { requireSuperadmin } from '@/lib/platform'
 import { browsePerson, browsableModuleKeys, subjectsIn } from '@/lib/data-browser'
 import DataBrowserResults from '@/components/data-browser/results'
+import { logSuperadminLookup } from '@/lib/superadmin-log'
 
 // The per-person data browser (docs/13, founder decision 2026-08-02).
 //
@@ -19,9 +20,19 @@ import DataBrowserResults from '@/components/data-browser/results'
 // professor the day the founder decides to expand it (docs/13 answer 1, which
 // says it would then follow view-as access).
 //
-// UNLOGGED, like the rest of the Owner Console — and here that is simply what
-// happens, not something suppressed: reading is the unstamped side of the
-// platform everywhere, and this page writes nothing at all.
+// LOGGED SINCE 2026-08-07 (docs/15 2026-08-06/07 decision 5; the DB half is
+// migration 20260807010000, the app half lib/superadmin-log.ts).
+//
+// This comment used to read "UNLOGGED, like the rest of the Owner Console — and
+// here that is simply what happens, not something suppressed: reading is the
+// unstamped side of the platform everywhere, and this page writes nothing at
+// all." Both of its factual claims are now false, and it is corrected in place
+// rather than deleted because the REASONING it recorded is what got overturned:
+// "reads are the unstamped side" is true of the platform generally and was
+// exactly the wrong inference HERE, because this tool is `select *` over every
+// row that names a person — the most revealing read on the platform, and the
+// one whose absence from any log made logging only its narrower sibling
+// incoherent (docs/15 decision 5's own words).
 
 type Props = {
   searchParams: Promise<{ org?: string; subject?: string }>
@@ -44,6 +55,24 @@ export default async function DataBrowserPage({ searchParams }: Props) {
 
   const moduleKeys = org ? await browsableModuleKeys(supabase, org.id) : []
   const result = org && subject ? await browsePerson(supabase, org.id, subject.userId, moduleKeys) : null
+
+  // THE LOOKUP LOG. Gated on the same `org && subject` condition as the lookup
+  // itself, so populating the org/person pickers records nothing — a row here
+  // means a real person was actually browsed.
+  //
+  // `module_key`, `position` and `scope_ref` are all null and that is not a gap:
+  // this tool spans every module the org has ever had in ONE lookup, so it has
+  // no single module key, and it has no notion of a position or a scope at all.
+  // The table's shape CHECK requires exactly this for `tool='data-browser'`, so
+  // the asymmetry with view-as is enforced rather than merely intended.
+  const logged =
+    org && subject
+      ? await logSuperadminLookup(supabase, {
+          tool: 'data-browser',
+          orgId: org.id,
+          subjectUserId: subject.userId,
+        })
+      : null
 
   return (
     <main className="mx-auto max-w-6xl p-6">
@@ -94,6 +123,16 @@ export default async function DataBrowserPage({ searchParams }: Props) {
           {org && subject ? 'Refresh' : 'Show'}
         </button>
       </form>
+
+      {/* Same honesty rule as the console view-as: a lookup that could not be
+          logged says so rather than passing itself off as recorded. */}
+      {logged && !logged.logged && (
+        <p className="mb-4 rounded border border-red-300 bg-red-50 p-2 text-xs text-red-800">
+          <strong>This lookup was NOT recorded in the superadmin lookup log</strong> ({logged.error}).
+          The results below still rendered, and everything shown is something you could already read —
+          but the audit trail has a hole where this lookup should be. Treat it as a bug, not a result.
+        </p>
+      )}
 
       {org && subjects.length === 0 && (
         <p className="rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-500">

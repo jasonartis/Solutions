@@ -6,6 +6,62 @@ lean. Newest first. Durable *decisions/conventions* live in their own docs (docs
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
 
 
+- **2026-08-07/08 (THE SUPERADMIN LOOKUP LOG — built, reviewed at three lenses, findings
+  applied, verified. Migration `20260807010000`. Opus session; reviews requested as Fable,
+  model UNVERIFIED.)** Durable reasoning → docs/15's 2026-08-07/08 entry; reusable rules →
+  docs/03 (three new bullets in the view-as/test-discipline section); checklist → docs/12
+  item 9, now closed. Headlines:
+  - **What shipped:** `public.superadmin_lookup_log` + `superadmin_log_guard()`, and the app
+    half in `apps/web/lib/superadmin-log.ts` wired into BOTH Owner Console tools. One row per
+    real lookup — not per page open: the write is gated on the same condition as the render
+    itself, so populating a picker records nothing. Append-only by GRANTS with `service_role`
+    named in the revoke (docs/03 #17 applied first time, unlike `view_as_sessions` which
+    needed `20260802010000` to learn it on prod). Verified locally: `authenticated` holds
+    INSERT+SELECT only, `service_role` SELECT only, `anon` nothing.
+  - **The central finding, and it is reusable: "unranked" and "rank 0" are not the same
+    thing.** The spec said visibility by the appointment rule (strict rank + scope coverage).
+    Applied honestly it admits NOBODY, because a superadmin is outside every module ladder
+    rather than on top of one — which is the founder's own answer. Writing the rank arm anyway
+    would have INVERTED the hierarchy: `module_position_rank` returns 0 for unmapped pairs and
+    never null, so every rank-1 holder (salon cashier, classroom GA, speed-dating host) would
+    strictly outrank the platform operator and read their whole cross-tenant history —
+    silently, error-free. The absence of that arm is the security decision in the file, stated
+    as such, and a live test proves it from both ends of a real ladder.
+  - **THE ORCHESTRATOR CAUGHT A BUG IN A REVIEWER'S PROPOSED FIX, and it is the same lesson
+    the codebase already learned once, in a new disguise.** Review 2 proposed a shape CHECK
+    including `subject_user_id is not null`. A CHECK is re-evaluated on every UPDATE
+    *including the real UPDATE an FK action performs* — so with `on delete set null` on that
+    column, it would have made every person ever browsed PERMANENTLY UNDELETABLE, exactly as
+    the rejected before-update trigger would have. The clause was dropped, the rest kept, and
+    a test now deletes a referenced scope node and asserts both halves (the delete succeeds;
+    the log row survives with a nulled reference). **Reviewers are not oracles — the
+    orchestrator reading the fix is part of the rhythm, not a formality.**
+  - **A read arm keyed on WHO YOU WERE outlives the authority it was granted for.** The draft
+    had `actor_user_id = auth.uid()` for self-read. Review 1 found it survives DEMOTION — strip
+    the superadmin flag and the person keeps reading every row they ever wrote, forever, which
+    is precisely the suspected-misuse case. Its proposed fix is correct AND makes the policy a
+    strict subset of the superadmin arm, i.e. dead. So the arm was deleted rather than fixed.
+  - **Four false claims in the existing codebase, found and corrected in place** — the two
+    "this surface writes nothing" headers, the `view_as_sessions` data-browser note claiming
+    the console "leaves no row to find", and the **on-screen `not logged` badge together with
+    the e2e assertion holding it true.** That last pair is the memorable one: a badge is a
+    claim to the operator, so a test that keeps passing after the claim goes false is worse
+    than no test.
+  - **The data browser's own coverage test caught the new table automatically** (it reads
+    `pg_catalog` and failed the build until the log's person columns were declared) — the
+    machine-enforced half working as designed. Surfaced as "Owner Console lookups naming
+    them", **included rather than omitted**: the tool promises to enumerate everything held
+    about a person, and "we looked at you, on these dates" is part of that answer.
+  - **Left open ON PURPOSE, and recorded rather than closed:** with a SECOND superadmin, the
+    flat `is_superadmin()` oversight arm means each reads 100% of the other's lookups,
+    unscoped, forever. That is a v1 default, not a derivation of the appointment rule (there
+    is no rank domain among superadmins), and it is a founder decision → docs/12 item 9 + the
+    Next list.
+  - **Verification:** typecheck 9/9; build clean; db suite **108/108 (RLS 104/104)** up from
+    97/97 — 11 new tests, floor raised to 104; e2e 49 with two new round-trip tests that drive
+    the real console over HTTP and assert the lookup then surfaces in the data browser. Live
+    rows confirmed with the intended shape asymmetry.
+
 - **2026-08-07 (PROD DEMO REFRESH + PROD-VERIFY, Sonnet session — closed CLAUDE.md's Next
   item 6. Also: cross-checked docs/15's 2026-08-06/07 entry and `apps/web/lib/view-as.ts`'s
   comments against the running code — no mismatches found.)**

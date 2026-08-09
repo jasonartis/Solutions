@@ -1802,7 +1802,11 @@ test('owner console view-as: mode 3 on a location-narrowed position badges the o
   // The operator must always know which of the two console tools they are in
   // and which rules this one stands outside of.
   await expect(page.getByText('bypasses declared edges')).toBeVisible()
-  await expect(page.getByText('not logged')).toBeVisible()
+  // WAS 'not logged' until 2026-08-07. The badge flipped when the superadmin
+  // lookup log shipped (migration 20260807010000), and this assertion flipping
+  // with it is the point: the badge is a CLAIM made to the operator, so a test
+  // that kept passing after the claim became false would be worse than no test.
+  await expect(page.getByText('logged', { exact: true })).toBeVisible()
 
   await page.getByLabel('Organisation').selectOption({ label: 'Demo Salon' })
   await page.getByRole('button', { name: 'Render' }).click()
@@ -1951,4 +1955,65 @@ test('sign out returns to login and locks the dashboard', async ({ page }) => {
   await expect(page).toHaveURL(/\/login/)
   await page.goto('/dashboard')
   await expect(page).toHaveURL(/\/login/)
+})
+
+// ---------------------------------------------------------------------------
+// THE SUPERADMIN LOOKUP LOG, end to end (built 2026-08-07; migration
+// 20260807010000). The db suite proves the POLICIES; this proves the LOOP —
+// that using a console tool over real HTTP actually deposits a row, that the
+// row is readable, and that it surfaces where the platform says it does.
+//
+// Deliberately verified THROUGH THE DATA BROWSER's own declaration of the log
+// rather than by querying the table: that checks two claims at once (the write
+// happened; the data browser's completeness promise really does include it),
+// and it is the exact path an operator would use to answer "who looked at this
+// person?".
+// ---------------------------------------------------------------------------
+test('owner console: a data-browser lookup records itself, and the log surfaces in the browser', async ({
+  page,
+}) => {
+  await signIn(page, 'owner@demo.local')
+
+  // FIRST LOOKUP — this is the write. Nothing is asserted about the log yet;
+  // the point is only that a real lookup happened through the real page.
+  await page.goto('/console/data-browser')
+  await page.getByLabel('Organisation').selectOption({ label: 'Demo Salon' })
+  await page.getByRole('button', { name: /Show|Refresh/ }).click()
+  // The option LABEL carries a display name plus an email, so it is picked by
+  // reading the matching option's value (a uuid) rather than by an exact label
+  // that a copy change would break.
+  const person = page.getByLabel('Person')
+  const charlieValue = await person.locator('option', { hasText: 'Charlie' }).first().getAttribute('value')
+  expect(charlieValue, 'no Charlie option in the person picker — did the seed run?').toBeTruthy()
+  await person.selectOption(charlieValue!)
+  await page.getByRole('button', { name: /Show|Refresh/ }).click()
+
+  // The lookup really ran (the control that stops everything below being vacuous).
+  await expect(page.getByText('What I can see about this person')).toBeVisible()
+  // And it was recorded — the failure badge is the page's own admission that it
+  // was not, so its ABSENCE here is a real assertion, not decoration.
+  await expect(page.getByText('This lookup was NOT recorded')).not.toBeVisible()
+
+  // SECOND LOOKUP of the same person — now the first one must be visible as data
+  // held ABOUT them, under the label the platform declaration gives it.
+  await page.getByRole('button', { name: /Show|Refresh/ }).click()
+  await expect(page.getByText('Owner Console lookups naming them')).toBeVisible()
+})
+
+test('owner console view-as: rendering a surface records itself too', async ({ page }) => {
+  // The other half of "written by BOTH console tools" (docs/15 decision 5).
+  // Logging only the narrower tool while the select-* data browser stayed silent
+  // was the incoherent option, so both halves get a test.
+  await signIn(page, 'owner@demo.local')
+  await page.goto('/console/view-as')
+  await page.getByLabel('Organisation').selectOption({ label: 'Demo Salon' })
+  await page.getByRole('button', { name: 'Render' }).click()
+  await page.getByLabel('Module').selectOption('nail-salon')
+  await page.getByRole('button', { name: 'Render' }).click()
+  await page.getByLabel('Position').selectOption('manager')
+  await page.getByRole('button', { name: 'Render' }).click()
+
+  // A surface really rendered, and the page did not admit to a logging failure.
+  await expect(page.getByText('logged', { exact: true })).toBeVisible()
+  await expect(page.getByText('This lookup was NOT recorded')).not.toBeVisible()
 })

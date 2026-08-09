@@ -587,6 +587,95 @@ vocabulary gets locked.
 
 ## Decisions log
 
+- **2026-08-07/08 (THE SUPERADMIN LOOKUP LOG — built, adversarially reviewed at three lenses,
+  findings applied, shipped. Migration `20260807010000`. Opus session; reviews requested as
+  Fable, model UNVERIFIED per the standing provenance caveat.)** The follow-on the
+  2026-08-06 build deliberately shipped without. Both Owner Console tools now record every
+  lookup to a new superadmin-only table. Five decisions worth keeping:
+
+  1. **THE APPOINTMENT RULE, APPLIED HONESTLY, ADMITS NOBODY — AND THAT IS THE ANSWER, NOT A
+     GAP.** Decision 5 below specced visibility as "strict rank + scope coverage". Applied to
+     this table's actual rows it yields exactly the founder's own words ("only the superadmin
+     can see them"), because every actor is a platform superadmin and **a superadmin is not at
+     the top of any module ladder — they are OUTSIDE every ladder.**
+  2. **"UNRANKED" AND "RANK 0" ARE NOT THE SAME THING, and conflating them would have INVERTED
+     the hierarchy this table exists to enforce.** This is the reusable finding.
+     `module_position_rank(module_key, role)` returns **0 for any unmapped pair and never
+     null** — its inner CASE falls through `coalesce` to the generic tier table, whose `else`
+     is 0. So the natural-looking policy arm `rank(reader) > rank(actor)` computes a
+     superadmin actor's rank as 0, and **every rank-1 holder on the platform — a salon
+     cashier, a classroom GA, a speed-dating host — then strictly outranks the platform
+     operator and reads their entire cross-tenant lookup history.** Silently, error-free, and
+     passing any test that only asserts the policy exists. Rank 0 is the bottom of a ladder;
+     unranked is not on it. **The absence of a rank arm is therefore the security-critical
+     decision in that migration, and it is stated as such rather than left to be inferred.**
+     A live RLS test now proves it from both ends of a real ladder (salon worker rank 1 AND
+     salon admin rank 3, both inside the org the row names).
+  3. **AN IDENTITY-KEYED READ ARM SURVIVES DEMOTION — so it was deleted, not fixed.** The
+     draft had a second policy, `actor_user_id = auth.uid()`, serving the founder's stated
+     self-read use case. The review found that `actor_user_id` is stamped once and never
+     changes while `profiles.is_superadmin` is a separate mutable column with nothing tying
+     them together: **strip someone's superadmin flag and they keep reading every row they
+     ever wrote, across every tenant, forever** — and demotion is precisely the
+     suspected-misuse scenario the log exists for. The proposed fix (`and is_superadmin()`)
+     is correct and *also makes the policy dead*, since it becomes a strict subset of the
+     superadmin arm. So the arm is gone entirely and the self-read case is served by the
+     superadmin arm it was always a subset of. **Generalisable: an audit-log read arm keyed on
+     WHO YOU WERE outlives the authority it was granted for; key it on who you ARE.**
+  4. **A CHECK CONSTRAINT CAN RE-CREATE THE `ON DELETE SET NULL` TRAP THAT KILLED THE
+     APPEND-ONLY TRIGGER.** The review proposed a shape constraint including
+     `subject_user_id is not null` for data-browser rows — obviously true, since that tool
+     always targets one person. **It is a trap.** `subject_user_id` is `on delete set null`,
+     and a CHECK is re-evaluated on every UPDATE *including the real UPDATE Postgres performs
+     to satisfy an FK action* — so it would have made **every person ever browsed permanently
+     undeletable**, breaking account erasure exactly as the rejected before-update trigger
+     would have. The clause was dropped and the rest kept. **The 2026-07-31 lesson generalises
+     past triggers: any constraint forbidding the null an FK action is about to write turns
+     "the log outlives what it describes" into "what it describes cannot die."** A test now
+     deletes a scope node named by a live log row and asserts BOTH halves — the delete
+     succeeds, and the row survives with a nulled reference.
+  5. **`is_superadmin()` IS NOT THE APPOINTMENT RULE, and saying so is the honest part.** The
+     review's sharpest spec-fit finding: the oversight arm performs no rank comparison and no
+     scope test, because **there is no rank domain among superadmins to compare over** —
+     `is_superadmin` is a flat boolean, not a ladder. Presenting a blanket "any superadmin
+     reads every row" as the output of "strict rank + scope coverage" would be dressing an
+     unspecced choice in the spec's language. It is now stated as what it is: a deliberate v1
+     default, exactly right while there is ONE superadmin, and **carrying an open founder
+     question the moment there are two** — should superadmin B read 100% of superadmin A's
+     lookups, unscoped, forever? (The alternative, each reads only their own, would make the
+     log pure self-audit and give no oversight at all — so this is the better default, but it
+     IS a default.) On the Next list, and a second reason "a second superadmin" is already a
+     named expiry condition in docs/12 item 9.
+
+  **WHAT THE BUILD FALSIFIED IN ITS OWN CODEBASE — four claims, all corrected in place rather
+  than deleted, because each one's REASONING is what got overturned:** `console-view-as.ts`'s
+  "this surface writes nothing" (the sentence that explained why docs/03 #18's rule did not
+  bite — the rule still doesn't bite, but now for a different, stated reason: nothing reads
+  the row back as a capability, unlike `view_as_sessions` where a row IS one); the data
+  browser page's "reading is the unstamped side of the platform, and this page writes nothing
+  at all" (true of the platform generally, and exactly the wrong inference for the most
+  revealing read on it); the `view_as_sessions` data-browser note's "the Owner Console's
+  superadmin view-as is unlogged by founder decision, so it leaves no row to find"; and the
+  **on-screen `not logged` badge**, plus the e2e assertion that had been holding it true. That
+  last pair is the one worth remembering: **a badge is a claim made to the operator, so a test
+  that keeps passing after the claim goes false is worse than no test at all.**
+
+  **THE DATA BROWSER'S OWN COVERAGE TEST CAUGHT THE NEW TABLE AUTOMATICALLY**, which is the
+  machine-enforced half working exactly as designed — `data-browser-coverage.test.ts` reads
+  `pg_catalog` and failed the build until the log's two person columns were declared. It is
+  now surfaced as "Owner Console lookups naming them", **included rather than omitted on
+  purpose**: this tool's promise is to enumerate everything held about a person, and "we
+  looked at you, on these dates" is genuinely part of that answer — it is what a
+  subject-access request would have to disclose. Omitting it for tidiness would make the
+  completeness claim false, which is the one failure that tool cannot afford.
+
+  **VERIFICATION.** typecheck 9/9; `pnpm build` clean; db suite **108/108 (RLS 104/104)**, up
+  from 97/97 — **11 new tests**, floor raised to 104; e2e **49**, including two round-trip
+  tests that drive the real console over real HTTP and then assert the lookup surfaces in the
+  data browser (verifying the write, the read, and the declaration in one path). Live rows
+  confirmed in the database with the intended shape asymmetry: data-browser rows carry a
+  subject and no module/position/scope, view-as rows always carry both module and position.
+
 - **2026-08-06/07 (THE OWNER CONSOLE VIEW-AS — the superadmin surface that bypasses every
   declared edge, built, adversarially reviewed, and shipped with the review's findings
   applied. Opus session; review requested as Fable, model UNVERIFIED — see the provenance

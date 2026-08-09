@@ -19,7 +19,33 @@ A multi-tenant modular platform: each client engagement produces a **module** bu
      and update only the compact "Now / Next / Standing rules" below. A fresh chat must never
      pay for the full journal. See "Session hygiene". -->
 
-**Now (2026-08-07):** **THE OWNER CONSOLE VIEW-AS IS ON PROD AND PROD-VERIFIED** (commit
+**Now (2026-08-08):** **THE SUPERADMIN LOOKUP LOG IS BUILT AND FULLY VERIFIED LOCALLY —
+NOT YET COMMITTED, PUSHED, OR ON PROD.** Migration `20260807010000`; both Owner Console tools
+write one row per real lookup (`apps/web/lib/superadmin-log.ts`), a failed write is BADGED on
+screen rather than swallowed, and **docs/12 item 9 is closed**. Full docs/03 #12 rhythm ran:
+draft → three-lens adversarial review → findings applied → 11 RLS tests → live round-trip
+verification. **Three findings worth carrying forward, all reusable well past this table:**
+**(1) "UNRANKED" AND "RANK 0" ARE NOT THE SAME THING** — `module_position_rank` returns 0 for
+unmapped pairs and never null, so the appointment rule written the obvious way would have let
+every rank-1 holder (salon cashier, classroom GA) outrank the PLATFORM OPERATOR and read
+their whole cross-tenant history, silently and error-free. **The ABSENCE of a rank arm is the
+security decision in that file.** **(2) A CHECK CONSTRAINT CAN RE-CREATE THE `ON DELETE SET
+NULL` TRAP** that killed the append-only trigger — a reviewer's proposed `subject_user_id is
+not null` would have made every person ever browsed PERMANENTLY UNDELETABLE. Caught by the
+orchestrator reading the reviewer's fix, which is the rhythm working as designed. **(3) A READ
+ARM KEYED ON WHO YOU WERE outlives the authority it was granted for** — `actor_user_id =
+auth.uid()` survives demotion; deleted rather than fixed, since conditioning it on current
+authority makes it a strict subset of the superadmin arm. **Four false claims in the existing
+codebase were found and corrected**, including the on-screen `not logged` badge AND the e2e
+assertion holding it true — *a badge is a claim to the operator, so a test that keeps passing
+after the claim goes false is worse than no test.* **STILL OPEN BY DESIGN:** with a SECOND
+superadmin, the flat `is_superadmin()` read arm means each sees 100% of the other's lookups,
+unscoped — a v1 default, **NOT** a derivation of the appointment rule (there is no rank domain
+among superadmins), and a founder decision. Detail → journal + docs/15's 2026-08-07/08 entry;
+rules → docs/03. **Verification: typecheck 9/9, build clean, db 108/108 (RLS 104/104, floor
+raised to 104), e2e 49/49 exit 0 run in CI-STRICT mode against the PREBUILT server.**
+
+**Previously (2026-08-07):** **THE OWNER CONSOLE VIEW-AS IS ON PROD AND PROD-VERIFIED** (commit
 `6a90110`, migration `20260806010000`; Vercel production `READY`, which proves CI was green
 since `deploy` has `needs: check`; prod policy confirmed live as
 `(is_org_member(org_id) OR is_superadmin())` against 200 visible policies as the control). `/console/view-as`, superadmin-only, absent from the in-module tab
@@ -107,13 +133,14 @@ carry the dated reasoning that produced them:**
   two harness bullets below collapse into one.
 - ~~**4. THE OWNER CONSOLE VIEW-AS.**~~ **DONE 2026-08-06/07 — see Now.** Three follow-ons
   it produced, all recorded rather than closed:
-  **(a) THE SUPERADMIN LOOKUP LOG** — founder-decided, spec settled, now docs/12 item 9 and
-  must exist before the first paying customer. New table (not `view_as_sessions`: different
-  event, and a `view_as_sessions` row IS a capability), written by BOTH console tools,
-  visibility by the APPOINTMENT rule (strict rank + scope coverage), append-only by GRANTS
-  with `service_role` named in the revoke. The trap: a log row names TWO people — hierarchy
-  answers who may read by ACTOR; reading by TARGET is §8.1 point 6's notify question, still
-  open. Opus, ~2h + its own review (new table with RLS and grants ⇒ full docs/03 #12).
+  ~~**(a) THE SUPERADMIN LOOKUP LOG**~~ **DONE 2026-08-07/08 — see Now.** Built, reviewed at
+  three lenses, 11 RLS tests, live round-trip verified; docs/12 item 9 closed. **It left ONE
+  founder decision open, which is now the only thing outstanding on it: with a SECOND
+  superadmin, the flat `is_superadmin()` oversight arm means each reads 100% of the other's
+  lookups, unscoped, forever.** That is a v1 default rather than a derivation of the
+  appointment rule — there is no rank domain among superadmins to compare over — and it wants
+  an explicit answer before a second superadmin ever exists, which is already a named expiry
+  condition in docs/12 item 9.
   **(b) `blinded` CHECKS ONE TABLE PER MODULE** (the `scopeEntity`), never per role table, so
   a future migration dropping an `is_org_admin` arm on an ordinary role table gives a silent,
   error-free, UNBADGED empty section. `20260806010000` is proof the category already bit once

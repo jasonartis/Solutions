@@ -190,22 +190,36 @@ Found in a deliberate "what haven't we thought of" pass; ordered by urgency.
    — see "Low-context assistant protections" below); this item upgrades
    "recoverable by discipline" to "recoverable by tested automation."
 
-9. **Superadmin lookup log — MUST exist before the first paying customer
-   (founder-decided 2026-08-06; spec in docs/15's 2026-08-06/07 entry).** Both
-   Owner Console tools currently write nothing: `/console/view-as` renders any
-   position's surface in any org bypassing every declared edge, and
-   `/console/data-browser` is `select *` over every row naming a person. Shipping
-   them unlogged was a deliberate, dated decision for a single owner-operator
-   superadmin, not an oversight — but it has an expiry that is structural rather
-   than a promise: **a log started later can never cover the period before it
-   existed.** The conditions that force it are named — a second superadmin, an
-   external audit, expanding either surface beyond the superadmin, or a real
-   customer whose data is in there.
-   Shape and rules are settled (new table, not `view_as_sessions`; written by
-   BOTH tools; visibility by the appointment rule — strict rank + scope coverage;
-   append-only by GRANTS, never a trigger, with `service_role` named in the
-   revoke). It is a new table with RLS and grants, so it runs the full docs/03
-   #12 rhythm: Opus, ~2h plus its own adversarial review.
+9. ~~**Superadmin lookup log — MUST exist before the first paying customer**~~
+   **DONE 2026-08-07/08** — migration `20260807010000_superadmin_lookup_log.sql`,
+   built with the full docs/03 #12 rhythm (draft → three-lens adversarial review →
+   findings applied → 11 RLS tests → live round-trip verification → docs). Both
+   Owner Console tools now write one row per real lookup; the failure to write is
+   badged on screen rather than swallowed. Detail → docs/15's 2026-08-07/08 entry.
+   **The structural point that made this urgent is now satisfied and cannot be
+   re-satisfied later: the log covers everything from this date forward.**
+
+   **What it does NOT do, deliberately, so nobody assumes otherwise:**
+   - **No module-rank read arm.** The appointment rule, applied honestly to rows
+     whose actor is always a platform superadmin, admits nobody — a superadmin is
+     OUTSIDE every module ladder, not at the top of one. Writing the arm anyway
+     would INVERT the hierarchy, because `module_position_rank` returns 0 for
+     unmapped pairs and never null, so every rank-1 holder would outrank the
+     operator. See docs/03's "unranked ≠ rank 0" rule.
+   - **No org-admin arm** (unlike `view_as_sessions`), because a tenant read would
+     republish operator activity into every tenant's audit view — the exact
+     objection the separate table exists to dissolve.
+   - **No subject arm.** Reading BY TARGET is §8.1 point 6's still-open
+     notify-the-target question. One table, two features; the second is not built.
+
+   **STILL OPEN, and now doubly so: what happens with a SECOND superadmin.** The
+   oversight arm is a flat `is_superadmin()`, which is not the appointment rule and
+   does not pretend to be — there is no rank domain among superadmins to compare
+   over. With one operator it is exactly the founder's "only the superadmin can see
+   them"; with two it silently means each reads 100% of the other's lookups,
+   unscoped, forever. That is a founder decision, not a derivation. "A second
+   superadmin" was already a named expiry condition for the unlogged design; it is
+   now also the trigger for revisiting this policy.
 
 10. **What should actually gate `master`? — OPEN, needs a comprehensive review
     (raised 2026-08-07; NOT launch-blocking, but decide it deliberately rather

@@ -297,6 +297,10 @@ console.log('\n[6] The invariant that keeps the UI gate safe: no definer / servi
     'apps/web/components/view-as/section-table.tsx',
     'apps/web/components/view-as/off-surface.tsx',
     'apps/web/components/view-as/page.tsx',
+    // The lookup log's app half (2026-08-07) — on the console path, and the
+    // first thing on it that WRITES. Kept in step with rls.test.ts's
+    // CONSOLE_PATH, which is the copy CI actually runs.
+    'apps/web/lib/superadmin-log.ts',
   ]
   for (const f of files) {
     let src: string

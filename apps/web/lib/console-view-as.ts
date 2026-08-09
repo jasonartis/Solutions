@@ -53,7 +53,23 @@
 // gate becomes the only thing between a user and data RLS would have refused —
 // which is precisely what docs/03 #18 forbids. Note this does NOT contradict #18's
 // "the app layer is not a gate": that rule is about STARTING A MODE-2 SESSION,
-// a real PostgREST-reachable WRITE, and this surface writes nothing.
+// a real PostgREST-reachable WRITE.
+//
+// THAT SENTENCE USED TO END "...and this surface writes nothing." It is FALSE as
+// of 2026-08-07 and is corrected here rather than deleted, because the claim was
+// load-bearing: it was the reason #18's rule was said not to bite. This surface
+// now writes exactly one row per render, to `superadmin_lookup_log`
+// (migration 20260807010000, app half lib/superadmin-log.ts).
+//
+// The rule still does not bite, but the reason is now DIFFERENT and has to be
+// argued rather than inherited: the write is an append-only audit row ABOUT THE
+// CALLER, server-stamped by a guard trigger that discards any client-supplied
+// actor, and NOTHING DOWNSTREAM READS IT BACK AS A CAPABILITY. That last clause
+// is the whole distinction from `view_as_sessions`, where a row IS a capability
+// — the in-module page resolves a cookie to a row and renders from it — which is
+// exactly why that table's insert needed a guard enforcing rank, scope and a
+// declared edge. Forging a row here buys an attacker a false line in a log only
+// they and a superadmin can read; forging one there would buy a render.
 //
 // ---------------------------------------------------------------------------
 // THE LOGGING QUESTION — settled here, deliberately, 2026-08-06.

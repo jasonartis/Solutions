@@ -2340,6 +2340,13 @@ describe('Owner Console view-as (2026-08-06)', () => {
     'apps/web/components/view-as/section-table.tsx',
     'apps/web/components/view-as/off-surface.tsx',
     'apps/web/components/view-as/page.tsx',
+    // Added 2026-08-07 with the lookup log. It is on the console path and it
+    // WRITES, which is new for this surface — so the "no definer, no
+    // service-role" invariant now has to cover a write path too, not only reads.
+    // The log's own integrity does not depend on the app (a guard trigger
+    // server-stamps the actor), but the console's gate-is-only-a-UI-gate
+    // argument does, and that argument is what this scan protects.
+    'apps/web/lib/superadmin-log.ts',
   ]
   const repoRoot = resolvePath(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
   const sourceOf = (f: string) => readFileSync(resolvePath(repoRoot, f), 'utf8')
@@ -2580,5 +2587,222 @@ describe('Owner Console view-as (2026-08-06)', () => {
     } finally {
       await sql.end()
     }
+  })
+})
+
+// ---------------------------------------------------------------------------
+// THE SUPERADMIN LOOKUP LOG (migration 20260807010000; docs/15 2026-08-06/07
+// decision 5; docs/12 checklist item 9). Built 2026-08-07.
+//
+// These are the adversarial review's findings turned into tests. The one that
+// matters most is the RANK-INVERSION test: the whole reason this table has no
+// module-rank read arm is that `module_position_rank()` returns 0 for anything
+// unmapped and never null, so a rank arm written the obvious way would let every
+// rank-1 position holder on the platform outrank the platform operator. That is
+// a claim about live policy behaviour, so it gets a live test with a control.
+//
+// EVERY NEGATIVE HERE CARRIES A NON-EMPTINESS CONTROL (docs/03 #18's vacuity
+// rule). "X cannot read the log" passes trivially against an empty table, so
+// each block writes a real row as the superadmin and asserts the superadmin CAN
+// see it before asserting that anyone else cannot.
+//
+// Note the table is genuinely append-only, so these tests cannot clean up after
+// themselves — rows accumulate across runs by design. Every assertion below is
+// therefore written against a row this test just created, never against a count.
+// ---------------------------------------------------------------------------
+describe('superadmin lookup log (2026-08-07)', () => {
+  let owner: SupabaseClient   // the local superadmin
+  let alice: SupabaseClient   // org owner of demo-salon, professor in demo-a
+  let dana: SupabaseClient    // salon WORKER - rank 1, the inversion candidate
+  let frank: SupabaseClient   // salon ADMIN - rank 3, the highest module rank
+  let charlie: SupabaseClient // student / salon customer - rank 0
+  let salonOrg: string
+  let ownerId: string
+  let charlieId: string
+
+  const errored = (r: { error: unknown }) => r.error != null
+  const idOf = async (c: SupabaseClient) => (await c.auth.getUser()).data.user!.id
+
+  /** Write one real log row as the superadmin and hand back its id. */
+  async function logAs(entry: Record<string, unknown>): Promise<string> {
+    const { data, error } = await owner
+      .from('superadmin_lookup_log')
+      .insert(entry)
+      .select('id')
+      .single()
+    if (error) throw new Error(`log insert failed: ${error.message}`)
+    return data!.id as string
+  }
+
+  beforeAll(async () => {
+    owner = await signIn('owner@demo.local')
+    alice = await signIn('alice@demo.local')
+    dana = await signIn('dana@demo.local')
+    frank = await signIn('frank@demo.local')
+    charlie = await signIn('charlie@demo.local')
+    salonOrg = (await alice.from('orgs').select('id').eq('slug', 'demo-salon').single()).data!.id
+    ownerId = await idOf(owner)
+    charlieId = await idOf(charlie)
+  })
+
+  it('CONTROL: the superadmin can write a row and read it back (every negative below depends on this)', async () => {
+    const id = await logAs({ tool: 'data-browser', org_id: salonOrg, subject_user_id: charlieId })
+    const { data } = await owner.from('superadmin_lookup_log').select('id, actor_user_id, tool').eq('id', id)
+    expect((data ?? []).length, 'the superadmin cannot read the row it just wrote').toBe(1)
+    expect(data![0]!.actor_user_id).toBe(ownerId)
+  })
+
+  it('THE RANK INVERSION: no module-position holder can read a superadmin row, at ANY rank', async () => {
+    // The central test of this table. `module_position_rank` returns 0 for an
+    // unmapped pair and never null, so a naively-written appointment-rule arm
+    // would compute the superadmin's rank as 0 and let anyone at rank >= 1 read
+    // the operator's entire cross-tenant lookup history. dana is a salon worker
+    // (rank 1) and frank a salon admin (rank 3) - the bottom and top of a real
+    // module ladder, both inside the very org the row names.
+    const id = await logAs({ tool: 'data-browser', org_id: salonOrg, subject_user_id: charlieId })
+
+    expect((await owner.from('superadmin_lookup_log').select('id').eq('id', id)).data?.length,
+      'CONTROL: the row must be readable by someone or the negatives are vacuous').toBe(1)
+
+    for (const [who, client] of [['dana (worker, rank 1)', dana], ['frank (admin, rank 3)', frank]] as const) {
+      const { data } = await client.from('superadmin_lookup_log').select('id').eq('id', id)
+      expect(data ?? [], `${who} can read a superadmin lookup row`).toEqual([])
+    }
+  })
+
+  it('an ORG ADMIN cannot read it either - deliberately unlike view_as_sessions', async () => {
+    // view_as_sessions gives org admins a whole-org read, because overseeing
+    // view-as inside your own tenant is auditing. This table is the opposite
+    // direction: it records what the PLATFORM OPERATOR did, across tenants, and
+    // a tenant read arm would republish operator activity into every tenant's
+    // audit view - the exact objection that made the 2026-08-06 build ship
+    // unlogged before the separate-table counter-proposal dissolved it.
+    const id = await logAs({ tool: 'data-browser', org_id: salonOrg, subject_user_id: charlieId })
+    expect((await owner.from('superadmin_lookup_log').select('id').eq('id', id)).data?.length).toBe(1)
+    // alice is org owner of demo-salon, so is_org_admin(salonOrg) is true for her.
+    expect((await alice.from('superadmin_lookup_log').select('id').eq('id', id)).data ?? []).toEqual([])
+  })
+
+  it('the SUBJECT of a lookup cannot read rows about themselves (the notify question stays closed)', async () => {
+    // docs/15 decision 5's two-people trap: hierarchy answers who may read BY
+    // ACTOR; reading BY SUBJECT is 8.1 point 6's notify-the-target question and
+    // is deliberately still open. Shipping it by accident would be a product
+    // decision made in a migration.
+    const id = await logAs({ tool: 'data-browser', org_id: salonOrg, subject_user_id: charlieId })
+    expect((await owner.from('superadmin_lookup_log').select('id').eq('id', id)).data?.length).toBe(1)
+    expect((await charlie.from('superadmin_lookup_log').select('id').eq('id', id)).data ?? []).toEqual([])
+  })
+
+  it('the actor is SERVER-STAMPED - a forged actor_user_id is discarded, not honoured', async () => {
+    // The one property that would make this log worse than no log: rows
+    // attributing your own lookups to somebody else.
+    const id = await logAs({
+      tool: 'data-browser',
+      org_id: salonOrg,
+      subject_user_id: charlieId,
+      actor_user_id: charlieId, // a lie the guard must overwrite
+    })
+    const { data } = await owner.from('superadmin_lookup_log').select('actor_user_id').eq('id', id).single()
+    expect(data!.actor_user_id, 'a client-supplied actor_user_id survived the guard').toBe(ownerId)
+  })
+
+  it('a NON-superadmin cannot write to the log at all', async () => {
+    for (const [who, client] of [['alice (org owner)', alice], ['frank (salon admin)', frank]] as const) {
+      const r = await client.from('superadmin_lookup_log').insert({
+        tool: 'data-browser', org_id: salonOrg, subject_user_id: charlieId,
+      })
+      expect(errored(r), `${who} wrote a row to the superadmin log`).toBe(true)
+    }
+  })
+
+  it('the log is APPEND-ONLY - no UPDATE, no DELETE, enforced at the privilege layer', async () => {
+    const id = await logAs({ tool: 'data-browser', org_id: salonOrg, subject_user_id: charlieId })
+    expect(errored(await owner.from('superadmin_lookup_log').update({ tool: 'view-as' }).eq('id', id)),
+      'the superadmin could UPDATE an append-only audit row').toBe(true)
+    expect(errored(await owner.from('superadmin_lookup_log').delete().eq('id', id)),
+      'the superadmin could DELETE an append-only audit row').toBe(true)
+    // Still there afterwards - the refusals above were real, not silent no-ops.
+    expect((await owner.from('superadmin_lookup_log').select('id').eq('id', id)).data?.length).toBe(1)
+  })
+
+  it('a stranger reaches the log at neither the privilege nor the row layer', async () => {
+    const anon = createClient(url, anonKey, { auth: { persistSession: false } })
+    const read = await anon.from('superadmin_lookup_log').select('*').limit(1)
+    expect(read.error?.code, JSON.stringify(read.error)).toBe('42501')
+    const write = await anon.from('superadmin_lookup_log').insert({
+      tool: 'data-browser', org_id: salonOrg, subject_user_id: charlieId,
+    })
+    expect(errored(write)).toBe(true)
+  })
+
+  it('the shape CHECK refuses rows that contradict the column documentation', async () => {
+    // The prose invariants made structural: a data-browser row has no module,
+    // position or scope; a view-as row must name both a module and a position.
+    // Without this, an audit row can silently contradict this table's own docs
+    // and a reader has no way to tell it from a true one.
+    expect(errored(await owner.from('superadmin_lookup_log').insert({
+      tool: 'data-browser', org_id: salonOrg, subject_user_id: charlieId, position: 'manager',
+    })), 'a data-browser row was allowed to carry a position').toBe(true)
+
+    expect(errored(await owner.from('superadmin_lookup_log').insert({
+      tool: 'view-as', org_id: salonOrg, position: 'manager',
+    })), 'a view-as row was allowed with no module_key').toBe(true)
+
+    expect(errored(await owner.from('superadmin_lookup_log').insert({
+      tool: 'view-as', org_id: salonOrg, module_key: 'nail-salon',
+    })), 'a view-as row was allowed with no position').toBe(true)
+
+    expect(errored(await owner.from('superadmin_lookup_log').insert({
+      tool: 'browsing-around', org_id: salonOrg, subject_user_id: charlieId,
+    })), 'an unknown tool name was accepted').toBe(true)
+  })
+
+  it('a scope_ref from a DIFFERENT org or module is refused (cross-tenant audit pollution)', async () => {
+    // A scope node belongs to exactly one (org, module). Without this check the
+    // row could name org A while pointing at a node in org B, and the reader
+    // would attribute the lookup to the wrong tenant's scope.
+    const foreign = (await alice
+      .from('module_scope_nodes')
+      .select('id, org_id, module_key')
+      .neq('org_id', salonOrg)
+      .limit(1)
+      .maybeSingle()).data
+    expect(foreign, 'CONTROL: no scope node outside demo-salon exists, so this test proves nothing').not.toBeNull()
+
+    expect(errored(await owner.from('superadmin_lookup_log').insert({
+      tool: 'view-as', org_id: salonOrg, module_key: 'nail-salon',
+      position: 'manager', scope_ref: foreign!.id,
+    })), 'a log row named a scope node belonging to another org').toBe(true)
+  })
+
+  it('the log outlives what it describes WITHOUT making it undeletable (the ON DELETE SET NULL trap)', async () => {
+    // THE TEST FOR THE TRAP THE REVIEW ALMOST INTRODUCED. Append-only is
+    // enforced by grants, never by a before-update/delete trigger, because
+    // Postgres implements `ON DELETE SET NULL` as a real UPDATE on this table.
+    // The same reasoning rules out any CHECK forbidding the null an FK action is
+    // about to write - a proposed `subject_user_id is not null` clause would
+    // have made every person ever browsed permanently undeletable.
+    //
+    // So: name a scope node, delete the node, and assert BOTH halves - the
+    // delete succeeds (nothing became undeletable) and the log row survives with
+    // a nulled reference (the log outlived what it described).
+    const node = (await alice.from('module_scope_nodes').insert({
+      org_id: salonOrg, module_key: 'nail-salon', name: 'RLS log FK probe',
+    }).select('id').single()).data
+    expect(node, 'CONTROL: could not create a scope node, so this test proves nothing').not.toBeNull()
+
+    const id = await logAs({
+      tool: 'view-as', org_id: salonOrg, module_key: 'nail-salon',
+      position: 'manager', scope_ref: node!.id,
+    })
+
+    const del = await alice.from('module_scope_nodes').delete().eq('id', node!.id)
+    expect(del.error, 'deleting a scope node named by the log FAILED - something is undeletable').toBeNull()
+    expect((await alice.from('module_scope_nodes').select('id').eq('id', node!.id)).data ?? [],
+      'CONTROL: the node is really gone, so the assertion below is about a real FK action').toEqual([])
+
+    const { data } = await owner.from('superadmin_lookup_log').select('id, scope_ref').eq('id', id).single()
+    expect(data, 'the log row vanished with the thing it described').not.toBeNull()
+    expect(data!.scope_ref, 'the FK action should have nulled the reference, not deleted the row').toBeNull()
   })
 })
