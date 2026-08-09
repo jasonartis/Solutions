@@ -45,38 +45,24 @@ blow-by-blow is in [docs/history/platform-journal.md](docs/history/platform-jour
 this short deliberately: this file is a tax on every session, and a second copy of the journal
 is the most expensive thing in it.
 
-- **2026-08-09 — the rank admission map** (`ba4eb6a`, pushed, **no migration**, prod READY).
-  `packages/db/src/rank-admission.test.ts` + the generated
-  **[docs/rank-admission-map.md](docs/rank-admission-map.md)**, which doubles as docs/13's "what
-  does rank 2 mean in this module?" table. Rank readers AND the position vocabulary are both
-  DISCOVERED (`pg_proc.prosrc` + the ladder's own body); a comparison the parser cannot classify
-  FAILS rather than being skipped. Gave three rules now in docs/03: *a count of mechanisms is not
-  a count of code* (docs/13's "FOUR rules" was eight functions, and the two omitted included the
-  only reader of rank 4, which fails **OPEN**); *a checker must fail on what it cannot understand*;
-  and *when half a fact comes from the source of truth, the other half is where the next gap is*.
-  Also extended the CI ratchet: `tests-floor.json.requiredFiles` fails on a schema-coverage file
-  that is missing *or merely untracked*.
-- **2026-08-07/08 — the superadmin lookup log** (`eef09ce`, `20260807010000`, prod 23/23).
-  Both Owner Console tools record every lookup; a failed write is BADGED, not swallowed;
-  docs/12 item 9 closed. Gave three rules now living in docs/03: *unranked is not rank 0*;
-  *a CHECK constraint can re-create the `ON DELETE SET NULL` trap*; *a read arm keyed on who
-  you WERE outlives the authority it was granted for*. **Its one open item is in the Next
-  list below** (what a SECOND superadmin should see). Brought `scripts/prod-verify-superadmin-log.mts`,
-  the template to copy for any table/policy migration — see the gotcha about
-  `prod-verify-migration.ts` being function-only.
+- **2026-08-09 — the rank admission map** (`ba4eb6a`, no migration). `rank-admission.test.ts` +
+  generated **[docs/rank-admission-map.md](docs/rank-admission-map.md)** (also docs/13's "what does
+  rank 2 mean here?" table); rank readers and the position vocabulary are both DISCOVERED, and an
+  unclassifiable comparison FAILS rather than skipping. Also extended the CI ratchet to
+  `requiredFiles`. Three rules → docs/03.
+- **2026-08-07/08 — the superadmin lookup log** (`eef09ce`, `20260807010000`, prod 23/23). Both
+  console tools log every lookup; a failed write is BADGED. Closed docs/12 item 9; brought
+  `scripts/prod-verify-superadmin-log.mts` (the table/policy verifier template — see the gotcha
+  about `prod-verify-migration.ts` being function-only). Three rules → docs/03. **Its open item —
+  what a SECOND superadmin should see — is in the list below.**
 - **2026-08-06/07 — the Owner Console view-as** (`6a90110`, `20260806010000`). `/console/view-as`,
-  superadmin-only. The three founder modes are ONE AXIS, not three code paths. Gave: *a `for
-  all` policy's USING also covers SELECT, so splitting it per-command silently drops an
-  inherited read arm*, and *naming a gate is not passing one* (the `SuperadminGate` brand).
-- **2026-08-05 — nail-salon view-as surface review** (`89fae0a`, `20260804010000`, 33/33).
-  All 12 `sal_` tables classified. Gave the durable rule in docs/03 #18: *mode 1 answers "what
-  can this POSITION see?", mode 2 "what does this PERSON see?", and mode 2 is only honest
-  where RLS narrows PER PERSON.* **What it deliberately did not close is in the Next list**
-  (the 12-table accounting is hand-checked, not machine-enforced).
-- **Earlier — the per-person data browser** (`070a73b`), **slice 5 view-as**
-  (`20260731010000` + `20260802010000`, `ad8e989`, 29/29) and **the ACL hardening sweep**
-  (`20260728010000`, `a16f4a5`, 39/39: `anon` holds nothing in `public`). Rules → docs/03
-  #17/#18/#19.
+  superadmin-only; the three founder modes are ONE AXIS, not three code paths. Rules: *naming a
+  gate is not passing one* → docs/03; *a `for all` policy's USING also covers SELECT* → docs/15.
+- **2026-08-05 — nail-salon view-as surface review** (`89fae0a`, `20260804010000`, 33/33). All 12
+  `sal_` tables classified; rule → docs/03 #18. **Its unclosed gap is in the list below.**
+- **Earlier — the per-person data browser** (`070a73b`), **slice 5 view-as** (`20260731010000` +
+  `20260802010000`, `ad8e989`) and **the ACL hardening sweep** (`20260728010000`, `a16f4a5`: `anon`
+  holds nothing in `public`). Rules → docs/03 #17/#18/#19.
 
 **Next / open (pick WITH the founder — do not start unprompted; details in docs/15 §11).
 AS OF 2026-08-09 the numbered items 1–6 are ALL DONE, and so are the rank/tier-wrapper gap and
@@ -88,40 +74,24 @@ Phase 2 (org-scoped activity) is specced but NOT founder-approved and ships a mi
 numbered items survive below because they still carry live operational facts, not because they are
 open:**
 
-- ~~**1. Confirm CI/deploy for slice 5.**~~ ~~**2. Peer-review comments.**~~
-  ~~**4. THE OWNER CONSOLE VIEW-AS.**~~ ~~**5. Push and prod-verify.**~~ **ALL DONE**
-  2026-08-02 → 08-07; detail in the journal. The open follow-ons they produced have been
-  PROMOTED into the unranked list below rather than left inside a struck-through heading —
-  that is the 2026-08-07 lesson (*open state hidden inside a completed item is how it gets
-  lost*) applied to this file itself.
-- **3. The speed-dating waitlist flake** (details in its own bullet below). Only truly urgent
-  if it is what broke CI, which is now ruled out by item 1. **CI has `retries: 1` and runs the
-  PREBUILT server (`pnpm start`), while local runs the dev server with JIT compilation and 0
-  retries** — and the 2026-07-30 diagnosis pinned this family on exactly that dev-server/load
-  combination, so it may well be green in CI and be a local-suite annoyance only. A clean
-  `db:reset` → seed → full e2e run on 2026-08-03 (verifying the peer-review-comments fix)
-  reproduced BOTH speed-dating tests passing cleanly — so the flake, when it happens, is
-  intermittent even under the documented failure-inducing order, not a hard regression.
-  **More evidence, 2026-08-07: THREE full clean-seed suite runs in one session, speed-dating
-  green in all three** (final run 47/47, exit 0). What makes those three worth counting is
-  that they are the FIRST full runs SINCE the 2026-08-05 harness fix — so they are evidence
-  the fix worked, not evidence the flake never existed. **Do not tally them against older
-  runs:** 2026-08-04's three runs each lost a test and the waitlist test was one of them
-  (see the harness bullet below). Consistent with the fix holding; not proof. The standing
-  rule stands — *judge a flake by CI, not locally* — so consider closing this at a docs beat
-  only after CI has stayed green across several pushes, which would let this bullet and the
-  two harness bullets below collapse into one.
-- ~~**6. PROD'S DEMO DATA IS STALE.**~~ **DONE 2026-08-07.** Two facts from it are still
-  operationally live and are the only reason this line survives:
-  **(i) `scripts/verify-console-view-as.mts` is 35/35 local but PROD 34/35, permanently, BY
-  DESIGN** — not a target to chase. The founder genuinely owns a real org (`Solutions`), so
-  `is_org_member` genuinely returns true for him and the console's mode-1 blurb premise ("the
-  superadmin belongs to no org") is not literally true for that account. The check still tells
-  the truth; its FAIL is the understood steady state.
-  **(ii) The script is parameterised** — `VERIFY_DEMO_PASSWORD` / `VERIFY_SUPERADMIN_EMAIL` /
-  `VERIFY_SUPERADMIN_PASSWORD`, because prod's superadmin is the founder's REAL account, never
-  `owner@demo.local` (the remote-seed guard in `seed.ts` sets that account's `is_superadmin`
-  to `false` off-localhost).
+- ~~**1. Confirm CI/deploy for slice 5.** **2. Peer-review comments.** **3. The speed-dating
+  waitlist flake.** **4. The Owner Console view-as.** **5. Push and prod-verify.**~~ **ALL DONE**
+  2026-08-02 → 08-09; detail in the journal. Their open follow-ons were PROMOTED into the list
+  below rather than left inside struck-through headings — *open state hidden inside a completed
+  item is how it gets lost.*
+  **Item 3 (the e2e flake family) is CLOSED at this docs beat**, on the condition this file itself
+  set: CI green across several pushes. It has now been green across six consecutive production
+  deploys (`c142c1d` → `4ed2958`), plus a clean local 49/49. **The two reusable facts are kept —
+  as a gotcha below (`test.slow()` does not extend an `expect()` timeout) and in the journal's
+  2026-08-05 entry (the family has two sub-shapes needing two different knobs).** Standing rule
+  unchanged: *judge a flake by CI, not locally.*
+- ~~**6. PROD'S DEMO DATA IS STALE.**~~ **DONE 2026-08-07.** Two live facts only:
+  **(i) `scripts/verify-console-view-as.mts` is 35/35 local but PROD 34/35 permanently, BY DESIGN**
+  — the founder really owns an org, so the mode-1 blurb's "the superadmin belongs to no org" is not
+  literally true for that account. Not a target to chase. **(ii) It is parameterised**
+  (`VERIFY_DEMO_PASSWORD` / `VERIFY_SUPERADMIN_EMAIL` / `VERIFY_SUPERADMIN_PASSWORD`) because
+  prod's superadmin is the founder's REAL account — `seed.ts`'s remote guard forces
+  `owner@demo.local` to `is_superadmin = false` off-localhost. Full story → journal.
 Everything below is open but unranked:
 - **ENGAGEMENT MONITORING — PHASE 1 BUILT 2026-08-09. PHASE 3 IS THE RECOMMENDED NEXT PIECE;
   PHASE 2 IS SPECCED BUT NOT APPROVED.** Full spec + dated decisions:
@@ -223,59 +193,44 @@ Everything below is open but unranked:
   vocabularies are entirely rank 0, so they imply no view-as pairs today; rank-mapping any of
   them will FAIL THE BUILD until every newly-implied pair is explicitly answered. That is the
   2026-07-30 amendment working as designed, not an obstacle — but budget for it.
-- **Flaky e2e test — FIXED 2026-07-30** (`speed-dating module: register → round → mutual
-  interest → reveal`): genuine timing/load, not data contamination; scoped `test.slow()`,
-  verified in the exact failure-inducing order. Reasoning → journal, 2026-07-30.
-- ~~**The local e2e suite loses ONE test per full run, a DIFFERENT one each time.**~~ **FIXED
-  AT THE HARNESS LEVEL 2026-08-05** — and the diagnosis is the part worth keeping. Three
-  clean-seed full runs on 2026-08-04 each lost exactly one test and it was a different test
-  every time (classroom homework, then speed-dating waitlist), each passing in isolation. **A
-  moving failure is environmental, not a set of test bugs** — the local dev server compiles
-  routes mid-test — which is why per-test patches were whack-a-mole. The family has **two
-  sub-shapes needing two DIFFERENT knobs**, and confusing them is how a session wastes an hour:
-  1. **the assertion after a navigation times out** (the link is in the DOM, the page just has
-     not changed yet) → `expect.timeout`, now 15s locally. `test.slow()` does NOT help here: it
-     raises the TEST timeout, not the per-assertion one.
-  2. **the `.click()` ACTION stalls to the test timeout** (log ends at "element is visible,
-     enabled and stable, scrolling into view if needed") → `test.slow()` or a longer test
-     timeout; an `expect` timeout cannot fix it.
-  **CI is deliberately left STRICTER (5s expect, 30s test)** because it serves a PREBUILT app
-  where a slow assertion means something is genuinely slow — the split is what keeps this from
-  becoming a blanket "wait longer" that hides a regression. **Still judge a flake by CI, not
-  locally.**
-- Low-priority verification: the **worker** was not exercised after the ACL sweep (neither the RLS
-  suite nor e2e touches it). It should be unaffected — `service_role`'s privileges are provably
-  unchanged (the verifier asserts they can't shrink), it makes zero `.rpc()` calls, and pg-boss
-  connects as `postgres`. Watch the next real job run rather than building a test for it.
+- ~~**The e2e flake family** (2026-07-30 speed-dating; 2026-08-05 "loses ONE test per full run,
+  a different one each time").~~ **BOTH FIXED; closed at the 2026-08-09 docs beat — see item 3.**
+  The diagnosis is the part worth keeping: **a MOVING failure is environmental, not a set of test
+  bugs** (the local dev server compiles routes mid-test), and the family has **two sub-shapes
+  needing two DIFFERENT knobs** — an assertion timing out after a navigation wants `expect.timeout`
+  (15s locally), a stalled `.click()` wants `test.slow()`/a longer test timeout, and neither knob
+  fixes the other. **CI is deliberately STRICTER (5s expect, 30s test) against a PREBUILT app**, so
+  a slow assertion there means something is genuinely slow. Full reasoning → journal 2026-07-30 +
+  2026-08-05.
+- Low-priority verification: **the worker's PRE-EXISTING jobs** were never exercised after the ACL
+  sweep (neither suite touches them). Should be unaffected — `service_role`'s privileges provably
+  cannot shrink, zero `.rpc()` calls, pg-boss connects as `postgres`. Watch the next real job run.
+  *(The NEW `login-events-prune` job was exercised end-to-end 2026-08-09; that says nothing about
+  the others.)*
 - `gh` is NOT installed on this machine, so GitHub Actions logs need the web UI — **but CI
   PASS/FAIL is readable from the terminal indirectly**: the `deploy` job has `needs: check`,
   so a `READY` production deployment proves `check` was green. Query it with the
   `VERCEL_TOKEN` already in `.env.deploy`:
   `GET https://api.vercel.com/v6/deployments?limit=8` with `Authorization: Bearer <token>`,
   and match `meta.githubCommitSha` against the commit. Gives state/target/sha/time per
-  deploy. Only the UI shows *why* a run failed, but this answers "did it ship?" in seconds. **CI differs from local in two ways that matter for flaky e2e:** `retries: 1`
-  (local 0) and a PREBUILT server via `pnpm start` (local uses `pnpm dev`, so route
-  compilation happens mid-test). A test that flakes locally may be reliably green in CI, and
-  vice versa — judge by the actual CI run, not the local one. Both settings are in
-  `apps/web/playwright.config.ts:9,15`.
-  *(The 2026-08-02 founder decision behind item 2 — a student sees the COMMENTS on their own
-  homework but never the peer GRADES — was BUILT 2026-08-03; `cls_comments_for_my_submission()`
-  already had the right filter and grant. Details → module-2 spec, 2026-08-03.)*
+  deploy. Only the UI shows *why* a run failed, but this answers "did it ship?" in seconds.
+  **CI also differs from local in two ways that matter for e2e:** `retries: 1` (local 0) and a
+  PREBUILT server via `pnpm start` (local `pnpm dev` compiles routes mid-test) —
+  `apps/web/playwright.config.ts:9,15`. So a test that flakes locally may be reliably green in CI
+  and vice versa; judge by the actual CI run.
 - ~~**The per-person data browser.**~~ **DONE 2026-08-03.** One known gap is still open and
   is the only reason this line survives: **walk-in salon customers have no account, so they are
   not findable** — the fix, if ever wanted, is letting a salon LINK a walk-in to an account when
   they sign up, not requiring accounts up front. (Its other recorded gap, the view-as session
   log's whole-org admin read, was promoted to its own bullet above on 2026-08-09.)
-- **Founder-raised 2026-08-02, parked in docs/13.** The **read-only positions/ranks/pair-grid
-  viewer is DONE 2026-08-06** (folded into `/console/view-as`). ~~**The rank/tier-wrapper
-  verification gap**~~ **DONE 2026-08-09 — see Now.** What REMAINS of this entry is the
-  original, larger idea: generalising per-position visibility as a *documented, test-proven*
-  map rather than generated RLS, across every position × every table. Opus. It carries the
-  reusable line it produced: **anything that WIDENS reach belongs in code; anything that only
-  NARROWS it can be a runtime switch.** Note the rank map does NOT subsume it — that map
-  answers "which POSITIONS does a rank gate admit", never "which TABLES may a position read",
-  and it deliberately ignores non-rank arms (role-name checks, `is_org_admin`) because those
-  do not move when the ladder moves.
+- **Founder-raised 2026-08-02, parked in docs/13** (its pair-grid viewer and rank/tier-wrapper
+  halves are both DONE, 2026-08-06 / 08-09). What REMAINS is the original larger idea:
+  per-position visibility as a *documented, test-proven* map across every position × every table,
+  rather than generated RLS. Opus. **The rank map does NOT subsume it** — that answers "which
+  POSITIONS does a rank gate admit", never "which TABLES may a position read", and it ignores
+  non-rank arms (role-name checks, `is_org_admin`) because those don't move when the ladder does.
+  Carries the rule: *anything that WIDENS reach belongs in code; anything that only NARROWS it can
+  be a runtime switch.*
 - Everywhere role-clarity labels (founder testing-round items 31–42) — high value; the
   view-as half of that item is now built.
 - Deferred platform hardening — the `revoke PUBLIC`/anon-table items are **DONE and pushed**

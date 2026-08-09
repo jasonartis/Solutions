@@ -671,6 +671,24 @@ inventory** — re-derive the inventory from the code before building anything t
 its completeness. The re-derivation here also turned up two whole rules the summary omitted,
 one of which (`module_roles_guard_last_director`, the only reader of rank 4) fails OPEN.
 
+**AND THE THIRD LESSON FROM THAT SESSION: WHEN HALF A FACT COMES FROM THE SOURCE OF TRUTH, THE
+OTHER HALF IS WHERE THE NEXT GAP IS.** The rank-admission checker DISCOVERED its list of
+rank-reading functions from `pg_proc.prosrc` — correctly, and that was the whole point — while
+hand-DECLARING the position vocabulary it compared them against. An adversarial review caught it:
+the discovered half looks so rigorous that it lends unearned credibility to the declared half
+sitting beside it, and the declared half is the one that silently goes stale. → **Whenever a check
+derives one input from the authority, ask what its OTHER inputs are derived from**, and derive
+those too (the fix read the vocabulary out of the ladder function's own body). This is the
+discover-don't-declare rule applied recursively, and it generalises past checkers to any claim
+assembled from a measured part and an assumed part — the measured part is not evidence for the
+assumption next to it.
+
+*(Recorded here 2026-08-09, at the second attempt. This rule spent a session being cited as
+"now in docs/03" by CLAUDE.md while never having been written to docs/03 at all — it existed only
+in the pointer that claimed it lived elsewhere, and a later compression of that pointer came
+within one commit of deleting it outright. Which is itself the lesson: a cross-reference is a
+claim, and an unverified one is how a lesson dies.)*
+
 **NEVER DOCUMENT A TEST YOU HAVE NOT WRITTEN — NOT EVEN ONE YOU INTEND TO WRITE IN THE SAME
 SESSION (2026-08-09, from the login-capture review).** The migration for engagement monitoring
 carried four comments saying "asserted in the RLS suite", written while drafting because the
