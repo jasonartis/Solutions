@@ -204,7 +204,16 @@ Everything below is open but unranked:
   arm at all.
 - ~~**Seed the salon's back office.**~~ **DONE 2026-08-05** — see Now. (Salon demo logins are
   now: **frank = admin**, alice = manager, eve = cashier, dana = worker, charlie = customer.)
-- **`cls_exam_papers` IS STILL ZERO-ROW, so the student/GA exam section is UNFALSIFIABLE.**
+- ~~**`cls_exam_papers` IS STILL ZERO-ROW, so the student/GA exam section is UNFALSIFIABLE.**~~
+  **DONE 2026-08-09** (seed-only, no migration). The seed now creates one `cls_exams` row
+  (`Quiz 1 — Warm-up`) plus a `cls_exam_papers` row for charlie, so the exam section renders a
+  real row on every surface instead of an empty one that could equally mean "broken".
+  **The collision was real and was checked first:** the classroom exam e2e creates its OWN
+  exam titled `Midterm` in the same (only) class and clicks a PAGE-LEVEL link by that exact
+  name — a seeded exam sharing the title would have made that click a strict-mode ambiguity.
+  Hence the different title, and the fixture deliberately grades nobody and publishes nothing,
+  so it cannot pre-satisfy that test's grading/publish assertions either. Verified on a clean
+  reset+seed: db 108/108, e2e 49/49 exit 0. Original reasoning kept below for the pattern:
   Carried over from the 2026-08-06 fixtures beat, which closed the other four classroom
   zero-row tables and left this one deliberately: it needs a `cls_exams` parent that nothing
   seeds. Consequence, in the vacuity rule's terms: that section renders empty on every
@@ -339,6 +348,20 @@ in the sections below.
 - After `supabase db reset`, Kong can hold a stale route to the recreated auth container (502 on `/auth/v1/*` while `rest` works) → `docker restart supabase_kong_Solutions_Platform`.
 - `import.meta.dirname` is `undefined` under tsx — use `dirname(fileURLToPath(import.meta.url))`.
 - Docker Desktop's WSL backend crashed under parallel image pulls → `C:\Users\yarmishj\.wslconfig` caps WSL at 8GB/4CPU (delete to revert); pull images sequentially if it recurs; zero-log segfaulting containers (exit 139) = corrupted image layers, `docker rmi` + re-pull.
+- **DOCKER DESKTOP CAN DIE OUTRIGHT UNDER A LONG SESSION'S MEMORY PRESSURE, and the symptom
+  reads as a test failure (2026-08-09).** After a session of resets + builds + Playwright runs,
+  the db suite reported `ECONNREFUSED 127.0.0.1:54321/54322` and 104 tests SKIPPED — which
+  looks like a broken diff and is not. `docker ps` then failed with *"failed to connect to the
+  docker API … dockerDesktopLinuxEngine: The system cannot find the file specified"* — the
+  ENGINE was gone, not the containers. Tell-tales that precede it: `supabase db reset` hanging
+  with an EMPTY log and the db container's uptime NOT resetting (a real reset recreates it),
+  and `bash: fork: Resource temporarily unavailable`. **Fix: `Start-Process "$env:ProgramFiles\
+  Docker\Docker\Docker Desktop.exe"`, wait ~10s, then restart Kong** (the containers
+  auto-restart and Postgres keeps its volume, so reset+seed state survives — but Kong's auth
+  route goes stale exactly as after a `db:reset`). Free RAM measured AFTER the crash looks
+  healthy (11GB of 31GB), which is misleading: it is free BECAUSE Docker died. Same family as
+  the OOM entries below — **any all-tests-fail-at-connection result is infrastructure, never
+  code.**
 - **`pnpm test` OOM-crashes on this host under turbo's 5-way parallelism** (`FATAL ERROR:
   Committing semi space failed`, at absurdly small heaps with ~7GB free). It is NOT the
   `node-compile-cache` corruption below — clearing that does not help. **Use `pnpm exec turbo

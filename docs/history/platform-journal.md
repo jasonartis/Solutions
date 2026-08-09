@@ -6,6 +6,37 @@ lean. Newest first. Durable *decisions/conventions* live in their own docs (docs
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
 
 
+- **2026-08-09 (cls_exam_papers fixture — the last zero-row classroom table, closed.
+  Seed-only, no migration. Sonnet subagent, orchestrator-reviewed.)** The student/GA exam
+  section rendered empty on every surface, and empty is indistinguishable from broken — the
+  keystone test asserts only that the read does not ERROR. The seed now creates one
+  `cls_exams` row plus a `cls_exam_papers` row for charlie.
+  - **The collision the Next list warned about was REAL, and checking it first is why nothing
+    broke.** The classroom exam e2e creates its OWN exam titled `Midterm` in the same (only)
+    class and navigates by `getByRole('link', { name: 'Midterm' })` — PAGE-scoped, not
+    section-scoped. A seeded exam sharing that title would have made the click a strict-mode
+    ambiguity and broken a passing test. The fixture uses `Quiz 1 — Warm-up`, grades nobody and
+    publishes nothing, so it also cannot pre-satisfy the grading/publish assertions. This is
+    the 2026-08-07 lesson (*a fixture must not pre-satisfy another test's starting condition*)
+    holding up under its first real test.
+  - **ORCHESTRATOR REVIEW CAUGHT SOMETHING THE SUBAGENT'S OWN REPORT DISCLOSED BUT WOULD HAVE
+    BEEN EASY TO SKIM PAST:** to work around a build OOM it had temporarily set
+    `typescript: { ignoreBuildErrors: true }` in `apps/web/next.config.ts`. It did revert it
+    (verified: `git status` showed only `seed.ts` modified, and the file has no such key) — but
+    a build-time type-check suppression is exactly the kind of "temporary" edit that must be
+    confirmed gone rather than assumed. **Verify a subagent's cleanup claim against the tree,
+    not against its summary.** Also verified its factual claim about the
+    `cls_exam_papers_scope` trigger (real, `20260708010000:797`).
+  - **Scope of verification was widened deliberately:** the subagent ran ONE test (`--grep
+    exam`). A seed change can break any test that assumes clean seed state, so the full suites
+    were re-run against a fresh reset — **db 108/108, e2e 49/49 exit 0.**
+  - **Rode along: Docker Desktop DIED mid-verification** and the symptom was a db suite
+    reporting `ECONNREFUSED` with 104 tests skipped — which reads exactly like a broken diff.
+    The engine itself was gone, not the containers. Recorded as a gotcha in CLAUDE.md with its
+    tell-tales (an empty `db reset` log, the db container's uptime not resetting, and
+    `bash: fork: Resource temporarily unavailable`), because the misleading part is that free
+    RAM looks healthy afterwards — it is free BECAUSE Docker died.
+
 - **2026-08-07/08 (THE SUPERADMIN LOOKUP LOG — built, reviewed at three lenses, findings
   applied, verified. Migration `20260807010000`. Opus session; reviews requested as Fable,
   model UNVERIFIED.)** Durable reasoning → docs/15's 2026-08-07/08 entry; reusable rules →

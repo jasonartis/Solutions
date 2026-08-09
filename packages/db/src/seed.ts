@@ -537,6 +537,46 @@ async function main() {
   ])
   if (answerErr) throw new Error(`Survey answer seed failed: ${answerErr.message}`)
 
+  // --- A seeded exam + scan, added 2026-08-09 --------------------------------
+  // cls_exam_papers was ZERO-row on a clean seed, so the student/GA exam-scans
+  // surface (view-as's "Their exam scans" embed and the data browser's "Exam
+  // scans" row — packages/platform/src/view-as-modules.ts /
+  // data-browser-modules.ts) rendered empty on every surface. Empty is
+  // indistinguishable from broken (the vacuity rule, docs/03): the keystone
+  // test only asserts the read doesn't error, never that a real row shows up.
+  //
+  // NAMED AND SCOPED TO AVOID THE EXAM E2E'S OWN FIXTURE (2026-08-07 lesson —
+  // a seed must not pre-satisfy another test's starting condition). The e2e
+  // "professor creates an exam" test creates its OWN exam titled "Midterm" in
+  // this same class (Statistics 101 — Fall) and asserts a page-level link by
+  // that exact name, so this fixture uses a different title ("Quiz 1 — Warm-
+  // up") to stay unambiguous. It grades no one and publishes no final, so it
+  // cannot pre-satisfy that test's grading/publish assertions either.
+  const { data: quiz, error: quizErr } = await admin
+    .from('cls_exams')
+    .insert({
+      org_id: orgA,
+      class_id: klass!.id,
+      title: 'Quiz 1 — Warm-up',
+      structure: [{ label: '1', points: 10 }],
+    })
+    .select('id')
+    .single()
+  if (quizErr) throw new Error(`Exam seed failed: ${quizErr.message}`)
+
+  // org_id/class_id are re-derived from exam_id by the cls_exam_papers_scope
+  // trigger regardless of what's passed here; no storage object actually
+  // exists at this path (the grading page's createSignedUrl call degrades to
+  // "no link shown" for a missing object, it does not error).
+  const { error: paperErr } = await admin.from('cls_exam_papers').insert({
+    org_id: orgA,
+    class_id: klass!.id,
+    exam_id: quiz!.id,
+    student_id: charlieId,
+    storage_path: `${orgA}/${klass!.id}/${quiz!.id}/charlie-quiz1.pdf`,
+  })
+  if (paperErr) throw new Error(`Exam paper seed failed: ${paperErr.message}`)
+
   // --- Demo matchmaking for module 1 ---------------------------------------
   // A separate org so the matchmaking role vocabulary (single/matchmaker/admin)
   // doesn't collide with orgA's classroom roles. alice administers; four
