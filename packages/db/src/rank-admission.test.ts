@@ -73,6 +73,19 @@
 // 4/3/2/1 in EVERY module — `module_position_rank('sample','lead')` is 2 today,
 // so any module_key can reach a `>= 2` gate through a name nothing declares.
 //
+// SHAPES THAT CORRECTLY HARD-FAIL, verified empirically against this parser
+// (2026-08-09) so nobody has to rediscover the list by hitting them one at a
+// time: reversed operands (`2 <= rank(...)`), `between`, `in (...)`,
+// `case rank(...) when`, `coalesce(rank(...), 0) >= 2`, rank passed as an
+// argument to another function, `having max(rank(...)) >= 2`, rank materialised
+// in a CTE column, `execute format('… >= %s')`, `r := rank(); if r >= 2`,
+// `r := rank()::int`, `<>` / `!=`, and a threshold parameter with no resolvable
+// call site. Each raises a named problem. Correctly HANDLED (not failures): an
+// operator across a newline, `>=2` with no space, `>= 2::int`, the 1-arg
+// overload, and a subquery or column reference as the module argument — the last
+// three resolve the module to null, which lists the gate under EVERY module and
+// is the conservative direction.
+//
 // TWO THINGS TO KNOW BEFORE "FIXING" A FAILURE HERE:
 //   * An ordinary plpgsql idiom — `r := rank(a,b); if r >= 2 then` — fails on
 //     purpose, because pass 3 only clears a bound variable that is compared to
@@ -563,6 +576,13 @@ describe('rank admission: what each rank gate lets through (docs/13, CLAUDE.md N
         // Comments blanked (offsets preserved) so neither the parser nor the
         // closure can be fooled by SQL that is not code. See blankComments().
         src: blankComments(r.src),
+        // Splitting `pg_get_function_arguments` on `,` and taking the first token
+        // is crude, and it CORRUPTS on a DEFAULT containing a comma
+        // (`label text DEFAULT 'a, b'`) or on OUT/INOUT/VARIADIC markers. Left
+        // crude on purpose: in every shape tried, the shifted ordinal resolved to
+        // `undefined` and the threshold then HARD-FAILED as unresolvable rather
+        // than silently picking the wrong literal. It fails safe. Do not "fix" it
+        // by relaxing the failure — teach it the shape instead.
         params: r.args
           .split(',')
           .map((a) => a.trim().split(/\s+/)[0] ?? '')

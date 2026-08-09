@@ -38,8 +38,10 @@ broken query: on the same connection, `auth.users` showed `ins=12`, `auth.sessio
 `ins=27 / del=12 / live=15`, `auth.refresh_tokens` `ins=51`. The read works. The absence is
 real. Supabase's hosted GoTrue routes auth logs to platform logging, not to this table.
 
-**Locally that same table is fully populated** — 160 rows, one per sign-in, with a clean
-`payload.actor_id` joining to `auth.users`.
+**Locally that same table is fully populated** — 160 rows (148 `login`, 11 `user_signedup`,
+1 `logout`), one per sign-in, with a clean `payload.actor_id` joining to `auth.users` on all
+148. Note `ip_address` is EMPTY on all 160 rows even locally, so no IP-based signal exists
+there regardless.
 
 > This is the ACL trap in a new costume, and it is the reason this document exists before any
 > code does. Build the feature on `audit_log_entries` and it works perfectly on the developer's
@@ -51,7 +53,7 @@ real. Supabase's hosted GoTrue routes auth logs to platform logging, not to this
 | Source | What it gives | Usable? |
 |---|---|---|
 | `auth.users.last_sign_in_at` | The LAST login. No history. | Yes, but it answers "when", never "how often" |
-| `auth.sessions` | `created_at`/`refreshed_at`, ~15 live rows | No — lossy by construction; 12 of 27 rows already deleted by logout / token rotation |
+| `auth.sessions` | `created_at`/`refreshed_at`, plus `user_agent` and `ip` (both populated) | No — lossy by construction; 12 of 27 rows already deleted by logout / token rotation. The only place device/IP exists at all, if that is ever wanted |
 | `auth.audit_log_entries` | One row per sign-in | **No — empty on prod** |
 
 **Conclusion: login frequency does not exist anywhere today.** It has to be captured going
@@ -69,6 +71,19 @@ orgs, "logged into org B" is undefined at the auth layer.
 
 The only thing linking a person to an org is `org_members` / `module_roles` — **membership, not
 activity.**
+
+**AND THERE IS NO ACTIVITY RECORD ANYWHERE ON THE PLATFORM TODAY.** Surveyed 2026-08-09:
+nothing records "user X did something in org Y at time T". `org_members` has `created_at`,
+`invited_at`, `accepted_at` and no activity column; `module_roles` has `created_at` and is
+mutated in place. The only tables carrying `(org_id, actor, created_at)` are
+`vm_moderation_log`, `view_as_sessions`, `superadmin_lookup_log` and `job_requests` — each
+locked to one tool by a CHECK or an insert policy, none of them general. The single piece of
+prior art in the whole repo is **`vm_conversation_members.last_seen_at`**, which is per
+conversation, not per org.
+
+*Recorded as a NEGATIVE finding on purpose:* the natural first instinct in phase 2 will be to
+look for an existing activity table to extend. There isn't one, and re-running that search
+costs an hour to arrive back here.
 
 So the founder's two questions need two different data sources:
 
@@ -235,6 +250,35 @@ Phase 1 (logins) has no org context at all, so it carries none of these — see 
 
 ---
 
+## 8a. Console integration notes (surveyed 2026-08-09 — saves re-deriving it in phase 3)
+
+Recorded because it was established by reading the code and is not obvious from it:
+
+- **There are only four files under `apps/web/app/(app)/console/`** — `page.tsx` (index + org
+  CRUD), `actions.ts`, `data-browser/page.tsx`, `view-as/page.tsx`. **There is no
+  `console/layout.tsx` and no shared page shell**, so a new tool brings its own.
+- **`requireSuperadmin()` lives in `apps/web/lib/platform.ts`**, not in the console files:
+  `createClient()` → `auth.getUser()` → `profiles.is_superadmin` → `notFound()` on failure,
+  returning `{ supabase, userId, gate }`. The `SuperadminGate` brand is in the same file and
+  the **only** place that mints it is the cast inside that function — enforced by a test in
+  `rls.test.ts`.
+- **The console nav is inline JSX, not a data array** (`console/page.tsx`, the tool list).
+  A new tool is hand-added there — there is no registry to extend.
+- **A new console page must also be added to `CONSOLE_PATH` in `rls.test.ts`**, or it is never
+  source-scanned for the two bans that make the UI gate sound (no `.rpc()`, no service-role on
+  that path). Missing that is silent: the page works and simply is not checked.
+- **`data-browser.ts` already has an `activity: boolean` section flag**, used for
+  `job_requests`, `view_as_sessions` and `superadmin_lookup_log`. Its declaration format
+  (`table, personColumns, orgColumn, orderBy, limit, note`) is directly reusable, and it is
+  already org-pivoted then person-pivoted — the same two directions §1 asks for. What it does
+  NOT do is aggregate; engagement is a third question and docs/03 #19 requires the page to say
+  so explicitly rather than look like a fourth data-browser tab.
+- **One inconsistency noticed, not fixed:** `console/page.tsx` does its own inline
+  `getProfile()` superadmin check, and `console/actions.ts` carries a *duplicate private*
+  `requireSuperadmin()` that THROWS where the shared one 404s. Not a hole — both still gate —
+  but a new tool should use the shared `platform.ts` one, and this is worth cleaning up
+  separately rather than copying.
+
 ## 9. Privacy and disclosure (founder decision, 2026-08-09)
 
 **No user-facing notification, no consent flow, no setting. One line in the privacy policy when
@@ -258,6 +302,15 @@ the test suite fails.
 ---
 
 ## 10. Verification plan (docs/03 #12 — this ships a migration, so the full rhythm applies)
+
+> **Model, decided 2026-08-09: build on Opus; run the adversarial review step on Fable.**
+> The build is ordinary Opus-tier migration/RLS work. The REVIEW earns the top tier under the
+> "novel mechanism, not a copy of an audited pattern" test for one specific reason: **the prune
+> function is a `SECURITY DEFINER` that can DELETE from an otherwise append-only table**, and
+> every existing log on this platform is append-only with no exception whatsoever. That is a
+> new hole in an established invariant, on a table of personal data. Switch manually at that
+> beat rather than delegating it.
+
 
 1. Draft the migration → **orchestrator reads it** → independent adversarial review → apply
    findings → RLS tests → live round-trip as real users.

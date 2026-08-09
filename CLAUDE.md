@@ -285,7 +285,13 @@ in the sections below.
 - Node module compile cache corruption makes pnpm OOM-crash at tiny heaps → delete `%TEMP%\node-compile-cache`.
 - PowerShell 5.1 `-Encoding utf8` writes a BOM; the Supabase CLI refuses BOM'd `.env` files. Write env files from Node (scripts/dev.ts) or with BOM-less UTF8.
 - After `supabase db reset`, Kong can hold a stale route to the recreated auth container (502 on `/auth/v1/*` while `rest` works) → `docker restart supabase_kong_Solutions_Platform`.
-- `import.meta.dirname` is `undefined` under tsx — use `dirname(fileURLToPath(import.meta.url))`.
+- **Resolving a path from `import.meta.url` — TWO traps on this host, same family.**
+  `import.meta.dirname` is `undefined` under tsx; and **`new URL('...', import.meta.url).pathname`
+  leaves the space in `D:\Solutions Platform` PERCENT-ENCODED**, so anything written through it
+  lands in a phantom `D:\Solutions%20Platform\` that git never sees and nobody ever looks in.
+  Hit 2026-08-09 writing the rank map: the test reported "snapshot written" and passed, and the
+  file simply was not in the repo. **Always `dirname(fileURLToPath(import.meta.url))`** — it
+  decodes. The failure is silent and looks like success, which is what makes it worth a bullet.
 - Docker Desktop's WSL backend crashed under parallel image pulls → `C:\Users\yarmishj\.wslconfig` caps WSL at 8GB/4CPU (delete to revert); pull images sequentially if it recurs; zero-log segfaulting containers (exit 139) = corrupted image layers, `docker rmi` + re-pull.
 - **DOCKER DESKTOP CAN DIE OUTRIGHT UNDER A LONG SESSION'S MEMORY PRESSURE, and the symptom
   reads as a test failure (2026-08-09).** After a session of resets + builds + Playwright runs,
