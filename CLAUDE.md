@@ -19,8 +19,9 @@ A multi-tenant modular platform: each client engagement produces a **module** bu
      and update only the compact "Now / Next / Standing rules" below. A fresh chat must never
      pay for the full journal. See "Session hygiene". -->
 
-**Now (2026-08-08):** **THE SUPERADMIN LOOKUP LOG IS BUILT AND FULLY VERIFIED LOCALLY —
-NOT YET COMMITTED, PUSHED, OR ON PROD.** Migration `20260807010000`; both Owner Console tools
+**Now (2026-08-09):** **THE SUPERADMIN LOOKUP LOG IS ON PROD AND PROD-VERIFIED**
+(commit `eef09ce`, migration `20260807010000`; **prod 23/23, zero failures** via the new
+`scripts/prod-verify-superadmin-log.mts`). Both Owner Console tools
 write one row per real lookup (`apps/web/lib/superadmin-log.ts`), a failed write is BADGED on
 screen rather than swallowed, and **docs/12 item 9 is closed**. Full docs/03 #12 rhythm ran:
 draft → three-lens adversarial review → findings applied → 11 RLS tests → live round-trip
@@ -43,7 +44,15 @@ superadmin, the flat `is_superadmin()` read arm means each sees 100% of the othe
 unscoped — a v1 default, **NOT** a derivation of the appointment rule (there is no rank domain
 among superadmins), and a founder decision. Detail → journal + docs/15's 2026-08-07/08 entry;
 rules → docs/03. **Verification: typecheck 9/9, build clean, db 108/108 (RLS 104/104, floor
-raised to 104), e2e 49/49 exit 0 run in CI-STRICT mode against the PREBUILT server.**
+raised to 104), e2e 49/49 exit 0 run in CI-STRICT mode against the PREBUILT server; prod
+23/23.** **NEW TOOLING, and it exists because of a documented trap:**
+`scripts/prod-verify-superadmin-log.mts` checks what `prod-verify-migration.ts` structurally
+CANNOT — that script parses `create function` blocks, so on a table/policy migration its
+"0 failures" is vacuous (the `20260806010000` lesson). The new one verifies the table's real
+prod ACL (the `ALTER DEFAULT PRIVILEGES` over-grant did NOT happen), both policies' exact
+expressions, **the ABSENCE of any rank arm**, the trigger being BOUND rather than merely
+defined, and that every FK is `on delete set null` with no CHECK fighting it — each with a
+control so an empty catalog read cannot pass as a correct absence.
 
 **Previously (2026-08-07):** **THE OWNER CONSOLE VIEW-AS IS ON PROD AND PROD-VERIFIED** (commit
 `6a90110`, migration `20260806010000`; Vercel production `READY`, which proves CI was green
@@ -333,7 +342,19 @@ in the sections below.
 - **`pnpm test` OOM-crashes on this host under turbo's 5-way parallelism** (`FATAL ERROR:
   Committing semi space failed`, at absurdly small heaps with ~7GB free). It is NOT the
   `node-compile-cache` corruption below — clearing that does not help. **Use `pnpm exec turbo
-  run test --concurrency=1`.** Never read a parallel-run failure as a real one.
+  run test --concurrency=1`.** Never read a parallel-run failure as a real one. The same
+  applies to `typecheck` and `build` (exit code **134** = SIGABRT is this, not a type error).
+- **THE FULL E2E SUITE OOMs THE `pnpm dev` SERVER on this host, and the fix is to run it the
+  way CI does (2026-08-09).** Symptom: 49/49 fail, every one `page.goto: net::
+  ERR_CONNECTION_REFUSED`, with `FATAL ERROR: ... JavaScript heap out of memory` in the
+  `[WebServer]` lines — the dev server never came up, or died partway (a partial run is the
+  same cause: tests pass until it dies, then everything after fails). Clearing
+  `%TEMP%\node-compile-cache` does NOT fix it. **`CI=true pnpm --filter web exec playwright
+  test` does** — that serves the PREBUILT app (`pnpm start`) instead of JIT-compiling routes,
+  which is both far lighter on memory and the STRICTER configuration (5s expect, 30s test,
+  retries 1). Build first. Generalises the existing sign-in rule: **all-tests-fail-at-connection
+  is an infrastructure symptom, never a code one** — read the `[WebServer]` output before
+  suspecting your diff.
 - **EVERY e2e test failing at sign-in ("Sign in" stuck on `Working…`) is an INFRASTRUCTURE
   symptom, never a code one.** Two causes, both hit on 2026-08-06, and the wasted hour came
   from theorising instead of measuring:

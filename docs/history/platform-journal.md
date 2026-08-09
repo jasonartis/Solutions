@@ -61,6 +61,34 @@ decision log, docs/03 conventions, docs/12 safeguards) — this is the chronolog
     97/97 — 11 new tests, floor raised to 104; e2e 49 with two new round-trip tests that drive
     the real console over HTTP and assert the lookup then surfaces in the data browser. Live
     rows confirmed with the intended shape asymmetry.
+  - **A LOCAL-ONLY HOST PROBLEM WORTH RECORDING, because it cost three suite runs and looked
+    like a regression.** The full e2e suite failed 49/49 twice with every test reporting
+    `ERR_CONNECTION_REFUSED` — the `pnpm dev` server had died with `FATAL ERROR:
+    NewSpace::EnsureCurrentCapacity Allocation failed - JavaScript heap out of memory` after a
+    session of resets, builds and Playwright runs. Clearing `%TEMP%\node-compile-cache` (the
+    documented fix) did not help. **What did: running the suite the way CI does —
+    `CI=true`, which serves the PREBUILT app via `pnpm start` instead of JIT-compiling routes
+    in `next dev`.** 49/49, exit 0, and in the STRICTER config (5s expect, 30s test, retries
+    1). Two lessons: an all-tests-fail-at-connection result is an infrastructure symptom, never
+    a code one (the existing rule about sign-in failures generalises); and `CI=true` locally is
+    both the memory fix and the more meaningful run, since it is literally what CI executes.
+  - **SHIPPED AND PROD-VERIFIED THE SAME SESSION.** Backup first
+    (`backups/2026-08-09T06-10-41/`), `--dry-run` confirmed exactly ONE pending migration,
+    pushed (`eef09ce`), then `migrate:prod`. The CLI's non-fatal `pgdelta-target-ca.crt ENOENT`
+    appeared again — its catalog-CACHE step tripping on a local cert path, third occurrence,
+    and the migration applied regardless.
+  - **NEW TOOLING: `scripts/prod-verify-superadmin-log.mts`, and it exists because of a trap
+    this repo already documented.** `prod-verify-migration.ts` parses `create function` blocks,
+    so on this migration it verified ONE trigger function and nothing else — not the table, its
+    ACL, the policies, the constraints, or whether the trigger is even bound. That is exactly
+    the vacuity that bit `20260806010000`. The new script checks all of it against prod,
+    read-only, **with a control on every block** so a broken catalog read cannot pass as a
+    correct absence. **Prod 23/23, zero failures** — including the three that only prod can
+    answer: the `ALTER DEFAULT PRIVILEGES` over-grant did NOT happen (`authenticated` holds
+    exactly INSERT+SELECT, `service_role` exactly SELECT, `anon` nothing, and no role holds
+    the whole-table wipe privilege); **no policy references a module rank arm** (the rank-0
+    inversion, asserted as a negative with the policy count as its control); and every FK is
+    `on delete set null` with no CHECK clause fighting it.
 
 - **2026-08-07 (PROD DEMO REFRESH + PROD-VERIFY, Sonnet session — closed CLAUDE.md's Next
   item 6. Also: cross-checked docs/15's 2026-08-06/07 entry and `apps/web/lib/view-as.ts`'s
