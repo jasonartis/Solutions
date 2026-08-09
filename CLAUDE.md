@@ -19,154 +19,63 @@ A multi-tenant modular platform: each client engagement produces a **module** bu
      and update only the compact "Now / Next / Standing rules" below. A fresh chat must never
      pay for the full journal. See "Session hygiene". -->
 
-**Now (2026-08-09):** **THE RANK/TIER-WRAPPER VERIFICATION GAP IS CLOSED** — the last item
-docs/13 was carrying. `packages/db/src/rank-admission.test.ts` + the generated
-**[docs/rank-admission-map.md](docs/rank-admission-map.md)** (which is also docs/13's asked-for
-"what does rank 2 mean in this module?" table). **No migration.** Not pushed yet.
-**The audit that came first moved the answer, and that is the durable part: docs/13's "one
-ladder, FOUR rules" is right as FAMILIES and wrong as an inventory — it is EIGHT functions,
-14 call sites.** The tier-threshold family alone is five functions with four independently
-hardcoded `2`s, so guarding only the generic `module_caller_covers_rank` would have looked
-complete and covered half. **Two rules were missing from the summary outright:**
-`module_roles_guard_last_director` — the only reader of rank **4**, and it fails **OPEN**
-(demote `director` below 4 and "a module must keep at least one Director" silently stops
-firing everywhere) — and the `= 3` peer-appointment arm in `module_caller_can_manage_seat`,
-an **equality**, which no threshold-shaped check would ever have found. Generalised in
-docs/03: *a count of mechanisms is not a count of code — re-derive the inventory before
-building anything that depends on its completeness.* **Mechanism: discover, don't declare.**
-Rank readers are read from `pg_proc.prosrc` and asserted against a tripwire list, so a ninth
-rule fails the build the day it lands; a comparison whose shape the parser cannot classify
-is a **FAILURE, never a skip** (now its own docs/03 rule — *a checker that skips the
-unfamiliar goes green while covering less and less*, the vacuity rule with a slow fuse). It
-caught a real miss in its own first draft. **PROVEN AGAINST THE MOTIVATING EXAMPLE:** cashier
-remapped 1→2 in the live DB fails the test and the diff names `sal_earnings_ledger`; restored
-and verified byte-identical by md5 of `prosrc`. Also: `prod-verify-view-as.mts` probe [5] no
-longer hand-types 12 rank triples — it parses the map and checks **56** pairs, with a control.
-**THE ADVERSARIAL REVIEW WAS RUN ON THE CHECK ITSELF** (no migration shipped, but a checker
-that lies is the exact failure it exists to prevent) **and found FOUR silent-widening holes —
-green while covering less — all fixed and re-proven:** discovery was **case-sensitive** over
-`prosrc` (stored verbatim, so `MODULE_POSITION_RANK(...)` was invisible) — now backed by a
-control requiring Postgres and the regex to AGREE on how many bodies mention the ladder; only
-`pg_proc` was searched, so a rank test in a policy/CHECK/default/view/index/other schema was
-outside the parser — none exist, and that **absence is now asserted with its own control**;
-**the rule set was discovered but the VOCABULARY was declared** (the sharpest one — the file's
-own argument condemned it: `when 'supervisor' then 3` would have given every module a rank-3
-name with no map row and no failure) — now parsed from the ladder's own body per module block;
-and **`not (rank >= 2)` parsed as `rank >= 2`**, which would have published the exact
-COMPLEMENT of who a gate admits. Also fixed: comments were parsed as code both ways, the
-closure froze on first pass, and **three header claims were false**.
-**THE RATCHET GAP IS CLOSED (founder-approved):** `tests-floor.json` gained `requiredFiles`
-and CI fails if one is missing **or merely UNTRACKED** — the untracked half matters because
-vitest WRITES a missing snapshot outside `CI=true`, so an uncommitted map passes locally and
-defends nothing. A numeric floor would have been theatre (one `it()` per file).
-**Verification: typecheck 9/9, build clean, db 109/109** (rls 104 + data-browser 4 + rank 1),
-e2e CI-STRICT against the prebuilt server. Detail → journal + docs/15's 2026-08-09 entry;
-rules → docs/03; ratchet → docs/12.
+**Now (2026-08-09):** **THE RANK/TIER-WRAPPER VERIFICATION GAP IS CLOSED** (`ba4eb6a`, pushed,
+**no migration**) — the last thing docs/13 was carrying. `packages/db/src/rank-admission.test.ts`
++ the generated **[docs/rank-admission-map.md](docs/rank-admission-map.md)**, which doubles as
+docs/13's "what does rank 2 mean in this module?" table. Rank readers AND the position
+vocabulary are both DISCOVERED (from `pg_proc.prosrc` and the ladder's own body), and a
+comparison the parser cannot classify FAILS rather than being skipped. Proven by remapping
+salon `cashier` 1→2 in the live DB: fails, and the diff names `sal_earnings_ledger`.
+**Three reusable lessons, all now in docs/03 — read them there, not here:** *a count of
+mechanisms is not a count of code* (docs/13's "FOUR rules" was eight functions, and the two it
+omitted included the only reader of rank 4, which fails **OPEN**); *a checker must fail on what
+it cannot understand, never skip it*; and *when half a fact comes from the source of truth, the
+other half is where the next gap is* — which is the mistake the adversarial review caught this
+very file making. **CI ratchet extended:** `tests-floor.json.requiredFiles` fails on a
+schema-coverage file that is missing *or merely untracked*. **Verification: typecheck 9/9,
+build clean, db 109/109, e2e 49/49 exit 0 CI-STRICT.** Detail → journal + docs/15 2026-08-09.
 
-**Previously (2026-08-07/08):** **THE SUPERADMIN LOOKUP LOG IS ON PROD AND PROD-VERIFIED**
-(commit `eef09ce`, migration `20260807010000`; **prod 23/23, zero failures** via the new
-`scripts/prod-verify-superadmin-log.mts`). Both Owner Console tools
-write one row per real lookup (`apps/web/lib/superadmin-log.ts`), a failed write is BADGED on
-screen rather than swallowed, and **docs/12 item 9 is closed**. Full docs/03 #12 rhythm ran:
-draft → three-lens adversarial review → findings applied → 11 RLS tests → live round-trip
-verification. **Three findings worth carrying forward, all reusable well past this table:**
-**(1) "UNRANKED" AND "RANK 0" ARE NOT THE SAME THING** — `module_position_rank` returns 0 for
-unmapped pairs and never null, so the appointment rule written the obvious way would have let
-every rank-1 holder (salon cashier, classroom GA) outrank the PLATFORM OPERATOR and read
-their whole cross-tenant history, silently and error-free. **The ABSENCE of a rank arm is the
-security decision in that file.** **(2) A CHECK CONSTRAINT CAN RE-CREATE THE `ON DELETE SET
-NULL` TRAP** that killed the append-only trigger — a reviewer's proposed `subject_user_id is
-not null` would have made every person ever browsed PERMANENTLY UNDELETABLE. Caught by the
-orchestrator reading the reviewer's fix, which is the rhythm working as designed. **(3) A READ
-ARM KEYED ON WHO YOU WERE outlives the authority it was granted for** — `actor_user_id =
-auth.uid()` survives demotion; deleted rather than fixed, since conditioning it on current
-authority makes it a strict subset of the superadmin arm. **Four false claims in the existing
-codebase were found and corrected**, including the on-screen `not logged` badge AND the e2e
-assertion holding it true — *a badge is a claim to the operator, so a test that keeps passing
-after the claim goes false is worse than no test.* **STILL OPEN BY DESIGN:** with a SECOND
-superadmin, the flat `is_superadmin()` read arm means each sees 100% of the other's lookups,
-unscoped — a v1 default, **NOT** a derivation of the appointment rule (there is no rank domain
-among superadmins), and a founder decision. Detail → journal + docs/15's 2026-08-07/08 entry;
-rules → docs/03. **Verification: typecheck 9/9, build clean, db 108/108 (RLS 104/104, floor
-raised to 104), e2e 49/49 exit 0 run in CI-STRICT mode against the PREBUILT server; prod
-23/23.** **NEW TOOLING, and it exists because of a documented trap:**
-`scripts/prod-verify-superadmin-log.mts` checks what `prod-verify-migration.ts` structurally
-CANNOT — that script parses `create function` blocks, so on a table/policy migration its
-"0 failures" is vacuous (the `20260806010000` lesson). The new one verifies the table's real
-prod ACL (the `ALTER DEFAULT PRIVILEGES` over-grant did NOT happen), both policies' exact
-expressions, **the ABSENCE of any rank arm**, the trigger being BOUND rather than merely
-defined, and that every FK is `on delete set null` with no CHECK fighting it — each with a
-control so an empty catalog read cannot pass as a correct absence.
+**Previously — shipped, prod-verified, and fully written up elsewhere.** One line each; the
+blow-by-blow is in [docs/history/platform-journal.md](docs/history/platform-journal.md)
+(newest first) and the durable rules are in docs/03 / docs/12 / docs/15's decision log. Kept
+this short deliberately: this file is a tax on every session, and a second copy of the journal
+is the most expensive thing in it.
 
-**Previously (2026-08-07):** **THE OWNER CONSOLE VIEW-AS IS ON PROD AND PROD-VERIFIED** (commit
-`6a90110`, migration `20260806010000`; Vercel production `READY`, which proves CI was green
-since `deploy` has `needs: check`; prod policy confirmed live as
-`(is_org_member(org_id) OR is_superadmin())` against 200 visible policies as the control). `/console/view-as`, superadmin-only, absent from the in-module tab
-strips. Renders any declared position's surface in any org, bypassing **four** things — the
-declared edge, the rank/scope-coverage conditions, §8.1 point 10's caller-scope intersection,
-and `org_modules.enabled` — and **never RLS, never the surface declaration**. The three
-founder-specified modes are **ONE AXIS, not three code paths**: the mode picks the PERSON
-axis (me / one named holder / nobody) and scope is an independent picker in every mode, which
-is what makes mode 3 answer the case the salon review refused to fake. docs/13's read-only
-positions/ranks/pair-grid viewer is folded into the same screen. One migration
-(`20260806010000`) restores the superadmin's SELECT on `sal_locations` — **a `for all`
-policy's USING also covers SELECT, so splitting one per-command silently drops an inherited
-read arm.**
-
-**The adversarial review's 8 findings are all applied.** Two are worth carrying forward:
-**finding 1 was a LIVE DEFECT outside the diff** (classroom's student surface declared
-`cls_review_comments` with `subjectColumn: null`, so every student's tab showed the whole
-class's peer feedback — a FALSE CLAIM, not a leak, since the live student UI uses a definer
-that filters and strips the author; now an embed under `cls_submissions` keyed on
-`student_id`), and **finding 2 gave the reusable mechanism: naming a gate is not passing
-one** — `RenderAuthority`'s superadmin arm now carries a `SuperadminGate`, a `declare const
-unique symbol` brand that only `requireSuperadmin()` can mint.
-
-**UNLOGGED GOT ITS DATED DECISION, not an assumption: this build ships unlogged and says so
-on screen; THE LOG GETS BUILT as a follow-on** (own table, written by BOTH console tools,
-hierarchy-governed visibility by the appointment rule). It is now **docs/12 checklist item 9**
-— a log started later can never cover the period before it existed.
-
-**Verification:** typecheck 9/9, build clean, db suite **97/97 (RLS 93/93)**, e2e **47**,
-floor raised to **47/93**, **35/35 new console probes + 22/22 data-browser probes, zero
-skips** (`scripts/verify-console-view-as.mts`). Full detail → journal + docs/15's
-2026-08-06/07 entry; reusable rules → **docs/03 #18** (FIVE new bullets) + THREE more in its
-Test-discipline section, which also gained the vacuity rule’s search form.
-
-**Previously (2026-08-05):** **NAIL-SALON VIEW-AS SURFACE REVIEW ON PROD, PROD-VERIFIED**
-(`89fae0a`, migration `20260804010000`, 33/33 prod probes). Nine pairs answered, three
-surfaces written, all 12 `sal_` tables classified: **mode 1 ON for all five staff-to-staff
-pairs, mode 2 additionally for the two into `worker`, all four customer pairs OFF.** Its
-generalisable finding — *mode 1 answers "what can this POSITION see?", mode 2 "what does this
-PERSON see?", and mode 2 is only honest where RLS narrows PER PERSON* — is a durable rule in
-**docs/03 #18**, not here. Four founder-approved follow-ups the same day (the dead `columns?`
-field removed; the CI ratchet fixed to count TESTS; the salon seed gained an admin; e2e
-timeouts made environment-dependent) → journal + docs/15's 2026-08-05 entry. Still open on
-purpose: the 12-table accounting is hand-checked, not machine-enforced — see the Next list.
-
-**Previously:** the **per-person data browser is ON PROD** (`070a73b`, zero migrations —
-Vercel production `READY`, which proves CI was green since `deploy` has `needs: check`);
-`/console/data-browser`, superadmin-only, answering *"what do I hold about this person?"* as
-against view-as's *"what does this person see?"*. Its UI gate is sound only because nothing
-on that path may ever call `.rpc()` or a service-role client — source-scanned by a probe.
-**Slice 5 (VIEW-AS) is ON PROD and PROD-VERIFIED** (`20260731010000` + `20260802010000`,
-`ad8e989`; 29/29 prod probes). **The ACL HARDENING SWEEP is ON PROD and PROD-VERIFIED**
-(`20260728010000`, `a16f4a5`; 39/39) — `anon` holds nothing in `public`, `authenticated` lost
-TRUNCATE. Blow-by-blow for all three → docs/history/platform-journal.md; rules → docs/03
-#17/#18/#19.
+- **2026-08-07/08 — the superadmin lookup log** (`eef09ce`, `20260807010000`, prod 23/23).
+  Both Owner Console tools record every lookup; a failed write is BADGED, not swallowed;
+  docs/12 item 9 closed. Gave three rules now living in docs/03: *unranked is not rank 0*;
+  *a CHECK constraint can re-create the `ON DELETE SET NULL` trap*; *a read arm keyed on who
+  you WERE outlives the authority it was granted for*. **Its one open item is in the Next
+  list below** (what a SECOND superadmin should see). Brought `scripts/prod-verify-superadmin-log.mts`,
+  the template to copy for any table/policy migration — see the gotcha about
+  `prod-verify-migration.ts` being function-only.
+- **2026-08-06/07 — the Owner Console view-as** (`6a90110`, `20260806010000`). `/console/view-as`,
+  superadmin-only. The three founder modes are ONE AXIS, not three code paths. Gave: *a `for
+  all` policy's USING also covers SELECT, so splitting it per-command silently drops an
+  inherited read arm*, and *naming a gate is not passing one* (the `SuperadminGate` brand).
+- **2026-08-05 — nail-salon view-as surface review** (`89fae0a`, `20260804010000`, 33/33).
+  All 12 `sal_` tables classified. Gave the durable rule in docs/03 #18: *mode 1 answers "what
+  can this POSITION see?", mode 2 "what does this PERSON see?", and mode 2 is only honest
+  where RLS narrows PER PERSON.* **What it deliberately did not close is in the Next list**
+  (the 12-table accounting is hand-checked, not machine-enforced).
+- **Earlier — the per-person data browser** (`070a73b`), **slice 5 view-as**
+  (`20260731010000` + `20260802010000`, `ad8e989`, 29/29) and **the ACL hardening sweep**
+  (`20260728010000`, `a16f4a5`, 39/39: `anon` holds nothing in `public`). Rules → docs/03
+  #17/#18/#19.
 
 **Next / open (pick WITH the founder — do not start unprompted; details in docs/15 §11).
-AS OF 2026-08-07: numbered items 1–6 are ALL DONE — prod's demo data is refreshed and
-prod-verified, which was the last mechanical piece. What remains is the unranked list below.
-THE RECOMMENDED NEXT REAL PIECE IS NOW THE SUPERADMIN LOOKUP LOG (item 4a — Opus, specced, and
-on docs/12's pre-launch checklist because a log started later can never cover the period before
-it existed). The numbered items are kept struck-through rather than deleted because several
-carry the dated reasoning that produced them:**
+AS OF 2026-08-09 the numbered items 1–6 are ALL DONE, and so is the rank/tier-wrapper gap; what
+remains is the unranked list below. THE RECOMMENDED NEXT REAL PIECE IS THE ENGAGEMENT-MONITORING
+BUILD, whose spec is `docs/17-engagement-monitoring.md` (founder-approved 2026-08-09, phase 1
+only, Opus — it ships a migration and a trigger on `auth.users`). Two numbered items survive
+below because they still carry live operational facts, not because they are open:**
 
-- ~~**1. Confirm CI/deploy for slice 5.**~~ **DONE 2026-08-02** — prod app and prod schema in
-  sync; a `READY` production deploy proves CI was green (`deploy` has `needs: check`).
-- ~~**2. Students cannot see peer-review comments on their own homework.**~~ **DONE
-  2026-08-03** — UI-only, no migration; details in the journal + module-2 spec.
+- ~~**1. Confirm CI/deploy for slice 5.**~~ ~~**2. Peer-review comments.**~~
+  ~~**4. THE OWNER CONSOLE VIEW-AS.**~~ ~~**5. Push and prod-verify.**~~ **ALL DONE**
+  2026-08-02 → 08-07; detail in the journal. The open follow-ons they produced have been
+  PROMOTED into the unranked list below rather than left inside a struck-through heading —
+  that is the 2026-08-07 lesson (*open state hidden inside a completed item is how it gets
+  lost*) applied to this file itself.
 - **3. The speed-dating waitlist flake** (details in its own bullet below). Only truly urgent
   if it is what broke CI, which is now ruled out by item 1. **CI has `retries: 1` and runs the
   PREBUILT server (`pnpm start`), while local runs the dev server with JIT compilation and 0
@@ -184,56 +93,47 @@ carry the dated reasoning that produced them:**
   rule stands — *judge a flake by CI, not locally* — so consider closing this at a docs beat
   only after CI has stayed green across several pushes, which would let this bullet and the
   two harness bullets below collapse into one.
-- ~~**4. THE OWNER CONSOLE VIEW-AS.**~~ **DONE 2026-08-06/07 — see Now.** Three follow-ons
-  it produced, all recorded rather than closed:
-  ~~**(a) THE SUPERADMIN LOOKUP LOG**~~ **DONE 2026-08-07/08 — see Now.** Built, reviewed at
-  three lenses, 11 RLS tests, live round-trip verified; docs/12 item 9 closed. **It left ONE
-  founder decision open, which is now the only thing outstanding on it: with a SECOND
-  superadmin, the flat `is_superadmin()` oversight arm means each reads 100% of the other's
-  lookups, unscoped, forever.** That is a v1 default rather than a derivation of the
-  appointment rule — there is no rank domain among superadmins to compare over — and it wants
-  an explicit answer before a second superadmin ever exists, which is already a named expiry
-  condition in docs/12 item 9.
-  **(b) `blinded` CHECKS ONE TABLE PER MODULE** (the `scopeEntity`), never per role table, so
-  a future migration dropping an `is_org_admin` arm on an ordinary role table gives a silent,
-  error-free, UNBADGED empty section. `20260806010000` is proof the category already bit once
-  — caught only because it hit the scope-entity table, whose symptom is loud.
-  **(c) Should `view_as_sessions`' own whole-org admin read be narrowed by hierarchy too?**
-  Same founder principle as (a), own migration, own review.
-- ~~**5. Push and prod-verify.**~~ **DONE 2026-08-07** — see Now. Backup at
-  `backups/2026-08-07T22-05-54/` before the migration, per docs/12.
-- ~~**6. PROD'S DEMO DATA IS STALE relative to the 2026-08-06 fixtures.**~~ **DONE
-  2026-08-07 — Sonnet session.** Backup first (`backups/2026-08-07T23-00-47/`), then
-  `SEED_ALLOW_REMOTE=yes` + `DEMO_PASSWORD=<PROD_DEMO_PASSWORD>` against prod; confirmed
-  read-only afterward: `grace@demo.local` exists, 2 salon locations (Downtown + Uptown), 2
-  `cls_review_comments` rows on two DIFFERENT students' submissions (the falsifiability
-  control). `scripts/verify-console-view-as.mts` **35/35 → prod 34/35, zero skips** (the
-  script no longer hardcoded `password123` — parameterised to `VERIFY_DEMO_PASSWORD` /
-  `VERIFY_SUPERADMIN_EMAIL` / `VERIFY_SUPERADMIN_PASSWORD`, since prod's superadmin is the
-  founder's REAL account, never `owner@demo.local` — the remote-seed guard in `seed.ts`
-  deliberately sets that account's `is_superadmin` to `false` off-localhost).
-  **The one FAIL was a genuine pre-existing fact, not a regression:** the founder's real
-  account already held `org_members` rows in 3 orgs on prod (owner of a real org
-  `Solutions`/`pozne`, member of `demo-a`, admin of `demo-b` — all predating this session,
-  confirmed against the pre-reseed backup). Harmless for view-as specifically (his
-  `module_roles` are still empty, so view-as GRANTS are still empty — org membership plays
-  no part in that ladder), but it meant the console's mode-1 blurb premise ("the superadmin
-  belongs to no org") was not literally true for this account. **Founder decision, same day:
-  keep `Solutions` (his real org), drop the `demo-a`/`demo-b` residue** — done, fresh backup
-  first (`backups/2026-08-07T23-34-43/`). **Prod is now 34/35, permanently, by design** —
-  not a target to chase to 35/35: he genuinely owns a real org, so `is_org_member` genuinely
-  returns true for him there, and forcing that premise to hold would mean he could never use
-  his own account to run a real org on his own platform. The check stays in the script because
-  it is still telling the truth; its FAIL is now the expected, understood steady state.
-  **A REAL SAFEGUARD GAP FOUND AND FIXED ALONG THE WAY:** `seed.ts`'s invite-accept status
-  flip (`org_members.update({status:'active'}).neq('status','active')`) was UNSCOPED —
-  global across every org, not demo-scoped, contradicting docs/12 guard 5's claim that prod
-  seeding "cannot touch a real client org's rows." Checked against the pre-reseed backup:
-  every row on prod already happened to be `'active'`, so this run changed nothing — harmless
-  by luck, not by design. Now scoped to `.in('org_id', demoOrgIds)`. The seed's DELETES were
-  already org-scoped (verified before running); only this one UPDATE was not.
-
+- ~~**6. PROD'S DEMO DATA IS STALE.**~~ **DONE 2026-08-07.** Two facts from it are still
+  operationally live and are the only reason this line survives:
+  **(i) `scripts/verify-console-view-as.mts` is 35/35 local but PROD 34/35, permanently, BY
+  DESIGN** — not a target to chase. The founder genuinely owns a real org (`Solutions`), so
+  `is_org_member` genuinely returns true for him and the console's mode-1 blurb premise ("the
+  superadmin belongs to no org") is not literally true for that account. The check still tells
+  the truth; its FAIL is the understood steady state.
+  **(ii) The script is parameterised** — `VERIFY_DEMO_PASSWORD` / `VERIFY_SUPERADMIN_EMAIL` /
+  `VERIFY_SUPERADMIN_PASSWORD`, because prod's superadmin is the founder's REAL account, never
+  `owner@demo.local` (the remote-seed guard in `seed.ts` sets that account's `is_superadmin`
+  to `false` off-localhost).
 Everything below is open but unranked:
+- **ENGAGEMENT MONITORING — SPECCED 2026-08-09, PHASE 1 APPROVED, NOT BUILT. The recommended
+  next real piece.** Full spec + dated decisions:
+  **[docs/17-engagement-monitoring.md](docs/17-engagement-monitoring.md)**. Answers "who has
+  gone quiet, and who should I reach out to", org→people and person→orgs. **The finding that
+  decides the design, and the reason it was specced before any code: `auth.audit_log_entries`
+  has NEVER been written to on prod** (`ins=0`, with `auth.users`/`sessions`/`refresh_tokens`
+  insert counts as the control proving the read works) — it is fully populated LOCALLY, so
+  building on it yields a feature that demos perfectly and ships permanently empty. Prod has
+  only `last_sign_in_at`: the LAST login, never a frequency. **Second hard fact: a login
+  cannot be attributed to an org** — people sign into the platform, not an org — so logins
+  (phase 1) and org-scoped activity (phase 2) are different data, and fanning one login out
+  across a member's three orgs would be a false claim. Capture mechanism is an
+  `AFTER UPDATE OF last_sign_in_at` trigger on `auth.users`, the same mechanism as the live
+  `on_auth_user_created`. Founder decisions already made: logins first; 90-day retention +
+  permanent rollup; no user notice, one privacy-policy line; no hierarchy columns in phase 1
+  but MANDATORY in phase 2 (role/scope at write time are unreconstructable — `module_roles` is
+  mutated in place); superadmin-only in v1 with hierarchy-governed reads as a named future
+  enhancement. **Ships a migration → full docs/03 #12 rhythm, Opus.**
+- **`blinded` CHECKS ONE TABLE PER MODULE** (the `scopeEntity`), never per role table — so a
+  future migration dropping an `is_org_admin` arm on an ordinary role table gives a silent,
+  error-free, **UNBADGED** empty section. `20260806010000` is proof the category already bit
+  once, caught only because it hit the scope-entity table, whose symptom is loud. *(Promoted
+  2026-08-09 out of the struck-through view-as item, where it was invisible. Full context:
+  docs/15 finding 6.)*
+- **Should `view_as_sessions`' own whole-org admin read be narrowed by hierarchy?** Today it
+  is whole-org, since an org admin has no scope dimension — and the data browser makes that
+  data *findable* where it was merely readable. Same founder principle as the second-superadmin
+  question below; own migration, own review. *(Also promoted 2026-08-09 out of two different
+  struck-through items; recorded in docs/13 and docs/15 §8.1.)*
 - **FOUNDER DECISION PENDING: what should a SECOND superadmin see in the lookup log?**
   (raised 2026-08-07/08 by the log's own build; full argument in docs/15's 2026-08-07/08 entry
   decision 5 and docs/12 item 9.) The log's read policy is a flat `is_superadmin()`, which
@@ -245,11 +145,11 @@ Everything below is open but unranked:
   oversight at all, which is why the default went the way it did. Wants an explicit answer
   BEFORE a second superadmin exists — it is already a named expiry condition in docs/12 item 9,
   and this is now a second, independent reason that condition matters. *Listed here as well as
-  under item 4(a) because it is an OPEN item that happens to live under a struck-through DONE
+  under the lookup-log line above because it is an OPEN item that lived under a struck-through DONE
   heading, and the 2026-08-07 lesson is that open state hidden inside a completed item is how
   it gets lost.*
 - **Slice 5 remaining follow-ons:** ~~the nail-salon surface review~~ **DONE 2026-08-04**
-  (see Now). Left: **speed-dating's 6 pairs** — and note its review is genuinely harder than
+  (see Previously). Left: **speed-dating's 6 pairs** — and note its review is genuinely harder than
   the salon's, because a host deliberately cannot read `sd_interest`/`sd_matches` while an
   organizer can, so an organizer rendering a host tab must respect an exclusion their own
   ambient reach does not impose (the salon had no equivalent: manager ⊇ cashier ⊇ worker with
@@ -260,26 +160,13 @@ Everything below is open but unranked:
   ask of each position whether its reach is a function of WHO it is or only of WHAT SCOPE it
   covers — mode 2 is only honest for the former, and a mode-1-only pair needs no migration
   arm at all.
-- ~~**Seed the salon's back office.**~~ **DONE 2026-08-05** — see Now. (Salon demo logins are
+- ~~**Seed the salon's back office.**~~ **DONE 2026-08-05.** (Salon demo logins are
   now: **frank = admin**, alice = manager, eve = cashier, dana = worker, charlie = customer.)
-- ~~**`cls_exam_papers` IS STILL ZERO-ROW, so the student/GA exam section is UNFALSIFIABLE.**~~
-  **DONE 2026-08-09** (seed-only, no migration). The seed now creates one `cls_exams` row
-  (`Quiz 1 — Warm-up`) plus a `cls_exam_papers` row for charlie, so the exam section renders a
-  real row on every surface instead of an empty one that could equally mean "broken".
-  **The collision was real and was checked first:** the classroom exam e2e creates its OWN
-  exam titled `Midterm` in the same (only) class and clicks a PAGE-LEVEL link by that exact
-  name — a seeded exam sharing the title would have made that click a strict-mode ambiguity.
-  Hence the different title, and the fixture deliberately grades nobody and publishes nothing,
-  so it cannot pre-satisfy that test's grading/publish assertions either. Verified on a clean
-  reset+seed: db 108/108, e2e 49/49 exit 0. Original reasoning kept below for the pattern:
-  Carried over from the 2026-08-06 fixtures beat, which closed the other four classroom
-  zero-row tables and left this one deliberately: it needs a `cls_exams` parent that nothing
-  seeds. Consequence, in the vacuity rule's terms: that section renders empty on every
-  surface, and empty is indistinguishable from broken — the keystone test asserts only that
-  the read does not ERROR. Fix is a seeded exam plus a paper row for one student; the
-  classroom exam e2e already creates exams through the UI, so check for a collision with it
-  first (the 2026-08-07 lesson: a fixture must not pre-satisfy another test's starting
-  condition). Small — Sonnet.
+- ~~**`cls_exam_papers` zero-row / exam section unfalsifiable.**~~ **DONE 2026-08-09**,
+  seed-only. Kept for one reusable line: **a fixture must not pre-satisfy another test's
+  starting condition** — the seeded exam is titled `Quiz 1 — Warm-up`, grades nobody and
+  publishes nothing, precisely so it cannot collide with the classroom exam e2e's own
+  `Midterm`. Reasoning in the journal.
 - **STILL OPEN, and the one gap the salon review deliberately did not close: machine-enforce
   "every module table is classified on every surface."** Today it is HAND-checked —
   `viewAsCompleteness()` only refuses a table appearing in two lists; it never enumerates the
@@ -341,13 +228,11 @@ Everything below is open but unranked:
   *(The 2026-08-02 founder decision behind item 2 — a student sees the COMMENTS on their own
   homework but never the peer GRADES — was BUILT 2026-08-03; `cls_comments_for_my_submission()`
   already had the right filter and grant. Details → module-2 spec, 2026-08-03.)*
-- ~~**The per-person data browser.**~~ **DONE 2026-08-03** — see Now and item 4. The Owner
-  Console view-as half is what remains of that pair; its detail now lives in item 4.
-  **Known gaps recorded rather than closed:** walk-in salon customers (no account, so not
-  findable — the fix, if ever wanted, is letting a salon LINK a walk-in to an account when
-  they sign up, not requiring accounts up front); and whether an org admin's read of the
-  view-as session log should be scope-narrowed (today it is whole-org, since org admin has
-  no scope dimension — the browser makes that data findable where it was merely readable).
+- ~~**The per-person data browser.**~~ **DONE 2026-08-03.** One known gap is still open and
+  is the only reason this line survives: **walk-in salon customers have no account, so they are
+  not findable** — the fix, if ever wanted, is letting a salon LINK a walk-in to an account when
+  they sign up, not requiring accounts up front. (Its other recorded gap, the view-as session
+  log's whole-org admin read, was promoted to its own bullet above on 2026-08-09.)
 - **Founder-raised 2026-08-02, parked in docs/13.** The **read-only positions/ranks/pair-grid
   viewer is DONE 2026-08-06** (folded into `/console/view-as`). ~~**The rank/tier-wrapper
   verification gap**~~ **DONE 2026-08-09 — see Now.** What REMAINS of this entry is the
@@ -360,8 +245,8 @@ Everything below is open but unranked:
   do not move when the ladder moves.
 - Everywhere role-clarity labels (founder testing-round items 31–42) — high value; the
   view-as half of that item is now built.
-- Deferred platform hardening — the `revoke PUBLIC`/anon-table items are **DONE pending the prod
-  push** (see Now, above). Still open, all recorded with rationale in docs/15's 2026-07-29 entry:
+- Deferred platform hardening — the `revoke PUBLIC`/anon-table items are **DONE and pushed**
+  (see Previously). Still open, all recorded with rationale in docs/15's 2026-07-29 entry:
   **`storage`-schema grants** (prod grants anon the full set incl. TRUNCATE; buckets private,
   policies key on `auth.uid()`; a `public`-schema sweep doesn't touch it); **prod's
   `ALTER DEFAULT PRIVILEGES`**, which re-opens every FUTURE object so the sweep decays without a

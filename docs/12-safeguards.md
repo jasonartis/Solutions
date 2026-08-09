@@ -179,6 +179,19 @@ Found in a deliberate "what haven't we thought of" pass; ordered by urgency.
    that a deletion request can empty is not an audit log** — the FKs are
    `on delete set null` precisely so the record survives the account, which is
    the shape the answer should probably build on.
+   **A THIRD is coming and its wording is a PRECONDITION of shipping it, not a
+   follow-up: engagement monitoring** ([docs/17](17-engagement-monitoring.md),
+   specced 2026-08-09, phase 1 approved). Founder decision, recorded there: no
+   user-facing notice — one line under "what we collect", *"authentication
+   events (when you sign in)"*. That is proportionate because Supabase already
+   stores `last_sign_in_at` today, so the new thing is RETENTION and cross-org
+   aggregation, not a new category of data. **Phase 2 moves the line:** logging
+   what a person opened and when, per org, is materially more than a login
+   timestamp, and that wording must exist BEFORE it ships. Unlike the two logs
+   above, the engagement log IS prunable by design (90 days raw + a permanent
+   rollup), which is a deliberate divergence — see docs/17 §6, including the
+   narrow `SECURITY DEFINER` exception to grant-layer append-only that pruning
+   requires and that needs its own review.
 7. **Auth email sender.** Supabase's built-in sender is rate-limited and
    spam-prone; before real user onboarding, configure custom SMTP (their
    dashboard supports it) so magic links and confirmations actually arrive.
