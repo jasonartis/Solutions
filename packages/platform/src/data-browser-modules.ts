@@ -114,6 +114,47 @@ export const platformDataBrowser = declareDataBrowser({
         'surfacing it here tells the SUBJECT nothing — whether to notify targets is still ' +
         'an open product question (docs/15 §8.1 point 6).',
     },
+    {
+      table: 'login_events',
+      activity: true,
+      label: 'Sign-ins recorded',
+      personColumns: ['user_id'],
+      // No org column, and the absence is a FACT about the data rather than an
+      // oversight: people sign into the platform, not into an org, so a login
+      // cannot be attributed to one (docs/17 §3). Fanning one sign-in out across
+      // a member's three orgs would over-report engagement threefold.
+      orgColumn: null,
+      orderBy: { column: 'occurred_at', ascending: false },
+      limit: 200,
+      note:
+        'Every sign-in this person has made since login capture began (docs/17 phase 1, ' +
+        '2026-08-09). DECLARED RATHER THAN OMITTED because this is personal data about its ' +
+        'subject and a subject-access request would have to disclose it — the same reasoning ' +
+        'that puts the superadmin lookup log above on this page. TWO LIMITS A READER MUST ' +
+        'KNOW, or an empty section reads as "they have never signed in": raw events are ' +
+        'pruned at 90 days ONCE THE RETENTION WORKER IS RUNNING AGAINST THIS ENVIRONMENT — ' +
+        'until then they simply accumulate, so this section may reach further back than 90 ' +
+        'days rather than less (the permanent summary is the next section either way); and ' +
+        'capture only began at the 20260809010000 migration — a log started later cannot ' +
+        'cover the period before it existed. Reading it requires being a superadmin; there ' +
+        'is deliberately no self-read arm, so surfacing it here tells the subject nothing.',
+    },
+    {
+      table: 'login_rollup',
+      activity: true,
+      label: 'Login summary (permanent)',
+      personColumns: ['user_id'],
+      orgColumn: null,
+      limit: 1,
+      note:
+        'The permanent per-person summary that survives the 90-day prune: last login, first ' +
+        'login this log observed, and how many it has counted since it started watching ' +
+        '(docs/17 §6, founder decision 2026-08-09). `last_login_at` is BACKFILLED from ' +
+        'Supabase\'s own last_sign_in_at, so it is trustworthy for people who existed before ' +
+        'capture began; `observed_logins` is not, and says so by being named for what it ' +
+        'counts. NO ROW AT ALL means "never signed in" — which is the cleanest answer to the ' +
+        'question this feature exists for, and why absence here is meaningful rather than empty.',
+    },
   ],
   omitted: [],
   neverReadable: [],

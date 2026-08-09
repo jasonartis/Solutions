@@ -2806,3 +2806,403 @@ describe('superadmin lookup log (2026-08-07)', () => {
     expect(data!.scope_ref, 'the FK action should have nulled the reference, not deleted the row').toBeNull()
   })
 })
+
+// ---------------------------------------------------------------------------
+// ENGAGEMENT MONITORING PHASE 1 — LOGIN CAPTURE (docs/17, 20260809010000).
+//
+// WHY THIS BLOCK EXISTS IN THE CI SUITE AND NOT ONLY IN A PROBE SCRIPT: the
+// migration makes four claims about test coverage in its own comments, and an
+// adversarial review (2026-08-09) correctly called them out as FALSE at the time
+// they were written — the tests did not exist yet, so nothing stopped someone
+// editing `interval '90 days'` to `interval '1 day'`. These are those tests. A
+// migration comment is an assertion a future reader trusts and acts on, so each
+// of the four is now falsifiable here:
+//
+//   1. "no api role holds any write privilege on either table"      -> READ-ONLY test
+//   2. "THE 90 IS ASSERTED BY THE TEST SUITE against pg_get_functiondef" -> window test
+//   3. "the pruner never touches login_rollup ... asserted in the RLS suite"  -> prune test
+//   4. "EXECUTE granted to nobody"                                   -> pruner ACL test
+//
+// EVERY NEGATIVE CARRIES A NON-EMPTINESS CONTROL (docs/03's vacuity rule). "dana
+// cannot read the login log" passes trivially against an empty table, so each
+// block first proves the superadmin CAN read real rows.
+//
+// A NOTE ON WHAT ONLY PROD CAN SETTLE, so nobody mistakes this file for
+// complete: the local stack has no `ALTER DEFAULT PRIVILEGES FOR ROLE postgres`,
+// so `service_role` would hold nothing on a new table here even WITHOUT the
+// migration's revoke naming it. Prod grants the full set including the
+// whole-table wipe privilege. The service_role assertions below are therefore
+// true-but-weak locally and are the reason
+// scripts/prod-verify-login-events.mts exists.
+// ---------------------------------------------------------------------------
+describe('login capture (engagement monitoring phase 1, 2026-08-09)', () => {
+  const dbUrl = process.env.DATABASE_URL ?? 'postgresql://postgres:postgres@127.0.0.1:54322/postgres'
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
+
+  let owner: SupabaseClient    // the local superadmin — the only legitimate reader
+  let aliceL: SupabaseClient   // org owner of demo-salon, professor in demo-a
+  let danaL: SupabaseClient    // salon WORKER — rank 1, the inversion candidate
+  let frankL: SupabaseClient   // salon ADMIN — rank 3, top of a real module ladder
+  let charlieL: SupabaseClient // student / salon customer — genuinely unranked
+  let melId: string
+
+  const errored = (r: { error: unknown }) => r.error != null
+
+  const eventsOf = async (userId: string) =>
+    ((await owner.from('login_events').select('id, occurred_at').eq('user_id', userId)).data ?? [])
+  const rollupOf = async (userId: string) =>
+    (await owner.from('login_rollup').select('*').eq('user_id', userId).maybeSingle()).data as
+      | { observed_logins: number; last_login_at: string; first_observed_login_at: string | null }
+      | null
+
+  beforeAll(async () => {
+    owner = await signIn('owner@demo.local')
+    aliceL = await signIn('alice@demo.local')
+    danaL = await signIn('dana@demo.local')
+    frankL = await signIn('frank@demo.local')
+    charlieL = await signIn('charlie@demo.local')
+    melId = (await owner.from('profiles').select('user_id').eq('email', 'mel@demo.local').single())
+      .data!.user_id as string
+  })
+
+  it('CONTROL: a real sign-in is CAPTURED — one new event, and the rollup counts it', async () => {
+    // The control the whole feature rests on, and the one docs/17 §2 exists to
+    // protect: a table that looks right can be permanently empty. Every negative
+    // below is meaningless unless capture demonstrably works here.
+    const before = await eventsOf(melId)
+    const rollupBefore = await rollupOf(melId)
+
+    await signIn('mel@demo.local')
+
+    const after = await eventsOf(melId)
+    expect(after.length, 'a sign-in did not produce a login_events row — capture is broken')
+      .toBe(before.length + 1)
+
+    const rollupAfter = await rollupOf(melId)
+    expect(rollupAfter, 'no login_rollup row after a sign-in').not.toBeNull()
+    expect(rollupAfter!.observed_logins, 'the rollup did not count the sign-in')
+      .toBe((rollupBefore?.observed_logins ?? 0) + 1)
+    expect(rollupAfter!.first_observed_login_at,
+      'first_observed_login_at must be set once this log has observed a login').not.toBeNull()
+  })
+
+  it('a token REFRESH is not a login — the count means sign-ins, not sessions', async () => {
+    // This is what separates a login count from a noise count. Measured against
+    // GoTrue before the migration was written (a refresh does not advance
+    // last_sign_in_at, so the trigger never fires); asserted here so a future
+    // GoTrue upgrade that changes it fails the build instead of silently
+    // inflating every engagement number on the platform.
+    const client = await signIn('mel@demo.local')          // one real login
+    const before = (await eventsOf(melId)).length
+
+    const { error } = await client.auth.refreshSession()
+    expect(error, 'CONTROL: the refresh itself failed, so this proves nothing').toBeNull()
+
+    expect((await eventsOf(melId)).length, 'a token refresh was recorded as a login')
+      .toBe(before)
+  })
+
+  it('THE READ RULE: only the superadmin reads either table, at ANY module rank', async () => {
+    // The rank-0 inversion, live. `module_position_rank` returns 0 for an
+    // unmapped pair and never null, so a naively-written hierarchy arm would
+    // compute an unranked SUBJECT as rank 0 and let every rank-1 holder read the
+    // engagement of most of the org. dana is a salon worker (rank 1), frank a
+    // salon admin (rank 3) — bottom and top of a real ladder — and alice owns
+    // the org outright.
+    const ownerEvents = await owner.from('login_events').select('id').limit(5)
+    const ownerRollup = await owner.from('login_rollup').select('user_id').limit(5)
+    expect((ownerEvents.data ?? []).length,
+      'CONTROL: the superadmin reads no login events, so every negative below is vacuous')
+      .toBeGreaterThan(0)
+    expect((ownerRollup.data ?? []).length,
+      'CONTROL: the superadmin reads no rollup rows, so every negative below is vacuous')
+      .toBeGreaterThan(0)
+
+    for (const [who, client] of [
+      ['dana (salon worker, rank 1)', danaL],
+      ['frank (salon admin, rank 3)', frankL],
+      ['alice (org owner)', aliceL],
+      ['charlie (unranked customer)', charlieL],
+    ] as const) {
+      expect((await client.from('login_events').select('id')).data ?? [],
+        `${who} can read login events`).toEqual([])
+      expect((await client.from('login_rollup').select('user_id')).data ?? [],
+        `${who} can read the login rollup`).toEqual([])
+    }
+  })
+
+  it('a person cannot read their OWN login history either (no self-read arm was shipped)', async () => {
+    // Deliberate: letting people see their own sign-ins is defensible and may be
+    // right later, but it is a PRODUCT decision about disclosure and docs/17 §9
+    // settles only the notice question. Shipping it inside a capture migration
+    // would be deciding it by accident. dana has certainly signed in — beforeAll
+    // did it — so this is a real absence, not an empty table.
+    const danaId = (await owner.from('profiles').select('user_id').eq('email', 'dana@demo.local')
+      .single()).data!.user_id as string
+    expect((await eventsOf(danaId)).length,
+      'CONTROL: dana has no captured logins, so the negative below is vacuous').toBeGreaterThan(0)
+    expect((await danaL.from('login_events').select('id').eq('user_id', danaId)).data ?? [],
+      'dana can read her own login history').toEqual([])
+  })
+
+  it('both tables are READ-ONLY to every api role — not even the superadmin may write', async () => {
+    // MIGRATION CLAIM 1. Stronger than the append-only the other two logs get:
+    // they grant INSERT to authenticated because the console writes their rows as
+    // the caller. Nothing here has a user-facing write path at all, so no api
+    // role holds INSERT either — the only writer is the trigger, running as owner.
+    const row = (await owner.from('login_events').select('id, user_id').limit(1).single()).data
+    expect(row, 'CONTROL: no login event to attempt writes against').not.toBeNull()
+
+    expect(errored(await owner.from('login_events').insert({ user_id: row!.user_id })),
+      'the superadmin could INSERT a login event').toBe(true)
+    expect(errored(await owner.from('login_events').update({ occurred_at: new Date().toISOString() })
+      .eq('id', row!.id)), 'the superadmin could UPDATE a login event').toBe(true)
+    expect(errored(await owner.from('login_events').delete().eq('id', row!.id)),
+      'the superadmin could DELETE a login event').toBe(true)
+
+    expect(errored(await owner.from('login_rollup').insert({ user_id: row!.user_id, last_login_at: new Date().toISOString() })),
+      'the superadmin could INSERT a rollup row').toBe(true)
+    expect(errored(await owner.from('login_rollup').update({ observed_logins: 999 }).eq('user_id', row!.user_id)),
+      'the superadmin could UPDATE a rollup row').toBe(true)
+    expect(errored(await owner.from('login_rollup').delete().eq('user_id', row!.user_id)),
+      'the superadmin could DELETE a rollup row').toBe(true)
+
+    // The refusals were real, not silent no-ops.
+    expect((await owner.from('login_events').select('id').eq('id', row!.id)).data?.length,
+      'the row is gone — one of the refusals above was not a refusal').toBe(1)
+  })
+
+  it('a stranger and the service role reach neither table at the privilege layer', async () => {
+    const anon = createClient(url, anonKey, { auth: { persistSession: false } })
+    for (const table of ['login_events', 'login_rollup'] as const) {
+      const read = await anon.from(table).select('*').limit(1)
+      expect(read.error?.code, `anon read ${table}: ${JSON.stringify(read.error)}`).toBe('42501')
+    }
+    // service_role holds nothing either — but see this block's header: locally
+    // that is true even without the revoke, so this assertion is weak HERE and
+    // is the prod verifier's job to make strong.
+    if (serviceKey) {
+      const svc = createClient(url, serviceKey, { auth: { persistSession: false } })
+      for (const table of ['login_events', 'login_rollup'] as const) {
+        expect(errored(await svc.from(table).select('id').limit(1)),
+          `service_role can read ${table} (weak locally; prod is what counts)`).toBe(true)
+      }
+    }
+  })
+
+  it('NO api role may EXECUTE the pruner — the one exception to append-only is owner-only', async () => {
+    // MIGRATION CLAIM 4, and the highest-value assertion in this block: this is
+    // the only function on the platform that can delete from a log.
+    const sql = postgres(dbUrl, { prepare: false, max: 1 })
+    try {
+      const rows = (await sql`
+        select r.rolname,
+               has_function_privilege(r.rolname, 'public.login_events_prune()', 'execute') as prune,
+               has_function_privilege(r.rolname, 'public.is_superadmin()', 'execute')      as control
+        from pg_roles r
+        where r.rolname in ('postgres', 'authenticated', 'service_role', 'anon')
+      `) as unknown as { rolname: string; prune: boolean; control: boolean }[]
+      const of = (role: string) => rows.find((r) => r.rolname === role)
+
+      // THE CONTROL that makes the negatives mean something: the same query
+      // shape reports TRUE for a function that really is granted to these roles.
+      // Without it, a typo'd function signature would report false for everyone
+      // and this test would pass while checking nothing.
+      expect(of('authenticated')?.control,
+        'CONTROL: has_function_privilege reports false for a function that IS granted — the probe is broken')
+        .toBe(true)
+
+      expect(of('postgres')?.prune, 'the owner cannot execute the pruner — retention can never run').toBe(true)
+      for (const role of ['authenticated', 'service_role', 'anon']) {
+        expect(of(role)?.prune, `${role} can EXECUTE the log pruner`).toBe(false)
+      }
+    } finally {
+      await sql.end()
+    }
+
+    // And in practice, through the API the app and worker actually use.
+    expect(errored(await owner.rpc('login_events_prune')),
+      'the superadmin could invoke the pruner over PostgREST').toBe(true)
+    if (serviceKey) {
+      const svc = createClient(url, serviceKey, { auth: { persistSession: false } })
+      expect(errored(await svc.rpc('login_events_prune')),
+        'service_role could invoke the pruner over PostgREST').toBe(true)
+    }
+  })
+
+  it('the pruner is NOT security definer, and its 90-day window is a literal nobody can pass in', async () => {
+    // MIGRATION CLAIM 2. A `prune(older_than interval)` would have been the
+    // natural shape and the whole vulnerability — one caller passing
+    // `interval '0 days'` empties the table. So: no arguments, and the window is
+    // in the body where changing it requires a migration and trips this test.
+    const sql = postgres(dbUrl, { prepare: false, max: 1 })
+    try {
+      const rows = (await sql`
+        select p.prosecdef, p.pronargs, pg_get_functiondef(p.oid) as def
+        from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+        where n.nspname = 'public' and p.proname = 'login_events_prune'
+      `) as unknown as { prosecdef: boolean; pronargs: number; def: string }[]
+
+      expect(rows.length, 'CONTROL: login_events_prune not found — the assertions below are vacuous').toBe(1)
+      const fn = rows[0]!
+      expect(fn.prosecdef,
+        'the pruner became SECURITY DEFINER — it must stay invoker so it can never exceed its caller').toBe(false)
+      expect(fn.pronargs,
+        'the pruner grew a parameter — the retention window must not be caller-supplied').toBe(0)
+      expect(fn.def, 'the 90-day retention window changed without a founder decision')
+        .toMatch(/interval\s+'90 days'/)
+      // The lock_timeout is what stops a lock wait inside the capture trigger
+      // riding the enclosing statement to the 120s cluster statement_timeout and
+      // taking GoTrue's sign-in down with it (review finding, 2026-08-09).
+      const trg = (await sql`
+        select pg_get_functiondef(p.oid) as def
+        from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+        where n.nspname = 'public' and p.proname = 'capture_login'
+      `) as unknown as { def: string }[]
+      expect(trg.length, 'CONTROL: capture_login not found').toBe(1)
+      expect(trg[0]!.def, 'capture_login lost its bounded lock_timeout — a lock wait can now fail a sign-in')
+        .toMatch(/SET\s+lock_timeout/i)
+    } finally {
+      await sql.end()
+    }
+  })
+
+  it('the pruner deletes ONLY rows past the window, and NEVER touches the rollup', async () => {
+    // MIGRATION CLAIM 3. Run as the owner over a direct connection, which is
+    // exactly how the worker invokes it.
+    const sql = postgres(dbUrl, { prepare: false, max: 1 })
+    try {
+      const [old] = (await sql`
+        insert into public.login_events (user_id, occurred_at)
+        values (${melId}, now() - interval '91 days') returning id`) as unknown as { id: string }[]
+      const [recent] = (await sql`
+        insert into public.login_events (user_id, occurred_at)
+        values (${melId}, now() - interval '89 days') returning id`) as unknown as { id: string }[]
+
+      const rollupBefore = await rollupOf(melId)
+      expect(rollupBefore, 'CONTROL: no rollup row for mel, so the no-touch assertion is vacuous').not.toBeNull()
+
+      const pruned = (await sql`select public.login_events_prune() as n`) as unknown as { n: string }[]
+      expect(Number(pruned[0]!.n), 'the pruner deleted nothing — the 91-day row should have gone')
+        .toBeGreaterThanOrEqual(1)
+
+      const survivors = (await sql`
+        select id from public.login_events where id in (${old!.id}, ${recent!.id})
+      `) as unknown as { id: string }[]
+      const ids = survivors.map((r) => r.id)
+      expect(ids, 'the 91-day row survived the prune').not.toContain(old!.id)
+      expect(ids, 'the 89-day row was pruned — the window is wrong, or it is not 90 days').toContain(recent!.id)
+
+      const rollupAfter = await rollupOf(melId)
+      expect(rollupAfter, 'the pruner deleted a rollup row').not.toBeNull()
+      expect(rollupAfter!.observed_logins,
+        'the pruner changed observed_logins — the permanent summary must survive pruning')
+        .toBe(rollupBefore!.observed_logins)
+      expect(rollupAfter!.last_login_at,
+        'the pruner changed last_login_at — the permanent summary must survive pruning')
+        .toBe(rollupBefore!.last_login_at)
+
+      // Leave the table as we found it: the synthetic 89-day row is not a real login.
+      await sql`delete from public.login_events where id = ${recent!.id}`
+    } finally {
+      await sql.end()
+    }
+  })
+
+  it('no policy on either table has a rank arm, and none permits a write', async () => {
+    const sql = postgres(dbUrl, { prepare: false, max: 1 })
+    try {
+      const policies = (await sql`
+        select tablename, policyname, cmd, qual, with_check
+        from pg_policies where schemaname = 'public'
+          and tablename in ('login_events', 'login_rollup')
+      `) as unknown as { tablename: string; policyname: string; cmd: string; qual: string; with_check: string }[]
+      const all = (await sql`
+        select count(*)::int as n from pg_policies where schemaname = 'public'
+      `) as unknown as { n: number }[]
+      expect(all[0]!.n,
+        'CONTROL: pg_policies returned almost nothing — a missing policy would read as correctly absent')
+        .toBeGreaterThan(100)
+
+      expect(policies.length, `expected exactly two policies, got ${JSON.stringify(policies.map((p) => p.policyname))}`).toBe(2)
+      for (const p of policies) {
+        expect(p.cmd, `${p.policyname} is not SELECT-only — a FOR ALL policy's USING silently covers SELECT`).toBe('SELECT')
+        expect(String(p.qual), `${p.policyname} is not gated on is_superadmin()`).toMatch(/is_superadmin\(\)/)
+        expect(/module_position_rank|module_roles|module_scope_covers/.test(`${p.qual} ${p.with_check}`),
+          `${p.policyname} grew a module rank arm — this is the rank-0 inversion (docs/17 §7.1)`).toBe(false)
+      }
+    } finally {
+      await sql.end()
+    }
+  })
+
+  it('the capture trigger is BOUND and ENABLED on auth.users, not merely defined', async () => {
+    // A function nothing fires is not a capture mechanism. Checked separately
+    // from the function's existence for the same reason the superadmin log's
+    // prod verifier does it.
+    const sql = postgres(dbUrl, { prepare: false, max: 1 })
+    try {
+      const rows = (await sql`
+        select t.tgname, t.tgenabled
+        from pg_trigger t
+        join pg_class c on c.oid = t.tgrelid
+        join pg_namespace n on n.oid = c.relnamespace
+        where n.nspname = 'auth' and c.relname = 'users' and not t.tgisinternal
+      `) as unknown as { tgname: string; tgenabled: string }[]
+
+      // CONTROL: the long-live sibling trigger proves this query really reads
+      // triggers in the `auth` schema — the exact place an information_schema
+      // version of it would silently return nothing.
+      expect(rows.map((r) => r.tgname),
+        'CONTROL: on_auth_user_created not visible, so this query cannot see auth triggers at all')
+        .toContain('on_auth_user_created')
+
+      const capture = rows.find((r) => r.tgname === 'on_auth_user_login')
+      expect(capture, 'the capture trigger is not bound to auth.users').toBeDefined()
+      expect(capture!.tgenabled, 'the capture trigger is bound but DISABLED').toBe('O')
+    } finally {
+      await sql.end()
+    }
+  })
+
+  it('a new account: no row until it signs in, captured on first sign-in, erased with the account', async () => {
+    // Three properties in one lifecycle, because they only make sense together:
+    //   * "never signed in" is represented by the ABSENCE of a rollup row — which
+    //     is what the console reads to build the outreach list, and is the
+    //     founder's primary question.
+    //   * a brand-new account's FIRST sign-in is captured. This was worth
+    //     asserting rather than assuming: if GoTrue set last_sign_in_at in the
+    //     INSERT that creates the user, no UPDATE would fire and every user's
+    //     first login would be missing.
+    //   * `on delete cascade` really erases the history, and nothing became
+    //     undeletable in the process (the trap that governs the other two logs).
+    if (!serviceKey) return
+    const admin = createClient(url, serviceKey, { auth: { persistSession: false } })
+    const email = `login-capture-probe-${Date.now()}@demo.local`
+    const { data: created, error: createErr } = await admin.auth.admin.createUser({
+      email, password: 'password123', email_confirm: true,
+    })
+    expect(createErr, `CONTROL: could not create the probe account: ${JSON.stringify(createErr)}`).toBeNull()
+    const probeId = created!.user!.id
+
+    try {
+      expect(await eventsOf(probeId), 'a freshly created account already has login events').toEqual([])
+      expect(await rollupOf(probeId),
+        'a freshly created account has a rollup row — "never signed in" must be an ABSENT row').toBeNull()
+
+      await signIn(email)
+
+      expect((await eventsOf(probeId)).length, "a new account's FIRST sign-in was not captured").toBe(1)
+      const rollup = await rollupOf(probeId)
+      expect(rollup, 'no rollup row after the first sign-in').not.toBeNull()
+      expect(rollup!.observed_logins).toBe(1)
+      expect(rollup!.first_observed_login_at, 'first_observed_login_at unset on a first-ever login').not.toBeNull()
+    } finally {
+      const { error: delErr } = await admin.auth.admin.deleteUser(probeId)
+      expect(delErr, 'deleting the account FAILED — the login log made a user undeletable').toBeNull()
+    }
+
+    expect(await eventsOf(probeId), 'login events survived account erasure').toEqual([])
+    expect(await rollupOf(probeId), 'the rollup row survived account erasure').toBeNull()
+  })
+})

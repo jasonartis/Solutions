@@ -6,6 +6,91 @@ lean. Newest first. Durable *decisions/conventions* live in their own docs (docs
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
 
 
+- **2026-08-09 (ENGAGEMENT MONITORING PHASE 1 — LOGIN CAPTURE, BUILT AND SHIPPED.
+  `20260809010000_login_events.sql`, a trigger on `auth.users`. Opus build; adversarial review on
+  a user-directed Fable subagent. Spec + every decision: docs/17.)** The platform can now answer
+  "who has gone quiet" for people. Two tables (`login_events` raw/90-day, `login_rollup`
+  permanent), one trigger, one owner-only pruner, one pg-boss job. No UI — that is phase 3.
+  - **THE NUMBER THAT JUSTIFIED SHIPPING CAPTURE BEFORE ANY UI: of 12 prod users, 5 have ever
+    signed in and 7 NEVER have.** Measured read-only pre-deploy. The outreach list existed on day
+    one, which is what the founder wanted this for — and a log started later can never cover the
+    period before it existed, so waiting for the UI would have cost real history.
+  - **The founder's own question reshaped phase 4.** He asked whether higher-ups would later see
+    logins of those below them. Mechanically yes (additive policy arm, no data migration) — but it
+    would answer the wrong question, because **a login has no org**: telling frank "dana signed in
+    Tuesday" reports platform activity that may belong entirely to a different client's org.
+    **Recorded recommendation, founder agreed: raw logins stay superadmin-only permanently, and
+    hierarchy-governed engagement is built on phase 2's org-scoped activity**, which carries
+    `org_id`. Prevents a plausible future session from bolting a rank arm onto the wrong table.
+  - **THE SPEC'S `profiles` MIRROR WAS DROPPED, and finding out why took a live catalog read
+    rather than an argument.** The spec wanted `last_sign_in_at` mirrored onto `profiles` so the
+    console could read it under ordinary RLS. But `profiles_select_shared_org` admits every member
+    of every org you belong to, and **RLS filters rows, never columns** — column grants are
+    per-ROLE, so hiding it from a colleague hides it from the superadmin too. Proven by signing in
+    as charlie (salon customer, rank 0) and reading 8 profile rows including frank's (salon admin,
+    rank 3). The founder's reaction — *"there should never be any visibility to someone lower of
+    someone higher"* — is the right instinct and revealed that **`profiles` has been flat since
+    2026-07-08 by design** (a professor's roster was rendering UUIDs). Names and emails are static
+    facts a customer already knows; a string of login times is a behaviour trail (working hours,
+    holidays, whether someone quietly stopped showing up). Two items parked to the open list:
+    whether the profiles policy should itself be hierarchy-narrowed, and that **anything put in
+    `profiles.settings` is org-mate-readable** (today: one console checkbox).
+  - **The prune exception came out far smaller than the spec feared.** docs/17 flagged it for the
+    top model specifically because it is the only thing on the platform that can delete from a log.
+    The answer was that it needs no elevated privilege at all: the only caller is the worker, which
+    already connects as the table owner, so it is **`security invoker`, parameterless, EXECUTE
+    granted to nobody**. `invoker` buys a second lock free — a future careless
+    `grant execute … to service_role` still fails at 42501, because that role holds no DELETE.
+    A `prune(older_than interval)` would have been the natural shape and the whole vulnerability.
+  - **THE REVIEW'S ONE REAL DEFECT, and it was a good one: `WHEN OTHERS` does not catch
+    `query_canceled`.** So the migration's absolute claim that the trigger "can never break
+    sign-in" was false — a statement cancellation aborts GoTrue's own UPDATE. Prod's cluster
+    `statement_timeout = 120000` (measured) made it reachable rather than theoretical. Fixed with
+    `set lock_timeout = '50ms'` on the function: function-scoped, restored on exit, converts an
+    unbounded lock wait into a catchable `lock_not_available`. **`when query_canceled` was
+    deliberately not added** — it does not reliably help for a timeout and its other source is an
+    operator's deliberate cancel, which a trigger must honour. **The review's stated failure
+    scenario was wrong and is recorded as wrong** (a range `delete` and an `insert` both take ROW
+    EXCLUSIVE, which does not self-conflict); the real exposure is DDL on the table.
+  - **The more embarrassing finding: four comments claimed test coverage that did not exist yet.**
+    "Asserted in the RLS suite" ×3 plus the worker job, written mid-draft because tests were the
+    next beat — but at that moment editing `interval '90 days'` to `'1 day'` would have passed CI.
+    Now 12 tests (floor 104 → 116), each mapped to the claim it makes true. **Generalised into
+    docs/03: write the assertion or write the future tense; never document a test you have not
+    written, even one you mean to write in the same session.**
+  - **A PROCESS FAILURE OF MINE THAT THE REVIEW EXPOSED SIDEWAYS, and the most reusable thing
+    here: `turbo run test` printed `>>> FULL TURBO` — all five tasks cached replays — after a
+    migration changed the schema, and I read it as a real pass.** Turbo's cache key cannot include
+    database state, so a cached test result after a migration proves nothing. It surfaced only
+    because the reviewer mentioned the local tables were empty when 11 seeded users should have
+    produced rows. The real run was green too, so nothing was hidden — but the "109/109" I reported
+    had not been measured. Now a CLAUDE.md gotcha. Same family as the tally rule: **before writing
+    a number, produce it.**
+  - **Also verified empirically before writing a line of SQL**, because the design rests on it: a
+    password grant advances `last_sign_in_at`; a refresh_token grant does NOT (so the count means
+    sign-ins, not sessions); and a brand-new `/signup` DOES fire the trigger — which would have
+    been a silent hole, since if GoTrue set the timestamp in the creating INSERT then every user's
+    first-ever login would be missing and a new active user could read as "never signed in".
+  - **`on delete cascade`, diverging from both existing logs.** They use `set null` so an oversight
+    log outlives what it describes; here a row with a null `user_id` is unattributable and
+    worthless, and account erasure should take it. Also lets `user_id` be `not null` and makes the
+    CHECK constraints FK-action-safe (cascade deletes rather than performing the real UPDATE that
+    `set null` performs — the trap that governs `superadmin_lookup_log`). Answers docs/17 §11's
+    open question about the counters by construction: yes, erasure takes them.
+  - **The rollup is maintained by the capture trigger, not the pruner** (the spec's wording implied
+    the latter). Write-time means the permanent summary is correct even if the pruner never runs,
+    and the pruner can then only destroy detail already counted. Also why there is no stored
+    "logins in last 30 days": the pruner only ever sees rows ≥90 days old, so such a column would
+    be permanently zero.
+  - **PROVENANCE, at the founder's explicit request:** Fable is not available as a session model,
+    so the review ran as a user-directed Fable SUBAGENT, and a subagent's tier cannot be verified
+    from inside the session. Recorded as **claimed-Fable, unverified**; a confirmed-Fable re-review
+    is on the open list. Nothing rests on it — both findings that mattered were independently
+    checked against documented Postgres behaviour and the live catalog.
+  - **Verification: typecheck 9/9, build clean, db 121/121 (real run, not cached), e2e 49/49
+    exit 0 CI-STRICT, prod pre-flight 11/11.** Local capture healthy under load (99 events across
+    a full suite run). Prod deploy + `scripts/prod-verify-login-events.mts` in the same session.
+
 - **2026-08-09 (THE RANK ADMISSION MAP — docs/13's rank/tier-wrapper gap, closed. One test,
   one generated doc, zero migrations. Opus session, founder chose the mechanism from three
   options after asking for each to be explained in plain terms.)** Nothing verified that a

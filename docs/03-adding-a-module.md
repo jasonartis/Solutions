@@ -671,6 +671,53 @@ inventory** — re-derive the inventory from the code before building anything t
 its completeness. The re-derivation here also turned up two whole rules the summary omitted,
 one of which (`module_roles_guard_last_director`, the only reader of rank 4) fails OPEN.
 
+**NEVER DOCUMENT A TEST YOU HAVE NOT WRITTEN — NOT EVEN ONE YOU INTEND TO WRITE IN THE SAME
+SESSION (2026-08-09, from the login-capture review).** The migration for engagement monitoring
+carried four comments saying "asserted in the RLS suite", written while drafting because the
+tests were the next beat of the docs/03 #12 rhythm. The adversarial review grepped for them and
+found nothing: at that moment, editing the retention window from `interval '90 days'` to
+`interval '1 day'` would have passed CI while the file claimed otherwise. Nobody had lied and the
+tests did get written an hour later — but had the session ended early, or had the reviewer trusted
+the comment, a false guarantee would have shipped. This is the tally rule (above) applied to
+coverage claims: a comment asserting a test exists is exactly as checkable as the test itself. →
+**Write the assertion, or write the future tense** ("must be asserted by the RLS suite"). → And
+when reviewing anything, treat a claim of test coverage as a claim to verify, not as
+documentation — `grep` for it.
+
+## Triggers on `auth.users` (engagement monitoring phase 1, 2026-08-09)
+
+The platform now has two: `on_auth_user_created` (AFTER INSERT → `handle_new_user`, live since
+2026-07-06) and `on_auth_user_login` (AFTER UPDATE OF `last_sign_in_at` → `capture_login`). The
+mechanism is proven in the managed environment, but it carries rules that are not obvious:
+
+- **A trigger on `auth.users` is on the critical path of signup or sign-in.** If it raises, the
+  enclosing statement aborts and the AUTH OPERATION FAILS. So the question "should this swallow
+  its errors?" is a criticality judgement, not a style one: `handle_new_user` deliberately does
+  NOT (an account with no `profiles` row is broken, so failing signup is correct), while
+  `capture_login` deliberately DOES (a missing engagement row is nothing; a platform-wide login
+  outage caused by an analytics defect is unacceptable).
+- **`WHEN OTHERS` DOES NOT CATCH `query_canceled` OR `assert_failure`.** This is documented
+  PL/pgSQL behaviour and it falsifies the obvious claim that an exception handler makes a trigger
+  unable to break its caller. A statement cancellation propagates regardless — and this project's
+  cluster runs `statement_timeout = 120000` (measured on prod 2026-08-09), so it is reachable.
+- **The fix is to bound the wait, not to catch the cancel.** `set lock_timeout = '50ms'` in the
+  function definition is scoped to the function and restored on exit, so it constrains the trigger
+  without altering the caller's transaction; a lock wait then fails as `lock_not_available`
+  (55P03), which IS ordinary and IS caught. Catching `query_canceled` instead is wrong twice: it
+  does not reliably help for a timeout (the deadline has passed, so the cancel re-asserts at the
+  next interrupt check) and its other source is an operator's `pg_cancel_backend`, which a trigger
+  must honour.
+- **Swallowing errors creates a debt the UI owes.** A silent capture failure is invisible, so the
+  surface reading the data must render a "newest captured row" honesty signal, with a test that
+  renders it (the badge discipline from the superadmin lookup log).
+- **The coupling is permanent and must be respected by future migrations:** once a trigger writes
+  to a table on the sign-in path, AUTH AVAILABILITY DEPENDS ON THAT TABLE BEING WRITABLE. DDL on
+  it belongs in a maintenance window or behind `concurrently` — never in a casual migration.
+- **Measure GoTrue's behaviour; do not assume it.** Verified before building: a password grant
+  advances `last_sign_in_at`, a refresh_token grant does not, and a `/signup` DOES produce an
+  UPDATE (so first-ever logins are captured). Had that last one been false — the timestamp set in
+  the same INSERT that creates the row — every user's first login would have been silently missing.
+
 ## Hard rules
 
 1. **Never fork a platform primitive.** If the notifications/files/workflow primitive almost fits, extend it in `packages/platform` (benefiting every module) — don't copy it into the module.

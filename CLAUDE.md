@@ -19,21 +19,25 @@ A multi-tenant modular platform: each client engagement produces a **module** bu
      and update only the compact "Now / Next / Standing rules" below. A fresh chat must never
      pay for the full journal. See "Session hygiene". -->
 
-**Now (2026-08-09):** **THE RANK/TIER-WRAPPER VERIFICATION GAP IS CLOSED** (`ba4eb6a`, pushed,
-**no migration**) — the last thing docs/13 was carrying. `packages/db/src/rank-admission.test.ts`
-+ the generated **[docs/rank-admission-map.md](docs/rank-admission-map.md)**, which doubles as
-docs/13's "what does rank 2 mean in this module?" table. Rank readers AND the position
-vocabulary are both DISCOVERED (from `pg_proc.prosrc` and the ladder's own body), and a
-comparison the parser cannot classify FAILS rather than being skipped. Proven by remapping
-salon `cashier` 1→2 in the live DB: fails, and the diff names `sal_earnings_ledger`.
-**Three reusable lessons, all now in docs/03 — read them there, not here:** *a count of
-mechanisms is not a count of code* (docs/13's "FOUR rules" was eight functions, and the two it
-omitted included the only reader of rank 4, which fails **OPEN**); *a checker must fail on what
-it cannot understand, never skip it*; and *when half a fact comes from the source of truth, the
-other half is where the next gap is* — which is the mistake the adversarial review caught this
-very file making. **CI ratchet extended:** `tests-floor.json.requiredFiles` fails on a
-schema-coverage file that is missing *or merely untracked*. **Verification: typecheck 9/9,
-build clean, db 109/109, e2e 49/49 exit 0 CI-STRICT.** Detail → journal + docs/15 2026-08-09.
+**Now (2026-08-09):** **ENGAGEMENT MONITORING PHASE 1 — LOGIN CAPTURE — IS BUILT AND SHIPPED**
+(`20260809010000_login_events.sql`, **a trigger on `auth.users`**). Spec and every decision:
+**[docs/17-engagement-monitoring.md](docs/17-engagement-monitoring.md)**. `login_events` (raw,
+90-day) + `login_rollup` (permanent), both READ-ONLY to every api role and superadmin-only reads;
+an owner-only pruner; a daily pg-boss job. **No UI — that is phase 3, which OWES a "newest
+captured login" honesty badge with a test, because the capture trigger swallows its own errors so
+it can never cause a login outage.** The fact that made it worth shipping before the UI: **of 12
+prod users, 5 have ever signed in and 7 NEVER have** — the outreach list existed on day one.
+**Four durable lessons, in docs/03 and docs/17 — read them there:** *a trigger on `auth.users` is
+on the auth critical path, so whether it swallows errors is a criticality judgement* (and
+**`WHEN OTHERS` does not catch `query_canceled`** — bound the wait with a function-scoped
+`lock_timeout` instead of catching the cancel); *never document a test you have not written, even
+one you mean to write in the same session*; *RLS filters rows, never columns, so a column added to
+`profiles` is readable by every org-mate*; and **a `>>> FULL TURBO` test result after a migration
+is a cached replay, not a run** (now a gotcha below). **Founder decisions this session:
+superadmin-only reads confirmed, no `profiles` mirror, and hierarchy-governed engagement will be
+built on PHASE 2's org-scoped activity — never on raw logins, because a login has no org.**
+**Verification: typecheck 9/9, build clean, db 121/121 (real run), e2e 49/49 exit 0 CI-STRICT,
+prod pre-flight 11/11, prod-verified.** Detail → journal + docs/17's decisions log.
 
 **Previously — shipped, prod-verified, and fully written up elsewhere.** One line each; the
 blow-by-blow is in [docs/history/platform-journal.md](docs/history/platform-journal.md)
@@ -41,6 +45,17 @@ blow-by-blow is in [docs/history/platform-journal.md](docs/history/platform-jour
 this short deliberately: this file is a tax on every session, and a second copy of the journal
 is the most expensive thing in it.
 
+- **2026-08-09 — the rank admission map** (`ba4eb6a`, pushed, **no migration**, prod READY).
+  `packages/db/src/rank-admission.test.ts` + the generated
+  **[docs/rank-admission-map.md](docs/rank-admission-map.md)**, which doubles as docs/13's "what
+  does rank 2 mean in this module?" table. Rank readers AND the position vocabulary are both
+  DISCOVERED (`pg_proc.prosrc` + the ladder's own body); a comparison the parser cannot classify
+  FAILS rather than being skipped. Gave three rules now in docs/03: *a count of mechanisms is not
+  a count of code* (docs/13's "FOUR rules" was eight functions, and the two omitted included the
+  only reader of rank 4, which fails **OPEN**); *a checker must fail on what it cannot understand*;
+  and *when half a fact comes from the source of truth, the other half is where the next gap is*.
+  Also extended the CI ratchet: `tests-floor.json.requiredFiles` fails on a schema-coverage file
+  that is missing *or merely untracked*.
 - **2026-08-07/08 — the superadmin lookup log** (`eef09ce`, `20260807010000`, prod 23/23).
   Both Owner Console tools record every lookup; a failed write is BADGED, not swallowed;
   docs/12 item 9 closed. Gave three rules now living in docs/03: *unranked is not rank 0*;
@@ -64,11 +79,14 @@ is the most expensive thing in it.
   #17/#18/#19.
 
 **Next / open (pick WITH the founder — do not start unprompted; details in docs/15 §11).
-AS OF 2026-08-09 the numbered items 1–6 are ALL DONE, and so is the rank/tier-wrapper gap; what
-remains is the unranked list below. THE RECOMMENDED NEXT REAL PIECE IS THE ENGAGEMENT-MONITORING
-BUILD, whose spec is `docs/17-engagement-monitoring.md` (founder-approved 2026-08-09, phase 1
-only, Opus — it ships a migration and a trigger on `auth.users`). Two numbered items survive
-below because they still carry live operational facts, not because they are open:**
+AS OF 2026-08-09 the numbered items 1–6 are ALL DONE, and so are the rank/tier-wrapper gap and
+ENGAGEMENT MONITORING PHASE 1; what remains is the unranked list below. THE RECOMMENDED NEXT REAL
+PIECE IS ENGAGEMENT MONITORING PHASE 3 — the console page that reads what phase 1 now captures
+(org→people and person→orgs, per docs/17 §1). It needs NO migration, so it is Sonnet-tier work
+apart from the badge; the one hard requirement is docs/17 §10 point 4's honesty badge with a test.
+Phase 2 (org-scoped activity) is specced but NOT founder-approved and ships a migration. Two
+numbered items survive below because they still carry live operational facts, not because they are
+open:**
 
 - ~~**1. Confirm CI/deploy for slice 5.**~~ ~~**2. Peer-review comments.**~~
   ~~**4. THE OWNER CONSOLE VIEW-AS.**~~ ~~**5. Push and prod-verify.**~~ **ALL DONE**
@@ -105,24 +123,39 @@ below because they still carry live operational facts, not because they are open
   `owner@demo.local` (the remote-seed guard in `seed.ts` sets that account's `is_superadmin`
   to `false` off-localhost).
 Everything below is open but unranked:
-- **ENGAGEMENT MONITORING — SPECCED 2026-08-09, PHASE 1 APPROVED, NOT BUILT. The recommended
-  next real piece.** Full spec + dated decisions:
-  **[docs/17-engagement-monitoring.md](docs/17-engagement-monitoring.md)**. Answers "who has
-  gone quiet, and who should I reach out to", org→people and person→orgs. **The finding that
-  decides the design, and the reason it was specced before any code: `auth.audit_log_entries`
-  has NEVER been written to on prod** (`ins=0`, with `auth.users`/`sessions`/`refresh_tokens`
-  insert counts as the control proving the read works) — it is fully populated LOCALLY, so
-  building on it yields a feature that demos perfectly and ships permanently empty. Prod has
-  only `last_sign_in_at`: the LAST login, never a frequency. **Second hard fact: a login
-  cannot be attributed to an org** — people sign into the platform, not an org — so logins
-  (phase 1) and org-scoped activity (phase 2) are different data, and fanning one login out
-  across a member's three orgs would be a false claim. Capture mechanism is an
-  `AFTER UPDATE OF last_sign_in_at` trigger on `auth.users`, the same mechanism as the live
-  `on_auth_user_created`. Founder decisions already made: logins first; 90-day retention +
-  permanent rollup; no user notice, one privacy-policy line; no hierarchy columns in phase 1
-  but MANDATORY in phase 2 (role/scope at write time are unreconstructable — `module_roles` is
-  mutated in place); superadmin-only in v1 with hierarchy-governed reads as a named future
-  enhancement. **Ships a migration → full docs/03 #12 rhythm, Opus.**
+- **ENGAGEMENT MONITORING — PHASE 1 BUILT 2026-08-09. PHASE 3 IS THE RECOMMENDED NEXT PIECE;
+  PHASE 2 IS SPECCED BUT NOT APPROVED.** Full spec + dated decisions:
+  **[docs/17-engagement-monitoring.md](docs/17-engagement-monitoring.md)**. What is live: capture
+  only, no UI. **Five things carried forward, all recorded there in full:**
+  **(i) PHASE 3 OWES AN HONESTY BADGE** ("newest captured login", with a test that renders it) —
+  the capture trigger swallows its own errors so it can never cause a login outage, which makes a
+  capture failure SILENT, and an empty engagement table is indistinguishable from "nobody uses the
+  platform". **(ii) RETENTION IS NOT ENFORCED IN PROD UNTIL THE WORKER RUNS THERE** (still the
+  `pnpm worker:prod` stopgap) — raw events accumulate past 90 days meanwhile; the pruner is
+  idempotent and range-based so the first real run catches up. **(iii) HIERARCHY-GOVERNED
+  ENGAGEMENT GOES ON PHASE 2's DATA, NEVER ON RAW LOGINS** (founder agreed 2026-08-09): a login has
+  no org, so "frank sees dana's logins" reports activity that may belong to a different client's
+  org entirely. **(iv) Phase 2 stays MANDATORY-hierarchy-columns** — role/scope at write time are
+  unreconstructable because `module_roles` is mutated in place. **(v) `auth.audit_log_entries` is
+  still never written to on prod** (`ins=0`, re-measured 2026-08-09 with the sibling-table insert
+  counts as control) — never build on it; it is fully populated locally, which is the trap.
+- **PARKED 2026-08-09, both raised by the login-capture build and both about `profiles`:**
+  **(a) should `profiles_select_shared_org` be hierarchy-narrowed?** The founder's stated rule is
+  *never any visibility to someone lower of someone higher*, and that policy breaks it today for
+  name/email — share ANY org, read the whole row, no rank arm (proven live: charlie, a rank-0 salon
+  customer, reads frank the rank-3 admin). It has been that way deliberately since `20260708020000`
+  because rosters were rendering UUIDs. Narrowing it touches every roster in every module, so it is
+  its own migration and review. **(b) Anything placed in `profiles.settings` is readable by every
+  org-mate** — today just one console preference (`superadminDefaultAddActive`), so nothing
+  sensitive, but it is an easy trap to walk into later. Both are why the login mirror went onto a
+  superadmin-only table instead.
+- **A CONFIRMED-FABLE RE-REVIEW OF `20260809010000` IS OPEN** (founder ask, 2026-08-09). Fable is
+  not selectable as a session model, so that migration's adversarial review ran as a user-directed
+  Fable SUBAGENT — and a subagent's tier cannot be verified from inside the session, so it is
+  recorded as **claimed-Fable, unverified** (docs/17's decisions log). Nothing rests on it: both
+  findings that mattered were independently checked against documented Postgres behaviour and the
+  live catalog. Worth one pass by a confirmed Fable when one is available, since the prune function
+  is the platform's only exception to append-only logging.
 - **`blinded` CHECKS ONE TABLE PER MODULE** (the `scopeEntity`), never per role table — so a
   future migration dropping an `is_org_admin` arm on an ordinary role table gives a silent,
   error-free, **UNBADGED** empty section. `20260806010000` is proof the category already bit
@@ -307,6 +340,16 @@ in the sections below.
   healthy (11GB of 31GB), which is misleading: it is free BECAUSE Docker died. Same family as
   the OOM entries below — **any all-tests-fail-at-connection result is infrastructure, never
   code.**
+- **A `>>> FULL TURBO` TEST RESULT AFTER A MIGRATION IS A CACHED REPLAY, NOT A RUN (2026-08-09).**
+  `turbo run test` reported `Cached: 5 cached, 5 total >>> FULL TURBO` and "109/109 passed"
+  immediately after a `db reset` applied a new migration — and the db suite had not executed at
+  all; the timestamp in its replayed log predated the change. **Turbo's cache key cannot include
+  database state**, so any suite that asserts against Postgres (the whole `@platform/db` package)
+  will happily replay a stale pass after a schema change. Caught only because a reviewer noticed
+  the new tables were empty when 11 seeded users should have filled them. → **After any migration,
+  run `pnpm --filter @platform/db test` directly** (or `turbo run test --force`), and treat
+  `FULL TURBO` on a DB-backed suite as "did not run". Same family as the tally rule in docs/03:
+  before reporting a number, produce it.
 - **`pnpm test` OOM-crashes on this host under turbo's 5-way parallelism** (`FATAL ERROR:
   Committing semi space failed`, at absurdly small heaps with ~7GB free). It is NOT the
   `node-compile-cache` corruption below — clearing that does not help. **Use `pnpm exec turbo

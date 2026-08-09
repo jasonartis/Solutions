@@ -1,8 +1,12 @@
 # 17 — Engagement monitoring (superadmin)
 
-**Status: SPECCED, NOT BUILT.** Founder-raised and decided 2026-08-09; phase 1 approved to
-build in a later session (Opus — it ships a migration and a trigger on `auth.users`). Nothing
-in this document is live.
+**Status: PHASE 1 BUILT 2026-08-09** (`20260809010000_login_events.sql`). Phases 2–4 are specced
+or sketched only and are NOT approved to build. Login capture is live: an
+`AFTER UPDATE OF last_sign_in_at` trigger on `auth.users` appends to `public.login_events` and
+maintains a permanent `public.login_rollup` summary; a 90-day pruner trims the raw detail.
+**Six things were built differently from the draft below and every one is recorded in the
+decisions log with its reasoning — read that entry before trusting any paragraph in §5 or §6,
+which have been corrected in place.** The largest change: there is NO `profiles` mirror.
 
 ---
 
@@ -139,13 +143,39 @@ sibling is the same mechanism, already proven to survive the managed environment
 That gives real per-login history **on prod**, independent of the audit table that never fills.
 
 ```
-auth.users  --AFTER UPDATE OF last_sign_in_at-->  public.login_events (append)
-                                             \->  profiles.last_sign_in_at (mirror, for cheap reads)
+auth.users  --AFTER UPDATE OF last_sign_in_at-->  public.login_events (append, 90-day raw)
+                                             \->  public.login_rollup  (permanent summary)
 ```
 
-The mirror onto `profiles` matters because it lets the console answer "when did this person last
-sign in" through ordinary RLS, with no definer call and no `auth` access — satisfying
-constraints 2 and 3.
+**CORRECTED AS BUILT (2026-08-09): the second arrow is NOT `profiles`.** The draft called for
+mirroring `last_sign_in_at` onto `profiles`, and the *reason* was right — the console must reach
+the timestamp through ordinary RLS, with no definer call and no `auth` access (constraints 2
+and 3). The *location* was wrong, and it took a live catalog read to see why.
+
+`profiles` is not private. `profiles_select_shared_org` (`20260708020000`) admits **every member
+of every org you belong to**, and RLS filters ROWS, never COLUMNS — so any column added to
+`profiles` is readable by all of them. Column-level grants cannot rescue it: they are per-ROLE,
+so hiding the column from a colleague hides it from the superadmin too and breaks `select *`
+across the app. **Demonstrated live rather than argued:** signed in as charlie (salon customer,
+rank 0) and read 8 profile rows including frank's (salon admin, rank 3).
+
+Today that timestamp is readable through the API by **nobody**. So the mirror was not a neutral
+relocation of data the platform already exposes — it was a new disclosure to a new audience, and
+a behavioural one (working hours, holidays, whether someone has quietly stopped showing up) as
+opposed to the static facts `profiles` already carries. §9's "not a new CATEGORY of data"
+argument is sound about RETENTION BY ONE OPERATOR and says nothing about audience.
+
+`login_rollup.last_login_at` satisfies constraints 2 and 3 identically and is superadmin-only.
+It is also BACKFILLED from `auth.users` at migration time, so the console has day-one answers
+for everyone who existed before capture began — which the trigger-fed mirror as drafted would
+not have given.
+
+**Founder-confirmed 2026-08-09** ("superadmin-only for now"). Two items were parked in the same
+exchange and are on CLAUDE.md's open list: whether `profiles_select_shared_org` should itself be
+hierarchy-narrowed for name/email (the founder's stated rule — *lower never sees higher* — does
+conflict with it today, and changing it touches every roster in every module), and the standing
+trap that **anything placed in `profiles.settings` is readable by every org-mate** (today it
+holds one console preference, `superadminDefaultAddActive`, so nothing sensitive).
 
 ### Table shape (draft — the adversarial review may change it)
 
@@ -172,8 +202,28 @@ invites the rank-0 confusion later (§7). Founder-approved 2026-08-09.
 
 ## 6. Retention — **90 days raw + permanent rollup** (founder decision, 2026-08-09)
 
-Raw login events are pruned at 90 days. What the pruner deletes is folded into a permanent
-per-user summary row: **first seen, last seen, total logins, logins in the last 30 days.**
+Raw login events are pruned at 90 days, and a permanent per-user summary survives.
+
+**CORRECTED AS BUILT (2026-08-09), because the obvious reading of that sentence is the fragile
+one.** The draft said the summary is what "the pruner deletes is folded into" — i.e. maintained
+BY the destructive nightly job. It is instead maintained by the CAPTURE TRIGGER at write time,
+which is the same retention decision implemented so that it cannot silently fail:
+
+- the summary is correct at every instant, even if the pruner never runs, runs twice, or is
+  deleted outright;
+- the pruner can then only ever destroy detail that has ALREADY been counted — "prune loses
+  data" becomes impossible by construction rather than by care;
+- `last_login_at` is a genuine last-login. Folded at prune time it could only ever hold a
+  timestamp from >90 days ago, which is useless as the very field the outreach question asks for.
+
+**And "logins in the last 30 days" is deliberately NOT a stored column.** The pruner only ever
+sees rows ≥90 days old, so a pruner-maintained 30-day counter would be permanently zero. It is a
+live query over the raw window (always ≥30 days of coverage) in phase 3.
+
+**The stored columns are named for what they can honestly claim:** `last_login_at` (backfilled,
+then maintained), `first_observed_login_at`, `observed_logins`, `observed_since`. A column called
+`total_logins` would be false on every backfilled row — §2's own point is that a log started
+later cannot cover the period before it existed.
 
 Reasoning: the detail anyone acts on is recent — "quiet for six weeks" is an outreach trigger,
 "signed in on a Tuesday last March" never is. The rollup keeps the long-term signal, volume
@@ -243,10 +293,26 @@ Phase 1 (logins) has no org context at all, so it carries none of these — see 
 
 | Phase | What | Status |
 |---|---|---|
-| **1** | Login capture: trigger on `auth.users`, append-only `login_events`, `profiles` mirror, prune + rollup | **Approved, not built** |
+| **1** | Login capture: trigger on `auth.users`, read-only `login_events`, permanent `login_rollup` (no `profiles` mirror), prune | **BUILT 2026-08-09** |
 | **2** | Org-scoped activity, written by the app as the user under RLS, carrying org/module/role/scope stamped at write time | Specced here, not approved |
 | **3** | The console page: org rollup → drill to people; person → their orgs | Not started |
-| **4** | Hierarchy-governed visibility (a manager sees those below them) | Future enhancement, §7 |
+| **4** | Hierarchy-governed visibility (a manager sees those below them) | Future enhancement, §7 — **and it belongs on phase 2's data, not phase 1's; see below** |
+
+**PHASE 4 MUST BE BUILT ON PHASE 2, NOT ON LOGINS (recommended 2026-08-09, founder agreed).**
+The founder asked directly whether higher-ups will be able to see the logins of those below them
+later. Mechanically yes — a hierarchy arm on `login_rollup` is additive, needs no data migration,
+and nothing shipped in phase 1 forecloses it. But it would answer the wrong question, for the
+reason in §3: **a login has no org.** Telling frank "dana signed in Tuesday" is a PLATFORM fact.
+Dana may have signed in solely to use a different org — possibly a different client — so frank
+would be reading activity that has nothing to do with his salon, which is a small cross-tenant
+disclosure dressed up as an engagement metric. What frank actually wants is "is dana using MY
+salon", and that is phase 2's org-scoped activity, which *does* carry `org_id` and over which a
+hierarchy arm is clean and meaningful.
+
+So: **raw logins stay superadmin-only permanently; hierarchy-governed engagement is a phase 2/4
+feature over org-scoped activity.** The §7.1 rank-0 trap still governs whenever that arm is
+written — an engagement row's subject is often genuinely unranked, so the arm must require both
+parties to be on the ladder and fail closed otherwise.
 
 ---
 
@@ -312,6 +378,16 @@ the test suite fails.
 > beat rather than delegating it.
 
 
+**AS RUN, 2026-08-09 (all beats completed; detail in the decisions log and the journal):**
+draft → orchestrator read → prod pre-flight (read-only, 11 checks) → claimed-Fable adversarial
+review → findings applied → 12 RLS tests (floor 104 → 116) → local live round-trip → typecheck
+9/9, build clean, db 121/121, e2e 49/49 CI-STRICT → prod deploy → `prod-verify-login-events.mts`.
+**One process lesson worth more than the feature: `turbo run test` reported `>>> FULL TURBO` —
+every task a cached replay — after a migration had changed the schema, and it was read as a real
+pass. Turbo cannot see database state, so a cached test result after a migration proves nothing.
+Now a CLAUDE.md gotcha.** It was caught only because the review noticed the local tables were
+empty when they should not have been.
+
 1. Draft the migration → **orchestrator reads it** → independent adversarial review → apply
    findings → RLS tests → live round-trip as real users.
 2. **Prod-verify with `scripts/prod-verify-superadmin-log.mts` as the template**, not
@@ -332,14 +408,33 @@ the test suite fails.
 
 ## 11. Open questions
 
-- **The prune mechanism** (§6): narrow `SECURITY DEFINER` function vs. monthly partitions. Needs
-  costing and its own review; it is a deliberate exception to grant-layer append-only either way.
+- ~~**The prune mechanism** (§6): narrow `SECURITY DEFINER` function vs. monthly partitions.~~
+  **RESOLVED 2026-08-09 — and it turned out much smaller than this question assumed.** Neither
+  option was needed: a `SECURITY DEFINER` is only necessary if a non-owner must call it, and the
+  only caller is the worker, which already connects as the table owner. So it is
+  `security invoker`, takes NO arguments (the window is a literal in the body — a
+  `prune(older_than interval)` would have been the natural shape and the entire vulnerability,
+  since one caller passing `interval '0 days'` empties the table), and holds EXECUTE for
+  **nobody**: not `authenticated`, not `service_role`, not `anon`. A leaked service-role key
+  cannot prune. `security invoker` also buys a second lock free — a future careless
+  `grant execute … to service_role` still fails, because that role holds no DELETE on the table.
+  The 90 is asserted against `pg_get_functiondef` by the RLS suite, so editing it trips CI.
+  **The one live caveat: retention is not enforced in prod until the worker runs there** (still
+  the `pnpm worker:prod` stopgap, docs/10). The prune is idempotent and range-based, so the first
+  real run catches up.
 - **Phase 2's activity granularity** — every page view is too much noise and too much data; "a
   meaningful action per module" needs defining per module, which risks becoming per-module
   bespoke work.
-- **Whether the rollup counters are themselves subject to a deletion request.** The raw events
-  clearly are. A counter is arguably not personal data once detached from timestamps — but it is
-  keyed by `user_id`, so probably yes. Unresolved, same family as docs/12's audit-log tension.
+- ~~**Whether the rollup counters are themselves subject to a deletion request.**~~ **ANSWERED
+  BY CONSTRUCTION 2026-08-09: yes.** Both tables' FKs are `on delete cascade`, so erasing an
+  account erases its raw events AND its rollup row. This is a deliberate divergence from both
+  existing logs (`on delete set null`, so an oversight log outlives what it describes) and the
+  reasoning is in the migration header: a `vm_moderation_log` row with a null actor still says
+  "somebody moderated this", whereas a login event with a null `user_id` is unattributable,
+  unaggregatable and undisclosable — retained personal data with zero informational value. It
+  also means `user_id` is `not null`, so "every row names a real person" is a database guarantee.
+  Asserted behaviourally in the RLS suite (create an account, sign in, delete it, assert both
+  tables are empty for it AND that the delete succeeded — nothing became undeletable).
 - **Phase 4's read policy**, which is the §7 trap in full. Not to be attempted without the
   founder and its own adversarial review.
 
@@ -347,6 +442,77 @@ the test suite fails.
 
 ## Decisions log (dated)
 
+- **2026-08-09 (build session) — PHASE 1 BUILT. `20260809010000_login_events.sql`.**
+  Six deviations from the draft above, each argued to the founder before shipping, plus the
+  adversarial review's findings. Ordered by how much they matter.
+  1. **NO `profiles` MIRROR — founder-confirmed** ("superadmin-only for now"). Full reasoning in
+     §5 as corrected. Short version: `profiles` is readable by every org-mate and RLS cannot hide
+     a column, so the mirror would have published a behavioural signal to peers.
+     `login_rollup.last_login_at` meets the stated requirement and is backfilled besides.
+  2. **`on delete cascade`, not `on delete set null`** — see §11. An engagement row naming nobody
+     is worthless; account erasure should take it.
+  3. **The rollup is trigger-maintained, not pruner-maintained** — see §6.
+  4. **Column names claim only what they can prove** (`observed_logins`, `observed_since`,
+     `first_observed_login_at`) — see §6. No `total_logins`, no stored 30-day counter.
+  5. **The capture trigger swallows its own errors** (`raise warning`, never re-raise) so an
+     analytics defect can never become a platform-wide login outage. A deliberate divergence from
+     `handle_new_user()`, which *should* fail signup — a missing `profiles` row is a broken
+     account, a missing login event is not. **The cost is real and is owed to phase 3:** a
+     capture failure is silent, so phase 3 MUST render "newest captured login" as an honesty
+     badge, with a test that renders it (§10 point 4).
+  6. **The pruner is owner-only and `security invoker`** — see §11.
+  **Prod facts measured read-only before deploying, not assumed:** `audit_log_entries` still
+  `ins=0` (control: `users ins=12`, `sessions ins=27`, `refresh_tokens ins=51` on the same
+  connection); `on_auth_user_created` still BOUND and ENABLED today, so "this mechanism is proven
+  in production" is a fact about now and not about July; the session pooler really does
+  authenticate as the `postgres` role, which is what makes an owner-only pruner invocable by the
+  worker; **15 of this project's 24 `ALTER DEFAULT PRIVILEGES` entries name an api role**, so the
+  four-role revokes are load-bearing rather than ceremony; and the cluster runs
+  `statement_timeout = 120000`, which turned the review's HIGH finding from theoretical into real.
+  **And the number that justifies shipping capture before any UI: of 12 prod users, 5 have ever
+  signed in and 7 NEVER have.** The outreach list exists on day one.
+  **Empirically verified before writing the migration** (the design rests on all three): a
+  password grant advances `last_sign_in_at`; a refresh_token grant does not; and a brand-new
+  `/signup` DOES fire the trigger — that last one would have been a silent hole, since if GoTrue
+  set the timestamp in the INSERT no UPDATE would fire and every user's first-ever login would be
+  missing.
+- **2026-08-09 — the adversarial review (Fable tier), and what it changed.**
+  Verdict SHIP WITH FIXES. It confirmed the ACL/ownership/policy design against the live catalog
+  rather than by re-reading the file, and found two things worth the review's cost:
+  1. **HIGH, and correct: PL/pgSQL's `WHEN OTHERS` does not catch `query_canceled`.** So the
+     header's absolute claim that the trigger "can never break sign-in" was FALSE — a statement
+     cancellation propagates and aborts GoTrue's own `UPDATE auth.users`. Prod's 120-second
+     cluster `statement_timeout` (measured, above) makes it a real exposure rather than a
+     theoretical one. **Fix shipped: `set lock_timeout = '50ms'` on the function.** A
+     function-level SET is scoped to the function and restored on exit, so it bounds the trigger
+     without touching GoTrue's transaction; a lock wait now fails after 50ms as
+     `lock_not_available` (55P03), which IS ordinary and IS caught. `when query_canceled` was
+     deliberately NOT added: it would not reliably help for a timeout (the deadline has already
+     passed, so the cancel re-asserts) and the other source is an operator's `pg_cancel_backend`,
+     which a trigger must honour rather than swallow. **The review's stated failure scenario —
+     the nightly pruner blocking a sign-in — is wrong** and is recorded as such so nobody
+     re-derives it: a range `delete` and an `insert` both take ROW EXCLUSIVE, which does not
+     self-conflict. The real exposure is DDL on `login_events`, which the migration header now
+     names.
+  2. **MEDIUM, and the more embarrassing one: four comments asserted test coverage that did not
+     exist yet.** The migration claimed "asserted in the RLS suite" three times and the worker job
+     once, while nothing referenced the new tables — so editing `interval '90 days'` to
+     `interval '1 day'` would have passed CI. This is precisely the house rule those same files
+     restate: *a migration comment is an assertion a future reader trusts and acts on.* Fixed by
+     writing the tests (12 new `it()`s, floor raised 104 → 116), each mapped to the claim it makes
+     true. **Generalised lesson, now in docs/03: write the assertion or write the future tense —
+     never document a test you have not written, even when you intend to write it in the same
+     session.**
+  3. Also fixed: the data-browser note stated "PRUNED AT 90 DAYS" as flat fact to an operator when
+     prod retention waits on the worker; and the unreachable `coalesce` in the trigger is now
+     labelled as deliberate belt-and-braces rather than left looking like a live branch.
+  **PROVENANCE CAVEAT, recorded at the founder's explicit request: the review ran as a
+  user-directed Fable SUBAGENT because Fable is not available as a session model, and a
+  subagent's tier cannot be verified from inside the session** — self-reported identity is not
+  evidence. So this review is recorded as **claimed-Fable, unverified**. A re-review on a
+  confirmed Fable model is on CLAUDE.md's open list. Nothing about the findings depends on the
+  tier being real; the two that mattered were checked independently against Postgres behaviour
+  and the live catalog.
 - **2026-08-09 — five decisions, all founder-approved in one pass.**
   1. **Logins first (phase 1); org-scoped activity is phase 2.** Rationale: one trigger, and it
      immediately answers "who has never signed in", which is most of the outreach value.

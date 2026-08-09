@@ -8,6 +8,7 @@ import { RENDER_KIND, runSynagogueRender } from './jobs/synagogue-render'
 import { runRetentionSweep } from './jobs/classroom-retention'
 import { runOrchestratorTick } from './jobs/speed-dating-orchestrator'
 import { runRescoreTick } from './jobs/matchmaking-rescore'
+import { runLoginEventsPrune } from './jobs/login-events-prune'
 
 // import.meta.dirname is undefined under tsx — derive it from the module URL.
 const here = dirname(fileURLToPath(import.meta.url))
@@ -28,7 +29,11 @@ try {
 // The worker owns all background jobs (docs/01). It connects with the
 // service-role/database credentials and therefore bypasses RLS — every job
 // must scope its queries by org explicitly.
-const connectionString = process.env.DATABASE_URL
+// Annotated `string` rather than left as `string | undefined`: the guard below
+// exits the process, but TypeScript does not carry that narrowing into the job
+// callbacks inside main(), and PgBoss's own option type accepts undefined — so
+// the missing narrowing was invisible until a job actually needed a real string.
+const connectionString: string = process.env.DATABASE_URL ?? ''
 if (!connectionString) {
   console.error('DATABASE_URL is not set. Run `pnpm dev` from the repo root (it writes .env files).')
   process.exit(1)
@@ -130,6 +135,20 @@ async function main() {
       return
     }
     await runRetentionSweep(admin)
+  })
+
+  // Engagement monitoring phase 1 (docs/17 §6): the 90-day raw retention window
+  // on login_events. Daily at 04:30 — after the classroom sweep, and nothing
+  // about it is latency-sensitive.
+  //
+  // NOTE IT TAKES THE CONNECTION STRING, NOT THE ADMIN CLIENT, and that is the
+  // security property rather than an inconsistency: the prune function is
+  // executable only by the table owner, so this job runs it over the direct
+  // database connection. See the job's own header.
+  await boss.createQueue('platform.login-events-prune')
+  await boss.schedule('platform.login-events-prune', '30 4 * * *')
+  await boss.work('platform.login-events-prune', async () => {
+    await runLoginEventsPrune(connectionString)
   })
 
   const admin = makeAdminClient()
