@@ -587,6 +587,69 @@ vocabulary gets locked.
 
 ## Decisions log
 
+- **2026-08-09 (THE RANK ADMISSION MAP — the rank/tier-wrapper verification gap, CLOSED. No
+  migration: one test plus one generated doc. Opus session; adversarial review run on the
+  test itself, since a checker that lies is the exact failure mode it exists to prevent.)**
+  docs/13 had recorded, and CLAUDE.md's Next list had carried, that nothing verified whether
+  a rank remap changed what a `rank >= N` wrapper ADMITS. It is now
+  `packages/db/src/rank-admission.test.ts` + [rank-admission-map.md](rank-admission-map.md).
+  Four things worth carrying forward:
+
+  1. **THE "FOUR RULES" WERE EIGHT FUNCTIONS, and the delta was where the danger was.** The
+     documented four are right as mechanism FAMILIES and wrong as an inventory of code. The
+     tier-threshold family alone is five functions holding four independently hardcoded `2`s,
+     so a fix aimed at the generic `module_caller_covers_rank` would have left
+     `cls_can_manage`, `sal_can_manage`, `sd_can_organize` and `module_has_manager_grant`
+     uncovered while looking complete. Two entire rules were missing from the summary:
+     `module_roles_guard_last_director` (the only reader of rank **4**, and it fails OPEN —
+     demote `director` below 4 and the last-Director protection silently stops firing) and
+     the `= 3` peer-appointment arm inside `module_caller_can_manage_seat`, an EQUALITY, which
+     no threshold-shaped check would have found. Generalised into docs/03: *a count of
+     mechanisms is not a count of code.*
+  2. **THE CHECK DISCOVERS ITS OWN SUBJECT, AND HARD-FAILS ON WHAT IT CANNOT READ.** The rank
+     readers are read out of `pg_proc.prosrc` rather than listed, so a ninth rule fails the
+     build the day it lands. A comparison whose shape the parser cannot classify, or a
+     threshold whose value it cannot resolve to a literal at every call site, is a FAILURE and
+     never a skip — because a checker that skips the unfamiliar goes green while covering less
+     and less. This is the vacuity rule with a slow fuse, and it is now a docs/03 rule in its
+     own right. It earned its keep on the FIRST run: it refused
+     `losing := rank(...) < 4 or ...`, a real threshold inside a boolean assignment that the
+     draft had mistaken for a rank bound to a variable.
+  3. **THE PROOF IS THE MOTIVATING EXAMPLE, RUN FOR REAL.** `cashier` was remapped 1 → 2 in
+     the live database, the test failed, and the diff named `sal_earnings_ledger` on the
+     `sal_can_manage_location` row. The original definition was then restored and verified
+     byte-identical to its migration source by md5 of `prosrc`, not merely by re-reading the
+     ranks. A test that would not have caught the case it was written for is not the test.
+  4. **THE ADVERSARIAL REVIEW WAS RUN ON THE CHECK ITSELF, AND IT PAID.** No migration shipped,
+     so docs/03 #12's rhythm did not strictly apply — but a checker that lies is precisely the
+     failure this file exists to prevent, so it got the review anyway. **Four findings were
+     silent-widening holes, i.e. the check would have stayed green while covering less:**
+     (a) discovery was CASE-SENSITIVE over `prosrc`, which stores the body verbatim, so a
+     gate written `MODULE_POSITION_RANK(...)` or with a quoted identifier was invisible —
+     fixed, plus a control requiring Postgres and the JS regex to AGREE on how many bodies
+     mention the ladder, which turns any future lexical blind spot into a failure;
+     (b) only `pg_proc` was searched, so a rank test in a policy, CHECK, default, view, index
+     predicate or another schema would never be seen — none exist, and that absence is now
+     ASSERTED with its own catalog-size control rather than left incidental;
+     (c) **the rule set was discovered but the VOCABULARY was declared** — the sharpest
+     finding, because the file's own argument condemned it. Adding `when 'supervisor' then 3`
+     to the ladder would have given every module a new rank-3 name satisfying the peer arm and
+     every `>= 2` gate, with no map row and no failure. The vocabulary is now parsed out of the
+     ladder's own body, per module block;
+     (d) `not (rank >= 2)` parsed as `rank >= 2`, so the map would have published the exact
+     COMPLEMENT of who a gate admits — now a hard failure, and carefully distinguished from
+     `not exists (… rank >= 4 …)`, which is live today and correctly read as `>= 4`.
+     Also fixed: SQL comments were parsed as code (a commented-out gate became a live map
+     entry, and a gate name in a comment invented a threshold on someone else's gate); the
+     closure froze each function on its first pass; and **three claims in the file's own
+     header were false** — by this repo's standard that is a defect, not a typo.
+  5. **AND THE MAP RECORDS WHAT IT DOES *NOT* WATCH.** It tracks only what RANK opens.
+     `sal_can_operate_location` also admits by the role NAME `cashier`; `module_caller_covers_rank`
+     short-circuits on `is_org_admin`. Those are deliberately out of scope — they do not move
+     when the ladder moves — and the generated file says so in its own header, so a **nobody**
+     cell can never be misread as "nobody can get in". Same discipline as the badge rule: the
+     artifact states its own limits, because the next reader will trust it.
+
 - **2026-08-07/08 (THE SUPERADMIN LOOKUP LOG — built, adversarially reviewed at three lenses,
   findings applied, shipped. Migration `20260807010000`. Opus session; reviews requested as
   Fable, model UNVERIFIED per the standing provenance caveat.)** The follow-on the

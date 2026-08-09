@@ -19,7 +19,51 @@ A multi-tenant modular platform: each client engagement produces a **module** bu
      and update only the compact "Now / Next / Standing rules" below. A fresh chat must never
      pay for the full journal. See "Session hygiene". -->
 
-**Now (2026-08-09):** **THE SUPERADMIN LOOKUP LOG IS ON PROD AND PROD-VERIFIED**
+**Now (2026-08-09):** **THE RANK/TIER-WRAPPER VERIFICATION GAP IS CLOSED** — the last item
+docs/13 was carrying. `packages/db/src/rank-admission.test.ts` + the generated
+**[docs/rank-admission-map.md](docs/rank-admission-map.md)** (which is also docs/13's asked-for
+"what does rank 2 mean in this module?" table). **No migration.** Not pushed yet.
+**The audit that came first moved the answer, and that is the durable part: docs/13's "one
+ladder, FOUR rules" is right as FAMILIES and wrong as an inventory — it is EIGHT functions,
+14 call sites.** The tier-threshold family alone is five functions with four independently
+hardcoded `2`s, so guarding only the generic `module_caller_covers_rank` would have looked
+complete and covered half. **Two rules were missing from the summary outright:**
+`module_roles_guard_last_director` — the only reader of rank **4**, and it fails **OPEN**
+(demote `director` below 4 and "a module must keep at least one Director" silently stops
+firing everywhere) — and the `= 3` peer-appointment arm in `module_caller_can_manage_seat`,
+an **equality**, which no threshold-shaped check would ever have found. Generalised in
+docs/03: *a count of mechanisms is not a count of code — re-derive the inventory before
+building anything that depends on its completeness.* **Mechanism: discover, don't declare.**
+Rank readers are read from `pg_proc.prosrc` and asserted against a tripwire list, so a ninth
+rule fails the build the day it lands; a comparison whose shape the parser cannot classify
+is a **FAILURE, never a skip** (now its own docs/03 rule — *a checker that skips the
+unfamiliar goes green while covering less and less*, the vacuity rule with a slow fuse). It
+caught a real miss in its own first draft. **PROVEN AGAINST THE MOTIVATING EXAMPLE:** cashier
+remapped 1→2 in the live DB fails the test and the diff names `sal_earnings_ledger`; restored
+and verified byte-identical by md5 of `prosrc`. Also: `prod-verify-view-as.mts` probe [5] no
+longer hand-types 12 rank triples — it parses the map and checks **56** pairs, with a control.
+**THE ADVERSARIAL REVIEW WAS RUN ON THE CHECK ITSELF** (no migration shipped, but a checker
+that lies is the exact failure it exists to prevent) **and found FOUR silent-widening holes —
+green while covering less — all fixed and re-proven:** discovery was **case-sensitive** over
+`prosrc` (stored verbatim, so `MODULE_POSITION_RANK(...)` was invisible) — now backed by a
+control requiring Postgres and the regex to AGREE on how many bodies mention the ladder; only
+`pg_proc` was searched, so a rank test in a policy/CHECK/default/view/index/other schema was
+outside the parser — none exist, and that **absence is now asserted with its own control**;
+**the rule set was discovered but the VOCABULARY was declared** (the sharpest one — the file's
+own argument condemned it: `when 'supervisor' then 3` would have given every module a rank-3
+name with no map row and no failure) — now parsed from the ladder's own body per module block;
+and **`not (rank >= 2)` parsed as `rank >= 2`**, which would have published the exact
+COMPLEMENT of who a gate admits. Also fixed: comments were parsed as code both ways, the
+closure froze on first pass, and **three header claims were false**.
+**THE RATCHET GAP IS CLOSED (founder-approved):** `tests-floor.json` gained `requiredFiles`
+and CI fails if one is missing **or merely UNTRACKED** — the untracked half matters because
+vitest WRITES a missing snapshot outside `CI=true`, so an uncommitted map passes locally and
+defends nothing. A numeric floor would have been theatre (one `it()` per file).
+**Verification: typecheck 9/9, build clean, db 109/109** (rls 104 + data-browser 4 + rank 1),
+e2e CI-STRICT against the prebuilt server. Detail → journal + docs/15's 2026-08-09 entry;
+rules → docs/03; ratchet → docs/12.
+
+**Previously (2026-08-07/08):** **THE SUPERADMIN LOOKUP LOG IS ON PROD AND PROD-VERIFIED**
 (commit `eef09ce`, migration `20260807010000`; **prod 23/23, zero failures** via the new
 `scripts/prod-verify-superadmin-log.mts`). Both Owner Console tools
 write one row per real lookup (`apps/web/lib/superadmin-log.ts`), a failed write is BADGED on
@@ -305,19 +349,15 @@ Everything below is open but unranked:
   view-as session log should be scope-narrowed (today it is whole-org, since org admin has
   no scope dimension — the browser makes that data findable where it was merely readable).
 - **Founder-raised 2026-08-02, parked in docs/13.** The **read-only positions/ranks/pair-grid
-  viewer is DONE 2026-08-06** (folded into `/console/view-as`, where the operator is about to
-  step over one of those rules). What remains is generalising per-position visibility as a
-  *documented, test-proven* map rather than generated RLS — and it now has a CONCRETE gap to
-  close, recorded in docs/13 2026-08-07: **one rank table (`module_position_rank`) is read by
-  FOUR different rules, and nothing verifies that a rank remap did not silently change what a
-  `rank >= N` TIER WRAPPER admits.** Promote salon `cashier` from 1 to 2 and it silently gains
-  the earnings ledger — the module's key documented asymmetry. Caught today only BY ACCIDENT
-  (an equal-rank pair breaks the view-as entry and fails typecheck); **remap a position with
-  no pair entries and nothing catches it.** Note what does NOT cover this: the completeness
-  type and `viewAsRankParity()` prove rank PARITY and pair coverage, never what a wrapper
-  admits. Verified for salon/classroom only, six modules unchecked. Opus. Both entries carry
-  the reusable line they produced: **anything that WIDENS reach belongs in code; anything that
-  only NARROWS it can be a runtime switch.**
+  viewer is DONE 2026-08-06** (folded into `/console/view-as`). ~~**The rank/tier-wrapper
+  verification gap**~~ **DONE 2026-08-09 — see Now.** What REMAINS of this entry is the
+  original, larger idea: generalising per-position visibility as a *documented, test-proven*
+  map rather than generated RLS, across every position × every table. Opus. It carries the
+  reusable line it produced: **anything that WIDENS reach belongs in code; anything that only
+  NARROWS it can be a runtime switch.** Note the rank map does NOT subsume it — that map
+  answers "which POSITIONS does a rank gate admit", never "which TABLES may a position read",
+  and it deliberately ignores non-rank arms (role-name checks, `is_org_admin`) because those
+  do not move when the ladder moves.
 - Everywhere role-clarity labels (founder testing-round items 31–42) — high value; the
   view-as half of that item is now built.
 - Deferred platform hardening — the `revoke PUBLIC`/anon-table items are **DONE pending the prod

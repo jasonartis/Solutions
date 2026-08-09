@@ -6,6 +6,101 @@ lean. Newest first. Durable *decisions/conventions* live in their own docs (docs
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
 
 
+- **2026-08-09 (THE RANK ADMISSION MAP — docs/13's rank/tier-wrapper gap, closed. One test,
+  one generated doc, zero migrations. Opus session, founder chose the mechanism from three
+  options after asking for each to be explained in plain terms.)** Nothing verified that a
+  rank remap did not silently change what a `rank >= N` wrapper ADMITS. Now
+  `packages/db/src/rank-admission.test.ts` + `docs/rank-admission-map.md`.
+  - **STEP ONE WAS AN AUDIT, AND IT MOVED THE ANSWER.** docs/13 recorded "one ladder, FOUR
+    rules". The catalog says **eight functions**, in four families, with **fourteen** rank
+    call sites. The tier-threshold family alone is five functions carrying four
+    independently hardcoded `2`s — so the obvious fix (guard the generic
+    `module_caller_covers_rank`) would have left `cls_can_manage`, `sal_can_manage`,
+    `sd_can_organize` and `module_has_manager_grant` uncovered while looking finished.
+    **Two rules were missing from the summary entirely:** `module_roles_guard_last_director`,
+    the only reader of rank 4 and one that fails OPEN (drop `director` below 4 and the
+    "a module must keep at least one Director" guard silently stops firing for every module),
+    and the `= 3` peer-appointment arm in `module_caller_can_manage_seat` — an EQUALITY, so
+    remapping a position TO exactly 3 grants peer-appointment into a strictly-contained
+    sub-scope and no threshold-shaped check would ever have noticed.
+  - **The mechanism: discover, don't declare.** The rank readers are read out of
+    `pg_proc.prosrc` and asserted against a tripwire list, so a ninth rule fails the build the
+    day it lands. Every rank comparison must parse into a known shape; one that does not is a
+    FAILURE, never a skip — and a threshold whose value cannot be resolved to a literal at
+    every call site fails too. Admitted sets are computed by asking the DATABASE for each
+    rank (never the TS mirror) over `viewAsDeclarations` — deliberately not `moduleRegistry`,
+    which `MODULES` filters, a hole the existing parity loop in `rls.test.ts:1382` still has.
+  - **It caught a real defect in its own first draft.** The parser reported
+    `module_roles_guard_last_director` as an unreadable shape. The cause:
+    `losing := rank(...) < 4 or new.org_id <> old.org_id or …` is an assignment whose RHS is a
+    boolean EXPRESSION containing a threshold, and matching on `:=` alone had swallowed it.
+    Requiring the call to be the entire RHS fixed it. The "fail, don't skip" design is the only
+    reason that surfaced instead of quietly dropping a rank-4 rule from coverage.
+  - **THE PROOF, RUN FOR REAL.** `cashier` remapped 1 → 2 in the live database: test FAILS,
+    and the diff names `sal_earnings_ledger` on the `sal_can_manage_location` row — the exact
+    motivating example, with the consequence visible in the failure rather than one lookup
+    away. Restored afterwards and verified byte-identical to the migration source by md5 of
+    `prosrc` (`437eac89…`), not merely by re-reading the three ranks back.
+  - **Two design bugs found by reading the generated file rather than trusting the code.**
+    (1) The closure over-attributed: every wrapper calling `module_caller_covers_rank`
+    inherited ALL four of its instantiations, so `sal_can_manage_location` claimed a
+    *classroom* rank test. Fixed by tagging each resolved threshold with the caller that
+    supplied it and stripping the tag once inherited. (2) The per-module table named internal
+    functions; it now keys on the gate closure, so each row names the function policies
+    actually reference **and the tables behind it**. That is what makes the failure diff
+    legible instead of merely correct.
+  - **Prod verifier de-duplicated.** `scripts/prod-verify-view-as.mts` probe [5] was twelve
+    hand-typed `(module, role, rank)` triples — a second copy of the same facts, free to rot
+    against the first, covering three of eight modules. It now PARSES the checked-in map and
+    checks **56** pairs against prod, including the generic `director/coordinator/lead/position`
+    vocabulary, with a control so a failed parse cannot pass as a clean run.
+  - **THE ADVERSARIAL REVIEW WAS RUN ON THE TEST, and four of its findings were
+    silent-widening holes** — cases where the check stays green while covering less, which is
+    the same failure the check exists to catch. All applied, all re-verified:
+    **(1) discovery was case-sensitive** over `prosrc` (stored verbatim), so
+    `MODULE_POSITION_RANK(...)` or a quoted identifier was invisible. Fixed, and backed by a
+    control requiring Postgres and the JS regex to agree on how many bodies mention the
+    ladder — so a future lexical blind spot fails instead of hiding.
+    **(2) only `pg_proc` was searched.** A rank test inline in a policy, CHECK, default, view,
+    index predicate, trigger WHEN or another schema was outside the parser entirely. None
+    exist; that absence is now asserted with its own catalog-size control, per the
+    `prod-verify-superadmin-log.mts` template, because an incidental absence nothing checks is
+    one migration from being a gap.
+    **(3) the rule set was discovered but the VOCABULARY was declared** — the sharpest one,
+    since assertion 1's own argument is "a list here rots". `when 'supervisor' then 3` added
+    to the ladder would have given every module a rank-3 name satisfying the peer arm and
+    every `>= 2` gate, with no map row and no failure. Now parsed from the ladder's own body,
+    per module block, with the old constant demoted to a tripwire asserted against SQL.
+    **(4) `not (rank >= 2)` parsed as `rank >= 2`**, which would have published the exact
+    COMPLEMENT of who a gate admits. Now a hard failure — and distinguished from
+    `not exists (… rank >= 4 …)`, which is live in the last-Director guard today and is
+    correctly read as `>= 4`, by testing only the token immediately before the call.
+    Also applied: SQL comments were being parsed as code in both directions (a commented-out
+    gate became a live map entry; a gate name inside a comment invented a phantom threshold on
+    another gate); the closure froze each function on its first pass, making it depend on the
+    catalog's collation; `localeCompare` was replaced with code-unit ordering so the snapshot
+    cannot churn between a Windows dev box and the Ubuntu runner; and **three claims in the
+    file's own header were false** and are corrected — by this repo's standard a false comment
+    is a defect. The remap proof was then RE-RUN against the hardened parser: still fails,
+    still names `sal_earnings_ledger`, restored to md5 `437eac89…`.
+  - **THE RATCHET GAP IS CLOSED TOO (founder-approved, same session).** CI's test-count
+    ratchet only counts `rls.test.ts`, so deleting this file — or leaving its generated map
+    untracked — tripped nothing. A numeric floor would be theatre here: these are ONE `it()`
+    each and their value is the file. `tests-floor.json` gained `requiredFiles`, and CI now
+    fails if any of them is missing **or merely untracked** (an untracked snapshot passes
+    locally, because vitest writes new snapshots, and defends nothing). Verified both ways —
+    it passes on the real list and bites on a deliberately absent path.
+  - **Verification:** typecheck 9/9 exit 0, build clean, db suite **109/109** (`rls.test.ts`
+    104, data-browser 4, rank-admission 1) via `turbo --concurrency=1`; e2e **49/49 exit 0**
+    in CI-STRICT mode against the PREBUILT server.
+  - **One more confirmation of a documented gotcha, because it cost a rerun.** The FIRST e2e
+    run lost six tests — and it followed two full db-suite runs, which mutate the seed data
+    several e2e tests assume is fresh. `db:reset` → restart Kong → `seed` → auth curl 200 →
+    49/49. Nothing about the diff was involved, and nothing about the diff touches app code.
+    The rule already in CLAUDE.md holds and is worth restating: **reset and reseed immediately
+    before an e2e run, not once at the start of a session** — a suite run in between is enough
+    to invalidate it.
+
 - **2026-08-09 (cls_exam_papers fixture — the last zero-row classroom table, closed.
   Seed-only, no migration. Sonnet subagent, orchestrator-reviewed.)** The student/GA exam
   section rendered empty on every surface, and empty is indistinguishable from broken — the

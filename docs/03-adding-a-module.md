@@ -640,6 +640,37 @@ it. Adjacent vocabulary is what manufactures the false positive.
 is why "no silent skips" is enforced in the probe scripts (a skipped probe prints loudly
 and is never counted as a pass).
 
+**A CHECKER MUST FAIL ON WHAT IT CANNOT UNDERSTAND, NOT SKIP IT (2026-08-09, from the rank
+admission map).** A check that inspects code or schema — a catalog reader, a source parser,
+a coverage sweep — will eventually meet a construct it was not written for. There are only
+two designs, and only one of them stays true:
+
+- *Skip the unrecognised and carry on.* Coverage silently shrinks every time the codebase
+  grows a shape the checker predates, and the green tick keeps claiming the same guarantee.
+  This is the vacuity rule with a slow fuse: not one vacuous assertion, but a check that
+  becomes vacuous by degrees while nobody is watching.
+- *Fail, naming the construct.* Somebody spends five minutes teaching the parser, and the
+  guarantee is still the guarantee.
+
+→ Take the second. `rank-admission.test.ts` fails on a rank comparison whose shape it cannot
+classify AND on a threshold whose value it cannot resolve to a literal at every call site —
+"I don't know what this gate admits" is reported as a defect, never as a pass. Corollary:
+**the set of things being checked should be DISCOVERED, not declared.** That file reads the
+list of rank-reading functions out of `pg_proc.prosrc` and asserts it against a checked-in
+tripwire list, so a ninth rule fails the build the day it lands instead of the day somebody
+remembers a list exists. A hand-maintained list of what to check is only ever as current as
+the last person who remembered it — which is the same failure as the thing being checked.
+
+**AND: A COUNT OF MECHANISMS IS NOT A COUNT OF CODE (same session).** docs/13 recorded "one
+rank ladder, read by FOUR rules". True as *families* — appointment, tier threshold,
+last-Director, view-as — and it was eight functions, with the tier-threshold family alone
+holding four separately hardcoded copies of the same `2`. A remediation scoped to the
+documented four would have shipped, passed review, and left half the surface uncovered. →
+When a doc summarises a mechanism by counting it, **the count is a summary, not an
+inventory** — re-derive the inventory from the code before building anything that depends on
+its completeness. The re-derivation here also turned up two whole rules the summary omitted,
+one of which (`module_roles_guard_last_director`, the only reader of rank 4) fails OPEN.
+
 ## Hard rules
 
 1. **Never fork a platform primitive.** If the notifications/files/workflow primitive almost fits, extend it in `packages/platform` (benefiting every module) — don't copy it into the module.

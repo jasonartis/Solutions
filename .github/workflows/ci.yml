@@ -68,6 +68,26 @@ jobs:
             exit 1
           fi
 
+          # The counters above only watch two files. The schema-coverage checks
+          # (data-browser, rank admission) are ONE it() each, so a numeric floor
+          # would be meaningless — what matters is that the file still exists and
+          # that the generated artifact is TRACKED. A snapshot that is merely
+          # untracked passes locally (vitest writes new snapshots) and defends
+          # nothing. Added 2026-08-09, founder-approved, after the rank-admission
+          # review pointed out that deleting the whole file tripped nothing.
+          missing=0
+          for f in $(node -p "require('./tests-floor.json').requiredFiles.join('\n')"); do
+            if ! git ls-files --error-unmatch "$f" > /dev/null 2>&1; then
+              echo "MISSING or UNTRACKED: $f"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            echo "A required schema-coverage file is gone or untracked (tests-floor.json requiredFiles)."
+            echo "These are single-test files whose absence is silent: the suite stays green and the guarantee disappears."
+            exit 1
+          fi
+
       - run: pnpm typecheck
 
       # Supabase must be up BEFORE build: Next.js prerenders pages at build

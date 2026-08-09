@@ -110,21 +110,46 @@ console.log('\n[4] The edge mirror answers correctly ON PROD, and fails closed')
   }
 }
 
-console.log('\n[5] Position ranks on prod match the TypeScript declarations')
+console.log('\n[5] Position ranks on prod match the checked-in rank admission map')
 {
-  const expected: [string, string, number][] = [
-    ['classroom', 'professor', 2], ['classroom', 'ga', 1], ['classroom', 'student', 1],
-    ['nail-salon', 'admin', 3], ['nail-salon', 'manager', 2], ['nail-salon', 'cashier', 1],
-    ['nail-salon', 'worker', 1], ['nail-salon', 'customer', 0],
-    ['speed-dating', 'admin', 3], ['speed-dating', 'organizer', 2],
-    ['speed-dating', 'host', 1], ['speed-dating', 'participant', 0],
-  ]
+  // The expectations are PARSED OUT OF docs/rank-admission-map.md rather than
+  // typed here. That file is generated from the local database by
+  // packages/db/src/rank-admission.test.ts and fails that test when it drifts,
+  // so deriving from it means prod is compared against the same single record
+  // the local suite defends. The previous version of this probe was twelve
+  // hand-written triples — a second copy of the same facts, free to rot against
+  // the first, and covering three of the eight modules.
+  //
+  // It also widens the check from 12 pairs to every position in every module
+  // INCLUDING the generic director/coordinator/lead/position vocabulary, which
+  // carries real ranks in modules whose own positions are all rank 0.
+  const map = readFileSync(resolve(root, 'docs/rank-admission-map.md'), 'utf8')
+  const expected: [string, string, number][] = []
+  let currentModule = ''
+  for (const line of map.split('\n')) {
+    const h = /^### (\S+)/.exec(line)
+    if (h?.[1]) { currentModule = h[1]; continue }
+    if (!line.startsWith('Ladder:') || !currentModule) continue
+    for (const group of line.slice('Ladder:'.length).split('·')) {
+      const g = /^\s*\*\*(\d+)\*\*\s*(.+?)\s*$/.exec(group)
+      if (!g?.[1] || !g[2]) continue
+      for (const role of g[2].split(',')) expected.push([currentModule, role.trim(), Number(g[1])])
+    }
+  }
+
+  // A control. If the parse ever silently yields nothing — a heading style
+  // changes, the file is renamed — the loop below would pass while comparing
+  // zero pairs, which is the vacuous-probe failure docs/03 #18 names. The map
+  // covers eight modules with at least five positions each.
+  check(`the map parsed into rank expectations (${expected.length} pairs)`, expected.length >= 40,
+        `parsed ${expected.length}; expected 40+`)
+
   let bad = 0
   for (const [m, role, want] of expected) {
     const r = await sql<{ v: number }[]>`select public.module_position_rank(${m}, ${role}) as v`
     if (r[0]?.v !== want) { bad++; console.log(`        ${m}/${role}: prod=${r[0]?.v} expected=${want}`) }
   }
-  check('all 12 ranked positions match (the parity the TS check depends on)', bad === 0)
+  check(`all ${expected.length} positions match the map (the parity the TS check depends on)`, bad === 0)
 }
 
 console.log('\n[6] LIVE PROBE — the guard actually refuses, in a rolled-back transaction')

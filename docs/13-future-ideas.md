@@ -447,7 +447,57 @@ documentation-plus-tests, explicitly NOT generated policies. Natural companion
 to the superadmin read-only view — which is now BUILT (see the entry above), so
 this is the remaining half.
 
-### The concrete gap this entry should close (found 2026-08-06, recorded 2026-08-07)
+### The concrete gap this entry should close — **CLOSED 2026-08-09**
+
+> **STATUS: BOTH PIECES ARE BUILT.** `packages/db/src/rank-admission.test.ts`
+> discovers every rank reader from `pg_proc.prosrc`, refuses to skip a comparison
+> it cannot classify, computes who satisfies each rank test by asking the
+> DATABASE, and snapshots the answer to **[rank-admission-map.md](rank-admission-map.md)** —
+> which is simultaneously piece 2 (the failing test) and piece 1 (the readable
+> "what does rank 2 mean in this module?" table). Proven against the motivating
+> example: `cashier` remapped 1 → 2 in the live database fails the test, and the
+> diff names `sal_earnings_ledger` on the `sal_can_manage_location` row. The
+> original text is kept below because its reasoning is what produced the design.
+>
+> **THE AUDIT CORRECTED THE ANSWER THIS ENTRY RECORDED, in four ways** — the
+> "one ladder, FOUR rules" line below is right as a count of *mechanism families*
+> and wrong as a count of *code*, which matters because a fix aimed at four
+> places would have missed four others:
+>
+> 1. **It is EIGHT functions, not four.** `module_caller_can_manage_seat`,
+>    `module_caller_covers_rank`, `module_has_manager_grant`, `cls_can_manage`,
+>    `sal_can_manage`, `sd_can_organize`, `module_roles_guard_last_director`,
+>    `view_as_guard_session`.
+> 2. **"RLS tier thresholds" is not one rule.** It is five functions carrying
+>    **four independently hardcoded `2`s** plus the parameterized
+>    `module_caller_covers_rank(min_rank)`. Guarding only the parameterized one —
+>    the obvious target, since it is the generic — would have left
+>    `cls_can_manage`, `sal_can_manage`, `sd_can_organize` and
+>    `module_has_manager_grant` uncovered.
+> 3. **The last-Director guard was missing from the list entirely,** and it is
+>    the only reader of rank **4**. It also fails OPEN: remap `director` below 4
+>    and "a module must keep at least one Director" silently stops firing for
+>    everyone, with no error anywhere.
+> 4. **The `= 3` peer arm was missing,** a third comparison shape beyond `>` and
+>    `>= N`. Remapping any position TO exactly 3 silently grants peer-appointment
+>    into a strictly-contained sub-scope. A threshold check would not have found
+>    it, because it is an equality.
+>
+> Also corrected: this entry names `viewAsRankParity()` as one of the two checks
+> that "might be mistaken for" the missing one. **`viewAsRankParity()` has no
+> callers anywhere in the repo** — the TS↔SQL parity it describes is done by an
+> inline loop in `rls.test.ts:1382`, which iterates `moduleRegistry` and so
+> inherits the `MODULES`-env shrinkage hole `data-browser-coverage.test.ts`
+> deliberately avoids. The new check does not use `moduleRegistry`.
+>
+> **Still open, deliberately, and now written down rather than assumed:** the map
+> tracks only what RANK opens. Gates with non-rank arms — `sal_can_operate_location`
+> also admitting the role NAME `cashier`, `module_caller_covers_rank`
+> short-circuiting on `is_org_admin` — are out of scope on purpose, because they
+> do not move when the ladder moves. The generated file says so in its own header
+> so a reader cannot mistake a **nobody** cell for "nobody can get in".
+
+_(Original entry, 2026-08-06/07, kept verbatim:)_
 
 A founder question — *how many hierarchies are there, and are they unified?* —
 produced a specific answer and one real hole.

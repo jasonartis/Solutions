@@ -340,6 +340,18 @@ Guards against well-meaning but confused sessions (any AI, any tool):
   halves count only real test declarations. If a legitimate reorganisation ever
   lowers the count — folding several `it()` into one `it.each`, say — that is a
   deliberate lowering and needs founder approval like any other.
+  **A COUNT IS THE WRONG METRIC FOR SOME CHECKS, so 2026-08-09 added a second
+  half (founder-approved): `tests-floor.json.requiredFiles`.** The two counters
+  watch two files. The schema-coverage checks —
+  `packages/db/src/data-browser-coverage.test.ts` and
+  `packages/db/src/rank-admission.test.ts` — are ONE `it()` each, because their
+  work is a sweep rather than a list of cases. A floor of 1 on those would be
+  theatre; deleting either file outright tripped nothing at all. CI now fails if
+  any listed path is missing **or merely UNTRACKED**, and the untracked half is
+  the load-bearing one: `docs/rank-admission-map.md` is a vitest file snapshot,
+  and vitest WRITES a missing snapshot rather than failing (outside `CI=true`),
+  so an uncommitted map passes locally while defending nothing. Removing an entry
+  from `requiredFiles` is a founder decision, exactly like lowering a floor.
 - **When a guard blocks you, the guard is right.** Stop, report, and ask —
   do not work around CI, markers, or protections.
 - **Edit sources, not derivatives:** module UI lives in `modules/<key>/ui`
