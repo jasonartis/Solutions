@@ -99,6 +99,15 @@ decision log, docs/03 conventions, docs/12 safeguards) — this is the chronolog
     connected as the owner over `DATABASE_URL`, deleted exactly 2, logged correctly and returned a
     real `number` (the driver hands back `bigint` as a string, so that conversion was worth
     proving). So retention works end-to-end; only the prod worker DEPLOYMENT is outstanding.
+  - **The pre-flight script was DELETED after its findings were recorded here and in docs/17, and
+    that is deliberate rather than untidy** — every assertion in it described a PRE-deploy state
+    ("the capture trigger is not present yet", "the tables do not exist yet"), so keeping it would
+    have left a script in `scripts/` that fails by design forever, which is its own trap for the
+    next session. The permanent checker is `scripts/prod-verify-login-events.mts`. If a future
+    migration wants the same pre-flight idea, the reusable queries are `pg_db_role_setting` +
+    `pg_settings` for timeouts, `pg_default_acl` for what the revokes must beat, and
+    `select current_user` over the pooler to confirm the owner identity — all now written up in
+    docs/12 item 6a.
 
 - **2026-08-09 (THE RANK ADMISSION MAP — docs/13's rank/tier-wrapper gap, closed. One test,
   one generated doc, zero migrations. Opus session, founder chose the mechanism from three

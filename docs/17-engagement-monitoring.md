@@ -237,6 +237,17 @@ minute-by-minute record of their working hours.**
 > by `authenticated`, not from the console path. Alternative worth costing at build time:
 > monthly partitions dropped by the owner, which needs no DELETE grant at all.
 
+**RESOLVED AS BUILT (2026-08-09) — and the tension turned out smaller than this paragraph
+predicted, so do not read the blockquote above as a live requirement.** Neither option was
+needed. A `SECURITY DEFINER` is only necessary if a NON-owner must call the function, and the
+only caller is the worker, which already connects as the table owner (`postgres` locally,
+`postgres.<ref>` through the session pooler on prod — verified to be the same role).
+`public.login_events_prune()` is therefore **`security invoker`, takes no arguments, and holds
+EXECUTE for nobody at all**. `invoker` is what makes it safe rather than merely gated: the
+function can never do more than its caller, so a future careless `grant execute … to
+service_role` still fails at the privilege layer, because that role holds no DELETE on the
+table. Full reasoning in the migration header and §11.
+
 **This decision does not extend to `superadmin_lookup_log` or `view_as_sessions.`** Those record
 superadmin *actions*, where docs/12's unresolved tension stands — *an audit log that a deletion
 request can empty is not an audit log*. Different purpose, different answer, still open.
@@ -345,6 +356,48 @@ Recorded because it was established by reading the code and is not obvious from 
   but a new tool should use the shared `platform.ts` one, and this is worth cleaning up
   separately rather than copying.
 
+## 8b. PHASE 3 CHECKLIST — everything the console page must get right, in one place
+
+Collected 2026-08-09 after phase 1 shipped, because these requirements were scattered across §3,
+§8a and §10 of a long document and the platform's own lesson is that **open state spread through a
+document is open state that gets missed.** Each item names its source section.
+
+1. **BADGE A FAILED OR ABSENT CAPTURE, with a test that renders the badge** (§10 point 4). This is
+   the hard requirement, not a polish item: the capture trigger swallows its own errors so it can
+   never cause a login outage, which makes a capture failure SILENT. Render "newest captured
+   login" so a human can see capture has stopped. A badge is a claim to the operator, and a test
+   that keeps passing after the claim goes false is worse than no test.
+2. **EXCLUDE `org_members.status = 'pending'` from every org rollup** (§3). An invited-but-never-
+   accepted member otherwise reads as a *disengaged* member — the opposite of the truth, and it
+   would send the founder to apologise to someone who never joined.
+3. **"No rollup row" means NEVER SIGNED IN** (§6). Drive the population from
+   `org_members`/`profiles` and LEFT JOIN `login_rollup`; absence is the answer, not an error.
+   On prod today that is 7 of 12 accounts, which is most of the feature's value.
+4. **Do not present `observed_logins` as a lifetime total** (§6). It counts from `observed_since`,
+   which for backfilled users is the migration date. `last_login_at` IS trustworthy for everyone
+   (it was backfilled from `auth.users`); the counter is only trustworthy after `observed_since`.
+   Showing them side by side without that distinction is the kind of false claim §2 exists to
+   prevent.
+5. **"Logins in the last 30 days" is a LIVE QUERY over `login_events`**, never a stored column
+   (§6) — and it is only meaningful while retention holds, which on prod waits on the worker.
+6. **No `.rpc()` and no service-role client on the console path** (§4 constraints 1–2). The
+   superadmin UI gate is sound *only* because every query is one the caller could already issue.
+   Both tables are readable by an ordinary `.select()` as a superadmin, so nothing here needs a
+   definer call.
+7. **Add the new page to `CONSOLE_PATH` in `rls.test.ts`** (§8a). Missing this is SILENT: the page
+   works and simply is never source-scanned for the two bans that make the UI gate sound.
+8. **Bring your own page shell and hand-add the nav entry** (§8a). There is no
+   `console/layout.tsx` and the tool list is inline JSX, not a registry.
+9. **Say plainly that this is a THIRD question, not a data-browser tab** (§8a). The data browser
+   answers "what do we hold about this person"; view-as answers "what does this person see";
+   engagement answers "who has gone quiet". docs/03 #19 requires the page to state which.
+10. **Use the shared `requireSuperadmin()` from `apps/web/lib/platform.ts`** (§8a) — not
+    `console/actions.ts`'s duplicate private copy, which throws where the shared one 404s.
+11. **Org→people and person→orgs, both directions** (§1) — the founder asked for both explicitly.
+    Remember a login cannot be attributed to an org (§3), so the org direction shows *members'
+    platform activity*, and the page must not imply it means "activity in this org". That
+    distinction is phase 2's whole reason for existing.
+
 ## 9. Privacy and disclosure (founder decision, 2026-08-09)
 
 **No user-facing notification, no consent flow, no setting. One line in the privacy policy when
@@ -377,6 +430,13 @@ the test suite fails.
 > new hole in an established invariant, on a table of personal data. Switch manually at that
 > beat rather than delegating it.
 
+**AS BUILT: that premise was a pre-build prediction and the shipped function is NOT a
+`SECURITY DEFINER`** (see §6 and §11) — kept above unedited because it is the recorded reasoning
+for spending the top tier, and it was still the right call: the review's one HIGH finding
+(`WHEN OTHERS` does not catch `query_canceled`) was in the capture trigger, not the pruner, and
+would not have been found by a check of the thing everyone expected to be dangerous. The tier
+was earned; the stated reason for it simply stopped being true once the design got narrower.
+
 
 **AS RUN, 2026-08-09 (all beats completed; detail in the decisions log and the journal):**
 draft → orchestrator read → prod pre-flight (read-only, 11 checks) → claimed-Fable adversarial
@@ -400,6 +460,16 @@ empty when they should not have been.
    production. Sign in as a demo user against prod and assert a row appears. An empty
    engagement table is indistinguishable from "nobody is using the platform", which is the one
    answer this feature must never give falsely.
+   **DONE 2026-08-09, and here is how to re-run it** (the verifier's last check fails until you
+   do, on purpose — a green run with zero captured events would be the vacuity rule shipping as
+   a checkmark). POST to
+   `https://<SUPABASE_PROJECT_REF>.supabase.co/auth/v1/token?grant_type=password` with the
+   `SUPABASE_ANON_KEY` as the `apikey` header and `alice@demo.local` +
+   **`PROD_DEMO_PASSWORD`** — all three keys are in `.env.deploy`. Then re-run
+   `pnpm exec tsx scripts/prod-verify-login-events.mts`; `raw events captured since deploy`
+   must be non-zero. **Do NOT use the superadmin account for this:** prod's superadmin is the
+   founder's real account, and `owner@demo.local` is forced to `is_superadmin = false`
+   off-localhost by `seed.ts`'s remote guard.
 4. **The UI must badge a failed or absent capture**, per the lookup log's badge discipline — and
    a test must assert the badge, because a badge is a claim to the operator and a test that
    keeps passing after the claim goes false is worse than no test.
@@ -435,6 +505,13 @@ empty when they should not have been.
   also means `user_id` is `not null`, so "every row names a real person" is a database guarantee.
   Asserted behaviourally in the RLS suite (create an account, sign in, delete it, assert both
   tables are empty for it AND that the delete succeeded — nothing became undeletable).
+  **But do not read that as "erasure is handled": THERE IS NO ACCOUNT-DELETION PATH IN THE
+  PRODUCT AT ALL.** Verified 2026-08-09 by searching the whole repo for `deleteUser` — the only
+  caller anywhere is the RLS test fixture above. Nothing in `apps/web`, `apps/worker` or
+  `scripts/` deletes a user, so today erasure happens only by hand through the Supabase
+  dashboard or a service-role call. The cascade means it *would* do the right thing the moment
+  such a path exists; docs/12 item 6's "deletion requests need a documented process" is still
+  entirely open, and this table is now one more thing that process has to name.
 - **Phase 4's read policy**, which is the §7 trap in full. Not to be attempted without the
   founder and its own adversarial review.
 

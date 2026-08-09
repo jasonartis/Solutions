@@ -179,19 +179,57 @@ Found in a deliberate "what haven't we thought of" pass; ordered by urgency.
    that a deletion request can empty is not an audit log** — the FKs are
    `on delete set null` precisely so the record survives the account, which is
    the shape the answer should probably build on.
-   **A THIRD is coming and its wording is a PRECONDITION of shipping it, not a
-   follow-up: engagement monitoring** ([docs/17](17-engagement-monitoring.md),
-   specced 2026-08-09, phase 1 approved). Founder decision, recorded there: no
-   user-facing notice — one line under "what we collect", *"authentication
-   events (when you sign in)"*. That is proportionate because Supabase already
-   stores `last_sign_in_at` today, so the new thing is RETENTION and cross-org
-   aggregation, not a new category of data. **Phase 2 moves the line:** logging
-   what a person opened and when, per org, is materially more than a login
-   timestamp, and that wording must exist BEFORE it ships. Unlike the two logs
-   above, the engagement log IS prunable by design (90 days raw + a permanent
-   rollup), which is a deliberate divergence — see docs/17 §6, including the
-   narrow `SECURITY DEFINER` exception to grant-layer append-only that pruning
-   requires and that needs its own review.
+   **A THIRD IS NOW LIVE AND ITS WORDING IS AN OUTSTANDING OBLIGATION, NOT A
+   FUTURE ONE: engagement monitoring phase 1 SHIPPED 2026-08-09**
+   ([docs/17](17-engagement-monitoring.md), `20260809010000_login_events.sql`,
+   prod-verified). Founder decision, recorded there: no user-facing notice — one
+   line under "what we collect", *"authentication events (when you sign in)"*.
+   That is proportionate because Supabase already stores `last_sign_in_at` today,
+   so the new thing is RETENTION and cross-org aggregation, not a new category of
+   data.
+   **READ THIS BEFORE ANY REAL USER SIGNS IN.** The previous version of this item
+   said that wording was "a PRECONDITION of shipping it, not a follow-up".
+   **Phase 1 shipped anyway, and this records that honestly rather than quietly
+   relaxing the rule.** The practical exposure today is nil — prod holds 12
+   accounts, all demo or the founder's own, of which 7 have never signed in, and
+   there is no privacy policy page yet at all (that page is this very item). But
+   the obligation has changed status: it is no longer "write it before you build
+   the feature", it is **"the feature is collecting now, so the wording is owed
+   before the first real customer account exists."** Do not let the pre-launch
+   framing of this checklist hide that one of its items is already accruing.
+   **Phase 2 moves the line again:** logging what a person opened and when, per
+   org, is materially more than a login timestamp, and that wording must exist
+   BEFORE it ships.
+   Unlike the two logs above, the engagement log IS prunable by design (90 days
+   raw + a permanent rollup) — a deliberate divergence, see docs/17 §6. **The
+   exception turned out NOT to need `SECURITY DEFINER`** (as this item previously
+   predicted it would): `public.login_events_prune()` is `security invoker`, takes
+   no arguments, and holds EXECUTE for **nobody** — only the table owner, which is
+   the role the worker already connects as. So it can never exceed its caller, and
+   a future careless `grant execute … to service_role` still fails at the
+   privilege layer because that role holds no DELETE. That is a smaller exception
+   than this checklist anticipated, and it has had its adversarial review.
+6a. **PRODUCTION POSTGRES TIMEOUTS — measured read-only 2026-08-09, recorded
+   because they bound every query the app makes and are invisible locally.** The
+   local stack sets none of these, so a query that is merely slow here can FAIL
+   on prod:
+   - `authenticated`: `statement_timeout = 8s` (per-role, all databases)
+   - `anon`: `statement_timeout = 3s`
+   - `authenticator`: `statement_timeout = 8s`, `lock_timeout = 8s`
+   - `supabase_auth_admin`: no statement/lock timeout of its own, but
+     `idle_in_transaction_session_timeout = 60000` and `search_path = auth`
+   - cluster default (configuration file): `statement_timeout = 120000`,
+     `lock_timeout = 0`, `idle_in_transaction_session_timeout = 0`
+   Two consequences already load-bearing: GoTrue's sign-in statement runs under
+   the 120-second cluster default, which is why the capture trigger in
+   `20260809010000` carries its own `set lock_timeout = '50ms'`
+   (PL/pgSQL's `WHEN OTHERS` cannot catch a `query_canceled`, so an unbounded
+   lock wait there could have failed the sign-in itself — docs/03's
+   "Triggers on `auth.users`"); and an 8-second ceiling on `authenticated` means
+   any expensive console/report query must be judged against that, not against
+   local behaviour. Re-derive with
+   `select * from pg_db_role_setting` joined to `pg_roles`/`pg_database`, plus
+   `pg_settings` for the cluster defaults.
 7. **Auth email sender.** Supabase's built-in sender is rate-limited and
    spam-prone; before real user onboarding, configure custom SMTP (their
    dashboard supports it) so magic links and confirmations actually arrive.
