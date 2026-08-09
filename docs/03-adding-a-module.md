@@ -341,6 +341,17 @@ edit anywhere else, that's a missing platform primitive — extract it, don't fo
       CHECK: could an `on delete set null` write a value this clause rejects? Prove it with a
       test that deletes a referenced row and asserts BOTH halves — the delete succeeds, and
       the log row survives with a nulled reference.
+    - **Widening a CHECK on an append-only log needs `not valid` + `validate constraint`**
+      (2026-08-07, from the lookup log's review; recorded here and NOT in the migration,
+      because that migration has already run and an applied migration is never edited — the
+      CLI stores its `statements` per version). Adding a value to an existing CHECK the
+      obvious way (`drop constraint` then `add constraint ... check (...)`) takes an
+      ACCESS EXCLUSIVE lock for a FULL-TABLE validation scan. On a log that is append-only
+      and never pruned that scan grows without bound — free at zero rows, an outage after
+      years of history. Instead: `add constraint ... check (...) not valid` (skips the scan,
+      brief lock), then a separate `validate constraint` (SHARE UPDATE EXCLUSIVE, blocks
+      neither reads nor writes). Applies to `superadmin_lookup_log`'s `tool` vocabulary and
+      its row-shape CHECK, and to any future audit table built on the same pattern.
     - **"Unranked" and "rank 0" are not the same thing** (2026-08-07, the superadmin lookup
       log). `module_position_rank(module_key, role)` returns **0 for any unmapped pair and
       never null** — its inner CASE falls through `coalesce` to the generic tier table, whose

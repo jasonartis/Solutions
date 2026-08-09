@@ -496,8 +496,10 @@ Opus — it is RLS-adjacent reasoning even though it ships no policy.
 > docs/03 **#19** and **#18**; the dated record is in docs/15's decisions log
 > (2026-08-03 and 2026-08-06/07 entries) and the journal. **Three answers this
 > entry gave were revised by the build and are corrected in docs/15's 2026-08-06/07
-> entry, not here:** "unlogged" is now a description of what shipped rather than
-> the platform's answer (the log gets built, hierarchy-read, as a follow-on); the
+> entry, not here:** "unlogged" was a description of what shipped on 2026-08-06
+> rather than the platform's answer — **the log was BUILT 2026-08-07/08
+> (migration `20260807010000`), so every "unlogged" statement below this line is
+> historical and none of it describes the live system**; the
 > scope intersection needed an explicit AUTHORITY parameter, and naming it was not
 > enough — it needed a token the check alone can mint; and the bypass turned out to
 > be four things, not three. Everything below is kept as the reasoning that

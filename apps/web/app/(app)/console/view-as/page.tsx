@@ -14,9 +14,13 @@ import { SectionTable } from '@/components/view-as/section-table'
 import { OffSurfaceLists } from '@/components/view-as/off-surface'
 import { logSuperadminLookup } from '@/lib/superadmin-log'
 
-// The Owner Console view-as. Design, what it bypasses, and the dated UNLOGGED
-// decision all live in lib/console-view-as.ts's header — read that first; this
-// file is the screen.
+// The Owner Console view-as. Design, what it bypasses, and the dated history of
+// the LOGGING decision all live in lib/console-view-as.ts's header — read that
+// first; this file is the screen.
+//
+// (That header used to be pointed at as "the dated UNLOGGED decision". The log
+// was built 2026-08-07/08 — migration 20260807010000 — so the header is now the
+// record of how that question was answered, not a standing "no".)
 //
 // Everything below is a GET form: org, module, position, mode, person, scope are
 // all in the URL. That is not a security boundary and does not need to be (the

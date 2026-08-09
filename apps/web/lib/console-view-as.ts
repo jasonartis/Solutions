@@ -72,7 +72,19 @@
 // they and a superadmin can read; forging one there would buy a render.
 //
 // ---------------------------------------------------------------------------
-// THE LOGGING QUESTION — settled here, deliberately, 2026-08-06.
+// THE LOGGING QUESTION — RESOLVED 2026-08-07/08. THE LOG IS BUILT AND LIVE.
+//
+// READ THIS BANNER BEFORE THE SECTION BELOW IT. Everything from here to the end
+// of this header is the HISTORICAL RECORD of how the decision was reached — it
+// is kept because the reasoning was overturned in stages and each stage is worth
+// knowing, but it describes a build that no longer exists. What is true NOW:
+// both Owner Console tools write to `superadmin_lookup_log` on every real
+// lookup (migration 20260807010000, app half lib/superadmin-log.ts), and the
+// on-screen badge says "logged", not "not logged".
+//
+// The section's original heading was "settled here, deliberately, 2026-08-06",
+// which read as a standing answer. It was a description of ONE BUILD, and that
+// build shipped, got its follow-on, and was superseded the next day.
 // ---------------------------------------------------------------------------
 // docs/15 §8.1 point 6 says every mode-2 session start is logged append-only
 // "from v1 — reads are the unstamped side, and the session log is a security
@@ -118,8 +130,11 @@
 // plan) expanding this surface beyond the superadmin. That last one is
 // structural, not a promise: `RenderAuthority` is a discriminated union, so
 // adding any third authority kind forces whoever adds it back through this
-// comment. And the page states "bypasses declared edges · not logged" on screen,
-// so the operator is never misled about which of the two tools they are using.
+// comment. And the page states its status on screen beside "bypasses declared
+// edges", so the operator is never misled about which of the two tools they are
+// using. (That badge read "not logged" when this paragraph was written and reads
+// "logged" as of 2026-08-07 — the sentence is left because the PRINCIPLE is the
+// durable part: whatever the answer is, the page must say it.)
 //
 // ---------------------------------------------------------------------------
 // AMENDED THE SAME DAY (2026-08-06) — the founder's counter-proposal, which
@@ -140,11 +155,20 @@
 // than only to a future auditor, which is what my "defer to pre-launch"
 // recommendation had rested on. So the expected outcome flips to LOG IT.
 //
-// DECIDED (founder, 2026-08-06): THE LOG GETS BUILT. This build still ships
-// UNLOGGED — its on-screen badge is accurate — because the log is a follow-on and
-// is purely ADDITIVE: nothing in this file changes when it lands. The decision
-// above ("unlogged") therefore stands as a description of THIS BUILD and no
-// longer as the platform's answer.
+// DECIDED (founder, 2026-08-06): THE LOG GETS BUILT. **AND IT WAS, 2026-08-07/08
+// — migration 20260807010000.** The sentence that stood here said "this build
+// still ships UNLOGGED — its on-screen badge is accurate", which was true for
+// exactly one day and is now false on both counts: the tools log, and the badge
+// says "logged".
+//
+// One prediction in it was WRONG and is worth correcting rather than quietly
+// dropping, because the next follow-on will be estimated the same way: "purely
+// ADDITIVE: nothing in this file changes when it lands." Landing it changed this
+// file twice — the "writes nothing" claim above became false and had to be
+// re-argued, and this whole section needed a superseded banner. **An additive
+// DATABASE change is not an additive DOCUMENTATION change**; a header that
+// explains why something is absent is exactly what stops being true when it
+// arrives.
 //
 // GROUND 1 IS CORRECTED, not preserved. It claimed reusing `view_as_sessions`
 // would corrode the one guard deliberately built with no org-rank shortcut. That

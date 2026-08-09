@@ -190,6 +190,20 @@ carry the dated reasoning that produced them:**
   already org-scoped (verified before running); only this one UPDATE was not.
 
 Everything below is open but unranked:
+- **FOUNDER DECISION PENDING: what should a SECOND superadmin see in the lookup log?**
+  (raised 2026-08-07/08 by the log's own build; full argument in docs/15's 2026-08-07/08 entry
+  decision 5 and docs/12 item 9.) The log's read policy is a flat `is_superadmin()`, which
+  with ONE operator is exactly the founder's "only the superadmin can see them". With TWO it
+  silently becomes "each reads 100% of the other's lookups, unscoped, forever". **That is a v1
+  default, NOT a derivation of the appointment rule** — there is no rank domain among
+  superadmins to compare over, so "strict rank + scope coverage" has nothing to compute. The
+  alternative (each reads only their own) would make the log pure self-audit and give no
+  oversight at all, which is why the default went the way it did. Wants an explicit answer
+  BEFORE a second superadmin exists — it is already a named expiry condition in docs/12 item 9,
+  and this is now a second, independent reason that condition matters. *Listed here as well as
+  under item 4(a) because it is an OPEN item that happens to live under a struck-through DONE
+  heading, and the 2026-08-07 lesson is that open state hidden inside a completed item is how
+  it gets lost.*
 - **Slice 5 remaining follow-ons:** ~~the nail-salon surface review~~ **DONE 2026-08-04**
   (see Now). Left: **speed-dating's 6 pairs** — and note its review is genuinely harder than
   the salon's, because a host deliberately cannot read `sd_interest`/`sd_matches` while an
