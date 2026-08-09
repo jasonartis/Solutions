@@ -92,7 +92,11 @@ decision log, docs/03 conventions, docs/12 safeguards) — this is the chronolog
     it passes on the real list and bites on a deliberately absent path.
   - **Verification:** typecheck 9/9 exit 0, build clean, db suite **109/109** (`rls.test.ts`
     104, data-browser 4, rank-admission 1) via `turbo --concurrency=1`; e2e **49/49 exit 0**
-    in CI-STRICT mode against the PREBUILT server.
+    in CI-STRICT mode against the PREBUILT server. **Pushed as `ba4eb6a`, and CI confirmed
+    green the documented way** — Vercel production `READY` for that SHA, which proves `check`
+    passed since `deploy` has `needs: check`. That matters more than usual here because the
+    commit CHANGES CI itself (the new `requiredFiles` guard), so a green run is also the
+    guard's first live exercise.
   - **One more confirmation of a documented gotcha, because it cost a rerun.** The FIRST e2e
     run lost six tests — and it followed two full db-suite runs, which mutate the seed data
     several e2e tests assume is fresh. `db:reset` → restart Kong → `seed` → auth curl 200 →
