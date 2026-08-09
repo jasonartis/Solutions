@@ -1,6 +1,16 @@
 // PROD verification for 20260807010000_superadmin_lookup_log.sql — the half
 // `scripts/prod-verify-migration.ts` structurally CANNOT check.
 //
+//   pnpm exec tsx scripts/prod-verify-superadmin-log.mts
+//
+// No arguments and NO app credentials: it connects through the session pooler
+// with `SUPABASE_DB_PASSWORD` from `.env.deploy`, so unlike
+// `verify-console-view-as.mts` it needs no superadmin login. Read-only.
+//
+// **COPY THIS FILE AS THE TEMPLATE** for any future migration that creates a
+// TABLE, POLICY, GRANT, TRIGGER or CONSTRAINT rather than a function — that is
+// the whole class `prod-verify-migration.ts` is blind to.
+//
 // WHY THIS EXISTS. That script parses `create function` blocks, so on this
 // migration it verifies one trigger function and NOTHING ELSE — not the table,
 // not its ACL, not the policies, not the CHECK constraints, not the trigger

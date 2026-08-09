@@ -170,6 +170,15 @@ Found in a deliberate "what haven't we thought of" pass; ordered by urgency.
    a privacy policy + terms page, and a decision on data-retention wording.
    The authorship-export feature is the portability story; deletion requests
    need a documented process.
+   **Two tables the retention wording must explicitly cover (2026-08-09), both
+   append-only by design and neither prunable by any api role:**
+   `view_as_sessions` and `superadmin_lookup_log` (item 9). They record that a
+   person was LOOKED AT, which is personal data about that person even though
+   they cannot read it, and a deletion request has to have an answer for them.
+   Note the deliberate tension to resolve rather than paper over: **an audit log
+   that a deletion request can empty is not an audit log** — the FKs are
+   `on delete set null` precisely so the record survives the account, which is
+   the shape the answer should probably build on.
 7. **Auth email sender.** Supabase's built-in sender is rate-limited and
    spam-prone; before real user onboarding, configure custom SMTP (their
    dashboard supports it) so magic links and confirmations actually arrive.
@@ -211,6 +220,22 @@ Found in a deliberate "what haven't we thought of" pass; ordered by urgency.
      objection the separate table exists to dissolve.
    - **No subject arm.** Reading BY TARGET is §8.1 point 6's still-open
      notify-the-target question. One table, two features; the second is not built.
+
+   **ALSO OPEN, and created BY this build rather than inherited: THE LOG HAS NO
+   RETENTION POLICY, and by design nothing can prune it.** Append-only is
+   enforced at the grant layer — no role holds DELETE — so the table can only
+   ever grow, and trimming it would take a deliberate migration or a
+   `postgres`-level job. That is the right default for an audit log and it is
+   not urgent operationally (one operator, a handful of rows per session), but
+   two things follow that should be decided rather than drifted into:
+   - **It is PERSONAL DATA about the subject** — "a superadmin looked at this
+     person, on this date" — so it belongs in item 6's data-retention wording
+     below, and it is disclosable in a subject-access request (which is exactly
+     why the data browser surfaces it rather than omitting it).
+   - **Widening either CHECK later gets more expensive as it grows** — see
+     docs/03's `not valid` + `validate constraint` rule, which exists because a
+     full-table validation scan on a never-pruned log is free today and an
+     outage after years of history.
 
    **STILL OPEN, and now doubly so: what happens with a SECOND superadmin.** The
    oversight arm is a flat `is_superadmin()`, which is not the appointment rule and
