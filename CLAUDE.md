@@ -93,7 +93,12 @@ open:**
   literally true for that account. Not a target to chase. **(ii) It is parameterised**
   (`VERIFY_DEMO_PASSWORD` / `VERIFY_SUPERADMIN_EMAIL` / `VERIFY_SUPERADMIN_PASSWORD`) because
   prod's superadmin is the founder's REAL account — `seed.ts`'s remote guard forces
-  `owner@demo.local` to `is_superadmin = false` off-localhost. Full story → journal.
+  `owner@demo.local` to `is_superadmin = false` off-localhost. **But those three are in NO env
+  file** (checked 2026-08-09: `.env.deploy` and `.env.accounts` both carry `PROD_DEMO_PASSWORD`
+  instead), so a prod run needs them exported by hand — the fallback to
+  `owner@demo.local`/`password123` is silent, and that account is not a superadmin on prod.
+  Tidy-up, founder's call because it touches credential files: add them to `.env.accounts.example`
+  + `.env.deploy`, or just document the export line. Full story → journal.
 Everything below is open but unranked:
 - **ENGAGEMENT MONITORING — PHASE 1 BUILT 2026-08-09. PHASE 3 IS THE RECOMMENDED NEXT PIECE;
   PHASE 2 IS SPECCED BUT NOT APPROVED.** Full spec + dated decisions:
