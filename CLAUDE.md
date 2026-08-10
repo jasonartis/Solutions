@@ -68,8 +68,10 @@ is the most expensive thing in it.
 AS OF 2026-08-09 the numbered items 1–6 are ALL DONE, and so are the rank/tier-wrapper gap and
 ENGAGEMENT MONITORING PHASE 1; what remains is the unranked list below. THE RECOMMENDED NEXT REAL
 PIECE IS ENGAGEMENT MONITORING PHASE 3 — the console page that reads what phase 1 now captures
-(org→people and person→orgs, per docs/17 §1). It needs NO migration, so it is Sonnet-tier work
-apart from the badge; the one hard requirement is docs/17 §10 point 4's honesty badge with a test.
+(org→people and person→orgs, per docs/17 §1). It needs NO migration, so it is Sonnet-tier.
+**START AT docs/17 §8b — a numbered checklist of everything that page must get right, collected
+there precisely so a new session does not have to reassemble it from three sections of a long
+document.** Its hardest item is the honesty badge with a test (§10 point 4).
 Phase 2 (org-scoped activity) is specced but NOT founder-approved and ships a migration. Two
 numbered items survive below because they still carry live operational facts, not because they are
 open:**

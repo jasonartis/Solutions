@@ -397,6 +397,18 @@ document is open state that gets missed.** Each item names its source section.
     Remember a login cannot be attributed to an org (§3), so the org direction shows *members'
     platform activity*, and the page must not imply it means "activity in this org". That
     distinction is phase 2's whole reason for existing.
+12. **PHASE 3 IS THE FIRST CONSUMER OF PHASE 1, SO TREAT QUERY FRICTION AS FEEDBACK ON THE SCHEMA
+    — NOT AS SOMETHING TO WORK AROUND SILENTLY.** Phase 1 was designed and shipped without a
+    single reader existing, which means every claim about how pleasant it is to query is currently
+    a prediction. If the outreach queries turn out to need a column that isn't there, an index
+    that doesn't exist, or a join that reads awkwardly, SAY SO and record it here — that is real
+    evidence about the design, and it is much cheaper to act on in phase 2 (which ships its own
+    migration anyway) than to discover after phase 4 has been built on the same shape. Two things
+    specifically worth reporting: whether `login_rollup`'s single index on `last_login_at` serves
+    the "who has been quiet longest, across every org" query, and whether the deliberate absence
+    of `org_id` forces an uncomfortable amount of client-side joining through `org_members`.
+    Working around friction in the page instead of naming it is how a schema's flaws become
+    permanent.
 
 ## 9. Privacy and disclosure (founder decision, 2026-08-09)
 
