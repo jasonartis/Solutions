@@ -548,8 +548,10 @@ guessing, so the Opus session can start on a concrete draft rather than re-deriv
 
 Six parallel read-only surveys (2026-08-10), one per module, of every real write/mutation path
 (server actions, not reads) in `modules/*/ui/**/actions.ts` and what actually calls them from
-`apps/web/app/(app)/o/[orgSlug]/m/**`. Full per-module lists are in the session transcript this
-brief was written from; synthesized below. Nothing was written — this is inventory only.
+`apps/web/app/(app)/o/[orgSlug]/m/**`. Synthesized in 12.2–12.3 below; the full per-module findings
+— including the reasoning behind every exclusion, not just the curated recommendation — are in
+**§12.6**, inlined rather than left in this session's chat transcript, which will not exist for
+whatever session builds phase 2. Nothing was written anywhere — this is inventory only.
 
 ### 12.2 The cross-module pattern that fell out of the survey
 
@@ -676,6 +678,164 @@ Real-signal candidates, module by module — the ones worth an explicit `recordA
 4. Whether moderator/staff actions across modules (grading, exam intake, flag review, tombstone/
    restore) count as the SAME "engagement" as member actions, or a separate bucket — this affects
    whether "who has gone quiet" ever conflates a professor grading with a student submitting.
+
+### 12.6 Full per-module write-path inventory (verbatim findings, 2026-08-10 survey)
+
+The complete findings behind 12.2–12.3's synthesis, inlined so nothing behind the curated
+recommendation is lost. Every write/mutation path found in `modules/*/ui/**/actions.ts`, per module.
+
+**classroom** (`ui/actions.ts`, `ui/homework/[homeworkId]/actions.ts`,
+`ui/review/[assignmentId]/actions.ts`, `ui/manage/actions.ts`, `ui/manage/materials/actions.ts`,
+`ui/manage/grading/[homeworkId]/actions.ts`, `ui/manage/exams/[examId]/actions.ts`):
+- `answerSurvey` (student) — insert/update `cls_survey_answers`. Real: genuine content submission.
+- `getOrCreateSubmission` (student) — creates `cls_submissions` on first page visit. **NOISE —
+  fires from opening the page, not doing work; a page-view event in disguise.**
+- `uploadSubmissionFile` (student) — insert `cls_submission_files` + storage. Real: clearest
+  "turned in homework" signal.
+- `deleteSubmissionFile` (student) — remove own upload. Low-value/incidental.
+- `submitPeerGrade` (student-as-reviewer) — update `cls_review_assignments`. Real: graded work.
+- `addReviewComment` (student-as-reviewer) — insert `cls_review_comments`. Real: authored feedback.
+- `createCourse`, `createClass` (professor/coordinator) — real, infrequent structural setup.
+- `enrollClassMember` / `removeClassMember` (professor/GA) — real roster management; borderline/
+  noisy if done in bulk-import loops.
+- `postAnnouncement` (professor) — real: authored content to students.
+- `createHomework`, `createExam`, `createSurvey` (professor) — real: the doc's own "created an
+  exam" example.
+- `setSubmissionsHiddenFrom` (professor) — noise: retention-date config toggle.
+- `setSurveyResultsVisible` (professor) — noise: visibility flag flip.
+- `createMaterial` / `deleteMaterial` (professor) — create is real (authored content); delete is
+  mostly cleanup/noise.
+- `publishMaterial` / `unpublishMaterial` (professor) — publish is real ("made content available");
+  unpublish is closer to noise.
+- `moveToGaGrading`, `moveToPeerReview`, `finalizePeerReview` (professor/GA) — real bulk workflow
+  transitions; one click affects many rows — worth ONE event per invocation, not per row.
+- `submitGaGrade`, `saveExamScores` (GA) — real: the canonical "graded work today" action.
+- `computeCombinationFinals` (professor) — real but automated/batch.
+- `publishFinalGrade`, `publishExamFinal` (professor) — real: publishing a grade.
+- `setRevealUntil` (professor) — noise: a display/access-window tweak.
+- `uploadExamPaper` (staff/GA) — real: recording physical exam intake.
+- Noise cluster, explicit: `getOrCreateSubmission`, `setSubmissionsHiddenFrom`,
+  `setSurveyResultsVisible`, `setRevealUntil`, `unpublishMaterial`, plain deletes.
+
+**nail-salon** (`ui/actions.ts`, `ui/manage/actions.ts`):
+- `bookAppointment` (operator/cashier) — real: core "used the platform" event.
+- `walkInAdd` (staff) — real: front-desk transaction, creates login-less customer + books.
+- `customerBookAppointment` (customer, self) — **strongest signal**: the customer's own booking.
+- `setAppointmentState` (staff) — mixed: state-transition writes (booked→checked_in→completed→
+  cancelled); noisy if every transition counts equally, "completed"/"cancelled" might be worth one
+  event each.
+- `createBillForAppointment` (staff/cashier) — real: revenue-producing action.
+- `markBillPaid` (cashier/manager) — **strongest signal candidate**: literally the doc's own
+  "checking out a bill" example.
+- `createService` (manager) — real but infrequent setup; borderline noise if bulk.
+- `setServiceActive` (manager) — low-value/incidental config toggle.
+- `createPromotion` (manager) — real but rare setup, not daily-use signal.
+- `setPromotionActive` (manager) — low-value/incidental.
+- `addExpense` (manager/bookkeeper) — real: recurring genuine bookkeeping activity.
+- `addShoppingItem` (manager) — low-value/incidental (a to-do, not a business outcome).
+- `purchaseShoppingItem` (manager) — real: closes the loop, produces a real expense record.
+- `cancelShoppingItem` (manager) — low-value/incidental list housekeeping.
+- `setWorkerSchedule` (manager) — occasional config, not a recurring "used it today" signal.
+- `addWorkerTimeOff` / `removeWorkerTimeOff` (manager only, no worker self-service) — real but
+  infrequent/administrative, more HR upkeep than daily platform usage.
+
+**matchmaking** (`ui/actions.ts`, `ui/manage/actions.ts`):
+- `saveAnswer` (single) — real, deliberate engagement with the questionnaire; consider deduping
+  multiple saves on the same question in one sitting (per question/day) to avoid over-counting
+  slider fiddling.
+- `expressInterest` (single) — **strongest signal**: "I want to be introduced to this person."
+- `withdrawInterest` (single) — real decision/action, lower frequency than saves.
+- `mm_ensure_answer` RPC, called from `ui/page.tsx` on every page load for a single — **NOISE,
+  explicit exclusion**: a write caused purely by viewing the page, lazily seeding a default row.
+- `createQuestion` (admin) — real: genuine content-authoring action.
+- `approveQuestion` / `rejectQuestion` (admin) — real: moderation decisions.
+- `recompute` (admin) — real, ONCE per invocation not per row upserted into `mm_pair_scores`. **Same
+  function is also invoked by the `matchmaking.rescore` background worker tick with no acting
+  user — that path must never be logged as engagement.**
+- `createGroup` (admin) — real setup/admin action.
+- `addGroupMember` / `removeGroupMember` (admin) — real roster-management, though can be bulk/
+  repetitive in one sitting.
+- `assignMatchmaker` / `removeAssignment` (admin) — real admin configuration actions.
+- Summary: every admin action here is real, low-frequency, deliberate — safe to log 1:1. For
+  singles, `expressInterest`/`withdrawInterest` are highest-value; `saveAnswer` meaningful but may
+  need debouncing; `mm_ensure_answer` is the one write path that must be excluded as noise.
+
+**speed-dating** (`ui/actions.ts`, invoked from `ui/page.tsx` and `ui/events/[eventId]/page.tsx`;
+the apps-router pages are thin re-export wrappers with no logic of their own):
+- `createEvent` (organizer) — real: set up a new event.
+- `setEventState` (organizer) — real key lifecycle milestone, but fires once per transition — may
+  want to log distinctly per transition or dedupe to "ran an event."
+- `registerForEvent` (participant) — **strong real signal**: the canonical "used the platform"
+  action for a participant (handles side/capacity/waitlist logic).
+- `withdrawFromEvent` (participant) — real but rare/negative action.
+- `promoteNextWaitlisted` (organizer/staff, or future worker) — **low-value/exclude**: system-driven
+  capacity management, not really "staff did something" in a human-intent sense unless done as a
+  deliberate manual override.
+- `runPairingRound` (organizer, manual stand-in for the orchestrator worker) — real: substantive
+  organizer action.
+- `markInterest` (participant) — **strong real signal**: the core "submitting a round result"
+  action this module exists for.
+- `revealMatches` RPC (organizer) — real but infrequent/one-off per event.
+- `saveProfileCard` (participant, self-only) — borderline: genuine content contribution but more
+  setup/profile-editing than activity; noise if resaved repeatedly.
+- `saveNote` (participant) — low/ambiguous: private per-person scratch notes, author-only
+  visibility, very low stakes; could fire on every keystroke-adjacent autosave.
+- `fileReport` (participant) — real but rare/sensitive: a safety report; worth flagging but
+  sensitive to log with detail — needs its own privacy thought, not a reflexive yes.
+- `reviewReport` (organizer/staff) — real: staff moderation action.
+- `blockUser` / `unblockUser` (participant, cross-event) — low-value/noise-leaning: defensive/
+  administrative.
+- Note: `export.ts` in the same UI dir is read-only (organizer exports/reports queries), not a
+  mutation path.
+
+**synagogue-schedules** (`ui/setup/actions.ts`, `ui/export-actions.ts`; gated by RLS's
+`syn_can_write` — makers/org owners/admins/superadmins only):
+- `createScheduleType` / `deleteScheduleType` (maker) — create is real setup/config; delete is
+  rare/incidental cleanup.
+- `createSection` / `deleteSection` (maker) — same pattern: create real, delete incidental.
+- `createLine` (maker) — **strong real signal**: the most complex action (builds/validates a time
+  rule), the core "did work" action for this module.
+- `deleteLine` (maker) — incidental cleanup, weaker signal.
+- `publishWeek` (maker) — **arguably the best single "did their job" signal** for this module:
+  strong, recurring, weekly cadence.
+- `unpublishWeek` (maker) — rare correction; low value, mostly noise.
+- `createOverride` (maker) — real, recurring, good signal (weekly special messages).
+- `requestExport` (maker, `export-actions.ts`) — enqueues a render job; low-effort/one-click and
+  easily repeated (double-clicks, retries) — borderline/noisy unless deduped per week.
+- **No update/reorder actions exist at all** for schedule types, sections, or lines — only create/
+  delete, no edit-in-place. No CRUD for `syn_export_profiles` via UI despite appearing in the export
+  schema (presumably seeded/admin-only).
+- **Overall finding, itself important: this module is almost entirely read-only display.** The
+  entire write surface is the maker's setup console plus one export button — no viewer/congregant
+  writes at all. Do not expect this module to generate much activity volume; that is a true fact
+  about the module, not a gap in the design.
+
+**visual-messaging** (`ui/actions.ts` is the sole write surface; `page.tsx`/`layer-grid`/
+`layer-canvas` call into it via props/handlers):
+- `createConversation` (any member starting a thread) — real: inserts conversation + creator
+  membership + root `vm_layers` row. Strong "did something real" signal.
+- `uploadImageStamp` (anyone drawing a reply) — noise on its own: an intermediate storage-only step
+  with no message-level result yet; the real signal is the reply it becomes part of.
+- `replyWithDrawing` (any participant) — **strong real signal**: the core "posted content" action,
+  equivalent to sending a message.
+- `joinConversation` RPC `vm_join_conversation` (new participant via deep link) — moderate: a real
+  one-time onboarding event, not a recurring "used it today" action.
+- `addMember` (admin/participant inviting someone) — moderate: meaningful for the inviter but
+  infrequent/admin-flavored.
+- `setJoinPolicy` (conversation admin) — low/incidental: a settings toggle, not content creation.
+- `toggleReaction` (any viewer) — **NOISE, the canonical example**: high-frequency, low-value,
+  easy to spam by clicking — explicitly the kind of engagement that would be noise if logged.
+- `flagLayer` (any member) — moderate/situational: rare and meaningful, but a safety action, not
+  "used the product" in the typical sense — arguably its own category rather than generic engagement.
+- `reviewFlag` (moderator) — strong for the moderator role, but role-specific, not general activity.
+- `tombstoneLayer` RPC `vm_tombstone_layer` (moderator) — strong, moderator-only.
+- `restoreLayer` RPC `vm_restore_layer` (moderator) — strong, moderator-only, low frequency.
+- `setBranchFrozen` RPC `vm_set_branch_frozen` (moderator/admin) — low-moderate: administrative,
+  infrequent.
+- Bottom line: `replyWithDrawing` and `createConversation` are the clean candidates.
+  `toggleReaction` is the canonical noise case. `uploadImageStamp`/`setJoinPolicy` are incidental
+  plumbing. Moderator actions may warrant a separate "moderation activity" bucket rather than
+  counting toward regular member engagement (same open question as 12.5 item 4).
 
 ---
 

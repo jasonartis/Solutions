@@ -32,9 +32,8 @@ checklist asked of its first reader:** the deliberate absence of `org_id` really
 multi-round-trip client-side joins through `org_members` for the platform-wide view — real, not
 costly yet at this scale; full argument → docs/17's decisions log. **Verification: typecheck 9/9,
 db 121/121 (real run), e2e 50/51 — the one failure is the pre-existing, documented speed-dating
-resume-review timeout flake, unrelated to this diff.** **NOT YET COMMITTED/PUSHED** — this session
-built and locally verified only; git status is clean of anything git-safety-relevant, awaiting the
-founder's word on committing. Detail → journal + docs/17's decisions log.
+resume-review timeout flake, unrelated to this diff.** Committed `4b036cf`, pushed, deployed READY
+on Vercel production. Detail → journal + docs/17's decisions log.
 
 **Previously — shipped, prod-verified, and fully written up elsewhere.** One line each; the
 blow-by-blow is in [docs/history/platform-journal.md](docs/history/platform-journal.md)
@@ -60,8 +59,8 @@ is the most expensive thing in it.
 - **2026-08-07/08 — the superadmin lookup log** (`eef09ce`, `20260807010000`, prod 23/23). Both
   console tools log every lookup; a failed write is BADGED. Closed docs/12 item 9; brought
   `scripts/prod-verify-superadmin-log.mts` (the table/policy verifier template — see the gotcha
-  about `prod-verify-migration.ts` being function-only). Three rules → docs/03. **Its open item —
-  what a SECOND superadmin should see — is in the list below.**
+  about `prod-verify-migration.ts` being function-only). Three rules → docs/03. **What a SECOND
+  superadmin should see is now DECIDED (2026-08-10) but not built — detail in the list below.**
 - **2026-08-06/07 — the Owner Console view-as** (`6a90110`, `20260806010000`). `/console/view-as`,
   superadmin-only; the three founder modes are ONE AXIS, not three code paths. Rules: *naming a
   gate is not passing one* → docs/03; *a `for all` policy's USING also covers SELECT* → docs/15.
@@ -151,22 +150,18 @@ Everything below is open but unranked:
 - **Should `view_as_sessions`' own whole-org admin read be narrowed by hierarchy?** Today it
   is whole-org, since an org admin has no scope dimension — and the data browser makes that
   data *findable* where it was merely readable. Same founder principle as the second-superadmin
-  question below; own migration, own review. *(Also promoted 2026-08-09 out of two different
+  decision below; own migration, own review. *(Also promoted 2026-08-09 out of two different
   struck-through items; recorded in docs/13 and docs/15 §8.1.)*
-- **FOUNDER DECISION PENDING: what should a SECOND superadmin see in the lookup log?**
-  (raised 2026-08-07/08 by the log's own build; full argument in docs/15's 2026-08-07/08 entry
-  decision 5 and docs/12 item 9.) The log's read policy is a flat `is_superadmin()`, which
-  with ONE operator is exactly the founder's "only the superadmin can see them". With TWO it
-  silently becomes "each reads 100% of the other's lookups, unscoped, forever". **That is a v1
-  default, NOT a derivation of the appointment rule** — there is no rank domain among
-  superadmins to compare over, so "strict rank + scope coverage" has nothing to compute. The
-  alternative (each reads only their own) would make the log pure self-audit and give no
-  oversight at all, which is why the default went the way it did. Wants an explicit answer
-  BEFORE a second superadmin exists — it is already a named expiry condition in docs/12 item 9,
-  and this is now a second, independent reason that condition matters. *Listed here as well as
-  under the lookup-log line above because it is an OPEN item that lived under a struck-through DONE
-  heading, and the 2026-08-07 lesson is that open state hidden inside a completed item is how
-  it gets lost.*
+- **FOUNDER DECISION RECORDED 2026-08-10, NOT YET IMPLEMENTABLE: a second superadmin should read
+  their own lookups plus those "lower" than them** (raised 2026-08-07/08 by the log's own build;
+  decided 2026-08-10; full argument in docs/12 item 9 and docs/15's 2026-08-10 entry). Same shape
+  as the appointment-rule/hierarchy pattern used everywhere else — reads flow down, never up. **Not
+  built**, and deliberately so: there is exactly one superadmin today, so there is nothing to rank
+  and no live case to build against (extract-don't-speculate). It is also missing the thing the
+  decision presupposes — **superadmins have no ordering today** (`is_superadmin` is a flat boolean,
+  no rank/seniority/appointment-chain column) — so a second, narrower question (what determines
+  "lower"?) has to be answered with a real second operator in front of you before this becomes a
+  migration. "A second superadmin" remains the trigger — now to implement this, not to decide it.
 - **Slice 5 remaining follow-ons:** ~~the nail-salon surface review~~ **DONE 2026-08-04**
   (see Previously). Left: **speed-dating's 6 pairs** — and note its review is genuinely harder than
   the salon's, because a host deliberately cannot read `sd_interest`/`sd_matches` while an
