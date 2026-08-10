@@ -621,6 +621,13 @@ vocabulary gets locked.
     table instead of the `profiles` mirror its own spec called for (docs/17 §5).
   - **Whether to narrow `profiles_select_shared_org` itself is OPEN** and on CLAUDE.md's list.
     It touches every roster in every module, so it needs its own migration and review.
+    **Re-raised 2026-08-10, still unresolved ("not sure / discuss further"):** offered the concrete
+    tension above (a classroom student needs the professor's name — that's benign; a salon
+    customer reading the admin's personal email is closer to the actual concern) plus a lean
+    toward leaving it as-is, since narrowing name/email would break the classroom case to fix the
+    salon one and the principle is already honored going forward for BEHAVIOURAL data (which is
+    the actual live risk). Founder wants to think about it more rather than decide either way —
+    not a decision, recorded so the tradeoff doesn't need re-deriving next time it comes up.
   **And the shape this principle takes when it is finally implemented as a rank arm is NOT the
   obvious one** — see the 2026-08-07/08 entry below and docs/17 §7.1: `module_position_rank`
   returns 0 for anyone unmapped and never null, so "I outrank the subject" silently lets every

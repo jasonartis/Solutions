@@ -209,6 +209,9 @@ Found in a deliberate "what haven't we thought of" pass; ordered by urgency.
    a future careless `grant execute … to service_role` still fails at the
    privilege layer because that role holds no DELETE. That is a smaller exception
    than this checklist anticipated, and it has had its adversarial review.
+   **Raised again 2026-08-10 and explicitly DEFERRED, not forgotten:** offered as a candidate
+   quick win (draft a minimal real page now, or just record the wording), the founder chose to
+   skip it for this session. Still open, same exposure as stated above (nil today).
 6a. **PRODUCTION POSTGRES TIMEOUTS — measured read-only 2026-08-09, recorded
    because they bound every query the app makes and are invisible locally.** The
    local stack sets none of these, so a query that is merely slow here can FAIL
