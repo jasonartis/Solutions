@@ -702,6 +702,14 @@ coverage claims: a comment asserting a test exists is exactly as checkable as th
 when reviewing anything, treat a claim of test coverage as a claim to verify, not as
 documentation — `grep` for it.
 
+**AND IT EXTENDS TO WHAT YOU HAND A SUBAGENT (2026-08-09).** Every rule above assumes a reader who
+can push back; a subagent cannot audit its briefer, it can only comply — so an unverified premise
+in a brief is AMPLIFIED rather than caught, and asserting a *shape* ("the file contains X") can bias
+the agent into producing it. → Label a brief's claims **RESOLVED** (established mechanically,
+saying how) vs **BELIEVED**, and say the source of truth overrides the brief. → A **floor** is safe
+and useful ("at least N; zero means it is broken"); an exact shape or count is not. **The test:
+would being wrong make the agent check harder, or conform?**
+
 ## Triggers on `auth.users` (engagement monitoring phase 1, 2026-08-09)
 
 The platform now has two: `on_auth_user_created` (AFTER INSERT → `handle_new_user`, live since
