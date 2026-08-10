@@ -368,6 +368,15 @@ in the sections below.
   add races the edit and the change silently misses the commit while `git log` looks
   correct. Hit 2026-08-03; caught only because the next step grepped `git show HEAD` for
   the change rather than trusting that the commit had run.
+- **NEVER `git add -A` WHEN ANOTHER CLAUDE SESSION MAY BE WORKING IN THIS REPO — STAGE PATHS
+  EXPLICITLY (2026-08-09).** Two windows on one repo is normal here (it is why log-session needs a
+  nonce probe), and `-A` stages THEIR in-progress work too. Hit live: a 3-line CLAUDE.md fix
+  committed and pushed a concurrent session's unfinished 269-line `apps/web/lib/engagement.ts`
+  under a docs message that never mentioned it. **It fails SILENTLY in the worst direction** — the
+  commit succeeds, `git log` looks clean, and had that file not compiled, master would have gone
+  red with the blame pointing at the wrong session. → `git add <path>` for what you actually
+  touched, and read the commit's file count: if it exceeds what you edited, stop before pushing.
+  → Corollary: once you tell the founder a session is finished, treat the repo as handed over.
 - **A one-off script run with `tsx` must live INSIDE the repo** — Node resolves
   dependencies from the script's own location, not the cwd, so a scratchpad script
   importing `@supabase/supabase-js` fails with ERR_MODULE_NOT_FOUND however you invoke it.
