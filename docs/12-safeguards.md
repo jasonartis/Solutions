@@ -288,14 +288,28 @@ Found in a deliberate "what haven't we thought of" pass; ordered by urgency.
      full-table validation scan on a never-pruned log is free today and an
      outage after years of history.
 
-   **STILL OPEN, and now doubly so: what happens with a SECOND superadmin.** The
-   oversight arm is a flat `is_superadmin()`, which is not the appointment rule and
-   does not pretend to be — there is no rank domain among superadmins to compare
-   over. With one operator it is exactly the founder's "only the superadmin can see
-   them"; with two it silently means each reads 100% of the other's lookups,
-   unscoped, forever. That is a founder decision, not a derivation. "A second
-   superadmin" was already a named expiry condition for the unlogged design; it is
-   now also the trigger for revisiting this policy.
+   **FOUNDER DECISION, 2026-08-10: each superadmin should read their own lookups
+   and those of superadmins "lower" than them** — the founder's words: "consistent
+   with the way we handle similar items," i.e. the same appointment-rule/hierarchy
+   shape used everywhere else on the platform (reads flow down a ladder, never up;
+   docs/15 §"the founder's visibility principle").
+
+   **NOT IMPLEMENTED, and deliberately so — this is a decision recorded ahead of
+   need, not a build.** There is exactly one superadmin today, so there is nothing
+   to rank and no second reader this policy would affect yet (extract-don't-
+   speculate, docs/00). It is also missing the one thing the decision itself
+   presupposes: **superadmins have no ordering today.** `is_superadmin` is a flat
+   boolean on `profiles` — no rank column, no appointment-chain, no seniority
+   field. So "lower than them" has no referent yet, and the concrete policy cannot
+   be written from this decision alone. **Before this can become a migration, a
+   second, narrower decision is needed: what determines "lower"** — candidates are
+   appointment order (whoever granted `is_superadmin` outranks whoever they
+   granted it to, mirroring the appointment rule exactly), an explicit rank/seniority
+   column, or something else. Surface that question again the day a second
+   superadmin is actually being appointed, since it's unanswerable in the abstract
+   and cheap to answer with a real second operator in front of you.
+   "A second superadmin" remains the trigger for revisiting this policy — now to
+   implement the decision above, not to make it.
 
 10. **What should actually gate `master`? — OPEN, needs a comprehensive review
     (raised 2026-08-07; NOT launch-blocking, but decide it deliberately rather

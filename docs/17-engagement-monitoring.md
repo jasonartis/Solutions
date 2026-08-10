@@ -536,6 +536,149 @@ empty when they should not have been.
 
 ---
 
+## 12. Phase 2 build brief — gathered 2026-08-10, ready for an Opus session
+
+**NOT founder-approved to build.** The founder asked for this to be gathered ahead of switching
+models, not for phase 2 to start — treat everything below as a well-informed draft for the Opus
+session's docs/03 #12 rhythm (draft → adversarial review → findings → RLS tests → live verification
+→ docs), not as sign-off. It answers §11's open granularity question with real evidence instead of
+guessing, so the Opus session can start on a concrete draft rather than re-deriving one.
+
+### 12.1 What was gathered, and how
+
+Six parallel read-only surveys (2026-08-10), one per module, of every real write/mutation path
+(server actions, not reads) in `modules/*/ui/**/actions.ts` and what actually calls them from
+`apps/web/app/(app)/o/[orgSlug]/m/**`. Full per-module lists are in the session transcript this
+brief was written from; synthesized below. Nothing was written — this is inventory only.
+
+### 12.2 The cross-module pattern that fell out of the survey
+
+Every module has the SAME three-way split, which means the granularity question has one honest
+answer rather than six bespoke ones:
+
+1. **Deliberate content/work — the clear "meaningful action" signal.** A submission, a booking, a
+   payment, a published schedule, an expressed interest, a posted reply, a grade, an exam created.
+   The founder's own examples in §8b item 12 (booking an appointment, checking out a bill) are
+   exactly this category, and every module has 2–4 actions that clearly belong in it.
+2. **Read-triggered writes masquerading as activity — must be EXCLUDED, not merely de-prioritized.**
+   The clearest examples: classroom's `getOrCreateSubmission` (fires on opening a homework page,
+   not on doing work) and matchmaking's `mm_ensure_answer` RPC (fires on every page load for a
+   single, lazily seeding a default row). These are writes caused by *viewing*, not by *acting* —
+   logging them would make "engagement" mean "loaded a page," which is precisely the noise §11
+   warned about. **Any table/query that decides what's "meaningful" must check against this list
+   explicitly, not assume `INSERT` implies intent.**
+3. **Config/housekeeping toggles — low value, arguably exclude.** Visibility flags, promo/service
+   on-off switches, deletes of one's own upload, schedule-type cleanup. Real writes, but they read
+   as platform administration, not "used the platform today." Borderline; a case can be made either
+   way, but including them dilutes the outreach signal the founder actually wants.
+
+**Two cross-cutting exclusions independent of any one module:**
+- **System/worker-driven writes must never be attributed to a human.** Matchmaking's `recompute`
+  can be invoked by an admin OR by the `matchmaking.rescore` background tick — same function, no
+  acting user on the worker path. Speed-dating's `promoteNextWaitlisted` is similarly
+  capacity-management-driven rather than a human decision most of the time. **The activity-recording
+  call must live at the SERVER ACTION call site (which knows there's a real, authenticated caller),
+  never inside a shared function also invoked by the worker.**
+- **Bulk operations are one event, not N.** classroom's grading-workflow bulk transitions and
+  matchmaking's `recompute` upsert many rows from one admin decision — log once per invocation, keyed
+  to the action, not once per row affected.
+
+### 12.3 Recommended action taxonomy (per module, for the Opus session to confirm/amend)
+
+Real-signal candidates, module by module — the ones worth an explicit `recordActivity()` call site:
+
+- **classroom:** `uploadSubmissionFile`, `submitPeerGrade`, `addReviewComment`, `postAnnouncement`,
+  `createHomework`/`createExam`/`createSurvey`, `submitGaGrade`/`saveExamScores`,
+  `publishFinalGrade`/`publishExamFinal`, `uploadExamPaper`. Excluded: `getOrCreateSubmission`
+  (read-triggered — see 12.2), `setSubmissionsHiddenFrom`/`setSurveyResultsVisible`/`setRevealUntil`
+  (toggles), plain deletes.
+- **nail-salon:** `customerBookAppointment` (strongest signal — the module's flagship), `bookAppointment`,
+  `walkInAdd`, `createBillForAppointment`, `markBillPaid` (the founder's own "checking out a bill"
+  example), `addExpense`, `purchaseShoppingItem`. Excluded: catalog/promo toggles, shopping-list
+  housekeeping, schedule/time-off config (infrequent admin, not daily use).
+- **matchmaking:** `expressInterest`/`withdrawInterest` (strongest signal), `saveAnswer` (real, maybe
+  debounce per question/day), admin actions (`createQuestion`, `approveQuestion`/`rejectQuestion`,
+  `recompute` — ONLY the admin-invoked path, `createGroup`, `addGroupMember`/`removeGroupMember`,
+  `assignMatchmaker`). Excluded: `mm_ensure_answer` (read-triggered — see 12.2).
+- **speed-dating:** `registerForEvent` (strongest signal), `markInterest` (the module's core "submitted
+  a round result" action), `createEvent`, `runPairingRound`, `revealMatches`, `reviewReport`.
+  Borderline, Opus/founder to decide: `saveProfileCard`/`saveNote` (low-stakes self-edits),
+  `fileReport` (real but sensitive — logging it at all needs its own privacy thought, not a reflexive
+  yes). Excluded: `promoteNextWaitlisted` (system-driven), `setEventState` transitions probably
+  collapse to one "ran an event" signal rather than one per transition.
+- **synagogue-schedules:** `publishWeek` (the module's best single "did their job" signal — weekly
+  cadence), `createLine` (the real config-authoring action), `createOverride`. Excluded: deletes,
+  `unpublishWeek` (correction, low value). Note this module is almost entirely read-only display —
+  its writer population is just makers, and the write surface is small; do not expect this module to
+  generate much activity volume, which is a true fact about the module, not a gap in the design.
+- **visual-messaging:** `replyWithDrawing` (the core "posted content" signal, equivalent to sending a
+  message), `createConversation`. Excluded: `toggleReaction` (the CANONICAL noise case — high
+  frequency, low value, explicitly what §11 warned about), `uploadImageStamp` (plumbing step, not a
+  result), `setJoinPolicy` (toggle). Moderator actions (`tombstoneLayer`, `restoreLayer`,
+  `reviewFlag`, `setBranchFrozen`) are real but role-scoped — flagged as possibly belonging to a
+  separate "moderation activity" concept rather than ordinary member engagement; Opus/founder call.
+
+### 12.4 Structural recommendations (draft only — the review step may change all of this)
+
+- **One shared table, not six per-module ones** — matching phase 1's own shape
+  (`login_events`/`login_rollup` are platform primitives, not module tables) and the fact that the
+  whole point of phase 2 is one cross-module engagement view. Working name: `public.activity_events`.
+- **Mandatory columns at write time** (§7.2, non-negotiable): `org_id`, `module_key`, actor's `role`
+  and `scope_ref` AS OF THAT MOMENT (not looked up later — `module_roles` is mutated in place, so
+  this is unreconstructable afterwards). Plus `user_id not null`, `action text not null` (free text
+  from the curated list in 12.3, not an FK to a vocabulary table — matches the platform's
+  explicit-over-clever style and `superadmin_lookup_log.position`'s precedent of deliberately free
+  text), `occurred_at`.
+- **Written by the app AS THE USER under RLS — a genuinely different write shape from phase 1.**
+  `login_events` has NO user-facing write path (only a trigger, running as owner). This table DOES —
+  every module action calls it, as the caller. That makes it structurally closer to
+  `superadmin_lookup_log` (insert to `authenticated`, policy-checked) than to `login_events`. Recommend
+  a single shared helper in `packages/platform` (matching "shared behavior goes through
+  packages/platform"), so ~30 call sites across 6 modules share one insert path rather than
+  reimplementing the write six times.
+- **A failed activity write must never break the real action it's attached to** — the same
+  criticality judgement phase 1's capture trigger made (an analytics defect can't become a platform
+  outage), applied at the app layer instead of a DB trigger this time since these are ordinary app
+  inserts, not trigger-fired. Needs its own decision: swallow-and-log like the trigger, or
+  swallow-and-badge like the superadmin lookup log's failure badge? The lookup log's UI-facing badge
+  works because a human is looking at the screen right after the write; a module action (booking an
+  appointment) has no equivalent "did this get logged" moment, so an unlogged activity event may need
+  to fail silently server-side (a Postgres `raise warning`-equivalent, i.e. log-and-continue) rather
+  than surface anything to the actor. Real design question for the Opus session, not resolved here.
+- **Retention/rollup shape is unresolved and may not want to copy phase 1's.** Phase 1's rollup is
+  one row per user (a login has no other dimension). Phase 2's natural rollup key is
+  `(user_id, org_id, module_key)` — a rollup keyed only on `user_id` would lose exactly the
+  cross-module, per-org signal that's the entire point of phase 2. Needs its own founder decision
+  on raw retention window and what the permanent summary claims.
+- **Read policy: superadmin-only for v1, structured so a hierarchy arm can be added later without
+  the §7.1 rank-0 trap.** Store the actor's OWN `(role, scope_ref)` as NOT NULL from day one (already
+  mandatory per 12.3) — that's what lets a future rank arm require both parties on the ladder and
+  fail closed otherwise, rather than retrofitting it. Do not write the rank arm itself now (§11: not
+  without the founder and its own adversarial review).
+- **ACL pattern: reuse `superadmin_lookup_log`'s conventions wholesale** — `revoke all ... from public,
+  anon, authenticated, service_role` then grant exactly `select, insert` to `authenticated`; `for
+  select`/`for insert` as separate policies, never `for all`; no update/delete grant to anyone (this
+  table wants append-only too, and unlike phase 1 it has no `ON DELETE SET NULL` FK-fires-triggers
+  trap to worry about if it follows phase 1's `on delete cascade` choice for personal-data-with-no-
+  informational-value-if-orphaned — re-derive which FK action is right here rather than copy either
+  precedent blindly, since this table's purpose is closer to phase 1 (member behaviour) than to the
+  two oversight logs).
+- **`data-browser-modules.ts` declaration required** (§4 constraint 5) — a new table with an FK to
+  `auth.users` fails `pnpm test` until declared; this is a build-time task, not a design one, flagged
+  here only so it isn't missed.
+
+### 12.5 What is still a real founder decision, not something Opus should just pick
+
+1. The exact final action list per module (12.3 is a strong draft, not sign-off) — especially the
+   flagged borderlines (speed-dating's `fileReport`, visual-messaging's moderator actions).
+2. Raw retention window + rollup shape for phase 2 (12.4) — likely NOT identical to phase 1's.
+3. Failed-write handling (12.4) — silent server-side log vs. some UI signal.
+4. Whether moderator/staff actions across modules (grading, exam intake, flag review, tombstone/
+   restore) count as the SAME "engagement" as member actions, or a separate bucket — this affects
+   whether "who has gone quiet" ever conflates a professor grading with a student submitting.
+
+---
+
 ## Decisions log (dated)
 
 - **2026-08-09 (build session) — PHASE 3 BUILT. No migration.** `/console/engagement`

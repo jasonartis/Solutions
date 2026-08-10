@@ -587,6 +587,14 @@ vocabulary gets locked.
 
 ## Decisions log
 
+- **2026-08-10 — a SECOND superadmin's lookup-log visibility should follow the same shape as
+  everywhere else on this platform: own lookups plus those of superadmins "lower" than them,**
+  not the flat mutual-visibility default the log shipped with. Full argument, and why it is
+  recorded but NOT yet implementable (superadmins have no ordering today — nothing to be "lower"
+  than), lives in docs/12 item 9. Consistent with the visibility principle immediately below:
+  reads flow down a ladder, never up — this is that principle applied to the one place on the
+  platform where the ladder itself doesn't exist yet.
+
 - **2026-08-09 (FOUNDER PRINCIPLE, stated plainly for the first time — recorded here because
   this document is where anyone designing visibility will look, and it had only ever been
   written down as an aside in a feature spec).** Reacting to a proposal that would have let a

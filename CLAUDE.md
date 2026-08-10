@@ -103,7 +103,12 @@ survive below because they still carry live operational facts, not because they 
   + `.env.deploy`, or just document the export line. Full story → journal.
 Everything below is open but unranked:
 - **ENGAGEMENT MONITORING — PHASES 1 AND 3 BUILT 2026-08-09. PHASE 2 IS SPECCED BUT NOT
-  APPROVED, AND IS THE ONLY REMAINING PIECE.** Full spec + dated decisions:
+  APPROVED, AND IS THE ONLY REMAINING PIECE.** Founder ask 2026-08-10: gather everything for an
+  Opus session before switching models. **[docs/17 §12](17-engagement-monitoring.md) is that
+  brief** — a real per-module survey of every write path across all 6 modules, a recommended
+  action taxonomy, and the structural open questions (table shape, retention, failed-write
+  handling) an Opus session needs to run docs/03 #12's rhythm from a concrete draft rather than a
+  blank page. Full spec + dated decisions:
   **[docs/17-engagement-monitoring.md](docs/17-engagement-monitoring.md)**. Live: capture (phase 1)
   and the console page (phase 3, `/console/engagement`) — the honesty badge phase 3 owed is BUILT,
   with a test. **Four things carried forward, all recorded there in full:**
