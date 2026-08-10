@@ -6,6 +6,38 @@ lean. Newest first. Durable *decisions/conventions* live in their own docs (docs
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
 
 
+- **2026-08-09 (ENGAGEMENT MONITORING PHASE 3 — THE CONSOLE PAGE, BUILT. No migration. Sonnet
+  build. Spec + full decisions log: docs/17.)** `/console/engagement` — the founder's outreach
+  tool: who has gone quiet, and who to reach out to. A platform-wide "quietest members" landing
+  panel plus the two directions §1 asked for (org→people, person→orgs), all reading phase 1's two
+  tables through the caller's ordinary RLS client.
+  - **The honesty badge reads `login_rollup`, not `login_events`.** The raw table is only a 90-day
+    window and would read empty on a quiet-but-healthy platform for a reason having nothing to do
+    with capture health; the rollup is permanent and can only advance when the capture trigger
+    actually succeeds, so a stuck value there is the honest "capture may have stopped" signal —
+    the most this schema can say without `auth` access. Rendered with a test that asserts a real,
+    non-vacuous timestamp.
+  - **grace@demo.local turned out to be exactly the right existing fixture for "never signed in."**
+    An active Demo Salon member the whole e2e suite never signs in as, by nobody's design but
+    useful anyway — every other demo account gets signed in somewhere in the 51-test suite. Used,
+    read-only, to prove absence-of-rollup-row renders as "never signed in" rather than an error.
+  - **Schema friction reported back, as docs/17 §8b item 12 asked of phase 3 as its first reader:**
+    the deliberate absence of `org_id` on `login_events`/`login_rollup` really does force
+    multi-round-trip client-side joining through `org_members` for the platform-wide "quietest"
+    view — real, not hypothetical, though not costly at this platform's current scale. The single
+    `last_login_at` index served every query actually written (a one-row badge lookup; small
+    bounded per-org/platform listings sorted client-side). Full argument in docs/17's decisions log.
+  - **First test-writing attempt failed on a real bug, not a flake:** `getByRole('button', { name:
+    'Show' })` matched two buttons (the org and person pickers share a label) — fixed by scoping
+    each locator to its own `<section>` before interacting, a small but generalizable lesson for
+    any page with more than one same-labelled form.
+  - **`apps/web/lib/engagement.ts` was already on master before this build session started** — a
+    prior session's `git add -A` accidentally committed it while landing an unrelated CLAUDE.md
+    fix. Confirmed byte-identical to this session's independently-written version; nothing to
+    reconcile. New CLAUDE.md gotcha from the same incident: never `git add -A` in this repo.
+  - **Verification: typecheck 9/9, db 121/121 (real run), full e2e 50/51 — the one failure is the
+    pre-existing, documented speed-dating resume-review timeout flake, unrelated to this diff and
+    reproduced identically against a byte-for-byte fresh `db:reset` + `pnpm seed`.**
 - **2026-08-09 (ENGAGEMENT MONITORING PHASE 1 — LOGIN CAPTURE, BUILT AND SHIPPED.
   `20260809010000_login_events.sql`, a trigger on `auth.users`. Opus build; adversarial review on
   a user-directed Fable subagent. Spec + every decision: docs/17.)** The platform can now answer

@@ -19,25 +19,22 @@ A multi-tenant modular platform: each client engagement produces a **module** bu
      and update only the compact "Now / Next / Standing rules" below. A fresh chat must never
      pay for the full journal. See "Session hygiene". -->
 
-**Now (2026-08-09):** **ENGAGEMENT MONITORING PHASE 1 — LOGIN CAPTURE — IS BUILT AND SHIPPED**
-(`20260809010000_login_events.sql`, **a trigger on `auth.users`**). Spec and every decision:
-**[docs/17-engagement-monitoring.md](docs/17-engagement-monitoring.md)**. `login_events` (raw,
-90-day) + `login_rollup` (permanent), both READ-ONLY to every api role and superadmin-only reads;
-an owner-only pruner; a daily pg-boss job. **No UI — that is phase 3, which OWES a "newest
-captured login" honesty badge with a test, because the capture trigger swallows its own errors so
-it can never cause a login outage.** The fact that made it worth shipping before the UI: **of 12
-prod users, 5 have ever signed in and 7 NEVER have** — the outreach list existed on day one.
-**Four durable lessons, in docs/03 and docs/17 — read them there:** *a trigger on `auth.users` is
-on the auth critical path, so whether it swallows errors is a criticality judgement* (and
-**`WHEN OTHERS` does not catch `query_canceled`** — bound the wait with a function-scoped
-`lock_timeout` instead of catching the cancel); *never document a test you have not written, even
-one you mean to write in the same session*; *RLS filters rows, never columns, so a column added to
-`profiles` is readable by every org-mate*; and **a `>>> FULL TURBO` test result after a migration
-is a cached replay, not a run** (now a gotcha below). **Founder decisions this session:
-superadmin-only reads confirmed, no `profiles` mirror, and hierarchy-governed engagement will be
-built on PHASE 2's org-scoped activity — never on raw logins, because a login has no org.**
-**Verification: typecheck 9/9, build clean, db 121/121 (real run), e2e 49/49 exit 0 CI-STRICT,
-prod pre-flight 11/11, prod-verified.** Detail → journal + docs/17's decisions log.
+**Now (2026-08-09):** **ENGAGEMENT MONITORING PHASE 3 — THE CONSOLE PAGE — IS BUILT**
+(`/console/engagement`, **no migration**, Sonnet-tier per docs/17 §8b). Spec and every decision:
+**[docs/17-engagement-monitoring.md](docs/17-engagement-monitoring.md)**. Reads phase 1's
+`login_events`/`login_rollup` through the caller's ordinary RLS client — no `.rpc()`, no
+service-role — and answers both directions the founder asked for (org→people, person→orgs) plus a
+platform-wide "quietest members" landing view that needs no picker. **The honesty badge — owed
+because the capture trigger swallows its own errors — reads `login_rollup`, not the 90-day raw
+table**, so it can't misread a healthy-but-quiet platform as a capture failure; rendered with a
+test that asserts a real, non-vacuous timestamp. **Schema-friction reported back, as phase 1's own
+checklist asked of its first reader:** the deliberate absence of `org_id` really does force
+multi-round-trip client-side joins through `org_members` for the platform-wide view — real, not
+costly yet at this scale; full argument → docs/17's decisions log. **Verification: typecheck 9/9,
+db 121/121 (real run), e2e 50/51 — the one failure is the pre-existing, documented speed-dating
+resume-review timeout flake, unrelated to this diff.** **NOT YET COMMITTED/PUSHED** — this session
+built and locally verified only; git status is clean of anything git-safety-relevant, awaiting the
+founder's word on committing. Detail → journal + docs/17's decisions log.
 
 **Previously — shipped, prod-verified, and fully written up elsewhere.** One line each; the
 blow-by-blow is in [docs/history/platform-journal.md](docs/history/platform-journal.md)
@@ -45,6 +42,16 @@ blow-by-blow is in [docs/history/platform-journal.md](docs/history/platform-jour
 this short deliberately: this file is a tax on every session, and a second copy of the journal
 is the most expensive thing in it.
 
+- **2026-08-09 — engagement monitoring phase 1, login capture** (`20260809010000_login_events.sql`,
+  a trigger on `auth.users`). `login_events` (raw, 90-day) + `login_rollup` (permanent), both
+  READ-ONLY to every api role and superadmin-only reads; an owner-only pruner; a daily pg-boss job.
+  Of 12 prod users, 5 have ever signed in and 7 NEVER have — the outreach list existed on day one.
+  Founder decisions: superadmin-only reads, no `profiles` mirror, hierarchy-governed engagement
+  built on phase 2 not raw logins (a login has no org). **Four durable lessons → docs/03/docs/17:**
+  `WHEN OTHERS` does not catch `query_canceled` (bound lock waits with a function-scoped
+  `lock_timeout` instead); never document a test you have not written; RLS filters rows never
+  columns, so a column added to `profiles` is readable by every org-mate; a `>>> FULL TURBO` result
+  after a migration is a cached replay, not a run (gotcha below). Prod-verified 11/11 pre-flight.
 - **2026-08-09 — the rank admission map** (`ba4eb6a`, no migration). `rank-admission.test.ts` +
   generated **[docs/rank-admission-map.md](docs/rank-admission-map.md)** (also docs/13's "what does
   rank 2 mean here?" table); rank readers and the position vocabulary are both DISCOVERED, and an
@@ -66,15 +73,10 @@ is the most expensive thing in it.
 
 **Next / open (pick WITH the founder — do not start unprompted; details in docs/15 §11).
 AS OF 2026-08-09 the numbered items 1–6 are ALL DONE, and so are the rank/tier-wrapper gap and
-ENGAGEMENT MONITORING PHASE 1; what remains is the unranked list below. THE RECOMMENDED NEXT REAL
-PIECE IS ENGAGEMENT MONITORING PHASE 3 — the console page that reads what phase 1 now captures
-(org→people and person→orgs, per docs/17 §1). It needs NO migration, so it is Sonnet-tier.
-**START AT docs/17 §8b — a numbered checklist of everything that page must get right, collected
-there precisely so a new session does not have to reassemble it from three sections of a long
-document.** Its hardest item is the honesty badge with a test (§10 point 4).
-Phase 2 (org-scoped activity) is specced but NOT founder-approved and ships a migration. Two
-numbered items survive below because they still carry live operational facts, not because they are
-open:**
+ENGAGEMENT MONITORING PHASES 1 AND 3; what remains is the unranked list below. Engagement
+monitoring's own next step, phase 2 (org-scoped activity), is specced but NOT founder-approved and
+ships a migration — pick it up only with the founder, per docs/17 §8/§11. Two numbered items
+survive below because they still carry live operational facts, not because they are open:**
 
 - ~~**1. Confirm CI/deploy for slice 5.** **2. Peer-review comments.** **3. The speed-dating
   waitlist flake.** **4. The Owner Console view-as.** **5. Push and prod-verify.**~~ **ALL DONE**
@@ -100,22 +102,24 @@ open:**
   Tidy-up, founder's call because it touches credential files: add them to `.env.accounts.example`
   + `.env.deploy`, or just document the export line. Full story → journal.
 Everything below is open but unranked:
-- **ENGAGEMENT MONITORING — PHASE 1 BUILT 2026-08-09. PHASE 3 IS THE RECOMMENDED NEXT PIECE;
-  PHASE 2 IS SPECCED BUT NOT APPROVED.** Full spec + dated decisions:
-  **[docs/17-engagement-monitoring.md](docs/17-engagement-monitoring.md)**. What is live: capture
-  only, no UI. **Five things carried forward, all recorded there in full:**
-  **(i) PHASE 3 OWES AN HONESTY BADGE** ("newest captured login", with a test that renders it) —
-  the capture trigger swallows its own errors so it can never cause a login outage, which makes a
-  capture failure SILENT, and an empty engagement table is indistinguishable from "nobody uses the
-  platform". **(ii) RETENTION IS NOT ENFORCED IN PROD UNTIL THE WORKER RUNS THERE** (still the
+- **ENGAGEMENT MONITORING — PHASES 1 AND 3 BUILT 2026-08-09. PHASE 2 IS SPECCED BUT NOT
+  APPROVED, AND IS THE ONLY REMAINING PIECE.** Full spec + dated decisions:
+  **[docs/17-engagement-monitoring.md](docs/17-engagement-monitoring.md)**. Live: capture (phase 1)
+  and the console page (phase 3, `/console/engagement`) — the honesty badge phase 3 owed is BUILT,
+  with a test. **Four things carried forward, all recorded there in full:**
+  **(i) RETENTION IS NOT ENFORCED IN PROD UNTIL THE WORKER RUNS THERE** (still the
   `pnpm worker:prod` stopgap) — raw events accumulate past 90 days meanwhile; the pruner is
-  idempotent and range-based so the first real run catches up. **(iii) HIERARCHY-GOVERNED
+  idempotent and range-based so the first real run catches up. **(ii) HIERARCHY-GOVERNED
   ENGAGEMENT GOES ON PHASE 2's DATA, NEVER ON RAW LOGINS** (founder agreed 2026-08-09): a login has
   no org, so "frank sees dana's logins" reports activity that may belong to a different client's
-  org entirely. **(iv) Phase 2 stays MANDATORY-hierarchy-columns** — role/scope at write time are
-  unreconstructable because `module_roles` is mutated in place. **(v) `auth.audit_log_entries` is
+  org entirely. **(iii) Phase 2 stays MANDATORY-hierarchy-columns** — role/scope at write time are
+  unreconstructable because `module_roles` is mutated in place. **(iv) `auth.audit_log_entries` is
   still never written to on prod** (`ins=0`, re-measured 2026-08-09 with the sibling-table insert
   counts as control) — never build on it; it is fully populated locally, which is the trap.
+  **New from the phase 3 build, worth weighing before phase 2's own schema is drafted: the
+  deliberate absence of `org_id` on phase 1's tables really did force multi-round-trip
+  client-side joining for the platform-wide "quietest members" view** — not costly at this
+  platform's current scale, but real friction; full argument in docs/17's decisions log.
 - **PARKED 2026-08-09, both raised by the login-capture build and both about `profiles`:**
   **(a) should `profiles_select_shared_org` be hierarchy-narrowed?** The founder's stated rule is
   *never any visibility to someone lower of someone higher*, and that policy breaks it today for

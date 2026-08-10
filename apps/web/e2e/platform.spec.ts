@@ -2017,3 +2017,88 @@ test('owner console view-as: rendering a surface records itself too', async ({ p
   await expect(page.getByText('logged', { exact: true })).toBeVisible()
   await expect(page.getByText('This lookup was NOT recorded')).not.toBeVisible()
 })
+
+// ---------------------------------------------------------------------------
+// ENGAGEMENT MONITORING, PHASE 3 (docs/17-engagement-monitoring.md §8b). The db
+// suite proves login_events/login_rollup's RLS; this proves the page reads
+// them honestly — the badge, the "never signed in" reading of an absent
+// rollup row, and pending exclusion.
+// ---------------------------------------------------------------------------
+test('owner console engagement: badges the newest captured login, and never-signed-in reads as absence, not error', async ({
+  page,
+}) => {
+  await signIn(page, 'owner@demo.local')
+  await page.goto('/console/engagement')
+
+  // THE HONESTY BADGE (§8b item 1). By this point in the suite many demo users
+  // — including the superadmin itself, signing in for every test above — have
+  // signed in, so this must render a real timestamp, never the "none captured"
+  // state. A vacuous pass here (the badge always rendering "none") would prove
+  // nothing about whether capture actually works.
+  await expect(page.getByText('Newest captured login:')).toBeVisible()
+  await expect(page.getByText('none — no login has ever been captured')).not.toBeVisible()
+
+  // The platform-wide landing panel (no picker) is the direct "who should I
+  // reach out to" view. grace@demo.local is a real, active Demo Salon member
+  // this whole e2e suite never signs in as (deliberately — she exists in the
+  // seed as an otherwise-ordinary member of a second, sparser salon
+  // location), so she must appear here reading "never signed in" — §8b item 3:
+  // absence of a rollup row IS the answer, not an error or a blank.
+  const quietSection = page.locator('section', { has: page.getByRole('heading', { name: 'Quietest across the platform' }) })
+  const graceQuietRow = quietSection.locator('tr', { has: page.getByText('Grace G') })
+  await expect(graceQuietRow).toBeVisible()
+  await expect(graceQuietRow.getByText('never signed in')).toBeVisible()
+
+  // "By organization" makes the same claim about her, scoped to Demo Salon.
+  // Scoped to the section BEFORE clicking — "Show" is not a unique label,
+  // the "By person" picker below has its own identically-labelled button.
+  const orgSection = page.locator('section', { has: page.getByRole('heading', { name: 'By organization' }) })
+  await orgSection.getByLabel('Organisation').selectOption({ label: 'Demo Salon' })
+  await orgSection.getByRole('button', { name: 'Show' }).click()
+  const graceOrgRow = orgSection.locator('tr', { has: page.getByText('Grace G') })
+  await expect(graceOrgRow).toBeVisible()
+  await expect(graceOrgRow.getByText('never signed in')).toBeVisible()
+})
+
+test('owner console engagement: a pending invite is excluded from the org rollup, not silently dropped', async ({
+  page,
+}) => {
+  // Platform Self-Test is the seed's dedicated scratch org for exactly this
+  // kind of mutation (packages/db/src/seed.ts) — safe to add/remove a member
+  // here without disturbing any other test's assumptions. Inviting through
+  // the org self-management page (not the superadmin console) because that
+  // flow always lands the invitee as PENDING, which is exactly the state this
+  // test needs — no active/pending toggle to get wrong.
+  await signIn(page, 'alice@demo.local')
+  await page.goto('/o/platform-self-test/members')
+  await page.getByPlaceholder('email@example.com').fill('grace@demo.local')
+  await page.getByRole('button', { name: 'Invite' }).click()
+  await expect(
+    page.locator('li', { has: page.getByText('grace@demo.local') }).getByText('invited · pending'),
+  ).toBeVisible()
+
+  await signIn(page, 'owner@demo.local')
+  await page.goto('/console/engagement')
+  // Scoped to the section BEFORE clicking — "Show" is not a unique label, the
+  // "By person" picker below has its own identically-labelled button. Scoping
+  // also makes the assertions below meaningful: Grace legitimately appears in
+  // the platform-wide panel above (her real, active Demo Salon membership),
+  // so asserting her absence page-wide would be a false failure, not a real
+  // check — it must be scoped to THIS org's section.
+  const orgSection = page.locator('section', { has: page.getByRole('heading', { name: 'By organization' }) })
+  await orgSection.getByLabel('Organisation').selectOption({ label: 'Platform Self-Test' })
+  await orgSection.getByRole('button', { name: 'Show' }).click()
+
+  // Named as excluded, not just absent — a silent drop and a stated exclusion
+  // look identical unless the count is asserted (§3, §8b item 2).
+  await expect(orgSection.getByText(/1 pending invite excluded/)).toBeVisible()
+  await expect(orgSection.getByText('Grace G')).not.toBeVisible()
+
+  // Cleanup: remove the invite via the superadmin console (already signed in
+  // as owner), restoring Platform Self-Test to its seeded membership so no
+  // later test inherits it.
+  await page.goto('/console')
+  const cleanupSection = page.locator('section', { has: page.getByRole('heading', { name: 'Platform Self-Test' }) })
+  await cleanupSection.locator('li', { has: page.getByText('grace@demo.local') }).getByRole('button', { name: 'Remove' }).click()
+  await expect(cleanupSection.getByText('grace@demo.local')).not.toBeVisible()
+})

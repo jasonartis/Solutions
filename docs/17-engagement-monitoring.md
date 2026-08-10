@@ -1,9 +1,12 @@
 # 17 — Engagement monitoring (superadmin)
 
-**Status: PHASE 1 BUILT 2026-08-09** (`20260809010000_login_events.sql`). Phases 2–4 are specced
-or sketched only and are NOT approved to build. Login capture is live: an
-`AFTER UPDATE OF last_sign_in_at` trigger on `auth.users` appends to `public.login_events` and
-maintains a permanent `public.login_rollup` summary; a 90-day pruner trims the raw detail.
+**Status: PHASES 1 AND 3 BUILT 2026-08-09** (`20260809010000_login_events.sql`; the console page
+at `/console/engagement`, no migration). Phases 2 and 4 are specced or sketched only and are NOT
+approved to build. Login capture is live: an `AFTER UPDATE OF last_sign_in_at` trigger on
+`auth.users` appends to `public.login_events` and maintains a permanent `public.login_rollup`
+summary; a 90-day pruner trims the raw detail. The console page reads both tables and answers §1's
+two directions — see §8b's decisions-log entry for what phase 3 actually built, its test coverage,
+and the schema-friction it reports back per item 12.
 **Six things were built differently from the draft below and every one is recorded in the
 decisions log with its reasoning — read that entry before trusting any paragraph in §5 or §6,
 which have been corrected in place.** The largest change: there is NO `profiles` mirror.
@@ -306,7 +309,7 @@ Phase 1 (logins) has no org context at all, so it carries none of these — see 
 |---|---|---|
 | **1** | Login capture: trigger on `auth.users`, read-only `login_events`, permanent `login_rollup` (no `profiles` mirror), prune | **BUILT 2026-08-09** |
 | **2** | Org-scoped activity, written by the app as the user under RLS, carrying org/module/role/scope stamped at write time | Specced here, not approved |
-| **3** | The console page: org rollup → drill to people; person → their orgs | Not started |
+| **3** | The console page: org rollup → drill to people; person → their orgs | **BUILT 2026-08-09** |
 | **4** | Hierarchy-governed visibility (a manager sees those below them) | Future enhancement, §7 — **and it belongs on phase 2's data, not phase 1's; see below** |
 
 **PHASE 4 MUST BE BUILT ON PHASE 2, NOT ON LOGINS (recommended 2026-08-09, founder agreed).**
@@ -357,6 +360,10 @@ Recorded because it was established by reading the code and is not obvious from 
   separately rather than copying.
 
 ## 8b. PHASE 3 CHECKLIST — everything the console page must get right, in one place
+
+**STATUS: BUILT 2026-08-09 — every item below addressed; see the decisions log entry for how, plus
+the schema-friction item 12 asked for.** Kept as a checklist (not rewritten past tense) because it
+is still the right shape for auditing the build against.
 
 Collected 2026-08-09 after phase 1 shipped, because these requirements were scattered across §3,
 §8a and §10 of a long document and the platform's own lesson is that **open state spread through a
@@ -530,6 +537,58 @@ empty when they should not have been.
 ---
 
 ## Decisions log (dated)
+
+- **2026-08-09 (build session) — PHASE 3 BUILT. No migration.** `/console/engagement`
+  (`apps/web/app/(app)/console/engagement/page.tsx` + `apps/web/lib/engagement.ts`). Sonnet build,
+  per docs/17 §8b's own note that phase 3 needs no migration.
+  1. **Every §8b checklist item addressed.** The honesty badge (item 1) reads
+     `max(login_rollup.last_login_at)` platform-wide, not `login_events` — the raw table is only a
+     90-day window and would read empty on a quiet-but-healthy platform for a reason unrelated to
+     capture health, where the rollup is permanent and can only advance when the trigger actually
+     succeeds. Pending members are excluded from every rollup and the exclusion is COUNTED, not
+     silently dropped (item 2). Population is derived from `org_members` and LEFT-JOINED to
+     `login_rollup` in application code, so "no row" renders as "never signed in" (item 3).
+     `observed_logins` is always rendered next to `observed_since` with an explicit "not a lifetime
+     total" caveat, never alone (item 4). "Last 30 days" is a live `.gte()` query over
+     `login_events`, no stored column (item 5). No `.rpc()`, no service-role, added to
+     `rls.test.ts`'s `CONSOLE_PATH` (items 6–7). Own page shell, hand-added nav entry in
+     `console/page.tsx` (item 8). The page states on screen that this is a third question, distinct
+     from the data browser and view-as (item 9), using `requireSuperadmin()` from `lib/platform.ts`
+     (item 10). Both directions built: a platform-wide "quietest members" landing panel plus org→
+     people and person→orgs pickers, each stating that a login is a platform event, not an org one
+     (item 11).
+  2. **Item 12's schema-friction report, as promised — two real observations, not fabricated ones.**
+     `login_rollup`'s single index on `last_login_at` served every query actually written: the
+     honesty badge is a one-row `order by ... limit 1` (cheap, indexed), and the per-org/platform
+     "quietest members" listing fetches a small bounded population (this platform's member counts)
+     and sorts client-side rather than via `order by`, so the index's marginal value there is small
+     at this scale — it would matter more if the platform-wide population grew into the thousands.
+     The deliberate absence of `org_id` DID force real client-side joining, exactly as §8b
+     predicted: `getQuietestMembers` has no single query available to it — it reads `org_members`
+     (filtered to `status = 'active'`), embeds `orgs(name)` for display, derives the distinct
+     user-id population in application code, and only then fetches `profiles`/`login_rollup`/
+     `login_events` `.in()` that id list. This is three or four round trips where a table carrying
+     `org_id` would have allowed one join. Not a blocker at this platform's scale, and not a reason
+     to add `org_id` to phase 1's tables retroactively (§5/§7.1's reasoning against speculative
+     hierarchy columns stands) — but real friction worth weighing if phase 2's own schema is ever
+     tempted to skip carrying `org_id` for the same "keep it simple" reason phase 1 correctly did
+     for logins specifically.
+  3. **Tests.** Two new e2e tests in `apps/web/e2e/platform.spec.ts`: the honesty badge renders a
+     real (non-vacuous) timestamp and grace@demo.local — a real, active Demo Salon member this
+     suite otherwise never signs in as — reads "never signed in" in both the platform-wide panel
+     and the org-scoped one; and a pending invite into the seed's dedicated Platform Self-Test
+     scratch org is excluded from that org's rollup and named as excluded, with cleanup. First
+     attempt at both failed on a genuine bug, not a flake: `getByRole('button', { name: 'Show' })`
+     matched two buttons (the org and person picker forms share the label), fixed by scoping each
+     locator to its own `<section>` before interacting. **Verification: typecheck 9/9, db 121/121
+     (real run, not a `FULL TURBO` replay), full e2e 50/51 — the one failure is the pre-existing,
+     documented speed-dating resume-review timeout flake (CLAUDE.md's e2e flake family), unrelated
+     to this diff and reproduced identically on a byte-for-byte fresh `db:reset` + `pnpm seed`.**
+  4. **`apps/web/lib/engagement.ts` was already committed to master (`82dfbc5`) before this build
+     session started** — a prior session's `git add -A` swept it in while committing an unrelated
+     CLAUDE.md fix (see CLAUDE.md's "never `git add -A`" gotcha, `3c7150e`). Verified byte-identical
+     to the file this session wrote independently before continuing; no divergence, nothing to
+     reconcile.
 
 - **2026-08-09 (build session) — PHASE 1 BUILT. `20260809010000_login_events.sql`.**
   Six deviations from the draft above, each argued to the founder before shipping, plus the

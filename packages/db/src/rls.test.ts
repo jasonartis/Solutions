@@ -2347,6 +2347,11 @@ describe('Owner Console view-as (2026-08-06)', () => {
     // server-stamps the actor), but the console's gate-is-only-a-UI-gate
     // argument does, and that argument is what this scan protects.
     'apps/web/lib/superadmin-log.ts',
+    // Added 2026-08-09 with the engagement page (docs/17 §8b item 7). Missing
+    // this addition is silent — the page still works, it is just never
+    // source-scanned for the two bans that make the UI gate sound.
+    'apps/web/lib/engagement.ts',
+    'apps/web/app/(app)/console/engagement/page.tsx',
   ]
   const repoRoot = resolvePath(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
   const sourceOf = (f: string) => readFileSync(resolvePath(repoRoot, f), 'utf8')

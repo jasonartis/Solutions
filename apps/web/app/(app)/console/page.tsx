@@ -59,6 +59,13 @@ export default async function ConsolePage() {
         <span className="text-gray-400" title="Any position's declared surface in any org, ignoring the declared view-as edges">
           what a position or person sees
         </span>
+        <span className="text-gray-300">·</span>
+        <Link href="/console/engagement" className="text-blue-600 hover:underline">
+          Engagement
+        </Link>
+        <span className="text-gray-400" title="Who has gone quiet, and who to reach out to">
+          who is using the platform
+        </span>
       </nav>
 
       <section className="mb-8 rounded-lg border border-gray-200 bg-white p-5">
