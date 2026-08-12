@@ -346,13 +346,23 @@ in the sections below.
   Kong still needs its usual restart afterwards. **Distinguishing rule: a 500 naming an ENGINE PIPE
   is a mode/provisioning problem; "cannot find the file specified" on the pipe is the engine being
   genuinely gone (below).**
-- **THIS MACHINE CAN LOSE PER-USER TOOL STATE MID-SESSION — three separate pieces went in ONE
-  session (2026-08-11), so seeing one should make you suspect the others.** Docker Desktop back in
-  Windows-containers mode (below), `pnpm` gone from PATH (below), and Playwright's browser binary
-  missing (cause 3 in the four-cause e2e entry below). Each presents as a different catastrophe and
-  none of them is: total recovery was under ten minutes once identified, and hours if not. **It is
-  also the leading theory for why a long session died mid-build that day** — worth raising with the
-  founder if it recurs, rather than only working around it.
+- **IF SEVERAL TOOLS LOOK "MISSING" AT ONCE, CHECK WHICH WINDOWS PROFILE YOU ARE IN BEFORE
+  DIAGNOSING ANYTHING ELSE — `$env:USERPROFILE` (2026-08-11).** After the founder was forced to
+  restart the machine, a session came up under `C:\Users\yarmishj.AEI-LT-JYARMISH` instead of the
+  normal `C:\Users\yarmishj`, and THREE tools appeared to vanish simultaneously: `pnpm` off PATH,
+  Playwright's browser binary gone, and `wsl --list --verbose` reporting *"no installed
+  distributions"*. **NOTHING WAS LOST OR CORRUPTED.** All three are PER-USER state sitting in the
+  other profile — `AppData\Local\pnpm`, `AppData\Local\ms-playwright` (holding the exact
+  `chromium_headless_shell-1228` that was reported missing), and WSL's distro registration, which
+  lives in **HKCU**. Docker Desktop's settings are per-user too (`%APPDATA%\Docker`), which is very
+  likely why it also came up in the wrong container mode.
+  **A profile name carrying a `.MACHINE`/`.DOMAIN` suffix is Windows saying it could not load the
+  real profile and created a new one** — so every per-user install, PATH entry and cache is absent
+  by definition, and anything saved to "Desktop"/"Documents" lands where the founder will not find
+  it. **TELL THE FOUNDER IMMEDIATELY rather than working around it**, because it affects far more
+  than this repo. If you must proceed anyway: corepack for pnpm, `playwright install chromium`.
+  **Do NOT write this up as tool-state loss or corruption — this entry exists because that was the
+  first (wrong) diagnosis, and it would have sent the next session hunting a phantom.**
 - **A HANGING `git push` IS USUALLY A CREDENTIAL DIALOG WAITING ON THE FOUNDER'S DESKTOP, NOT A
   NETWORK PROBLEM (2026-08-11 — cost ~10 minutes across two timeouts).** `git push` produced NO
   output and hit a 3-minute and then a 7-minute timeout, while `git ls-remote --heads origin`
