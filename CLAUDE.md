@@ -343,6 +343,22 @@ in the sections below.
   Kong still needs its usual restart afterwards. **Distinguishing rule: a 500 naming an ENGINE PIPE
   is a mode/provisioning problem; "cannot find the file specified" on the pipe is the engine being
   genuinely gone (below).**
+- **51/51 e2e FAILURES CAN ALSO MEAN THE PLAYWRIGHT BROWSER IS SIMPLY NOT INSTALLED (2026-08-11)
+  — a THIRD distinct cause of the all-tests-fail symptom, and the cheapest to fix.** The existing
+  entries below cover a dead dev server (`ERR_CONNECTION_REFUSED` + a heap-OOM `[WebServer]` line)
+  and stale auth (`Working…` at sign-in). This one is neither: the app builds, the server starts,
+  the seed succeeds, and every test dies at
+  `browserType.launch: Executable doesn't exist at …\ms-playwright\chromium_headless_shell-…`.
+  **Fix: `pnpm --filter web exec playwright install chromium`.** **READ THE PER-TEST ERROR BEFORE
+  ASSUMING WHICH ONE IT IS** — all three look identical from the summary line, and only the first
+  is worth panicking about. Appeared alongside the missing `pnpm` and the Docker mode flip below,
+  so if one of the three shows up, expect the others: something clears this machine's per-user tool
+  state.
+  **Also, a self-inflicted trap worth avoiding: do NOT pipe a Playwright run through
+  `Select-Object -Last N` / `tail`.** It truncates away the actual per-test error and leaves only
+  the trailing list of test names, which reads as a mysterious mass failure. Redirect the whole run
+  to a file and grep it — the same rule the existing entry states for exit codes applies to
+  diagnosing causes.
 - **A HANGING `git push` IS USUALLY A CREDENTIAL DIALOG WAITING ON THE FOUNDER'S DESKTOP, NOT A
   NETWORK PROBLEM (2026-08-11 — cost ~10 minutes across two timeouts).** `git push` produced NO
   output and hit a 3-minute and then a 7-minute timeout, while `git ls-remote --heads origin`
