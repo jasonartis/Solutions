@@ -19,7 +19,26 @@ A multi-tenant modular platform: each client engagement produces a **module** bu
      and update only the compact "Now / Next / Standing rules" below. A fresh chat must never
      pay for the full journal. See "Session hygiene". -->
 
-**Now (2026-08-09):** **ENGAGEMENT MONITORING PHASE 3 — THE CONSOLE PAGE — IS BUILT**
+**Now (2026-08-11):** **ENGAGEMENT MONITORING PHASE 2 — THE SCHEMA IS BUILT, VERIFIED AND
+COMMITTED, BUT NOTHING CALLS IT YET** (`20260810010000_activity_events.sql`, commits `2f1a0ea` +
+`42cc497`). `activity_events` (raw, 90-day) + `activity_rollup` (permanent, keyed
+**(user, org, module, ACTION)**), guard trigger, rollup maintainer, pruner, worker job at 04:35.
+Reads are **superadmin-only**; hierarchy-governed reads remain a future phase.
+**NEXT SESSION IS SONNET-TIER — the schema work that earned Opus is finished.** Three things left,
+all mechanical: **(1) the RLS test block** — port the 48 assertions in
+`scripts/verify-activity-capture.mts`, which IS the spec, into `rls.test.ts`; **keep every
+negative's non-emptiness control** (it proves capture works before asserting anyone cannot read);
+**(2) the ~45 call sites** across 6 modules (`recordActivity()` from `@platform/activity`, called
+AFTER the real action succeeds and `await`ed — never fire-and-forget, a serverless function can be
+frozen at response); **(3) `scripts/prod-verify-activity-events.mts`**, copying
+`prod-verify-login-events.mts` — and it must FAIL until real activity has landed on prod, because
+capture failures here are silent by founder decision and phase 2 has NO honesty badge (no console
+reader was built). Recovered from a lost session; full story + all decisions:
+**[docs/17-engagement-monitoring.md](docs/17-engagement-monitoring.md)** decisions log, 2026-08-11.
+**Verification: live 48/48 as real users through PostgREST, db 121/121 (real run), typecheck 9/9.**
+Phase 1 (capture) and phase 3 (`/console/engagement`, reads phase 1 only) remain as below.
+
+**Previously (2026-08-09):** **ENGAGEMENT MONITORING PHASE 3 — THE CONSOLE PAGE — IS BUILT**
 (`/console/engagement`, **no migration**, Sonnet-tier per docs/17 §8b). Spec and every decision:
 **[docs/17-engagement-monitoring.md](docs/17-engagement-monitoring.md)**. Reads phase 1's
 `login_events`/`login_rollup` through the caller's ordinary RLS client — no `.rpc()`, no
@@ -72,10 +91,12 @@ is the most expensive thing in it.
 
 **Next / open (pick WITH the founder — do not start unprompted; details in docs/15 §11).
 AS OF 2026-08-09 the numbered items 1–6 are ALL DONE, and so are the rank/tier-wrapper gap and
-ENGAGEMENT MONITORING PHASES 1 AND 3; what remains is the unranked list below. Engagement
-monitoring's own next step, phase 2 (org-scoped activity), is specced but NOT founder-approved and
-ships a migration — pick it up only with the founder, per docs/17 §8/§11. Two numbered items
-survive below because they still carry live operational facts, not because they are open:**
+ENGAGEMENT MONITORING PHASES 1 AND 3; what remains is the unranked list below. **Engagement
+monitoring phase 2 is FOUNDER-APPROVED AND ITS MIGRATION IS BUILT, VERIFIED AND PUSHED
+(2026-08-11)** — the exception to "pick it up only with the founder", because that pick-up already
+happened; finishing it is the three mechanical tasks in "Now" above, not a new decision. Two
+numbered items survive below because they still carry live operational facts, not because they are
+open:**
 
 - ~~**1. Confirm CI/deploy for slice 5.** **2. Peer-review comments.** **3. The speed-dating
   waitlist flake.** **4. The Owner Console view-as.** **5. Push and prod-verify.**~~ **ALL DONE**
@@ -101,13 +122,15 @@ survive below because they still carry live operational facts, not because they 
   Tidy-up, founder's call because it touches credential files: add them to `.env.accounts.example`
   + `.env.deploy`, or just document the export line. Full story → journal.
 Everything below is open but unranked:
-- **ENGAGEMENT MONITORING — PHASES 1 AND 3 BUILT 2026-08-09. PHASE 2 IS SPECCED BUT NOT
-  APPROVED, AND IS THE ONLY REMAINING PIECE.** Founder ask 2026-08-10: gather everything for an
-  Opus session before switching models. **[docs/17 §12](17-engagement-monitoring.md) is that
-  brief** — a real per-module survey of every write path across all 6 modules, a recommended
-  action taxonomy, and the structural open questions (table shape, retention, failed-write
-  handling) an Opus session needs to run docs/03 #12's rhythm from a concrete draft rather than a
-  blank page. Full spec + dated decisions:
+- **ENGAGEMENT MONITORING — PHASES 1 AND 3 BUILT 2026-08-09; PHASE 2's SCHEMA BUILT AND VERIFIED
+  2026-08-11 BUT NOT YET INSTRUMENTED (see "Now" above for the three remaining Sonnet-tier
+  tasks).** §12 remains the build brief it always was, but **note two places it is now WRONG and
+  was deliberately overridden** — do not "fix" the code back to it: §12.4 demanded the actor's
+  `role`/`scope_ref` as NOT NULL scalars (not implementable — multiple simultaneous grants are
+  first-class, and `is_org_admin` authority is not in `module_roles` at all, so `actor_grants` is a
+  jsonb array of PAIRED objects), and it proposed an `org_modules` entitlement check (rejected —
+  `org_modules` gates no RLS anywhere, so a guard stricter than the modules would silently drop
+  real activity, and by founder decision 3 that drop is invisible). Full spec + dated decisions:
   **[docs/17-engagement-monitoring.md](docs/17-engagement-monitoring.md)**. Live: capture (phase 1)
   and the console page (phase 3, `/console/engagement`) — the honesty badge phase 3 owed is BUILT,
   with a test. **Four things carried forward, all recorded there in full:**
@@ -300,6 +323,30 @@ in the sections below.
   file simply was not in the repo. **Always `dirname(fileURLToPath(import.meta.url))`** — it
   decodes. The failure is silent and looks like success, which is what makes it worth a bullet.
 - Docker Desktop's WSL backend crashed under parallel image pulls → `C:\Users\yarmishj\.wslconfig` caps WSL at 8GB/4CPU (delete to revert); pull images sequentially if it recurs; zero-log segfaulting containers (exit 139) = corrupted image layers, `docker rmi` + re-pull.
+- **DOCKER DESKTOP CAN COME BACK UP IN *WINDOWS CONTAINERS* MODE, AND IT LOOKS EXACTLY LIKE THE
+  ENGINE BEING DEAD (2026-08-11).** Symptom: every `docker` command returns
+  *"request returned 500 Internal Server Error … dockerDesktop**Windows**Engine … check if the
+  server supports the requested API version"*, and — the part that sends you down a rabbit hole —
+  **`wsl --list --verbose` reports "has no installed distributions"** and
+  `C:\ProgramData\DockerDesktop\vm-data` is MISSING. It reads as total loss of the Linux VM,
+  images and volumes. **It is not: nothing is lost.** In Windows-containers mode the Linux distro
+  is simply not registered. **Diagnose with `docker context ls`** — if the starred context is
+  `desktop-windows` (and no `desktop-linux` exists) this is it, not the 2026-08-09 crash below.
+  **Fix: `& "$env:ProgramFiles\Docker\Docker\DockerCli.exe" -SwitchDaemon`, then FULLY restart
+  Docker Desktop** (stop `Docker Desktop`/`com.docker.backend`/`com.docker.build`, relaunch) — the
+  switch alone left the Linux engine still 500ing. Everything returns healthy with volumes intact;
+  Kong still needs its usual restart afterwards. **Distinguishing rule: a 500 naming an ENGINE PIPE
+  is a mode/provisioning problem; "cannot find the file specified" on the pipe is the engine being
+  genuinely gone (below).**
+- **`pnpm` MAY NOT BE ON PATH, while `corepack` is (2026-08-11).** `pnpm : The term 'pnpm' is not
+  recognized`, yet `corepack pnpm --version` prints 10.34.3. **`corepack pnpm <cmd>` is NOT a
+  workaround** — the repo's own scripts shell out to bare `pnpm` (`pnpm --filter @platform/db
+  seed`), so it fails one level down with a confusing "'pnpm' is not recognized" from inside a
+  script that appeared to start fine. **`corepack enable` needs admin** (`EPERM … 'C:\Program
+  Files\nodejs\pnpx'`). Non-admin fix: `corepack enable --install-directory <writable dir>` then
+  prepend that dir to `$env:PATH` in EVERY command (shell state does not persist between tool
+  calls). Appeared in the same session as the Docker mode flip, so suspect a common cause if both
+  show up together.
 - **DOCKER DESKTOP CAN DIE OUTRIGHT UNDER A LONG SESSION'S MEMORY PRESSURE, and the symptom
   reads as a test failure (2026-08-09).** After a session of resets + builds + Playwright runs,
   the db suite reported `ECONNREFUSED 127.0.0.1:54321/54322` and 104 tests SKIPPED — which
