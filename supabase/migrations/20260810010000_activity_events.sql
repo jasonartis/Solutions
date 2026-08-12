@@ -670,7 +670,12 @@ begin
   -- register as engaged (spec section 3: an invited-but-never-accepted member
   -- reading as a DISENGAGED member is the opposite of the truth, and would send
   -- the founder to apologise to somebody who never joined). `is_org_member`
-  -- requires status = 'active'.
+  -- requires status = 'active' — but NOT in the version created in
+  -- `20260706120000_core.sql`, which has no such filter. It was REDEFINED to add
+  -- it in `20260727010000_org_invite_accept.sql`, and that is the version live
+  -- today. Noted because a future reader who chases this claim to the function's
+  -- original definition will find it false there and conclude this comment is
+  -- stale, when the opposite is true.
   if not public.is_org_member(new.org_id) then
     raise exception 'activity: not an active member of this org';
   end if;

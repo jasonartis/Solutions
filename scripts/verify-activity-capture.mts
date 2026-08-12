@@ -56,6 +56,39 @@ const main = async () => {
   // fails for a reason that has nothing to do with the schema — the documented
   // trap when reproducing a non-idempotent test. Only the owner can do this;
   // no api role holds DELETE on either table, which is itself asserted later.
+  //
+  // ---------------------------------------------------------------------------
+  // LOOPBACK-ONLY, ENFORCED — this script DELETES FROM A PERMANENT LOG.
+  // ---------------------------------------------------------------------------
+  // `activity_rollup` never expires and CANNOT BE BACKFILLED: no activity
+  // history exists anywhere else to rebuild it from, which is the entire reason
+  // it is permanent. Wiping it destroys the record outright rather than costing
+  // a re-run.
+  //
+  // The danger is not hypothetical and not exotic: this repo has a real
+  // remote-database workflow (`scripts/dev-cloud-db.ts`, `.env.cloud-db.example`)
+  // whose whole purpose is to point `DATABASE_URL` and `SUPABASE_URL` at a
+  // hosted project. With that env loaded, an unguarded version of this script
+  // would silently empty a live rollup — and the failure would be invisible,
+  // because everything below would still pass against the freshly emptied table.
+  // So both endpoints must be loopback, and the check FAILS CLOSED on anything
+  // it cannot positively recognise as local.
+  {
+    const local = /^(127\.0\.0\.1|localhost|\[?::1\]?)$/
+    const hostOf = (s: string) => { try { return new URL(s).hostname } catch { return '' } }
+    const apiHost = hostOf(url)
+    const dbHost = hostOf(dbUrl)
+    if (!local.test(apiHost) || !local.test(dbHost)) {
+      console.error(
+        `\nREFUSING TO RUN — this script deletes from activity_rollup, which is PERMANENT and ` +
+        `cannot be backfilled.\n  SUPABASE_URL host: ${apiHost || '(unparseable)'}\n` +
+        `  DATABASE_URL host: ${dbHost || '(unparseable)'}\n` +
+        `Both must be loopback. If you meant to verify a deployed environment, that is a ` +
+        `prod-verify script's job (read-only) — see scripts/prod-verify-login-events.mts.\n`,
+      )
+      process.exit(1)
+    }
+  }
   {
     const clean = postgres(dbUrl, { prepare: false, max: 1 })
     try {
@@ -187,6 +220,39 @@ const main = async () => {
   }
   ok('dana cannot read her OWN activity (no self-read arm)',
     ((await dana.from('activity_events').select('id').eq('user_id', danaId)).data ?? []).length === 0)
+
+  console.log('\n--- 7b. A STRANGER and the SERVICE ROLE reach neither table at the privilege layer')
+  // Carried over from phase 1's block deliberately: every check above uses a
+  // SIGNED-IN client, so without this the two roles that hold no grant at all
+  // are never exercised — and they are exactly the ones docs/03 #17 is about.
+  {
+    const anon = createClient(url, anonKey, { auth: { persistSession: false } })
+    for (const table of ['activity_events', 'activity_rollup'] as const) {
+      const read = await anon.from(table).select('*').limit(1)
+      ok(`anon is refused reading ${table} (42501)`, read.error?.code === '42501',
+        JSON.stringify(read.error))
+    }
+    const anonWrite = await anon.from('activity_events').insert({
+      org_id: salon, module_key: 'nail-salon', action: 'bill.paid',
+    })
+    ok('anon is refused INSERT on activity_events', anonWrite.error != null)
+
+    // NOTE THE LOCAL WEAKNESS, stated rather than glossed: the local stack has no
+    // `ALTER DEFAULT PRIVILEGES FOR ROLE postgres`, so service_role would hold
+    // nothing on a new table here EVEN WITHOUT the migration's revoke naming it.
+    // Prod grants the full set. These assertions are therefore true-but-weak
+    // here, and making them strong is the prod verifier's job.
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
+    if (serviceKey) {
+      const svc = createClient(url, serviceKey, { auth: { persistSession: false } })
+      for (const table of ['activity_events', 'activity_rollup'] as const) {
+        ok(`service_role is refused reading ${table} (weak locally; prod is what counts)`,
+          (await svc.from(table).select('id').limit(1)).error != null)
+      }
+    } else {
+      console.log('        SKIPPED service_role checks — SUPABASE_SERVICE_ROLE_KEY not set')
+    }
+  }
 
   console.log('\n--- 8. Append-only: not even the superadmin may write')
   const anyRow = (await owner.from('activity_events').select('id').limit(1)).data![0]!

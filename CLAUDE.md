@@ -27,7 +27,12 @@ Reads are **superadmin-only**; hierarchy-governed reads remain a future phase.
 **NEXT SESSION IS SONNET-TIER — the schema work that earned Opus is finished.** Three things left,
 all mechanical: **(1) the RLS test block** — port the 48 assertions in
 `scripts/verify-activity-capture.mts`, which IS the spec, into `rls.test.ts`; **keep every
-negative's non-emptiness control** (it proves capture works before asserting anyone cannot read);
+negative's non-emptiness control** (it proves capture works before asserting anyone cannot read),
+and **add the ONE case that verifier deliberately cannot cover — an org member holding NO
+`module_roles` row for that module, whose `actor_grants` must come back as an EMPTY ARRAY**. Every
+seeded Demo Salon member holds some salon grant (charlie an explicit `customer`, grace a SCOPED
+`manager`), so that path needs a purpose-made fixture; the migration argues at length that an empty
+array is a correct answer rather than a hole, and nothing currently proves it;
 **(2) the ~45 call sites** across 6 modules (`recordActivity()` from `@platform/activity`, called
 AFTER the real action succeeds and `await`ed — never fire-and-forget, a serverless function can be
 frozen at response); **(3) `scripts/prod-verify-activity-events.mts`**, copying
@@ -338,6 +343,17 @@ in the sections below.
   Kong still needs its usual restart afterwards. **Distinguishing rule: a 500 naming an ENGINE PIPE
   is a mode/provisioning problem; "cannot find the file specified" on the pipe is the engine being
   genuinely gone (below).**
+- **A HANGING `git push` IS USUALLY A CREDENTIAL DIALOG WAITING ON THE FOUNDER'S DESKTOP, NOT A
+  NETWORK PROBLEM (2026-08-11 — cost ~10 minutes across two timeouts).** `git push` produced NO
+  output and hit a 3-minute and then a 7-minute timeout, while `git ls-remote --heads origin`
+  returned instantly — which rules out network and read auth and makes it look like a hung remote.
+  **The tell: `Get-Process | Where-Object { $_.Name -match "git|credential" }` showed
+  `GitHub.UI` with MainWindowTitle "Connect to GitHub".** Git Credential Manager
+  (`credential.helper=manager-core`) had opened an interactive auth window that only the founder
+  can see and complete; `GIT_TERMINAL_PROMPT=0` does NOT prevent it, because it is a GUI prompt
+  rather than a terminal one. **Check for that window before diagnosing anything else, and tell the
+  founder it is waiting — they cannot know otherwise.** There are no hooks in `.git/hooks`, so rule
+  that out cheaply too.
 - **`pnpm` MAY NOT BE ON PATH, while `corepack` is (2026-08-11).** `pnpm : The term 'pnpm' is not
   recognized`, yet `corepack pnpm --version` prints 10.34.3. **`corepack pnpm <cmd>` is NOT a
   workaround** — the repo's own scripts shell out to bare `pnpm` (`pnpm --filter @platform/db
@@ -471,6 +487,18 @@ in the sections below.
 - **Interaction patterns that work:** numbered load-bearing questions (he answers inline,
   point by point); real client artifacts as specs; click-by-click walkthroughs for testing;
   plain-language explanations of infra concepts (he asks — answer directly, no jargon).
+- **ASK CHOICES AS CONCRETE SCENARIOS, NOT AS ABSTRACTIONS (founder, 2026-08-11, after sending
+  the same question back twice).** His words: *"This too is not clear what you are asking. Say I
+  am asking if we should do A or B. Here is the scenario and if we do A then xyz, if we do B then
+  ghj etc."* An `AskUserQuestion` option like "keep one bucket / split the buckets" is unanswerable
+  — it asks him to hold the consequences in his head. What works: name a real situation with real
+  seed users, then state what actually happens under each choice ("Charlie files a report March
+  8th and never returns. Under A he reads as lapsed and gets a come-back email. Under B you see
+  `report.filed` and don't send it, but the report's existence is now in a table you browse in
+  bulk"). **Corollary that also came from that exchange: when he asks a question back rather than
+  answering — "how would you define staff vs members?" — go and MEASURE the answer** (that one was
+  settled by reading `docs/rank-admission-map.md` and finding rank cannot express it at all),
+  rather than restating the question more carefully.
 - **Code prefs:** explicit TypeScript over clever; few abstractions; inline docs where
   intent isn't obvious; he may read/modify code himself and Copilot may join.
 - **Command execution on this machine:** run sandboxed by default — the sandbox-bypass
