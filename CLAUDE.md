@@ -19,31 +19,57 @@ A multi-tenant modular platform: each client engagement produces a **module** bu
      and update only the compact "Now / Next / Standing rules" below. A fresh chat must never
      pay for the full journal. See "Session hygiene". -->
 
-**Now (2026-08-11):** **ENGAGEMENT MONITORING PHASE 2 — THE SCHEMA IS BUILT, VERIFIED AND
-PUSHED, BUT NOTHING CALLS IT YET** (`20260810010000_activity_events.sql`, commits `2f1a0ea` →
-`a5bfb7d`). `activity_events` (raw, 90-day) + `activity_rollup` (permanent, keyed
-**(user, org, module, ACTION)**), guard trigger, rollup maintainer, pruner, worker job at 04:35.
-Reads are **superadmin-only**; hierarchy-governed reads remain a future phase.
-**NEXT SESSION IS SONNET-TIER — the schema work that earned Opus is finished.** Three things left,
-all mechanical: **(1) the RLS test block** — port the 48 assertions in
-`scripts/verify-activity-capture.mts`, which IS the spec, into `rls.test.ts`; **keep every
-negative's non-emptiness control** (it proves capture works before asserting anyone cannot read),
-and **add the ONE case that verifier deliberately cannot cover — an org member holding NO
-`module_roles` row for that module, whose `actor_grants` must come back as an EMPTY ARRAY**. Every
-seeded Demo Salon member holds some salon grant (charlie an explicit `customer`, grace a SCOPED
-`manager`), so that path needs a purpose-made fixture; the migration argues at length that an empty
-array is a correct answer rather than a hole, and nothing currently proves it;
-**(2) the ~45 call sites** across 6 modules (`recordActivity()` from `@platform/activity`, called
-AFTER the real action succeeds and `await`ed — never fire-and-forget, a serverless function can be
-frozen at response); **(3) `scripts/prod-verify-activity-events.mts`**, copying
-`prod-verify-login-events.mts` — and it must FAIL until real activity has landed on prod, because
-capture failures here are silent by founder decision and phase 2 has NO honesty badge (no console
-reader was built). Recovered from a lost session; full story + all decisions:
-**[docs/17-engagement-monitoring.md](docs/17-engagement-monitoring.md)** decisions log, 2026-08-11.
-**Verification: live 53/53 as real users through PostgREST (`scripts/verify-activity-capture.mts`,
-re-runnable, loopback-only because it deletes from the permanent rollup), db 121/121 (real run,
-not turbo), typecheck 9/9, build clean, e2e 51/51 — cleaner than the previous 50/51, so the
-documented speed-dating flake did not reproduce.**
+**Now (2026-08-11) — THIS IS A WORK ORDER. A fresh session can start from it with no prompt.**
+
+**ENGAGEMENT MONITORING PHASE 2: THE SCHEMA IS BUILT, VERIFIED AND PUSHED. NOTHING CALLS IT YET.**
+`20260810010000_activity_events.sql`, commits `2f1a0ea` → `96f0722`. `activity_events` (raw,
+90-day) + `activity_rollup` (permanent, keyed **(user, org, module, ACTION)**), guard trigger,
+rollup maintainer, pruner, worker job at 04:35. Reads **superadmin-only**; hierarchy-governed reads
+are a later phase. **Recovered from a lost session — read docs/17's decisions log entry for
+2026-08-11 before touching anything, including which of its own §12 recommendations were
+deliberately overridden.**
+
+**FINISHING THIS IS ALREADY FOUNDER-APPROVED — do NOT wait to be asked.** The standing "never start
+a slice without the founder initiating" rule is satisfied: the founder approved phase 2 on
+2026-08-10 and took four more decisions on 2026-08-11. What remains is finishing approved work, not
+starting new work. **Do not change the migration, the vocabulary, or any decision without asking.**
+
+**MODEL: SONNET.** The schema work that earned Opus is done; all three tasks below are mechanical.
+Escalate to Opus only if you end up needing to change the migration (which would mean something was
+missed, and is worth saying out loud rather than doing quietly).
+
+1. **The RLS test block.** Port the **53** assertions in `scripts/verify-activity-capture.mts` into
+   `packages/db/src/rls.test.ts` — **that script IS the spec; read it first.** Two things it does
+   that must survive the port: every negative carries a **non-emptiness control** (it proves capture
+   works before asserting anyone cannot read), and it covers **`anon` and `service_role`** and not
+   only signed-in users. **Then add the one case it deliberately cannot cover: an org member holding
+   NO `module_roles` row for that module, whose `actor_grants` must come back as an EMPTY ARRAY.**
+   Every seeded Demo Salon member holds some salon grant (charlie an explicit `customer`, grace a
+   SCOPED `manager`), so this needs a purpose-made fixture — and remember since slice 3 a fixture
+   that adds an org member must ACCEPT the invite or it satisfies no membership predicate. The
+   migration argues at length that an empty array is correct rather than a hole; nothing proves it.
+2. **The ~45 call sites** across 6 modules. Vocabulary and the full list of deliberate EXCLUSIONS are
+   in `packages/platform/src/activity.ts`; the per-module inventory is docs/17 §12.3/§12.6. Call
+   `recordActivity()` **AFTER the real action succeeds, and `await` it** — fire-and-forget is wrong
+   because a serverless function can be frozen the moment it responds, losing the insert
+   non-deterministically. Put the call at the **server action** call site, never inside a shared
+   function the worker also invokes (the worker path has no acting user).
+3. **`scripts/prod-verify-activity-events.mts`**, copying `prod-verify-login-events.mts`. **It MUST
+   FAIL until real activity has landed on prod** — capture failures are silent by founder decision
+   and phase 2 has NO honesty badge, because no console reader was built. Then deploy and prod-verify.
+
+**Verification bar to re-clear before reporting done** (all green as of 2026-08-11):
+`pnpm exec tsx scripts/verify-activity-capture.mts` **53/53** (re-runnable; loopback-only, because
+it deletes from the permanent rollup) · `pnpm --filter @platform/db test` **121/121** — run it
+DIRECTLY, a `FULL TURBO` result after a migration is a cached replay · `turbo run typecheck
+--concurrency=1` **9/9** · build · `CI=true pnpm --filter web exec playwright test` **51/51**.
+
+**Host state, 2026-08-12:** the machine was migrated to a new Windows profile
+(`C:\Users\yarmishj.AEI-LT-JYARMISH`) after the old one was lost. Claude's own state — memories,
+560 permission entries, the `log-session` skill — is fully migrated and verified. **If `pnpm` is not
+on PATH, that is the known profile issue and the gotchas below have the workaround; it is not a new
+fault.** Do not re-diagnose it as tool corruption.
+
 Phase 1 (capture) and phase 3 (`/console/engagement`, reads phase 1 only) remain as below.
 
 **Previously (2026-08-09):** **ENGAGEMENT MONITORING PHASE 3 — THE CONSOLE PAGE — IS BUILT**
