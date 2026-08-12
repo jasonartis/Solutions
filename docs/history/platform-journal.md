@@ -6,6 +6,72 @@ lean. Newest first. Durable *decisions/conventions* live in their own docs (docs
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
 
 
+- **2026-08-11 (ENGAGEMENT MONITORING PHASE 2 — THE SCHEMA, RECOVERED FROM A LOST SESSION, THEN
+  HARDENED AND VERIFIED. Migration `20260810010000_activity_events.sql`. Opus, with a Fable
+  subagent for the review. Commits `2f1a0ea`, `42cc497`, `2ff596d`, `9367bad`, `a5bfb7d`. Full
+  decisions log: docs/17, 2026-08-11.)** The session opened with the founder saying he had lost a
+  chat mid-build and asking whether the repo could be picked up from. It could: a 745-line
+  migration and a 369-line vocabulary/helper were sitting UNTRACKED in the working tree. The first
+  act was committing them unverified, because a stray `git reset` or Docker restart would have
+  destroyed reasoning nothing else recorded.
+  - **THE DEFINING FINDING: the migration claimed "Founder-approved 2026-08-10, seven decisions,
+    all recorded in that file's decisions log" and docs/17 had no such entry.** The commit
+    immediately before it recorded the two discussions that produced NO decision, while the seven
+    that did went unwritten. Decisions 1–3 plus "superadmin-only reads" were reconstructed from the
+    file headers; **5, 6 and 7 are permanently lost and are recorded as lost rather than guessed**,
+    because inferring them from code a single unreviewed session wrote would turn a draft into a
+    decision by default. **The durable rule, now in docs/17: a decision recorded only inside the
+    artifact it produced is not recorded** — a comment can carry the *reasoning*, but it cannot be
+    the *register* of which decisions exist, since nothing enumerates it and nothing notices an
+    absence.
+  - **Four founder decisions closed the gaps.** ONE ENGAGEMENT BUCKET — settled by measurement, not
+    preference: **rank cannot express staff-vs-member at all.** A GA is rank 1, identical to a
+    student; a moderator rank 0, identical to a member; a matchmaker rank 0, identical to a single;
+    synagogue-schedules' *maker*, its only writer, is rank 0 like a viewer. Rank answers "who may
+    manage whose seat", and three of six modules were never rank-mapped. Deferred at zero cost
+    because `actor_grants` stamps real position names, so any future definition applies backwards.
+    `fileReport` STAYS EXCLUDED on the founder's own generalisation argument (safety reporting has
+    no parallel in the other five modules, and a per-module privacy exception would force every
+    future module to re-derive whether it has one) — the staff side, `reviewReport`, IS recorded.
+    `setBranchFrozen` INCLUDED, having been in *neither* list. The console is an EXPANDABLE TREE,
+    recollected and marked as recollected.
+  - **Three defects fixed. (1) The `lock_timeout` was on the function that does not contend** — it
+    sat on the BEFORE-INSERT guard while `activity_rollup_apply()`, holding the contending upsert,
+    had none. A function-level SET is restored when *that* function exits; phase 1 says so
+    explicitly and survived only because `capture_login()` was ONE function doing both jobs.
+    **The transplant failure mode: a property structural in the original becomes conditional in the
+    copy, and the comment travels intact while the guarantee does not.** **(2)** "Easy to subtract
+    an action" was half-delivered — fixed by keying `activity_rollup` on `(user, org, module,
+    ACTION)`, so retiring an action is a read-time re-sum over all history rather than a permanent
+    total that cannot be unpicked. **(3)** The never-pruned rollup was an **unbounded amplification
+    surface**: any member could mint unlimited permanent rows by POSTing fresh random `action`
+    values straight to PostgREST, and the file's claim that the TypeScript union bounded row count
+    was false for exactly the caller the table defends against. Bounded now by CHECKs on *shape*,
+    not membership, so adding an action still needs no migration.
+  - **A review finding was REJECTED, with the reasoning recorded** — Fable proposed an
+    `org_modules` entitlement check; `org_modules` gates no RLS anywhere on this platform, so a
+    guard stricter than the modules themselves would silently refuse activity for actions that
+    genuinely succeeded, and by founder decision 3 that refusal is swallowed. **Invisible missing
+    data is the one outcome this feature exists to prevent.**
+  - **A hazard introduced and caught in-session:** `scripts/verify-activity-capture.mts` deletes
+    from `activity_rollup` to stay re-runnable, against whatever `DATABASE_URL` names — and this
+    repo has a real remote-database workflow. That table is permanent and cannot be backfilled, and
+    the damage would have been invisible because every assertion after the wipe still passes
+    against an empty table. Now loopback-only, failing closed. Found in round 3 of the founder's
+    continuity audit, which is the argument for running one.
+  - **Verification: 53/53 live as real users through PostgREST** (including settling the one thing
+    the review could reason about but not test — a PostgREST upsert cannot target the partial
+    dedupe index, `42P10`), **db 121/121 run directly, typecheck 9/9, build clean, e2e 51/51.**
+  - **Ships CAPTURE-ONLY: no call sites, no console reader.** Capture cannot be backfilled, so
+    every day without it is signal lost; a reader can be built any time. Next session is explicitly
+    Sonnet-tier.
+  - **Four new host gotchas, all costing real time in one session** (→ CLAUDE.md): Docker Desktop
+    returning in **Windows-containers mode** (mimics total loss of images and volumes; loses
+    nothing), **`pnpm` missing from PATH** while corepack works, **Playwright's browser binary
+    missing** as a third cause of the 51/51 symptom, and **a hanging `git push` being a credential
+    GUI dialog on the founder's desktop**. Three are the same shape — this machine lost per-user
+    tool state mid-session, which may be what killed the original chat.
+
 - **2026-08-09 (ENGAGEMENT MONITORING PHASE 3 — THE CONSOLE PAGE, BUILT. No migration. Sonnet
   build. Spec + full decisions log: docs/17.)** `/console/engagement` — the founder's outreach
   tool: who has gone quiet, and who to reach out to. A platform-wide "quietest members" landing

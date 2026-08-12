@@ -20,8 +20,8 @@ A multi-tenant modular platform: each client engagement produces a **module** bu
      pay for the full journal. See "Session hygiene". -->
 
 **Now (2026-08-11):** **ENGAGEMENT MONITORING PHASE 2 — THE SCHEMA IS BUILT, VERIFIED AND
-COMMITTED, BUT NOTHING CALLS IT YET** (`20260810010000_activity_events.sql`, commits `2f1a0ea` +
-`42cc497`). `activity_events` (raw, 90-day) + `activity_rollup` (permanent, keyed
+PUSHED, BUT NOTHING CALLS IT YET** (`20260810010000_activity_events.sql`, commits `2f1a0ea` →
+`a5bfb7d`). `activity_events` (raw, 90-day) + `activity_rollup` (permanent, keyed
 **(user, org, module, ACTION)**), guard trigger, rollup maintainer, pruner, worker job at 04:35.
 Reads are **superadmin-only**; hierarchy-governed reads remain a future phase.
 **NEXT SESSION IS SONNET-TIER — the schema work that earned Opus is finished.** Three things left,
@@ -40,7 +40,10 @@ frozen at response); **(3) `scripts/prod-verify-activity-events.mts`**, copying
 capture failures here are silent by founder decision and phase 2 has NO honesty badge (no console
 reader was built). Recovered from a lost session; full story + all decisions:
 **[docs/17-engagement-monitoring.md](docs/17-engagement-monitoring.md)** decisions log, 2026-08-11.
-**Verification: live 48/48 as real users through PostgREST, db 121/121 (real run), typecheck 9/9.**
+**Verification: live 53/53 as real users through PostgREST (`scripts/verify-activity-capture.mts`,
+re-runnable, loopback-only because it deletes from the permanent rollup), db 121/121 (real run,
+not turbo), typecheck 9/9, build clean, e2e 51/51 — cleaner than the previous 50/51, so the
+documented speed-dating flake did not reproduce.**
 Phase 1 (capture) and phase 3 (`/console/engagement`, reads phase 1 only) remain as below.
 
 **Previously (2026-08-09):** **ENGAGEMENT MONITORING PHASE 3 — THE CONSOLE PAGE — IS BUILT**
@@ -343,22 +346,13 @@ in the sections below.
   Kong still needs its usual restart afterwards. **Distinguishing rule: a 500 naming an ENGINE PIPE
   is a mode/provisioning problem; "cannot find the file specified" on the pipe is the engine being
   genuinely gone (below).**
-- **51/51 e2e FAILURES CAN ALSO MEAN THE PLAYWRIGHT BROWSER IS SIMPLY NOT INSTALLED (2026-08-11)
-  — a THIRD distinct cause of the all-tests-fail symptom, and the cheapest to fix.** The existing
-  entries below cover a dead dev server (`ERR_CONNECTION_REFUSED` + a heap-OOM `[WebServer]` line)
-  and stale auth (`Working…` at sign-in). This one is neither: the app builds, the server starts,
-  the seed succeeds, and every test dies at
-  `browserType.launch: Executable doesn't exist at …\ms-playwright\chromium_headless_shell-…`.
-  **Fix: `pnpm --filter web exec playwright install chromium`.** **READ THE PER-TEST ERROR BEFORE
-  ASSUMING WHICH ONE IT IS** — all three look identical from the summary line, and only the first
-  is worth panicking about. Appeared alongside the missing `pnpm` and the Docker mode flip below,
-  so if one of the three shows up, expect the others: something clears this machine's per-user tool
-  state.
-  **Also, a self-inflicted trap worth avoiding: do NOT pipe a Playwright run through
-  `Select-Object -Last N` / `tail`.** It truncates away the actual per-test error and leaves only
-  the trailing list of test names, which reads as a mysterious mass failure. Redirect the whole run
-  to a file and grep it — the same rule the existing entry states for exit codes applies to
-  diagnosing causes.
+- **THIS MACHINE CAN LOSE PER-USER TOOL STATE MID-SESSION — three separate pieces went in ONE
+  session (2026-08-11), so seeing one should make you suspect the others.** Docker Desktop back in
+  Windows-containers mode (below), `pnpm` gone from PATH (below), and Playwright's browser binary
+  missing (cause 3 in the four-cause e2e entry below). Each presents as a different catastrophe and
+  none of them is: total recovery was under ten minutes once identified, and hours if not. **It is
+  also the leading theory for why a long session died mid-build that day** — worth raising with the
+  founder if it recurs, rather than only working around it.
 - **A HANGING `git push` IS USUALLY A CREDENTIAL DIALOG WAITING ON THE FOUNDER'S DESKTOP, NOT A
   NETWORK PROBLEM (2026-08-11 — cost ~10 minutes across two timeouts).** `git push` produced NO
   output and hit a 3-minute and then a 7-minute timeout, while `git ls-remote --heads origin`
@@ -408,32 +402,39 @@ in the sections below.
   `node-compile-cache` corruption below — clearing that does not help. **Use `pnpm exec turbo
   run test --concurrency=1`.** Never read a parallel-run failure as a real one. The same
   applies to `typecheck` and `build` (exit code **134** = SIGABRT is this, not a type error).
-- **THE FULL E2E SUITE OOMs THE `pnpm dev` SERVER on this host, and the fix is to run it the
-  way CI does (2026-08-09).** Symptom: 49/49 fail, every one `page.goto: net::
-  ERR_CONNECTION_REFUSED`, with `FATAL ERROR: ... JavaScript heap out of memory` in the
-  `[WebServer]` lines — the dev server never came up, or died partway (a partial run is the
-  same cause: tests pass until it dies, then everything after fails). Clearing
-  `%TEMP%\node-compile-cache` does NOT fix it. **`CI=true pnpm --filter web exec playwright
-  test` does** — that serves the PREBUILT app (`pnpm start`) instead of JIT-compiling routes,
-  which is both far lighter on memory and the STRICTER configuration (5s expect, 30s test,
-  retries 1). Build first. Generalises the existing sign-in rule: **all-tests-fail-at-connection
-  is an infrastructure symptom, never a code one** — read the `[WebServer]` output before
-  suspecting your diff.
-- **EVERY e2e test failing at sign-in ("Sign in" stuck on `Working…`) is an INFRASTRUCTURE
-  symptom, never a code one.** Two causes, both hit on 2026-08-06, and the wasted hour came
-  from theorising instead of measuring:
-  1. **A stale dev server.** The local Playwright config REUSES whatever is already on
-     :3000. One left over from a session three days earlier was silently serving every run.
-     `netstat -ano | grep :3000` then `Get-CimInstance Win32_Process -Filter "ProcessId=N"`
-     shows its **CreationDate** — if it predates your work, kill it and let Playwright start
-     a fresh one.
-  2. **Kong's stale auth route after `db:reset`** (the gotcha below). `docker restart
-     supabase_kong_...` must come AFTER the reset, not before — resetting recreates the auth
-     container and re-staleness the route.
-  **Measure first:** `curl -X POST "$SUPABASE_URL/auth/v1/token?grant_type=password" -H
-  "apikey: $ANON" -d '{"email":"owner@demo.local","password":"password123"}'` — 502 is Kong,
-  400 means the seed did not run, 200 means auth is fine and the problem is the app server.
-  Working order: `db:reset` → restart Kong → `seed` → curl says 200 → run.
+- **THE WHOLE E2E SUITE FAILING IS ALWAYS INFRASTRUCTURE, NEVER YOUR DIFF — and there are FOUR
+  causes that look identical at the summary line.** (Merged 2026-08-11 from three separate entries;
+  they kept being written as if each were the only one, which is exactly what makes the summary
+  line misleading.) **READ THE PER-TEST ERROR FIRST — it names which of the four this is, and only
+  the first two are worth any worry:**
+  1. **`ERR_CONNECTION_REFUSED` + `FATAL ERROR: ... JavaScript heap out of memory` in the
+     `[WebServer]` lines (2026-08-09)** — the full suite OOMs the `pnpm dev` server. A PARTIAL run
+     is the same cause: tests pass until it dies, then everything after fails. Clearing
+     `%TEMP%\node-compile-cache` does NOT help. **Fix: run it the way CI does —
+     `CI=true pnpm --filter web exec playwright test`, having built first.** That serves the
+     PREBUILT app (`pnpm start`) instead of JIT-compiling routes: far lighter on memory, and the
+     STRICTER config (5s expect, 30s test, retries 1).
+  2. **Stuck on `Working…` at sign-in (2026-08-06)** — auth, two sub-causes. **(a) A stale dev
+     server**: the local Playwright config REUSES whatever is already on :3000, and one left from a
+     session three days earlier silently served every run. `netstat -ano | grep :3000` then
+     `Get-CimInstance Win32_Process -Filter "ProcessId=N"` shows its **CreationDate**; if it
+     predates your work, kill it. **(b) Kong's stale auth route after `db:reset`** —
+     `docker restart supabase_kong_...` must come AFTER the reset, since resetting recreates the
+     auth container and re-stales the route.
+  3. **`browserType.launch: Executable doesn't exist at …\ms-playwright\chromium_headless_shell-…`
+     (2026-08-11)** — the browser binary is simply not installed. The app builds, the server
+     starts, the seed succeeds. **Fix: `pnpm --filter web exec playwright install chromium`.**
+  4. **Docker not actually running** — see the Docker entries above; a dead or wrong-mode engine
+     takes the database with it.
+  **Measure, don't theorise** (the 2026-08-06 lesson cost an hour): `curl -X POST
+  "$SUPABASE_URL/auth/v1/token?grant_type=password" -H "apikey: $ANON" -d
+  '{"email":"owner@demo.local","password":"password123"}'` — 502 is Kong, 400 means the seed did
+  not run, 200 means auth is fine and the problem is the app server. **Working order: `db:reset` →
+  restart Kong → `seed` → curl says 200 → build → run.**
+  **And do NOT pipe the run through `Select-Object -Last N` / `tail`** — it truncates away the
+  per-test error (the only thing that distinguishes the four) and leaves a trailing list of test
+  names that reads as a mysterious mass failure. Redirect to a file and grep it; the same rule
+  already stated below for exit codes applies to diagnosing causes.
 - **Do NOT edit app source while the e2e suite is running** (the local config serves
   `pnpm dev`, so an edit lands mid-run on a half-compiled app). Editing `docs/*.md` is safe.
   Related: piping the run through `| tail -N` swallows its exit code, so a failing suite

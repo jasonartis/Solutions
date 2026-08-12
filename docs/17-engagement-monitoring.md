@@ -952,12 +952,20 @@ the apps-router pages are thin re-export wrappers with no logic of their own):
   original becomes conditional in the copy, and the comment travels intact while the guarantee does
   not.**
 
-  **Build status at this entry:** migration + helper committed but **NOT YET APPLIED ANYWHERE**;
-  both tables declared in `data-browser-modules.ts` (a hard blocker — Tier 1 of
+  **Build status at the close of 2026-08-11:** migration **APPLIED LOCALLY AND VERIFIED LIVE**, not
+  merely written; both tables declared in `data-browser-modules.ts` (a hard blocker — Tier 1 of
   `data-browser-coverage.test.ts` fails on any undeclared `auth.users` FK); the
-  `platform.activity-events-prune` worker job written and scheduled 04:35. **Still owed: the RLS test
-  block, the ~45 call sites, live verification, and a prod-verify script.** A confirmed-Fable
-  adversarial review was commissioned 2026-08-11 per the model-choice rule (a genuinely novel write
+  `platform.activity-events-prune` worker job written and scheduled 04:35.
+  **Verification: `scripts/verify-activity-capture.mts` 53/53 — exercised AS REAL USERS THROUGH
+  POSTGREST, which is the only layer that matters given `authenticated` reaches the table directly;
+  db 121/121 run directly (a `FULL TURBO` result after a migration is a cached replay); typecheck
+  9/9; build clean; e2e 51/51, cleaner than the previous recorded run of 50/51.**
+  **Still owed: the RLS test block** (port the verifier's assertions — it IS the spec — plus a
+  fixture for the one case it cannot cover, an org member with NO `module_roles` row for the module,
+  whose `actor_grants` must be an empty array)**, the ~45 call sites, a prod-verify script** (which
+  must FAIL until real activity lands on prod, since capture failures are silent by founder decision
+  and phase 2 has no honesty badge)**, and the prod deploy.** A confirmed-Fable
+  adversarial review ran 2026-08-11 per the model-choice rule (a genuinely novel write
   shape — ~45 caller-authenticated inserts, where phase 1 had no user-facing write path at all).
 
 - **2026-08-09 (build session) — PHASE 3 BUILT. No migration.** `/console/engagement`
