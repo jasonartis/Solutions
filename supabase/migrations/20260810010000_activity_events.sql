@@ -328,7 +328,65 @@ create table public.activity_events (
   -- WHEN. Server-stamped; there is no client-supplied value anywhere in this row
   -- except org_id, module_key, action, scope_ref and dedupe_key, each of which
   -- the guard validates.
-  occurred_at timestamptz not null default now()
+  occurred_at timestamptz not null default now(),
+
+  -- -------------------------------------------------------------------------
+  -- THE BOUNDS ON FREE TEXT — added 2026-08-11 from the adversarial review's
+  -- highest finding, and the reasoning is worth keeping because the defect was
+  -- invisible from the app side.
+  --
+  -- THE ATTACK. `activity_rollup` is keyed on `action` and is NEVER PRUNED. Any
+  -- ACTIVE MEMBER of any org can POST to /rest/v1/activity_events directly,
+  -- bypassing activity.ts's typed union entirely — that is this table's own
+  -- stated premise, not a hypothetical. So without these constraints one
+  -- ordinary member could mint unlimited PERMANENT rollup rows by sending a
+  -- fresh random `action` each time (`crypto.randomUUID()` is the obvious
+  -- shape), each row multi-megabyte if they chose, since `text` is unbounded.
+  -- Nothing on the platform rate-limits that path and the pruner would never
+  -- reclaim any of it.
+  --
+  -- WHY THE CONSTRAINT IS ON SHAPE RATHER THAN ON MEMBERSHIP OF THE VOCABULARY.
+  -- A CHECK listing the ~45 known actions would close this completely — and
+  -- would break founder decision 1 outright, which requires that adding an
+  -- action (page views were the named example) cost one line of TypeScript and
+  -- NO MIGRATION. So `action` stays open to anything that LOOKS like the
+  -- convention documented in activity.ts (`<noun>.<past-tense-verb>`), which
+  -- costs a new action nothing while rejecting uuids (digits and hyphens),
+  -- prose, and blobs. The cardinality left reachable is bounded by what a
+  -- human-plausible identifier space allows rather than by 2^128.
+  --
+  -- `module_key` GETS THE STRICTER TREATMENT — a closed set — because unlike an
+  -- action, a new module cannot appear without a migration anyway (its tables,
+  -- its policies, its manifest), so pinning it here costs nothing that was ever
+  -- free. NOTE THIS IS *NOT* AN ENTITLEMENT CHECK AND MUST NOT BECOME ONE: the
+  -- review proposed verifying `org_modules`, and that was checked and rejected
+  -- against the live schema, because `org_modules` GATES NO RLS ANYWHERE on this
+  -- platform — module access runs off `module_roles`/`is_org_admin`. A guard
+  -- stricter than the modules themselves would silently refuse activity for
+  -- actions that genuinely succeeded, and by founder decision 3 that refusal is
+  -- SWALLOWED — so the failure mode would be invisible missing data, which is
+  -- the one outcome this whole feature exists to prevent.
+  --
+  -- FK-ACTION-SAFE, RE-DERIVED RATHER THAN ASSUMED, as this file demands of
+  -- every addition: a CHECK is re-evaluated on the real UPDATE Postgres performs
+  -- for `scope_ref`'s `ON DELETE SET NULL`. Every clause below names ONLY
+  -- `module_key`, `action` or `dedupe_key` — never `scope_ref` — and all three
+  -- are immutable after insert, so a row that satisfied these at insert still
+  -- satisfies them when an FK action nulls its scope. Deleting a scope node can
+  -- therefore never be blocked by these. A future clause naming `scope_ref`
+  -- would make every scope node this log has touched permanently undeletable.
+  constraint activity_events_module_key_known check (
+    module_key in (
+      'classroom', 'nail-salon', 'matchmaking',
+      'speed-dating', 'synagogue-schedules', 'visual-messaging'
+    )
+  ),
+  constraint activity_events_action_shape check (
+    action ~ '^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$' and char_length(action) <= 60
+  ),
+  constraint activity_events_dedupe_key_bounded check (
+    dedupe_key is null or char_length(dedupe_key) <= 200
+  )
 );
 
 -- Partial, so the overwhelming majority of rows (dedupe_key null) carry no
@@ -349,11 +407,62 @@ create index activity_events_occurred_idx on public.activity_events (occurred_at
 -- activity_rollup — the PERMANENT summary (founder decision 2, 2026-08-10:
 -- 90 days raw + a tally that NEVER expires).
 --
--- KEYED (user_id, org_id, module_key), which is the decision that makes phase 2
--- worth building. A rollup keyed only on user_id — phase 1's shape — would throw
--- away exactly the org and module signal this phase exists to capture: it could
--- say "Dana is active" but never "Dana is active IN YOUR SALON", and the second
--- is the founder's actual question.
+-- KEYED (user_id, org_id, module_key, action), which is the decision that makes
+-- phase 2 worth building. A rollup keyed only on user_id — phase 1's shape —
+-- would throw away exactly the org and module signal this phase exists to
+-- capture: it could say "Dana is active" but never "Dana is active IN YOUR
+-- SALON", and the second is the founder's actual question.
+--
+-- WHY `action` IS IN THE KEY, added 2026-08-11 after the founder's own stated
+-- requirement made the absence of it a defect. Two independent reasons, and the
+-- first is the one that matters:
+--
+--   1. SUBTRACTING AN ACTION HAS TO WORK BACKWARDS, NOT JUST FORWARDS. Founder
+--      ask, 2026-08-10 and restated 2026-08-11: "make it flexible in that should
+--      a particular action later be deemed as if they are not active, it's
+--      relatively easy to add or subtract the action from what is considered
+--      active." ADDING was already one line in activity.ts with no migration.
+--      SUBTRACTING was not, and could not be: `observed_actions` was a single
+--      running total that never expires, so an action removed from the list
+--      stopped being recorded but every occurrence already counted stayed baked
+--      into the permanent number FOREVER, unrecoverably, because the row did not
+--      remember what it was made of. With `action` in the key, "this no longer
+--      counts as active" becomes "do not sum that row" — applied retroactively
+--      over all history, at read time, with no migration and no data loss.
+--   2. IT KEEPS THE REPORTING TREE EXPANDABLE PAST 90 DAYS. Founder decision,
+--      recollected 2026-08-11: the console is an expandable tree — an org total
+--      that opens into per-person, per-position and per-action detail. Every
+--      other level of that tree survives forever on this table (per-person is
+--      the key; per-position is a read-time join to `module_roles`). Per-ACTION
+--      was the one level that lived only in `activity_events` and therefore
+--      evaporated at the 90-day prune, so "Demo Salon — 200 actions" would stay
+--      answerable while "which 200?" silently stopped being.
+--
+-- THE COST, NAMED RATHER THAN DISCOVERED LATER. Two things get slightly worse
+-- and neither is material at this platform's scale:
+--   * ROW COUNT. One permanent row per (person, org, module) becomes one per
+--     action they have ACTUALLY performed. For a caller going through
+--     activity.ts that is bounded by the module's vocabulary — at most 13
+--     (classroom), 7 (nail-salon), 7 (visual-messaging) — and it is per action
+--     DONE, not per action defined.
+--     **BUT THE TYPESCRIPT UNION IS NOT WHAT BOUNDS IT, AND SAYING SO WAS THIS
+--     FILE'S OWN MISTAKE** (caught by the adversarial review, 2026-08-11). This
+--     table's stated premise is that `authenticated` reaches it through
+--     PostgREST DIRECTLY, bypassing activity.ts entirely — so a bound that only
+--     holds for well-behaved callers is not a bound at all, and it mattered more
+--     here than anywhere because THIS TABLE IS NEVER PRUNED. The real bound is
+--     the CHECK constraints on `activity_events` below: `module_key` is a closed
+--     set, and `action` must match the naming convention and fit in 60
+--     characters. See those constraints for the full reasoning.
+--   * "WHEN DID DANA LAST DO ANYTHING HERE" IS NOW AN AGGREGATE, not a single
+--     row read: `max(last_activity_at)` across her rows for that (org, module).
+--     The founder's verbatim requirement — "even if they did not engage in a
+--     while, we know at least the last time they did" — is still answered
+--     exactly, and `activity_rollup_org_idx` still serves it, but a future
+--     reader writing that query must remember to aggregate rather than assume
+--     one row. Reading a single row now answers the narrower question "when did
+--     they last do THIS action", which is a real question too and is why the
+--     wider one is worth stating here explicitly.
 --
 -- The founder's stated requirement, verbatim in substance (2026-08-10): "Dana
 -- logged in to nail salon 1 year 2 months ago, and Dana logged in to visual chat
@@ -383,16 +492,32 @@ create table public.activity_rollup (
   org_id uuid not null references public.orgs (id) on delete cascade,
   module_key text not null,
 
-  -- The first activity THIS LOG saw for this (person, org, module).
+  -- WHAT THEY DID — in the key, so the permanent tally can be re-summed later
+  -- under a changed definition of "active". See the header. Free text and
+  -- uncurated for exactly the same reason as `activity_events.action`: the
+  -- vocabulary is TypeScript, so an action retired from the list keeps its
+  -- meaning in rows already written rather than becoming unreadable.
+  action text not null,
+
+  -- The first time THIS LOG saw this person perform THIS action here.
   first_observed_at timestamptz not null,
 
   -- The field the outreach question actually asks for, and the one that must
-  -- survive forever. "No row" means "has never done anything here", which is a
-  -- cleaner answer than a row with a null timestamp.
+  -- survive forever. "No row" means "has never done this here", and the absence
+  -- of ANY row for a (person, org, module) means "has never done anything here"
+  -- — which is a cleaner answer than a row with a null timestamp.
+  --
+  -- READ THE HEADER BEFORE QUERYING IT. Since `action` joined the key, "when did
+  -- they last do ANYTHING in this org and module" is `max(last_activity_at)`
+  -- across their rows, not a single row read. A query that forgets to aggregate
+  -- gets one arbitrary action's recency and will silently under-report how
+  -- recently somebody was active — which is the direction that suppresses an
+  -- outreach signal rather than raising a false one, and so is the direction
+  -- nobody notices.
   last_activity_at timestamptz not null,
 
-  -- Actions counted since `observed_since`. Never a lifetime total, and named so
-  -- that it cannot be misread as one.
+  -- Occurrences of THIS action counted since `observed_since`. Never a lifetime
+  -- total, and named so that it cannot be misread as one.
   --
   -- DELIBERATELY NO DEFAULT. The trigger below always supplies 1 on insert and
   -- only ever increments, so the CHECK can assert `> 0` — which makes "a row
@@ -406,7 +531,7 @@ create table public.activity_rollup (
   -- that cannot tell those apart sends the wrong email.
   observed_since timestamptz not null default now(),
 
-  primary key (user_id, org_id, module_key),
+  primary key (user_id, org_id, module_key, action),
 
   -- ROW COHERENCE, made structural rather than left as prose.
   --
@@ -462,10 +587,18 @@ alter table public.activity_rollup enable row level security;
 -- enclosing statement to the 120-second cluster `statement_timeout` and takes
 -- the sign-in down with it, so 50ms is right there. This function runs in its
 -- own statement, in the user's own request, where the only casualty of a wait is
--- that one request's latency — and 50ms would be actively harmful, because the
--- rollup upsert genuinely can contend when one person acts twice in quick
--- succession, and a spuriously failed capture is a silently missing row. One
--- second bounds the request without manufacturing losses.
+-- that one request's latency — and 50ms would be actively harmful, because
+-- capture can genuinely contend, and a spuriously failed capture is a silently
+-- missing row. One second bounds the request without manufacturing losses.
+--
+-- THE SAME SET IS REPEATED ON `activity_rollup_apply()` BELOW, AND IT IS NOT
+-- REDUNDANT — the omission there was a real defect in this file's first draft
+-- (corrected 2026-08-11). A function-level SET is restored when THAT function
+-- exits, so this one bounds only the guard's own work; the upsert that actually
+-- contends lives in the AFTER trigger and needs its own. Phase 1 needed just one
+-- because `capture_login()` was a single function doing both jobs. Anything
+-- added to this file later that takes a lock in a THIRD function needs its own
+-- SET too — this is not a property the table inherits.
 -- ---------------------------------------------------------------------------
 create function public.activity_event_guard()
 returns trigger
@@ -501,11 +634,17 @@ begin
     raise exception 'activity: org_id is the derived-scope placeholder — this table derives nothing, pass the real org id';
   end if;
 
-  if new.module_key is null or btrim(new.module_key) = '' then
+  -- `!~ '\S'` RATHER THAN `btrim(...) = ''`, THROUGHOUT THIS FUNCTION — the
+  -- single-argument `btrim` strips the SPACE CHARACTER ONLY, not tabs, newlines
+  -- or any other whitespace (adversarial review, 2026-08-11). The three checks
+  -- here all exist to catch input that is empty in the sense a human means, and
+  -- the ASCII-space-only version missed every non-space case. `!~ '\S'` reads as
+  -- "contains no non-whitespace character", which is the actual intent.
+  if new.module_key is null or new.module_key !~ '\S' then
     raise exception 'activity: module_key is required';
   end if;
 
-  if new.action is null or btrim(new.action) = '' then
+  if new.action is null or new.action !~ '\S' then
     raise exception 'activity: action is required';
   end if;
 
@@ -515,7 +654,13 @@ begin
   -- silently, since the losers are swallowed as ordinary duplicates. A caller
   -- building a key from an id that turned out undefined produces exactly that
   -- string. Normalise it to null, which means "record every occurrence".
-  if new.dedupe_key is not null and btrim(new.dedupe_key) = '' then
+  -- THIS IS THE ONE WHERE THE btrim GAP ACTUALLY BIT. A tab-only dedupe key is
+  -- non-empty to `btrim`, so it survived normalisation, and being non-null it
+  -- engages the partial unique index — collapsing EVERY row for that
+  -- (user, org, module, action) into one, permanently and silently, since the
+  -- losers are swallowed as ordinary duplicates. Exactly the failure this check
+  -- was written to prevent, reached by the input it failed to recognise.
+  if new.dedupe_key is not null and new.dedupe_key !~ '\S' then
     new.dedupe_key := null;
   end if;
 
@@ -608,23 +753,47 @@ revoke execute on function public.activity_event_guard() from public, anon, auth
 -- reconcile. The cost is the same cost phase 1 accepted — a capture failure is
 -- SILENT — and it is paid for the same way: the console renders a "newest
 -- recorded activity" honesty badge, with a test that asserts a real timestamp.
+--
+-- THE `lock_timeout` LIVES HERE, NOT ONLY ON THE GUARD, AND THE REASON IS THE
+-- WHOLE POINT OF SETTING IT AT ALL (corrected 2026-08-11 — the first draft put
+-- it only on the guard, which is the function that does NOT contend).
+--
+-- A function-level SET is scoped to the function and RESTORED WHEN THAT FUNCTION
+-- EXITS — stated in as many words by phase 1's own header
+-- (20260809010000_login_events.sql), where the equivalent 50ms sat on
+-- `capture_login()`, a SINGLE function containing both the event insert and the
+-- rollup upsert, so one SET covered the contending statement. Phase 2 splits
+-- that work across two trigger functions. The guard runs BEFORE INSERT and
+-- stamps identity — it barely contends. THIS function runs AFTER INSERT and
+-- holds the `on conflict do update`, which is the operation that genuinely
+-- contends when one person acts twice in quick succession. Without a SET here
+-- the upsert would run at the session default (unbounded on Supabase, capped
+-- only by the 120s cluster statement_timeout), so the "one second bounds the
+-- request" the guard's header promises would simply not have been true of the
+-- statement it was promised about.
+--
+-- One second rather than phase 1's 50ms, for the reason the guard's header
+-- gives: this runs in the user's own request, where the only casualty of a wait
+-- is that request's latency, and 50ms would manufacture spurious capture
+-- failures — a silently missing row — out of ordinary contention.
 -- ---------------------------------------------------------------------------
 create function public.activity_rollup_apply()
 returns trigger
 language plpgsql
 security definer
 set search_path = public
+set lock_timeout = '1s'
 as $$
 begin
   insert into public.activity_rollup as r (
-    user_id, org_id, module_key,
+    user_id, org_id, module_key, action,
     first_observed_at, last_activity_at, observed_actions, observed_since
   )
   values (
-    new.user_id, new.org_id, new.module_key,
+    new.user_id, new.org_id, new.module_key, new.action,
     new.occurred_at, new.occurred_at, 1, new.occurred_at
   )
-  on conflict (user_id, org_id, module_key) do update
+  on conflict (user_id, org_id, module_key, action) do update
     set first_observed_at = least(r.first_observed_at, excluded.first_observed_at),
         -- `greatest`, not `excluded`, so the column is MONOTONIC. Nothing
         -- observed today can reorder what already happened, and a clock skew or

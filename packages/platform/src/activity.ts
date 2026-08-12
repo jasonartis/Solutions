@@ -23,6 +23,17 @@
 //   * a typo cannot invent a silent new category, because `ActivityAction` is a
 //     union derived from this object and `pnpm typecheck` checks every call site.
 //
+// AND SUBTRACTING NOW WORKS BACKWARDS AS WELL AS FORWARDS — the founder's ask of
+// 2026-08-11, which the first draft only half-delivered. Adding was always cheap;
+// removing an action used to stop future recording while every occurrence already
+// counted stayed baked into the permanent tally forever, because
+// `activity_rollup` held one running total per (person, org, module) and did not
+// remember what it was made of. `action` is now part of that table's primary key,
+// so "this no longer counts as active" is a read-time decision — drop that row
+// from the sum — applied over ALL history, with no migration and nothing
+// destroyed. Reasoning in full: the rollup section of
+// supabase/migrations/20260810010000_activity_events.sql.
+//
 // AND THE EXCLUSIONS ARE RECORDED BESIDE THE INCLUSIONS, ON PURPOSE. A list of
 // what counts tells the next reader nothing about what was considered and
 // rejected — so the same argument gets re-run, or worse, a previously-rejected
@@ -108,9 +119,21 @@ export const ACTIVITY_ACTIONS = {
   'visual-messaging': [
     'drawing.replied', // the core "posted content" action
     'conversation.created',
+    // The five moderator actions, all INCLUDED — founder decision, 2026-08-11:
+    // "even small actions still mean they are active". Moderating is the way a
+    // moderator uses this module; excluding them would mean the only people who
+    // ever look engaged in visual-messaging are the ones who draw.
     'flag.reviewed',
     'layer.tombstoned',
     'layer.restored',
+    // `setBranchFrozen` takes a boolean, so it is TWO actions here rather than
+    // one — same shape as tombstoned/restored above, and for the same reason:
+    // freezing a runaway thread and releasing it are different decisions, and a
+    // single `branch.freeze_toggled` would record neither. It was in NEITHER
+    // list in this file's first draft — not included, not excluded — which is
+    // exactly the silent omission ACTIVITY_EXCLUDED exists to make impossible.
+    'branch.frozen',
+    'branch.unfrozen',
   ],
 } as const satisfies Record<ActivityModuleKey, readonly string[]>
 
@@ -204,10 +227,22 @@ export const ACTIVITY_EXCLUDED: ReadonlyArray<{
     what: 'fileReport',
     why:
       'A SAFETY REPORT, excluded on privacy grounds rather than because it is noise (founder decision 1, ' +
-      '2026-08-10). It is a real, deliberate act — but "who filed a harassment report and when" has ' +
-      'near-zero outreach value and real sensitivity, and it does not belong in a table browsed to decide ' +
-      'who to email. If safety reporting ever needs measuring, it wants its own surface and its own ' +
-      'disclosure decision.',
+      '2026-08-10; re-confirmed with a stronger reason 2026-08-11). It is a real, deliberate act — but ' +
+      '"who filed a harassment report and when" has near-zero outreach value and real sensitivity, and it ' +
+      'does not belong in a table browsed in bulk to decide who to email. ' +
+      'THE DECIDING ARGUMENT IS A PLATFORM ONE, NOT A SPEED-DATING ONE (founder, 2026-08-11): this ' +
+      'vocabulary has to generalise across all six modules and every module built after them, and safety ' +
+      'reporting has NO parallel in the other five. Carving a per-module privacy exception into a shared ' +
+      'engagement log means every future module must re-derive whether it has one too — so the rule is ' +
+      'that this log records ordinary use, and anything needing a disclosure decision stays out of it. ' +
+      'NOTE THE ASYMMETRY THIS CREATES, DELIBERATELY: the STAFF side, `reviewReport`, IS recorded as ' +
+      'report.reviewed. Triaging a report is a job someone was assigned; filing one is something that ' +
+      'happened TO them. ' +
+      'AND NOTE WHAT IT COSTS, so the console author knows rather than discovers: somebody whose only act ' +
+      'in a month was reporting harassment reads here as fully disengaged, so an ordinary ' +
+      '"we miss you, come back" message would go to exactly the person who had a bad experience and told ' +
+      'you. That blind spot belongs to whatever builds outreach on top of this table; it cannot be fixed ' +
+      'by recording the report.',
   },
 ]
 

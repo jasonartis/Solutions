@@ -9,6 +9,7 @@ import { runRetentionSweep } from './jobs/classroom-retention'
 import { runOrchestratorTick } from './jobs/speed-dating-orchestrator'
 import { runRescoreTick } from './jobs/matchmaking-rescore'
 import { runLoginEventsPrune } from './jobs/login-events-prune'
+import { runActivityEventsPrune } from './jobs/activity-events-prune'
 
 // import.meta.dirname is undefined under tsx — derive it from the module URL.
 const here = dirname(fileURLToPath(import.meta.url))
@@ -149,6 +150,22 @@ async function main() {
   await boss.schedule('platform.login-events-prune', '30 4 * * *')
   await boss.work('platform.login-events-prune', async () => {
     await runLoginEventsPrune(connectionString)
+  })
+
+  // Engagement monitoring phase 2 (docs/17, founder decision 2 of 2026-08-10):
+  // the same 90-day raw window, on `activity_events`. 04:35 — five minutes after
+  // the login prune, so the two never contend and a log line makes it obvious
+  // which one is speaking. Same direct-connection reasoning as above; see the
+  // job's own header.
+  //
+  // LIKE PHASE 1's, THIS IS NOT RUNNING ON PROD YET (docs/10's `pnpm worker:prod`
+  // stopgap is still the only production execution path). Raw events accumulate
+  // past 90 days until it does. The function is idempotent and range-based, so
+  // the first real run simply catches up rather than needing a backfill.
+  await boss.createQueue('platform.activity-events-prune')
+  await boss.schedule('platform.activity-events-prune', '35 4 * * *')
+  await boss.work('platform.activity-events-prune', async () => {
+    await runActivityEventsPrune(connectionString)
   })
 
   const admin = makeAdminClient()

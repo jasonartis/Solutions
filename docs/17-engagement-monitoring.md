@@ -841,6 +841,125 @@ the apps-router pages are thin re-export wrappers with no logic of their own):
 
 ## Decisions log (dated)
 
+- **2026-08-11 — PHASE 2 RECOVERED AFTER A LOST SESSION, and seven decisions reconstructed to four.**
+  **Read this entry before trusting any "founder decision N, 2026-08-10" reference in the phase 2
+  files** — the numbering in those headers points at a record that does not exist.
+
+  **What happened.** An Opus session on 2026-08-10 obtained founder approval to build phase 2 and
+  wrote two substantial files — `supabase/migrations/20260810010000_activity_events.sql` and
+  `packages/platform/src/activity.ts` — then ended abruptly. Its transcript is gone and there is no
+  session log for it in `D:\Jason_prompts\sessions`. Both files were sitting UNTRACKED in the working
+  tree when the next session opened; they are now committed (`2f1a0ea`) precisely so a stray reset
+  cannot repeat this. **The migration header asserts "Founder-approved 2026-08-10, seven decisions,
+  all recorded in that file's decisions log" and that was never true** — the commit immediately
+  before it (`e1936fb`) recorded the two 2026-08-10 discussions that produced NO decision, while the
+  ones that did went unwritten. This entry is the repair.
+
+  **The general lesson, which is the expensive part and belongs to the platform rather than to this
+  feature: a decision recorded only inside the artifact it produced is not recorded.** Both files
+  cite decision numbers confidently and neither defines them. A code comment can carry the
+  *reasoning* for a decision; it cannot serve as the *register* of which decisions exist, because
+  nothing enumerates it and nothing notices when an entry is missing. Write the decisions log entry
+  in the same beat as the artifact, not after it.
+
+  **RECOVERED from the two files' headers — believed accurate, reconstructed rather than
+  transcribed:**
+  1. **Decision 1 — the curated action list**, with the explicit rider *"MAKE IT EASY TO CHANGE IT
+     TO INCLUDE MORE MUNDANE ACTIVITY IN THE FUTURE"* (page views named as a maybe). Hence a free-text
+     `action` column, the vocabulary as TypeScript data, and no migration to change it. Includes the
+     per-question-per-day debounce on `answer.saved`, and `fileReport` excluded on privacy grounds.
+  2. **Decision 2 — retention: 90 days raw + a permanent rollup that never expires**, deliberately
+     the same window as phase 1 so there is one number to remember. Verbatim in substance: *"Dana
+     logged in to nail salon 1 year 2 months ago … should be stored so even if they did not engage in
+     a while, we know at least the last time they did."*
+  3. **Decision 3 — a failed activity write must never break the real action, and must surface
+     NOTHING to the actor.** Somebody booking a nail appointment has no "did this get logged" moment.
+  4. **(Unnumbered in the files) — reads are SUPERADMIN-ONLY for now.** Hierarchy-governed reads are
+     a later phase with its own founder decision and its own adversarial review.
+
+  **LOST, and recorded as lost rather than guessed: decisions 5, 6 and 7.** Nothing in the repo
+  names them. §12.5's four open questions map cleanly onto 1–3 plus the moderator/staff-bucket
+  question below, so the residue is genuinely unknown. **Do not infer them from the code** — the code
+  is what a single unreviewed session wrote, and treating it as evidence of founder intent is how a
+  draft becomes a decision by default.
+
+  **DECIDED 2026-08-11, with the founder, to close the gaps:**
+  5. **ONE ENGAGEMENT BUCKET — staff and member actions are counted together.** The question was
+     whether a professor grading and a student submitting should be distinguishable. **The finding
+     that settled it: the platform has no staff/member concept, and rank cannot supply one.** Checked
+     against `docs/rank-admission-map.md`: a **GA is rank 1, identical to a student**; a
+     **moderator is rank 0, identical to a member**; a **matchmaker is rank 0, identical to a
+     single**; in synagogue-schedules the *maker* — the only writer in the module — is rank 0, same
+     as a viewer. Rank answers "who may manage whose seat", not "who works here", and three of six
+     modules were never rank-mapped at all, so their vocabularies are flat. A real split would need a
+     hand-declared per-module staff list — new platform design, adjacent to the role-clarity-labels
+     item in docs/13. **It is deferred at zero cost because `actor_grants` stamps the actual position
+     names on every row, so any future definition can be applied RETROACTIVELY over all history.**
+     Reinforced by decision 8: the reporting tree expands by position at read time, so the split was
+     never a write-time concern.
+  6. **`fileReport` STAYS EXCLUDED — and the deciding argument is a platform one, not a
+     speed-dating one.** Founder, 2026-08-11: *"the idea here is to generalize these things for all
+     apps. so unless there is potential harrasment parallels to include for the other apps, we are
+     going to avoid it."* Safety reporting has no parallel in the other five modules; carving a
+     per-module privacy exception into a shared engagement log would force every future module to
+     re-derive whether it has one. The rule is therefore: **this log records ordinary use, and
+     anything requiring a disclosure decision stays out of it.** The STAFF side, `reviewReport`, is
+     recorded — triaging a report is an assigned job; filing one is something that happened *to*
+     someone. **The cost is named rather than discovered: a person whose only act in a month was
+     reporting harassment reads here as fully disengaged**, so a naive "we miss you" message would
+     go to exactly the wrong person. That blind spot belongs to whatever builds outreach on this
+     table and cannot be fixed by recording the report.
+  7. **`setBranchFrozen` IS RECORDED** (`branch.frozen` / `branch.unfrozen` — two actions, since the
+     action takes a boolean and freezing a thread and releasing it are different decisions). Founder,
+     2026-08-11: *"even small actions still mean they are active"*, with the rider that it must stay
+     easy to add or subtract an action later. **It had been in NEITHER list in the draft** — not
+     included, not excluded — which is precisely the silent omission `ACTIVITY_EXCLUDED` exists to
+     make impossible, and it is why that record earns its keep.
+  8. **THE CONSOLE IS AN EXPANDABLE TREE — recollected by the founder 2026-08-11, and marked as
+     recollected rather than transcribed**, since it is very likely one of the lost decisions but
+     cannot be confirmed against any record. Shape: an org total (*"Demo Salon — 200 actions last
+     month"*) that opens into per-person, per-position and per-action detail. **Verified against the
+     drafted schema: it needs no additional column.** Per-person is the rollup key; per-position is a
+     read-time join to `module_roles`; per-action is decision 9.
+  9. **`activity_rollup` IS NOW KEYED `(user_id, org_id, module_key, action)`** — changed 2026-08-11,
+     before the migration had ever been applied anywhere. Two reasons, and the first is what makes it
+     a defect rather than a refinement: **decision 1's "easy to add or subtract an action" was only
+     half-delivered.** Adding was one line; subtracting was impossible backwards, because
+     `observed_actions` was a single permanent running total that did not remember what it was made
+     of, so an action retired from the list kept every occurrence it had already contributed, forever.
+     With `action` in the key, "this no longer counts as active" becomes a read-time re-sum over all
+     history. Second, it stops the tree's per-action level expiring at the 90-day prune. Cost, both
+     accepted: up to one permanent row per action actually performed (bounded by each module's
+     vocabulary — at most 13, classroom), and *"when did they last do anything here"* becomes
+     `max(last_activity_at)` rather than a single row read.
+  10. **PHASE 2 SHIPS CAPTURE-ONLY. No reader this pass.** Capture cannot be backfilled — every day
+      without it is signal permanently lost — whereas a console can be built at any time against data
+      already accumulating. The per-person data browser is the one place phase 2 data surfaces
+      meanwhile (both tables are now declared there). **Consequence to state plainly: until that
+      reader exists, "which orgs have gone quiet" — §1's actual question — is NOT answerable**, and
+      alice, who owns Demo Salon, cannot see her own salon's engagement. Only the superadmin can.
+
+  **A REAL DEFECT FOUND AND FIXED IN THE DRAFT, 2026-08-11 — the `lock_timeout` was on the function
+  that does not contend.** The draft put `set lock_timeout = '1s'` on `activity_event_guard()` (BEFORE
+  INSERT, stamps identity) and nothing on `activity_rollup_apply()` (AFTER INSERT, holds the
+  `on conflict do update` that actually contends). **A function-level SET is restored when that
+  function exits** — stated in as many words by phase 1's own header, where the equivalent 50ms sat on
+  `capture_login()`, a SINGLE function containing both the insert and the upsert. Splitting that work
+  across two trigger functions silently dropped the property. The guard's header meanwhile asserted
+  that the 1s *"bounds the request"* for the rollup upsert, which was false. Fixed by setting it on
+  both, and the file now carries the rule that a third lock-taking function would need its own.
+  **Worth generalising: this is the transplant failure mode — a property that was structural in the
+  original becomes conditional in the copy, and the comment travels intact while the guarantee does
+  not.**
+
+  **Build status at this entry:** migration + helper committed but **NOT YET APPLIED ANYWHERE**;
+  both tables declared in `data-browser-modules.ts` (a hard blocker — Tier 1 of
+  `data-browser-coverage.test.ts` fails on any undeclared `auth.users` FK); the
+  `platform.activity-events-prune` worker job written and scheduled 04:35. **Still owed: the RLS test
+  block, the ~45 call sites, live verification, and a prod-verify script.** A confirmed-Fable
+  adversarial review was commissioned 2026-08-11 per the model-choice rule (a genuinely novel write
+  shape — ~45 caller-authenticated inserts, where phase 1 had no user-facing write path at all).
+
 - **2026-08-09 (build session) — PHASE 3 BUILT. No migration.** `/console/engagement`
   (`apps/web/app/(app)/console/engagement/page.tsx` + `apps/web/lib/engagement.ts`). Sonnet build,
   per docs/17 §8b's own note that phase 3 needs no migration.

@@ -155,6 +155,59 @@ export const platformDataBrowser = declareDataBrowser({
         'counts. NO ROW AT ALL means "never signed in" — which is the cleanest answer to the ' +
         'question this feature exists for, and why absence here is meaningful rather than empty.',
     },
+    {
+      table: 'activity_events',
+      activity: true,
+      label: 'Actions recorded in modules',
+      personColumns: ['user_id'],
+      // NOTE THE CONTRAST WITH THE TWO SECTIONS ABOVE, which is the entire point
+      // of phase 2 rather than an incidental difference. A login has no org, so
+      // `login_events` declares `orgColumn: null` and means it. An ACTION always
+      // happens somewhere, so this table carries a real `org_id` — which is what
+      // lets the browser answer "what did they do in THIS org" instead of only
+      // "are they alive on the platform".
+      orgColumn: 'org_id',
+      orderBy: { column: 'occurred_at', ascending: false },
+      limit: 200,
+      note:
+        'Every meaningful action this person recorded in a module since activity capture began ' +
+        '(docs/17 phase 2, 2026-08-10). DECLARED RATHER THAN OMITTED for the same reason as the ' +
+        'two sections above: it is personal data about its subject and a subject-access request ' +
+        'would have to disclose it. THREE LIMITS A READER MUST KNOW BEFORE READING AN EMPTY ' +
+        'SECTION AS "they have done nothing": raw events are pruned at 90 days once the retention ' +
+        'worker runs against this environment (the permanent summary below is what survives); ' +
+        'capture only began at the 20260810010000 migration, and a log started later cannot cover ' +
+        'the period before it existed; and — the limit with no equivalent in phase 1 — WHAT ' +
+        'COUNTS AS AN ACTION IS A CURATED LIST, not everything a person can do. It lives in ' +
+        'packages/platform/src/activity.ts beside an explicit record of what was considered and ' +
+        'EXCLUDED (page views and other read-triggered writes above all). So this section is a ' +
+        'record of deliberate acts, never a complete history of a person\'s use. Reading it ' +
+        'requires being a superadmin; there is deliberately no self-read arm, so surfacing it ' +
+        'here tells the subject nothing.',
+    },
+    {
+      table: 'activity_rollup',
+      activity: true,
+      label: 'Activity summary per org, module and action (permanent)',
+      personColumns: ['user_id'],
+      orgColumn: 'org_id',
+      orderBy: { column: 'last_activity_at', ascending: false },
+      // One row per (org, module, action) this person has ever performed, so
+      // tens for an active person — bounded by each module's vocabulary in
+      // activity.ts, not unbounded, but far more than login_rollup's single row.
+      limit: 200,
+      note:
+        'The permanent summary that survives the 90-day prune, one row per org per module per ' +
+        'ACTION (docs/17 §6, founder decision 2 of 2026-08-10; keyed on action 2026-08-11 so a ' +
+        'definition of "active" can be revised backwards over history). It answers the founder\'s actual ' +
+        'question — "the last time they did anything in THIS salon" — which the login summary ' +
+        'structurally cannot, because a login names no org. UNLIKE `login_rollup` NOTHING HERE ' +
+        'IS BACKFILLED, and none could be: no activity history existed anywhere on the platform ' +
+        'before this log (docs/17 §3). So every row was born from a real observed event, and ' +
+        '`observed_actions` is honestly named for what it counts rather than claiming a lifetime ' +
+        'total. NO ROW for an org means "has never acted there", which is the outreach answer ' +
+        'rather than a gap.',
+    },
   ],
   omitted: [],
   neverReadable: [],
