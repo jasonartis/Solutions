@@ -520,21 +520,30 @@ in the sections below.
   them stale-seed-state noise, not real bugs (bookings/matches/etc. the first run had already advanced
   past their starting state). **Verify a fix with exactly ONE clean run against freshly reset+seeded
   data, never a second consecutive full run on the same stack.**
-- **PHASE 2's RLS SUITE AND STANDALONE PROBE SCRIPT BOTH SIGN IN AS `grace@demo.local` — AND PHASE 3's
-  E2E SUITE DEPENDS ON HER NEVER HAVING SIGNED IN, ANYWHERE, IN THIS SHARED DATABASE (2026-08-16).**
-  Grace is the seed's *only* scoped nail-salon manager grant (`packages/db/src/seed.ts`), so both
-  `scripts/verify-activity-capture.mts` and the ported `rls.test.ts` phase-2 block need her as a real
+- ~~**PHASE 2's RLS SUITE AND STANDALONE PROBE SCRIPT BOTH SIGN IN AS `grace@demo.local` — AND
+  PHASE 3's E2E SUITE DEPENDS ON HER NEVER HAVING SIGNED IN.**~~ **FIXED 2026-08-20, and it was NOT
+  a flake — it broke CI deterministically, every run.** Grace is the seed's *only* scoped nail-salon
+  manager grant (`packages/db/src/seed.ts`), so `rls.test.ts`'s phase-2 block needs her as a real
   signed-in user to prove a SCOPED `{role, scope_ref}` pair survives the write path — but
   `apps/web/e2e/platform.spec.ts`'s phase-3 engagement test picks her BECAUSE she's an active member
   "this whole e2e suite never signs in as," and asserts she reads "never signed in." A real password
-  sign-in via either script advances her `last_sign_in_at`, which phase 1's capture trigger faithfully
-  records — so running the RLS suite or the probe script before that specific e2e test, with no reset
-  in between, makes it fail for a reason that has nothing to do with a real regression. **Not a bug in
-  either suite — a genuine, pre-existing tension in reusing one seeded user for two different test
-  purposes.** Full verification order that avoids it: `db:reset` → `seed` → e2e (run it BEFORE
-  anything else touches grace) — or, if the RLS suite/probe script already ran first, a plain
-  `db:reset`+`seed` before e2e fixes it (a targeted `delete from login_events/login_rollup where
-  user_id = <grace>` also works and is faster, but only fixes that one run — a full reset is what
+  sign-in advances her `last_sign_in_at`, which phase 1's capture trigger faithfully records. **This
+  looked like it might be environment-specific flakiness — it passed clean in two separate local
+  reproductions before the real mechanism was found** — but `.github/workflows/ci.yml` runs
+  `pnpm --filter @platform/db test` immediately before `pnpm test:e2e` on the SAME database with NO
+  reset in between, so it is 100% deterministic in CI, not a flake at all: the GitHub Actions run for
+  `d653d4d` failed on exactly this test, and reproducing CI's literal step order locally (reset →
+  seed → db test → e2e, no reset) reproduced the failure on demand. **Fixed at the root**: the
+  phase-2 describe block's own `afterAll` now deletes grace's `login_events`/`login_rollup` rows via
+  a raw owner-level connection (both tables are read-only to every api role including the superadmin,
+  so this can't go through the ordinary RLS client) — the suite that dirties her state now cleans it
+  up itself, so no downstream test ever sees the pollution regardless of run order. Verified by
+  reproducing the exact CI sequence locally post-fix: 139/139 db, then 51/51 e2e, no reset between.
+  **`scripts/verify-activity-capture.mts` still signs in as grace with no equivalent cleanup** — it's
+  a standalone script never run by CI, but running it by hand before e2e with no reset in between
+  will still reintroduce this. A `db:reset`+`seed` before e2e fixes it same as it always did (a
+  targeted `delete from login_events/login_rollup where user_id = <grace>` also works and is faster,
+  but only fixes that one run — a full reset is what
   actually restores a clean baseline for everything downstream, including e2e's own well-known
   non-idempotence).
 - **`ON DELETE SET NULL` fires the referencing table's BEFORE UPDATE triggers** — Postgres implements the FK action as a real UPDATE. So an append-only `before update or delete ... raise exception` trigger silently makes every row the table has ever referenced UNDELETABLE (the parent DELETE aborts), including whole orgs via a cascading `org_id`. Enforce append-only with GRANTS instead (no UPDATE/DELETE to api roles → `42501`), which is why `vm_moderation_log` has no such trigger. Found live in the 2026-07-31 view-as review, one review after `set null` had been (correctly) required.

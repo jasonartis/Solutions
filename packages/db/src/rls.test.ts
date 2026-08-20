@@ -3288,6 +3288,30 @@ describe('org-scoped activity (engagement monitoring phase 2, 20260810010000)', 
     // isn't one. Safe to run even if the fixture test never got that far
     // (DELETE on a row that was never inserted is a no-op).
     await owner.from('org_members').delete().eq('org_id', salon).eq('user_id', bobId)
+
+    // CRITICAL: this block's own beforeAll signs in as grace (the seed's
+    // ONLY scoped nail-salon manager grant — needed to prove a SCOPED
+    // {role, scope_ref} pair survives the write path). That real password
+    // sign-in advances her last_sign_in_at, which phase 1's capture trigger
+    // faithfully records into login_events/login_rollup. But
+    // apps/web/e2e/platform.spec.ts's phase-3 engagement test relies on grace
+    // having NEVER signed in anywhere in this shared database ("a real,
+    // active Demo Salon member this whole e2e suite never signs in as") to
+    // prove the "never signed in" reading of an absent rollup row. CI runs
+    // `pnpm --filter @platform/db test` immediately before `pnpm test:e2e`
+    // against the SAME database with no reset in between — so without this
+    // cleanup, this suite deterministically breaks that e2e test on EVERY
+    // run, not just occasionally (discovered 2026-08-20 when it did exactly
+    // that). Both tables are read-only to every api role including the
+    // superadmin (phase 1's whole point), so this can't go through `owner` —
+    // it needs the raw owner-level connection, same as the pruner tests below.
+    const sql = postgres(dbUrl, { prepare: false, max: 1 })
+    try {
+      await sql`delete from public.login_events where user_id = ${graceId}`
+      await sql`delete from public.login_rollup where user_id = ${graceId}`
+    } finally {
+      await sql.end()
+    }
   })
 
   it('CONTROL: a salon worker can record an action, the superadmin reads it, and the rollup counts it BY ACTION', async () => {
