@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { DERIVED_SCOPE_PLACEHOLDER } from '@platform/core'
+import { DERIVED_SCOPE_PLACEHOLDER, recordActivity } from '@platform/core'
 import { createClient } from '@/lib/supabase/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
@@ -42,6 +42,7 @@ export async function uploadExamPaper(
     storage_path: path,
   })
   fail(error, 'Record scan failed')
+  await recordActivity(supabase, { moduleKey: 'classroom', action: 'exam_paper.uploaded', orgSlug })
   revalidatePath(`/o/${orgSlug}/m/classroom/manage/exams/${examId}`)
 }
 
@@ -134,6 +135,7 @@ export async function saveExamScores(
     detail: { problems },
   })
   fail(error, 'Save scores failed')
+  await recordActivity(supabase, { moduleKey: 'classroom', action: 'exam.scores_saved', orgSlug })
   revalidatePath(`/o/${orgSlug}/m/classroom/manage/exams/${examId}`)
 }
 
@@ -158,5 +160,6 @@ export async function publishExamFinal(
     visible: true,
   })
   fail(error, 'Publish final failed')
+  await recordActivity(supabase, { moduleKey: 'classroom', action: 'exam.published', orgSlug })
   revalidatePath(`/o/${orgSlug}/m/classroom/manage/exams/${examId}`)
 }

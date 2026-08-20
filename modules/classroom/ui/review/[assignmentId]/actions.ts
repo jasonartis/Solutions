@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { DERIVED_SCOPE_PLACEHOLDER } from '@platform/core'
+import { DERIVED_SCOPE_PLACEHOLDER, recordActivity } from '@platform/core'
 import { createClient } from '@/lib/supabase/server'
 
 // Reviewer actions. RLS enforces that only the assigned reviewer may write
@@ -21,6 +21,7 @@ export async function submitPeerGrade(orgSlug: string, assignmentId: string, for
     .update({ grade, grade_submitted_at: new Date().toISOString() })
     .eq('id', assignmentId)
   fail(error, 'Submit grade failed')
+  await recordActivity(supabase, { moduleKey: 'classroom', action: 'peer_grade.submitted', orgSlug })
   revalidatePath(`/o/${orgSlug}/m/classroom/review/${assignmentId}`)
 }
 
@@ -46,5 +47,6 @@ export async function addReviewComment(
     body,
   })
   fail(error, 'Add comment failed')
+  await recordActivity(supabase, { moduleKey: 'classroom', action: 'review.commented', orgSlug })
   revalidatePath(`/o/${orgSlug}/m/classroom/review/${assignmentId}`)
 }

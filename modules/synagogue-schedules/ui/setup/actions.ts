@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { recordActivity } from '@platform/core'
 import { dayTypeSchema, lineRuleSchema, zmanNameSchema } from '@modules/synagogue-schedules'
 import { createClient } from '@/lib/supabase/server'
 
@@ -149,6 +150,11 @@ export async function createLine(
     rule,
   })
   fail(error, 'Create line failed')
+  await recordActivity(supabase, {
+    moduleKey: 'synagogue-schedules',
+    action: 'line.created',
+    orgId,
+  })
   revalidatePath(`/o/${orgSlug}/m/synagogue-schedules/setup`)
 }
 
@@ -167,6 +173,11 @@ export async function publishWeek(orgId: string, orgSlug: string, formData: Form
     .from('syn_published_weeks')
     .upsert({ org_id: orgId, week_start: weekStart, published: true })
   fail(error, 'Publish failed')
+  await recordActivity(supabase, {
+    moduleKey: 'synagogue-schedules',
+    action: 'week.published',
+    orgId,
+  })
   revalidatePath(`/o/${orgSlug}/m/synagogue-schedules/setup`)
 }
 
@@ -200,5 +211,10 @@ export async function createOverride(
     text_hebrew: String(formData.get('textHebrew') ?? '').trim() || null,
   })
   fail(error, 'Create override failed')
+  await recordActivity(supabase, {
+    moduleKey: 'synagogue-schedules',
+    action: 'override.created',
+    orgId,
+  })
   revalidatePath(`/o/${orgSlug}/m/synagogue-schedules/setup`)
 }

@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { DERIVED_SCOPE_PLACEHOLDER } from '@platform/core'
+import { DERIVED_SCOPE_PLACEHOLDER, recordActivity } from '@platform/core'
 import { createClient } from '@/lib/supabase/server'
 
 // Professor/staff actions. RLS (cls_can_manage) is the enforcement layer;
@@ -166,6 +166,7 @@ export async function postAnnouncement(orgSlug: string, classId: string, formDat
     body,
   })
   fail(error, 'Post announcement failed')
+  await recordActivity(supabase, { moduleKey: 'classroom', action: 'announcement.posted', orgSlug })
   revalidatePath(`/o/${orgSlug}/m/classroom/manage`)
   revalidatePath(`/o/${orgSlug}/m/classroom`)
 }
@@ -183,6 +184,7 @@ export async function createHomework(orgSlug: string, classId: string, formData:
     due_at: dueAt ? new Date(dueAt).toISOString() : null,
   })
   fail(error, 'Create homework failed')
+  await recordActivity(supabase, { moduleKey: 'classroom', action: 'homework.created', orgSlug })
   revalidatePath(`/o/${orgSlug}/m/classroom/manage`)
   revalidatePath(`/o/${orgSlug}/m/classroom`)
 }
@@ -214,6 +216,7 @@ export async function createExam(orgSlug: string, classId: string, formData: For
     structure,
   })
   fail(error, 'Create exam failed')
+  await recordActivity(supabase, { moduleKey: 'classroom', action: 'exam.created', orgSlug })
   revalidatePath(`/o/${orgSlug}/m/classroom/manage`)
 }
 
@@ -228,6 +231,7 @@ export async function createSurvey(orgSlug: string, classId: string, formData: F
     question,
   })
   fail(error, 'Create survey failed')
+  await recordActivity(supabase, { moduleKey: 'classroom', action: 'survey.created', orgSlug })
   revalidatePath(`/o/${orgSlug}/m/classroom/manage`)
   revalidatePath(`/o/${orgSlug}/m/classroom`)
 }

@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { recordActivity } from '@platform/core'
 
 // Visual-messaging actions. RLS + the vm_ guard triggers are the enforcement
 // layer: the creator-insert policy + member bootstrap start a conversation;
@@ -104,6 +105,11 @@ export async function createConversation(orgSlug: string, formData: FormData) {
   })
   fail(rootErr, 'Create root layer failed')
 
+  await recordActivity(supabase, {
+    moduleKey: 'visual-messaging',
+    action: 'conversation.created',
+    orgSlug,
+  })
   revalidatePath(`/o/${orgSlug}/m/visual-messaging`)
 }
 
@@ -257,6 +263,11 @@ export async function replyWithDrawing(
     .select('id')
     .single()
   fail(error, 'Send reply failed')
+  await recordActivity(supabase, {
+    moduleKey: 'visual-messaging',
+    action: 'drawing.replied',
+    orgSlug,
+  })
   revalidatePath(`/o/${orgSlug}/m/visual-messaging/conversations/${conversationId}`)
   // Founder feedback (2026-07-11): after sending, land on the reply just
   // sent — not back on the parent, requiring a swipe to find it.
@@ -302,6 +313,11 @@ export async function reviewFlag(
   const supabase = await createClient()
   const { error } = await supabase.from('vm_flags').update({ state }).eq('id', flagId)
   fail(error, 'Review flag failed')
+  await recordActivity(supabase, {
+    moduleKey: 'visual-messaging',
+    action: 'flag.reviewed',
+    orgSlug,
+  })
   revalidatePath(`/o/${orgSlug}/m/visual-messaging/conversations/${conversationId}`)
 }
 
@@ -316,6 +332,11 @@ export async function tombstoneLayer(orgSlug: string, conversationId: string, la
     check_reason: reason || null,
   })
   fail(error, 'Remove layer failed')
+  await recordActivity(supabase, {
+    moduleKey: 'visual-messaging',
+    action: 'layer.tombstoned',
+    orgSlug,
+  })
   revalidatePath(`/o/${orgSlug}/m/visual-messaging/conversations/${conversationId}`)
 }
 
@@ -323,6 +344,11 @@ export async function restoreLayer(orgSlug: string, conversationId: string, laye
   const supabase = await createClient()
   const { error } = await supabase.rpc('vm_restore_layer', { check_layer_id: layerId })
   fail(error, 'Restore layer failed')
+  await recordActivity(supabase, {
+    moduleKey: 'visual-messaging',
+    action: 'layer.restored',
+    orgSlug,
+  })
   revalidatePath(`/o/${orgSlug}/m/visual-messaging/conversations/${conversationId}`)
 }
 
@@ -330,6 +356,11 @@ export async function setBranchFrozen(orgSlug: string, conversationId: string, l
   const supabase = await createClient()
   const { error } = await supabase.rpc('vm_set_branch_frozen', { check_layer_id: layerId, check_frozen: frozen })
   fail(error, 'Freeze branch failed')
+  await recordActivity(supabase, {
+    moduleKey: 'visual-messaging',
+    action: frozen ? 'branch.frozen' : 'branch.unfrozen',
+    orgSlug,
+  })
   revalidatePath(`/o/${orgSlug}/m/visual-messaging/conversations/${conversationId}`)
 }
 

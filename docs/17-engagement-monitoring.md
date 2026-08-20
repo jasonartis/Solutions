@@ -841,6 +841,52 @@ the apps-router pages are thin re-export wrappers with no logic of their own):
 
 ## Decisions log (dated)
 
+- **2026-08-16 — THE CONFIRMED-FABLE RE-REVIEW OF `20260809010000` (phase 1) IS DONE. Verdict: SHIP AS-IS
+  (already shipped; nothing changes), plus one concrete fix applied to tooling.** Closes the item that had
+  sat open on CLAUDE.md since 2026-08-09: the original adversarial review of the login-capture migration ran
+  as a user-directed Fable SUBAGENT whose tier could not be verified from inside that session (self-reported
+  identity is not evidence), so it was recorded as "claimed-Fable, unverified." This pass was invoked via an
+  explicit `model: "fable"` parameter on the orchestrating tool call — a claim asserted by the calling
+  harness rather than self-reported by the subagent, which is a stronger provenance signal, though still not
+  independently verifiable from inside a session; recorded as such rather than overclaimed. **Local
+  Docker/Supabase was unavailable during this pass** (a host issue, see CLAUDE.md's gotchas), so this was a
+  static/code-level review rather than one checking a live catalog — noted so it isn't mistaken for a repeat
+  of the first review's method.
+  1. **The review deliberately looked PAST the two findings the first pass already closed** (the
+     `query_canceled`/`lock_timeout` HIGH finding and the false-test-coverage MEDIUM finding) and focused on
+     `login_events_prune()` specifically, per CLAUDE.md's own framing of it as "the platform's only exception
+     to append-only logging." Stress-tested and CONFIRMED, not merely re-read: `security invoker` is genuinely
+     sufficient (no privilege the function grants that its only possible caller — the table owner — didn't
+     already hold; a future careless `grant execute ... to service_role` would still fail at the DELETE, since
+     that role holds no table-level privilege regardless of a definer/invoker choice); the zero-argument,
+     literal-90-day-window shape has no injection or boundary-widening path (the boundary comparison is strict
+     `<`, so a row exactly at 90 days is *retained*, biasing toward over-retention rather than data loss); the
+     guard trigger's single nested exception block genuinely covers every statement that could raise, with no
+     path in the function body that reaches an error before that handler; the RLS policies are genuinely
+     rank-arm-free (independently re-read `is_superadmin()`'s own definition, not just the two policies); the
+     `on delete cascade` FK choice is correct and does not trip the FK-action-fires-triggers trap (CASCADE
+     performs a DELETE, not an UPDATE, so there is no trigger on either table for it to trip in the first
+     place); and the pruner-vs-fresh-sign-in race is genuinely impossible (a fresh row's `occurred_at` can
+     never match the prune predicate by construction, and `ROW EXCLUSIVE` — the lock both a plain INSERT and a
+     plain DELETE take — is self-compatible per Postgres's documented lock conflict matrix, independently
+     checked rather than trusted from the migration's own comment).
+  2. **One real gap found and fixed as tooling, not a migration change**: the claim that the worker's session-
+     pooler connection (`postgres.<ref>` username) actually authenticates as the `postgres` ROLE — which the
+     whole "owner-only pruner is invocable by the worker and nobody else" argument rests on — had been checked
+     exactly ONCE, by hand, pre-deploy (`docs/history/platform-journal.md`, 2026-08-09), and never carried into
+     the permanent, re-runnable `scripts/prod-verify-login-events.mts`. A future change to Supabase's Supavisor
+     username-to-role mapping would have gone silently unnoticed. **Fixed same day**: added a `select
+     current_user as u` check (the same pattern already used in `scripts/verify-acl-hardening.ts`) as a new
+     `[0]` section at the top of both `scripts/prod-verify-login-events.mts` and the new
+     `scripts/prod-verify-activity-events.mts` (phase 2's pruner rests on the identical assumption) — this
+     assumption is now re-proven on every prod-verify run rather than resting on a one-time measurement.
+  3. **One operational note, not a security finding**: applying a migration that adds a trigger to `auth.users`
+     takes an `ACCESS EXCLUSIVE` lock on that table for the (brief) duration of the migration transaction,
+     which could block or delay a concurrent sign-in. True of the original `on_auth_user_created` migration too
+     — not a defect specific to this file, but worth deploying during low-traffic windows as a general practice.
+  Full review detail (every file read, every claim independently re-derived rather than trusted) is preserved
+  in this session's transcript; this entry is the durable summary.
+
 - **2026-08-11 — PHASE 2 RECOVERED AFTER A LOST SESSION, and seven decisions reconstructed to four.**
   **Read this entry before trusting any "founder decision N, 2026-08-10" reference in the phase 2
   files** — the numbering in those headers points at a record that does not exist.

@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { DERIVED_SCOPE_PLACEHOLDER as PLACEHOLDER } from '@platform/core'
+import { DERIVED_SCOPE_PLACEHOLDER as PLACEHOLDER, recordActivity } from '@platform/core'
 import { createClient } from '@/lib/supabase/server'
 import { weeklyScheduleError } from './availability'
 
@@ -90,6 +90,11 @@ export async function bookAppointment(orgSlug: string, locationId: string, formD
     booked_by: user?.id ?? null,
   })
   fail(error, 'Booking failed')
+  await recordActivity(supabase, {
+    moduleKey: 'nail-salon',
+    action: 'appointment.booked_by_staff',
+    orgSlug,
+  })
   revalidatePath(`/o/${orgSlug}/m/nail-salon`)
 }
 
@@ -132,6 +137,11 @@ export async function walkInAdd(orgSlug: string, locationId: string, formData: F
     booked_by: user?.id ?? null,
   })
   fail(error, 'Walk-in booking failed')
+  await recordActivity(supabase, {
+    moduleKey: 'nail-salon',
+    action: 'walk_in.added',
+    orgSlug,
+  })
   revalidatePath(`/o/${orgSlug}/m/nail-salon`)
 }
 
@@ -188,6 +198,11 @@ export async function createBillForAppointment(orgSlug: string, appointmentId: s
   })
   fail(itemErr, 'Add bill item failed')
 
+  await recordActivity(supabase, {
+    moduleKey: 'nail-salon',
+    action: 'bill.created',
+    orgSlug,
+  })
   await supabase.from('sal_appointments').update({ state: 'billed' }).eq('id', appointmentId)
   revalidatePath(`/o/${orgSlug}/m/nail-salon`)
 }
@@ -203,6 +218,11 @@ export async function markBillPaid(orgSlug: string, billId: string, appointmentI
     .update({ state: 'paid', payment_method: method })
     .eq('id', billId)
   fail(error, 'Mark paid failed')
+  await recordActivity(supabase, {
+    moduleKey: 'nail-salon',
+    action: 'bill.paid',
+    orgSlug,
+  })
   await supabase.from('sal_appointments').update({ state: 'paid' }).eq('id', appointmentId)
   revalidatePath(`/o/${orgSlug}/m/nail-salon`)
 }
@@ -253,5 +273,10 @@ export async function customerBookAppointment(orgSlug: string, formData: FormDat
     booked_by: user.id,
   })
   fail(error, 'Booking failed')
+  await recordActivity(supabase, {
+    moduleKey: 'nail-salon',
+    action: 'appointment.booked_by_customer',
+    orgSlug,
+  })
   revalidatePath(`/o/${orgSlug}/m/nail-salon`)
 }

@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { DERIVED_SCOPE_PLACEHOLDER } from '@platform/core'
+import { DERIVED_SCOPE_PLACEHOLDER, recordActivity } from '@platform/core'
 import { buildNextRound } from '@modules/speed-dating'
 import { createClient } from '@/lib/supabase/server'
 import { getEventSides, parseEventFormat, type SideKey } from './event-format'
@@ -9,10 +9,16 @@ import { getEventSides, parseEventFormat, type SideKey } from './event-format'
 // Speed-dating actions. RLS + the sd_ guard triggers are the enforcement
 // layer (organize-write for event control, insert-self/pins for participants,
 // the sd_interest privacy chain for marks). The pairing "round" here is an
-// organizer-run stand-in for the speeddating.event-orchestrator worker —
-// same pattern as matchmaking's manual recompute (documented in CLAUDE.md);
-// it pairs sequential unpaired participants once, ignoring pool sides, and
-// will be replaced by the real rotation engine when the worker deploys.
+// organizer-run MANUAL trigger, run in parallel with (not superseded by) the
+// speeddating.event-orchestrator worker job (apps/worker/src/jobs/speed-
+// dating-orchestrator.ts, registered in apps/worker/src/index.ts) — CORRECTED
+// 2026-08-16, an independent review found this comment stale: the worker
+// orchestrator is already built and live, not a future thing this button is a
+// placeholder for. The two paths share no code that writes (each has its own
+// insert/update sequence) but do share the same pure computation
+// (buildNextRound/rotationExhausted from @modules/speed-dating), so a manually
+// -run round and a worker-run one produce an equivalent result. This function
+// pairs sequential unpaired participants once, ignoring pool sides.
 
 function fail(error: { message: string } | null, what: string) {
   if (error) throw new Error(`${what}: ${error.message}`)
@@ -46,6 +52,7 @@ export async function createEvent(orgSlug: string, formData: FormData) {
     created_by: user?.id ?? null,
   })
   fail(error, 'Create event failed')
+  await recordActivity(supabase, { moduleKey: 'speed-dating', action: 'event.created', orgSlug })
   revalidatePath(`/o/${orgSlug}/m/speed-dating`)
 }
 
@@ -122,6 +129,7 @@ export async function registerForEvent(orgSlug: string, eventId: string, formDat
     status,
   })
   fail(error, 'Registration failed')
+  await recordActivity(supabase, { moduleKey: 'speed-dating', action: 'event.registered', orgSlug })
   revalidatePath(`/o/${orgSlug}/m/speed-dating/events/${eventId}`)
 }
 
@@ -237,8 +245,8 @@ export async function runPairingRound(orgSlug: string, eventId: string) {
   const nextNumber = Math.max(0, ...(rounds ?? []).map((r) => r.round_number)) + 1
   // ends_at mirrors the orchestrator's own round creation (speed-dating-
   // orchestrator.ts) — without it, a manually-run round has no expiry for
-  // the "Right now" panel's countdown to key off (the manual button is the
-  // stand-in for the worker, so it should produce an equivalent round).
+  // the "Right now" panel's countdown to key off (this manual trigger runs in
+  // parallel with the worker, so it should produce an equivalent round).
   const startsAt = new Date()
   const endsAt = new Date(startsAt.getTime() + event.round_duration_seconds * 1000)
   const { data: round, error: roundErr } = await supabase
@@ -272,6 +280,7 @@ export async function runPairingRound(orgSlug: string, eventId: string) {
     .eq('id', round!.id)
   fail(activateErr, 'Activate round failed')
 
+  await recordActivity(supabase, { moduleKey: 'speed-dating', action: 'pairing_round.run', orgSlug })
   revalidatePath(`/o/${orgSlug}/m/speed-dating/events/${eventId}`)
 }
 
@@ -301,6 +310,7 @@ export async function markInterest(
         verdict,
       })
   fail(error, 'Record interest failed')
+  await recordActivity(supabase, { moduleKey: 'speed-dating', action: 'round.interest_marked', orgSlug })
   revalidatePath(`/o/${orgSlug}/m/speed-dating/events/${eventId}`)
 }
 
@@ -308,6 +318,7 @@ export async function revealMatches(orgSlug: string, eventId: string) {
   const supabase = await createClient()
   const { error } = await supabase.rpc('sd_reveal_matches', { check_event_id: eventId })
   fail(error, 'Reveal failed')
+  await recordActivity(supabase, { moduleKey: 'speed-dating', action: 'matches.revealed', orgSlug })
   revalidatePath(`/o/${orgSlug}/m/speed-dating/events/${eventId}`)
 }
 
@@ -380,6 +391,7 @@ export async function reviewReport(
   const supabase = await createClient()
   const { error } = await supabase.from('sd_reports').update({ state }).eq('id', reportId)
   fail(error, 'Review report failed')
+  await recordActivity(supabase, { moduleKey: 'speed-dating', action: 'report.reviewed', orgSlug })
   revalidatePath(`/o/${orgSlug}/m/speed-dating/events/${eventId}`)
 }
 

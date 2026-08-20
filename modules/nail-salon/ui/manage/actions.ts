@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { DERIVED_SCOPE_PLACEHOLDER as PLACEHOLDER } from '@platform/core'
+import { DERIVED_SCOPE_PLACEHOLDER as PLACEHOLDER, recordActivity } from '@platform/core'
 import { createClient } from '@/lib/supabase/server'
 import { ORDERED_DAYS, parseDayRangesInput, type WeeklySchedule } from '../availability'
 
@@ -88,6 +88,11 @@ export async function addExpense(orgSlug: string, locationId: string, formData: 
     amount,
   })
   fail(error, 'Add expense failed')
+  await recordActivity(supabase, {
+    moduleKey: 'nail-salon',
+    action: 'expense.added',
+    orgSlug,
+  })
   revalidatePath(`/o/${orgSlug}/m/nail-salon/manage`)
 }
 
@@ -141,6 +146,11 @@ export async function purchaseShoppingItem(orgSlug: string, itemId: string, form
     .update({ status: 'purchased', purchased_at: new Date().toISOString(), expense_id: expense!.id })
     .eq('id', itemId)
   fail(error, 'Mark purchased failed')
+  await recordActivity(supabase, {
+    moduleKey: 'nail-salon',
+    action: 'shopping_item.purchased',
+    orgSlug,
+  })
   revalidatePath(`/o/${orgSlug}/m/nail-salon/manage`)
 }
 

@@ -56,6 +56,22 @@ try {
   console.log(`\nProd verification — login capture (project ${ref})\n`)
 
   // -------------------------------------------------------------------------
+  console.log('[0] This connection really authenticates as `postgres` through the pooler')
+  // The whole "the owner-only pruner is invocable by the worker and nobody
+  // else" argument rests on the worker's pooler connection (`postgres.<ref>`
+  // username) actually assuming the `postgres` ROLE, not merely LOOKING like
+  // it from the connection string. That was checked once, by hand, on
+  // 2026-08-09 (docs/history/platform-journal.md) and never carried into this
+  // permanent, re-runnable verifier — so a future change to Supabase's
+  // Supavisor username-to-role mapping would go silently unnoticed. Same
+  // pattern already used in scripts/verify-acl-hardening.ts (`select
+  // current_user as u`), applied here to the actual prod pooler connection
+  // this script itself is using — not a separate probe.
+  const who = await sql`select current_user as u`
+  check('this connection authenticates as postgres (not some other pooler-mapped role)',
+    who[0]?.u === 'postgres', `current_user=${who[0]?.u}`)
+
+  // -------------------------------------------------------------------------
   console.log('[1] The tables exist with RLS enabled')
   const tables = await sql`
     select c.relname, c.relrowsecurity, c.relforcerowsecurity

@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { recordActivity, activityDayKey } from '@platform/core'
 import { createClient } from '@/lib/supabase/server'
 
 // Single's own-answer actions. RLS (mm_answers_update_own + the lock/identity
@@ -33,6 +34,13 @@ export async function saveAnswer(orgSlug: string, questionId: string, formData: 
     .eq('user_id', user.id)
   if (error) throw new Error(`Save answer failed: ${error.message}`)
 
+  await recordActivity(supabase, {
+    moduleKey: 'matchmaking',
+    action: 'answer.saved',
+    orgSlug,
+    dedupeKey: `${questionId}:${activityDayKey()}`,
+  })
+
   // The mm_mark_pairs_stale trigger flags this user's pair rows; the matches
   // list shows them as pending until an admin (or the future worker) recomputes.
   revalidatePath(`/o/${orgSlug}/m/matchmaking`)
@@ -59,6 +67,11 @@ export async function expressInterest(orgSlug: string, orgId: string, targetUser
   if (error && !/duplicate|unique/i.test(error.message)) {
     throw new Error(`Express interest failed: ${error.message}`)
   }
+  // Only record on a genuine insert — a duplicate-hit no-op didn't newly express
+  // anything, so recording it would out-count a real click with a repeated one.
+  if (!error) {
+    await recordActivity(supabase, { moduleKey: 'matchmaking', action: 'interest.expressed', orgId })
+  }
   revalidatePath(`/o/${orgSlug}/m/matchmaking`)
 }
 
@@ -78,5 +91,6 @@ export async function withdrawInterest(orgSlug: string, orgId: string, targetUse
     .eq('user_id', user.id)
     .eq('target_user_id', targetUserId)
   if (error) throw new Error(`Withdraw failed: ${error.message}`)
+  await recordActivity(supabase, { moduleKey: 'matchmaking', action: 'interest.withdrawn', orgId })
   revalidatePath(`/o/${orgSlug}/m/matchmaking`)
 }

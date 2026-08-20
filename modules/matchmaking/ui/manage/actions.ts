@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { DERIVED_SCOPE_PLACEHOLDER } from '@platform/core'
+import { DERIVED_SCOPE_PLACEHOLDER, recordActivity } from '@platform/core'
 import { createClient } from '@/lib/supabase/server'
 import { recomputeMatches } from '@/lib/matchmaking'
 
@@ -54,6 +54,7 @@ export async function createQuestion(orgSlug: string, formData: FormData) {
     approved_at: new Date().toISOString(),
   })
   fail(error, 'Create question failed')
+  await recordActivity(supabase, { moduleKey: 'matchmaking', action: 'question.created', orgId })
   revalidatePath(`/o/${orgSlug}/m/matchmaking/manage`)
 }
 
@@ -67,6 +68,7 @@ export async function approveQuestion(orgSlug: string, questionId: string) {
     .update({ status: 'approved', approved_by: user?.id ?? null, approved_at: new Date().toISOString() })
     .eq('id', questionId)
   fail(error, 'Approve failed')
+  await recordActivity(supabase, { moduleKey: 'matchmaking', action: 'question.approved', orgSlug })
   revalidatePath(`/o/${orgSlug}/m/matchmaking/manage`)
 }
 
@@ -74,6 +76,7 @@ export async function rejectQuestion(orgSlug: string, questionId: string) {
   const supabase = await createClient()
   const { error } = await supabase.from('mm_questions').update({ status: 'rejected' }).eq('id', questionId)
   fail(error, 'Reject failed')
+  await recordActivity(supabase, { moduleKey: 'matchmaking', action: 'question.rejected', orgSlug })
   revalidatePath(`/o/${orgSlug}/m/matchmaking/manage`)
 }
 
@@ -81,6 +84,7 @@ export async function recompute(orgSlug: string) {
   const supabase = await createClient()
   const orgId = await resolveOrgId(supabase, orgSlug)
   await recomputeMatches(supabase, orgId)
+  await recordActivity(supabase, { moduleKey: 'matchmaking', action: 'scores.recomputed', orgId })
   revalidatePath(`/o/${orgSlug}/m/matchmaking/manage`)
   revalidatePath(`/o/${orgSlug}/m/matchmaking`)
 }
@@ -107,6 +111,7 @@ export async function createGroup(orgSlug: string, formData: FormData) {
   const orgId = await resolveOrgId(supabase, orgSlug)
   const { error } = await supabase.from('mm_groups').insert({ org_id: orgId, name })
   fail(error, 'Create group failed')
+  await recordActivity(supabase, { moduleKey: 'matchmaking', action: 'group.created', orgId })
   revalidatePath(`/o/${orgSlug}/m/matchmaking/manage`)
 }
 
@@ -122,6 +127,7 @@ export async function addGroupMember(orgSlug: string, groupId: string, formData:
     user_id: userId,
   })
   fail(error, 'Add to group failed')
+  await recordActivity(supabase, { moduleKey: 'matchmaking', action: 'group.member_added', orgSlug })
   revalidatePath(`/o/${orgSlug}/m/matchmaking/manage`)
 }
 
@@ -129,6 +135,7 @@ export async function removeGroupMember(orgSlug: string, memberId: string) {
   const supabase = await createClient()
   const { error } = await supabase.from('mm_group_members').delete().eq('id', memberId)
   fail(error, 'Remove from group failed')
+  await recordActivity(supabase, { moduleKey: 'matchmaking', action: 'group.member_removed', orgSlug })
   revalidatePath(`/o/${orgSlug}/m/matchmaking/manage`)
 }
 
@@ -154,6 +161,7 @@ export async function assignMatchmaker(orgSlug: string, formData: FormData) {
     target_group_id: targetType === 'group' ? targetGroupId : null,
   })
   fail(error, 'Assign matchmaker failed')
+  await recordActivity(supabase, { moduleKey: 'matchmaking', action: 'matchmaker.assigned', orgId })
   revalidatePath(`/o/${orgSlug}/m/matchmaking/manage`)
 }
 
@@ -161,5 +169,6 @@ export async function removeAssignment(orgSlug: string, assignmentId: string) {
   const supabase = await createClient()
   const { error } = await supabase.from('mm_matchmaker_assignments').delete().eq('id', assignmentId)
   fail(error, 'Remove assignment failed')
+  await recordActivity(supabase, { moduleKey: 'matchmaking', action: 'matchmaker.unassigned', orgSlug })
   revalidatePath(`/o/${orgSlug}/m/matchmaking/manage`)
 }

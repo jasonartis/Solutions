@@ -19,56 +19,69 @@ A multi-tenant modular platform: each client engagement produces a **module** bu
      and update only the compact "Now / Next / Standing rules" below. A fresh chat must never
      pay for the full journal. See "Session hygiene". -->
 
-**Now (2026-08-11) — THIS IS A WORK ORDER. A fresh session can start from it with no prompt.**
+**Now (2026-08-16) — THIS IS A WORK ORDER. A fresh session can start from it with no prompt.**
 
-**ENGAGEMENT MONITORING PHASE 2: THE SCHEMA IS BUILT, VERIFIED AND PUSHED. NOTHING CALLS IT YET.**
-`20260810010000_activity_events.sql`, commits `2f1a0ea` → `96f0722`. `activity_events` (raw,
-90-day) + `activity_rollup` (permanent, keyed **(user, org, module, ACTION)**), guard trigger,
-rollup maintainer, pruner, worker job at 04:35. Reads **superadmin-only**; hierarchy-governed reads
-are a later phase. **Recovered from a lost session — read docs/17's decisions log entry for
-2026-08-11 before touching anything, including which of its own §12 recommendations were
-deliberately overridden.**
+**ENGAGEMENT MONITORING PHASE 2: ALL THREE REMAINING TASKS ARE DONE IN THE WORKING TREE AND
+REVIEWED — BUT UNCOMMITTED, NOT LIVE-DB-VERIFIED, AND NOT DEPLOYED.** The migration itself
+(`20260810010000_activity_events.sql`, commits `2f1a0ea` → `96f0722`) is UNCHANGED since 2026-08-11
+— nothing below touched it or `packages/platform/src/activity.ts`; **do not change either without
+asking.** `git status` right now shows 17 modified/new files, all from this session, all reviewed —
+none secret, nothing stray.
 
-**FINISHING THIS IS ALREADY FOUNDER-APPROVED — do NOT wait to be asked.** The standing "never start
-a slice without the founder initiating" rule is satisfied: the founder approved phase 2 on
-2026-08-10 and took four more decisions on 2026-08-11. What remains is finishing approved work, not
-starting new work. **Do not change the migration, the vocabulary, or any decision without asking.**
+1. **The RLS test block is ported** — `packages/db/src/rls.test.ts`, new
+   `describe('org-scoped activity (engagement monitoring phase 2, 20260810010000)')` block, all of
+   `scripts/verify-activity-capture.mts`'s assertions (delta-scoped, not wiping the table, since this
+   suite shares the DB with every other describe block) **plus the one case the probe script
+   couldn't cover**: an org member (bob) with NO `nail-salon` `module_roles` row, whose
+   `actor_grants` comes back a real empty array. An independent review caught one gap — the fixture
+   never removed bob from `org_members` afterward, unlike every other bob-fixture in this file —
+   **fixed same session** (now has a matching `afterAll`).
+2. **All ~48 call sites are in**, across all 6 modules, matching `packages/platform/src/activity.ts`'s
+   curated list exactly (13 classroom, 7 nail-salon, 12 matchmaking, 6 speed-dating, 3
+   synagogue-schedules, 7 visual-messaging). **Independently adversarially reviewed — zero findings**:
+   completeness, every `ACTIVITY_EXCLUDED` path confirmed genuinely absent (incl. matchmaking's
+   worker-shared `recompute` — the record call is correctly only in the admin server action, never in
+   the shared `recomputeMatches`), placement strictly after the real write succeeds, the `saveAnswer`
+   debounce keyed correctly, `setBranchFrozen`'s two-way boolean branch, and matchmaking's
+   `expressInterest` duplicate-no-op judgment call (verified sound line-by-line, not just plausible).
+   One efficiency fix applied: synagogue-schedules' 3 call sites now pass the already-in-scope
+   `orgId` instead of forcing `recordActivity` to re-resolve it from `orgSlug`.
+3. **`scripts/prod-verify-activity-events.mts` is written**, copying `prod-verify-login-events.mts`'s
+   template. **It correctly FAILS until real activity lands on prod** (by design — capture failures
+   are silent by founder decision and phase 2 has no honesty badge). Carries one addition not in the
+   original template — see next paragraph.
 
-**MODEL: SONNET.** The schema work that earned Opus is done; all three tasks below are mechanical.
-Escalate to Opus only if you end up needing to change the migration (which would mean something was
-missed, and is worth saying out loud rather than doing quietly).
+**A CONFIRMED-FABLE RE-REVIEW OF PHASE 1'S MIGRATION ALSO RAN THIS SESSION**, closing the item that
+had sat open since 2026-08-09 (docs/17's decisions log, 2026-08-16 entry). Verdict: SHIP AS-IS. One
+concrete, already-applied fix came out of it: a `select current_user` check confirming the worker's
+session-pooler connection really authenticates as `postgres` (not just looks like it from the
+connection string) — previously a one-time manual measurement, never re-checked — is now a permanent
+`[0]` section in BOTH `scripts/prod-verify-login-events.mts` and the new
+`scripts/prod-verify-activity-events.mts`.
 
-1. **The RLS test block.** Port the **53** assertions in `scripts/verify-activity-capture.mts` into
-   `packages/db/src/rls.test.ts` — **that script IS the spec; read it first.** Two things it does
-   that must survive the port: every negative carries a **non-emptiness control** (it proves capture
-   works before asserting anyone cannot read), and it covers **`anon` and `service_role`** and not
-   only signed-in users. **Then add the one case it deliberately cannot cover: an org member holding
-   NO `module_roles` row for that module, whose `actor_grants` must come back as an EMPTY ARRAY.**
-   Every seeded Demo Salon member holds some salon grant (charlie an explicit `customer`, grace a
-   SCOPED `manager`), so this needs a purpose-made fixture — and remember since slice 3 a fixture
-   that adds an org member must ACCEPT the invite or it satisfies no membership predicate. The
-   migration argues at length that an empty array is correct rather than a hole; nothing proves it.
-2. **The ~45 call sites** across 6 modules. Vocabulary and the full list of deliberate EXCLUSIONS are
-   in `packages/platform/src/activity.ts`; the per-module inventory is docs/17 §12.3/§12.6. Call
-   `recordActivity()` **AFTER the real action succeeds, and `await` it** — fire-and-forget is wrong
-   because a serverless function can be frozen the moment it responds, losing the insert
-   non-deterministically. Put the call at the **server action** call site, never inside a shared
-   function the worker also invokes (the worker path has no acting user).
-3. **`scripts/prod-verify-activity-events.mts`**, copying `prod-verify-login-events.mts`. **It MUST
-   FAIL until real activity has landed on prod** — capture failures are silent by founder decision
-   and phase 2 has NO honesty badge, because no console reader was built. Then deploy and prod-verify.
+**ALL VERIFICATION IS NOW GREEN, 2026-08-17 (Docker recovered — see gotchas):**
+`turbo run typecheck --concurrency=1 --force` **9/9**, `turbo run build --force` **2/2** (both real
+forced runs), `pnpm --filter @platform/db test` **139/139** (floor 121 + 18 new, confirmed twice —
+once before and once after the e2e-driven `db:reset` below), `scripts/verify-activity-capture.mts`
+**53/53** (also confirmed twice), `CI=true pnpm --filter web exec playwright test` **51/51** (one
+clean run against a freshly reset+seeded stack — see the gotcha on why the first two attempts
+weren't clean; not a code defect). **Still not committed, not deployed, not prod-verified — ask
+before committing** (nothing has been committed this session yet). **Once committed → deploy →
+prod-verify** with the new script (remember it's SUPPOSED to fail until a real instrumented action
+happens on prod afterward).
 
-**Verification bar to re-clear before reporting done** (all green as of 2026-08-11):
-`pnpm exec tsx scripts/verify-activity-capture.mts` **53/53** (re-runnable; loopback-only, because
-it deletes from the permanent rollup) · `pnpm --filter @platform/db test` **121/121** — run it
-DIRECTLY, a `FULL TURBO` result after a migration is a cached replay · `turbo run typecheck
---concurrency=1` **9/9** · build · `CI=true pnpm --filter web exec playwright test` **51/51**.
+**MODEL: SONNET** was correct for everything above — none of it touched the migration/RLS design.
+The one exception, the phase-1 re-review, used a confirmed Fable subagent (passed via the tool's own
+`model` parameter, not a self-report) for exactly the reason the model-choice rule names: reviewing a
+novel security mechanism, not the mechanical call-site work.
 
 **Host state, 2026-08-12:** the machine was migrated to a new Windows profile
 (`C:\Users\yarmishj.AEI-LT-JYARMISH`) after the old one was lost. Claude's own state — memories,
 560 permission entries, the `log-session` skill — is fully migrated and verified. **If `pnpm` is not
 on PATH, that is the known profile issue and the gotchas below have the workaround; it is not a new
-fault.** Do not re-diagnose it as tool corruption.
+fault.** Do not re-diagnose it as tool corruption. **Two more casualties of the same profile switch
+surfaced 2026-08-16** (Docker admin-group membership, Docker Desktop crashing outright) — full detail
+in the gotchas section; don't re-diagnose either as something new.
 
 Phase 1 (capture) and phase 3 (`/console/engagement`, reads phase 1 only) remain as below.
 
@@ -156,9 +169,9 @@ open:**
   Tidy-up, founder's call because it touches credential files: add them to `.env.accounts.example`
   + `.env.deploy`, or just document the export line. Full story → journal.
 Everything below is open but unranked:
-- **ENGAGEMENT MONITORING — PHASES 1 AND 3 BUILT 2026-08-09; PHASE 2's SCHEMA BUILT AND VERIFIED
-  2026-08-11 BUT NOT YET INSTRUMENTED (see "Now" above for the three remaining Sonnet-tier
-  tasks).** §12 remains the build brief it always was, but **note two places it is now WRONG and
+- **ENGAGEMENT MONITORING — PHASES 1 AND 3 BUILT 2026-08-09; PHASE 2's SCHEMA BUILT 2026-08-11 AND
+  NOW INSTRUMENTED 2026-08-16 (see "Now" above — uncommitted, not yet live-DB-verified or deployed).**
+  §12 remains the build brief it always was, but **note two places it is now WRONG and
   was deliberately overridden** — do not "fix" the code back to it: §12.4 demanded the actor's
   `role`/`scope_ref` as NOT NULL scalars (not implementable — multiple simultaneous grants are
   first-class, and `is_org_admin` authority is not in `module_roles` at all, so `actor_grants` is a
@@ -191,13 +204,11 @@ Everything below is open but unranked:
   org-mate** — today just one console preference (`superadminDefaultAddActive`), so nothing
   sensitive, but it is an easy trap to walk into later. Both are why the login mirror went onto a
   superadmin-only table instead.
-- **A CONFIRMED-FABLE RE-REVIEW OF `20260809010000` IS OPEN** (founder ask, 2026-08-09). Fable is
-  not selectable as a session model, so that migration's adversarial review ran as a user-directed
-  Fable SUBAGENT — and a subagent's tier cannot be verified from inside the session, so it is
-  recorded as **claimed-Fable, unverified** (docs/17's decisions log). Nothing rests on it: both
-  findings that mattered were independently checked against documented Postgres behaviour and the
-  live catalog. Worth one pass by a confirmed Fable when one is available, since the prune function
-  is the platform's only exception to append-only logging.
+- ~~**A CONFIRMED-FABLE RE-REVIEW OF `20260809010000` IS OPEN.**~~ **DONE 2026-08-16** — verdict SHIP
+  AS-IS, plus one concrete fix: the "worker's pooler connection really authenticates as `postgres`"
+  claim rested on a single one-time manual measurement and is now a permanent, re-runnable check in
+  both `scripts/prod-verify-login-events.mts` and `scripts/prod-verify-activity-events.mts`. Full
+  writeup → docs/17's decisions log, 2026-08-16 entry.
 - **`blinded` CHECKS ONE TABLE PER MODULE** (the `scopeEntity`), never per role table — so a
   future migration dropping an `is_org_admin` arm on an ordinary role table gives a silent,
   error-free, **UNBADGED** empty section. `20260806010000` is proof the category already bit
@@ -389,6 +400,33 @@ in the sections below.
   than this repo. If you must proceed anyway: corepack for pnpm, `playwright install chromium`.
   **Do NOT write this up as tool-state loss or corruption — this entry exists because that was the
   first (wrong) diagnosis, and it would have sent the next session hunting a phantom.**
+  **Two more per-profile gaps found under this same new profile, 2026-08-16 — same root cause, don't
+  re-diagnose as something new:**
+  1. **The `docker-users` local group only listed the OLD profile's identities** (`jyarmish`,
+     `NXE\YarmishJ`), not `aei-lt-jyarmish\yarmishj`, so Docker Desktop refused to treat this account
+     as a Docker admin. Fix (needs an ELEVATED prompt, which Claude cannot grant itself — this is on
+     the founder): `net localgroup docker-users "aei-lt-jyarmish\yarmishj" /add`, then **sign out and
+     back in** (or reboot) — group membership only takes effect in a fresh login token.
+  2. Separately, this Docker Desktop install had never had the Windows **Hyper-V** and **Containers**
+     optional features turned on at all (`Enable-WindowsOptionalFeature -Online -FeatureName
+     Microsoft-Hyper-V,Containers -All`, elevated, then a full reboot). Unclear whether this is a
+     THIRD per-profile-migration casualty or just a fresh-install gap that was never hit before — not
+     worth re-deriving, just know Docker Desktop will say so plainly ("Windows containers feature is
+     disabled") and name the fix itself.
+- **A CRASHED `com.docker.backend` CAN BALLOON TO 13+GB AND SILENTLY STARVE EVERY SUBSEQUENT LAUNCH
+  ATTEMPT (2026-08-16).** Symptom: Docker Desktop shows an "unexpected error, needs to close" dialog on
+  launch, the engine pipe never comes up, and each RETRY fails the same way — looking like a
+  fundamentally broken install. **The actual cause: the CRASHED instance from the PREVIOUS attempt
+  doesn't release its memory when the crash dialog appears** — `Get-Process com.docker.backend` showed
+  13.8GB resident (normal idle is a few hundred MB), which alone accounted for the difference between
+  31GB total and 1.5GB FREE. Every relaunch attempt then starved for memory and crashed again,
+  indistinguishable from a genuine install problem. **Fix: before retrying a launch, always check
+  first** — `Get-Process -Name "com.docker.backend","com.docker.build","Docker Desktop" | Stop-Process
+  -Force`, confirm free memory recovers (`Get-CimInstance Win32_OperatingSystem` →
+  `FreePhysicalMemory`), THEN relaunch. Same family as the documented "Docker Desktop dies under
+  session memory pressure" gotcha below, but the causality here runs the other way — the crash caused
+  the memory pressure, not the reverse — so don't assume freeing RAM elsewhere first will help; check
+  for a stray `com.docker.backend` specifically.
 - **A HANGING `git push` IS USUALLY A CREDENTIAL DIALOG WAITING ON THE FOUNDER'S DESKTOP, NOT A
   NETWORK PROBLEM (2026-08-11 — cost ~10 minutes across two timeouts).** `git push` produced NO
   output and hit a 3-minute and then a 7-minute timeout, while `git ls-remote --heads origin`
@@ -476,6 +514,29 @@ in the sections below.
   Related: piping the run through `| tail -N` swallows its exit code, so a failing suite
   reports success to the shell — redirect to a file and check `$?` instead.
 - **Reproducing a flaky/order-dependent e2e failure: `db:reset` + `pnpm seed` immediately before the reproduction run, not just once at the start of the session.** Several e2e tests are documented non-idempotent (assume fresh seed state). Running a suspect test in isolation first (to confirm it currently passes) mutates that seed data; a subsequent full-suite reproduction attempt then fails for the mundane reason of stale state from your OWN prior run — which looks like the bug you're chasing but isn't (hit in a 2026-07-30 session validating the speed-dating flaky-test fix: an isolated run advanced the seeded event to `complete`, then the very next full-suite run failed at the first "Register" step instead of reproducing the real timing issue).
+  **THE SAME TRAP APPLIES TO RUNNING THE FULL SUITE TWICE IN A ROW, not just an isolated test then the
+  full suite (2026-08-16).** Running the complete e2e suite once, then again immediately without a
+  `db:reset`+`seed` in between, produced 11 failures on the second run (down from 1) — every one of
+  them stale-seed-state noise, not real bugs (bookings/matches/etc. the first run had already advanced
+  past their starting state). **Verify a fix with exactly ONE clean run against freshly reset+seeded
+  data, never a second consecutive full run on the same stack.**
+- **PHASE 2's RLS SUITE AND STANDALONE PROBE SCRIPT BOTH SIGN IN AS `grace@demo.local` — AND PHASE 3's
+  E2E SUITE DEPENDS ON HER NEVER HAVING SIGNED IN, ANYWHERE, IN THIS SHARED DATABASE (2026-08-16).**
+  Grace is the seed's *only* scoped nail-salon manager grant (`packages/db/src/seed.ts`), so both
+  `scripts/verify-activity-capture.mts` and the ported `rls.test.ts` phase-2 block need her as a real
+  signed-in user to prove a SCOPED `{role, scope_ref}` pair survives the write path — but
+  `apps/web/e2e/platform.spec.ts`'s phase-3 engagement test picks her BECAUSE she's an active member
+  "this whole e2e suite never signs in as," and asserts she reads "never signed in." A real password
+  sign-in via either script advances her `last_sign_in_at`, which phase 1's capture trigger faithfully
+  records — so running the RLS suite or the probe script before that specific e2e test, with no reset
+  in between, makes it fail for a reason that has nothing to do with a real regression. **Not a bug in
+  either suite — a genuine, pre-existing tension in reusing one seeded user for two different test
+  purposes.** Full verification order that avoids it: `db:reset` → `seed` → e2e (run it BEFORE
+  anything else touches grace) — or, if the RLS suite/probe script already ran first, a plain
+  `db:reset`+`seed` before e2e fixes it (a targeted `delete from login_events/login_rollup where
+  user_id = <grace>` also works and is faster, but only fixes that one run — a full reset is what
+  actually restores a clean baseline for everything downstream, including e2e's own well-known
+  non-idempotence).
 - **`ON DELETE SET NULL` fires the referencing table's BEFORE UPDATE triggers** — Postgres implements the FK action as a real UPDATE. So an append-only `before update or delete ... raise exception` trigger silently makes every row the table has ever referenced UNDELETABLE (the parent DELETE aborts), including whole orgs via a cascading `org_id`. Enforce append-only with GRANTS instead (no UPDATE/DELETE to api roles → `42501`), which is why `vm_moderation_log` has no such trigger. Found live in the 2026-07-31 view-as review, one review after `set null` had been (correctly) required.
 - **A passing NEGATIVE assertion proves nothing unless something nearby proves the subject
   exists** — the vacuity rule, generalised in docs/03 after it appeared three times in one

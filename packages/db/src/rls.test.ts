@@ -3211,3 +3211,456 @@ describe('login capture (engagement monitoring phase 1, 2026-08-09)', () => {
     expect(await rollupOf(probeId), 'the rollup row survived account erasure').toBeNull()
   })
 })
+
+describe('org-scoped activity (engagement monitoring phase 2, 20260810010000)', () => {
+  // Ports scripts/verify-activity-capture.mts — THAT SCRIPT IS THE SPEC, read it
+  // before changing anything here. Two properties of it matter enough to
+  // restate rather than silently copy: every negative below carries a
+  // non-emptiness CONTROL first (a passing negative proves nothing unless
+  // something nearby proves the subject exists — docs/03's vacuity rule), and
+  // both `anon` and `service_role` are exercised, not only signed-in users.
+  //
+  // UNLIKE THE PROBE SCRIPT, THIS SUITE DOES NOT WIPE EITHER TABLE. The probe
+  // is meant to run standalone and repeatedly against a throwaway local stack,
+  // so it deletes from both tables first (loopback-guarded, because
+  // activity_rollup is permanent and cannot be backfilled). This suite runs
+  // alongside every other describe block in this file, writing to the same
+  // database, so a full wipe here would be destructive to unrelated tests. Every
+  // assertion below is instead scoped to a specific (user, action) pair and
+  // measured as a BEFORE/AFTER delta rather than an absolute count, so a second
+  // run against leftovers from a first one still passes for the right reason —
+  // the same discipline the login-capture block above already follows.
+  const dbUrl = process.env.DATABASE_URL ?? 'postgresql://postgres:postgres@127.0.0.1:54322/postgres'
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
+
+  let owner: SupabaseClient       // the local superadmin — the only legitimate reader
+  let dana: SupabaseClient        // salon WORKER — holds an unscoped module grant
+  let charlie: SupabaseClient     // salon CUSTOMER — holds an explicit customer grant
+  let grace: SupabaseClient       // salon manager SCOPED to Uptown
+  let bobFixture: SupabaseClient  // admin of Demo Org B — NOT a salon member, until the fixture at the end of this block
+
+  let salon: string  // demo-salon org id
+  let orgB: string   // demo-b org id — dana is not a member here
+  let danaId: string
+  let charlieId: string
+  let graceId: string
+  let bobId: string
+
+  const errored = (r: { error: unknown }) => r.error != null
+
+  // Scoped, delta-safe readers — never a full-table read, so a second run
+  // against leftovers from a first one measures the right thing rather than an
+  // absolute count that a prior run has already inflated.
+  const eventsOf = async (userId: string, action: string) =>
+    ((await owner.from('activity_events').select('*').eq('user_id', userId).eq('action', action)
+      .order('occurred_at', { ascending: false })).data ?? [])
+  const rollupOf = async (userId: string, orgId: string, moduleKey: string, action: string) =>
+    (await owner.from('activity_rollup').select('*')
+      .eq('user_id', userId).eq('org_id', orgId).eq('module_key', moduleKey).eq('action', action)
+      .maybeSingle()).data as { observed_actions: number; action: string } | null
+
+  beforeAll(async () => {
+    owner = await signIn('owner@demo.local')
+    dana = await signIn('dana@demo.local')
+    charlie = await signIn('charlie@demo.local')
+    grace = await signIn('grace@demo.local')
+    bobFixture = await signIn('bob@demo.local')
+
+    salon = (await owner.from('orgs').select('id').eq('slug', 'demo-salon').single()).data!.id as string
+    orgB = (await owner.from('orgs').select('id').eq('slug', 'demo-b').single()).data!.id as string
+    danaId = (await owner.from('profiles').select('user_id').eq('email', 'dana@demo.local').single())
+      .data!.user_id as string
+    charlieId = (await owner.from('profiles').select('user_id').eq('email', 'charlie@demo.local').single())
+      .data!.user_id as string
+    graceId = (await owner.from('profiles').select('user_id').eq('email', 'grace@demo.local').single())
+      .data!.user_id as string
+    bobId = (await owner.from('profiles').select('user_id').eq('email', 'bob@demo.local').single())
+      .data!.user_id as string
+  })
+
+  afterAll(async () => {
+    // The empty-actor_grants fixture (last test in this block) adds bob to
+    // demo-salon's org_members so it can prove the no-module_roles case. Every
+    // other bob-adding fixture in this file removes that seat in its own
+    // afterAll (see e.g. the scoped-authority block above) — match that
+    // convention rather than leaving bob a permanent active salon member,
+    // which would silently affect any later test/e2e run that assumes he
+    // isn't one. Safe to run even if the fixture test never got that far
+    // (DELETE on a row that was never inserted is a no-op).
+    await owner.from('org_members').delete().eq('org_id', salon).eq('user_id', bobId)
+  })
+
+  it('CONTROL: a salon worker can record an action, the superadmin reads it, and the rollup counts it BY ACTION', async () => {
+    // Everything below is vacuous without this — the same role this block's
+    // opening test plays for login capture.
+    const action = 'appointment.booked_by_staff'
+    const before = await eventsOf(danaId, action)
+    const rollupBefore = await rollupOf(danaId, salon, 'nail-salon', action)
+
+    const ins = await dana.from('activity_events').insert({ org_id: salon, module_key: 'nail-salon', action })
+    expect(ins.error, `dana could not record ${action}: ${JSON.stringify(ins.error)}`).toBeNull()
+
+    const after = await eventsOf(danaId, action)
+    expect(after.length, 'the event is not readable by the superadmin').toBe(before.length + 1)
+
+    const rollupAfter = await rollupOf(danaId, salon, 'nail-salon', action)
+    expect(rollupAfter, 'no rollup row after a recorded action').not.toBeNull()
+    expect(rollupAfter!.observed_actions, 'the rollup did not count the action')
+      .toBe((rollupBefore?.observed_actions ?? 0) + 1)
+    expect(rollupAfter!.action, 'rollup is not keyed on action (the 2026-08-11 change)').toBe(action)
+  })
+
+  it('the guard discards a forged user_id, occurred_at and actor_grants, and derives the real ones', async () => {
+    const action = 'bill.paid'
+    await dana.from('activity_events').insert({
+      org_id: salon, module_key: 'nail-salon', action,
+      user_id: charlieId,                                  // forged identity
+      occurred_at: '2020-01-01T00:00:00Z',                 // forged time
+      actor_grants: [{ role: 'admin', scope_ref: null }],  // forged authority
+    })
+
+    const rows = await eventsOf(danaId, action)
+    expect(rows.length, 'CONTROL: the forged insert was not recorded at all').toBeGreaterThan(0)
+    const forged = rows[0]! // occurred_at desc — the freshest row is the one just inserted
+
+    expect(forged.user_id, 'a forged user_id was not discarded — the row does not belong to the caller')
+      .toBe(danaId)
+    expect(new Date(forged.occurred_at as string).getFullYear(),
+      'a forged occurred_at was not discarded — server time was not stamped').toBeGreaterThan(2020)
+
+    const grants = (forged.actor_grants ?? []) as { role: string }[]
+    expect(grants.some((g) => g.role === 'worker'), 'the real worker grant was not derived').toBe(true)
+    expect(grants.some((g) => g.role === 'admin'), 'the forged admin grant survived').toBe(false)
+  })
+
+  it('FINDING 1: a random-uuid action, an over-long action, and an over-long dedupe_key are all refused', async () => {
+    const uuidAction = await dana.from('activity_events').insert({
+      org_id: salon, module_key: 'nail-salon', action: crypto.randomUUID(),
+    })
+    expect(uuidAction.error, 'a random-uuid action was accepted — unbounded permanent rollup rows').not.toBeNull()
+
+    const longAction = await dana.from('activity_events').insert({
+      org_id: salon, module_key: 'nail-salon', action: 'a.' + 'x'.repeat(500),
+    })
+    expect(longAction.error, 'an over-long action was accepted').not.toBeNull()
+
+    const bigDedupe = await dana.from('activity_events').insert({
+      org_id: salon, module_key: 'nail-salon', action: 'bill.paid', dedupe_key: 'x'.repeat(5000),
+    })
+    expect(bigDedupe.error, 'an over-long dedupe_key was accepted').not.toBeNull()
+  })
+
+  it('an unknown module_key is refused, and a well-formed NEW action still needs no migration', async () => {
+    const badModule = await dana.from('activity_events').insert({
+      org_id: salon, module_key: 'not-a-module', action: 'bill.paid',
+    })
+    expect(badModule.error, 'an unknown module_key was accepted').not.toBeNull()
+
+    // CONTROL for founder decision 1's whole "no migration needed" claim: a NEW
+    // action, never used elsewhere in this suite, still inserts cleanly through
+    // nothing but activity.ts's typed union plus a call site.
+    const goodStillWorks = await dana.from('activity_events').insert({
+      org_id: salon, module_key: 'nail-salon', action: 'walk_in.added',
+    })
+    expect(goodStillWorks.error, `a well-formed new action needed a migration: ${JSON.stringify(goodStillWorks.error)}`)
+      .toBeNull()
+  })
+
+  it('FINDING 4: a whitespace/tab-only dedupe_key normalises to null, so BOTH rows land', async () => {
+    const action = 'expense.added'
+    const before = await eventsOf(danaId, action)
+
+    await dana.from('activity_events').insert({ org_id: salon, module_key: 'nail-salon', action, dedupe_key: '\t' })
+    await dana.from('activity_events').insert({ org_id: salon, module_key: 'nail-salon', action, dedupe_key: '\t' })
+
+    const after = await eventsOf(danaId, action)
+    expect(after.length, 'a tab-only dedupe_key collapsed the two rows into one — the btrim gap regressed')
+      .toBe(before.length + 2)
+    expect(after.slice(0, 2).every((r) => r.dedupe_key === null),
+      'a tab-only dedupe_key was not normalised to null').toBe(true)
+  })
+
+  it('tenancy: a non-member cannot record activity in another org, and the derived-scope placeholder is refused by name', async () => {
+    const crossOrg = await dana.from('activity_events').insert({
+      org_id: orgB, module_key: 'nail-salon', action: 'bill.paid',
+    })
+    expect(crossOrg.error, 'dana recorded activity in an org she does not belong to').not.toBeNull()
+
+    const placeholder = await dana.from('activity_events').insert({
+      org_id: '00000000-0000-0000-0000-000000000000', module_key: 'nail-salon', action: 'bill.paid',
+    })
+    expect(placeholder.error, 'the DERIVED_SCOPE_PLACEHOLDER org_id was accepted').not.toBeNull()
+    expect(placeholder.error?.message, 'the placeholder was refused, but not for the right reason')
+      .toMatch(/placeholder/i)
+  })
+
+  it('a customer booking their own appointment is recorded (actor_grants only logged here — see the fixture below for the empty-array proof)', async () => {
+    // NOTE, carried over verbatim from the probe script's own comment: every
+    // seeded Demo Salon member holds SOME salon grant, including charlie (an
+    // explicit `customer` role) — so this does NOT exercise the empty-array
+    // path the migration's header argues at length must be legal. It only
+    // proves the module's flagship action is recorded. The purpose-made fixture
+    // for the empty-array case is the last test in this block.
+    const action = 'appointment.booked_by_customer'
+    const before = await eventsOf(charlieId, action)
+
+    const ins = await charlie.from('activity_events').insert({ org_id: salon, module_key: 'nail-salon', action })
+    expect(ins.error, `charlie could not record ${action}: ${JSON.stringify(ins.error)}`).toBeNull()
+
+    const after = await eventsOf(charlieId, action)
+    expect(after.length, 'a customer booking their own appointment was not recorded').toBe(before.length + 1)
+    expect(Array.isArray(after[0]!.actor_grants), 'actor_grants is not an array').toBe(true)
+  })
+
+  it("a SCOPED grant keeps its scope_ref paired with its role, and the actor's org seat is recorded alongside it", async () => {
+    const action = 'walk_in.added'
+    const before = await eventsOf(graceId, action)
+
+    const ins = await grace.from('activity_events').insert({ org_id: salon, module_key: 'nail-salon', action })
+    expect(ins.error, `grace could not record ${action}: ${JSON.stringify(ins.error)}`).toBeNull()
+
+    const after = await eventsOf(graceId, action)
+    expect(after.length, "grace's activity was not recorded").toBe(before.length + 1)
+    const grants = (after[0]!.actor_grants ?? []) as { role: string; scope_ref: string | null }[]
+    expect(grants.length, "grace's grant was not derived at all").toBeGreaterThan(0)
+    expect(grants.every((g) => 'role' in g && 'scope_ref' in g),
+      'actor_grants is not shaped as {role, scope_ref} pairs').toBe(true)
+    expect(grants.some((g) => g.scope_ref != null),
+      "grace's SCOPED grant lost its scope_ref — flattened to a bare role name").toBe(true)
+    expect(after[0]!.actor_org_role, "the actor's org seat was not recorded alongside the module grants")
+      .not.toBeNull()
+  })
+
+  it('THE READ RULE: only the superadmin reads either table, at any rank', async () => {
+    const ownerEvents = await owner.from('activity_events').select('id').limit(5)
+    const ownerRollup = await owner.from('activity_rollup').select('user_id').limit(5)
+    expect((ownerEvents.data ?? []).length,
+      'CONTROL: the superadmin reads no activity events, so every negative below is vacuous').toBeGreaterThan(0)
+    expect((ownerRollup.data ?? []).length,
+      'CONTROL: the superadmin reads no rollup rows, so every negative below is vacuous').toBeGreaterThan(0)
+
+    for (const [who, client] of [
+      ['dana (salon worker)', dana],
+      ['charlie (salon customer)', charlie],
+      ['bob (another org admin)', bobFixture],
+    ] as const) {
+      expect((await client.from('activity_events').select('id')).data ?? [],
+        `${who} can read activity_events`).toEqual([])
+      expect((await client.from('activity_rollup').select('user_id')).data ?? [],
+        `${who} can read activity_rollup`).toEqual([])
+    }
+  })
+
+  it('dana cannot read her OWN activity either (no self-read arm was shipped)', async () => {
+    expect((await eventsOf(danaId, 'appointment.booked_by_staff')).length,
+      'CONTROL: dana has no recorded activity, so the negative below is vacuous').toBeGreaterThan(0)
+    expect((await dana.from('activity_events').select('id').eq('user_id', danaId)).data ?? [],
+      'dana can read her own activity history').toEqual([])
+  })
+
+  it('a stranger and the service role reach neither table at the privilege layer', async () => {
+    const anon = createClient(url, anonKey, { auth: { persistSession: false } })
+    for (const table of ['activity_events', 'activity_rollup'] as const) {
+      const read = await anon.from(table).select('*').limit(1)
+      expect(read.error?.code, `anon read ${table}: ${JSON.stringify(read.error)}`).toBe('42501')
+    }
+    const anonWrite = await anon.from('activity_events').insert({
+      org_id: salon, module_key: 'nail-salon', action: 'bill.paid',
+    })
+    expect(anonWrite.error, 'anon could INSERT into activity_events').not.toBeNull()
+
+    // Weak locally, for the same reason phase 1's equivalent test is: no
+    // `ALTER DEFAULT PRIVILEGES FOR ROLE postgres` here, so service_role holds
+    // nothing on a new table even without the migration's revoke naming it.
+    // Prod is what makes this assertion strong.
+    if (serviceKey) {
+      const svc = createClient(url, serviceKey, { auth: { persistSession: false } })
+      for (const table of ['activity_events', 'activity_rollup'] as const) {
+        expect(errored(await svc.from(table).select('id').limit(1)),
+          `service_role can read ${table} (weak locally; prod is what counts)`).toBe(true)
+      }
+    }
+  })
+
+  it('append-only: not even the superadmin may UPDATE or DELETE an event, or INSERT a rollup row directly', async () => {
+    const anyRow = (await owner.from('activity_events').select('id').limit(1).single()).data
+    expect(anyRow, 'CONTROL: no activity event to attempt writes against').not.toBeNull()
+
+    expect(errored(await owner.from('activity_events').update({ action: 'bill.paid' }).eq('id', anyRow!.id)),
+      'the superadmin could UPDATE an event').toBe(true)
+    expect(errored(await owner.from('activity_events').delete().eq('id', anyRow!.id)),
+      'the superadmin could DELETE an event').toBe(true)
+    expect(errored(await owner.from('activity_rollup').insert({
+      user_id: danaId, org_id: salon, module_key: 'nail-salon', action: 'x.y',
+      first_observed_at: new Date().toISOString(), last_activity_at: new Date().toISOString(), observed_actions: 99,
+    })), 'the superadmin could INSERT a rollup row directly').toBe(true)
+
+    expect((await owner.from('activity_events').select('id').eq('id', anyRow!.id)).data?.length,
+      'the row is gone — one of the refusals above was not a refusal').toBe(1)
+  })
+
+  it('a PostgREST upsert cannot target the partial dedupe index (42P10), and no row is written', async () => {
+    const dedupeKey = `k1-${crypto.randomUUID()}` // fresh every run — must never collide with a prior run's history
+    const up = await dana.from('activity_events').upsert(
+      { org_id: salon, module_key: 'nail-salon', action: 'bill.created', dedupe_key: dedupeKey },
+      { onConflict: 'user_id,org_id,module_key,action,dedupe_key' },
+    )
+    const up2 = await dana.from('activity_events').upsert(
+      { org_id: salon, module_key: 'nail-salon', action: 'bill.created', dedupe_key: dedupeKey },
+      { onConflict: 'user_id,org_id,module_key,action,dedupe_key' },
+    )
+    expect(up.error?.code, `first upsert: ${JSON.stringify(up.error)}`).toBe('42P10')
+    expect(up2.error?.code, `second upsert: ${JSON.stringify(up2.error)}`).toBe('42P10')
+
+    const dupRows = (await owner.from('activity_events').select('id').eq('dedupe_key', dedupeKey)).data ?? []
+    expect(dupRows.length, 'a row was written by a refused upsert').toBe(0)
+  })
+
+  it('the pruner: exists, is security INVOKER, takes no arguments, and the 90-day window is a literal', async () => {
+    const sql = postgres(dbUrl, { prepare: false, max: 1 })
+    try {
+      const fn = (await sql`
+        select p.prosecdef, p.pronargs, pg_get_functiondef(p.oid) as def
+        from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+        where n.nspname = 'public' and p.proname = 'activity_events_prune'
+      `) as unknown as { prosecdef: boolean; pronargs: number; def: string }[]
+      expect(fn.length, 'CONTROL: activity_events_prune not found — the assertions below are vacuous').toBe(1)
+      expect(fn[0]!.prosecdef, 'the pruner became SECURITY DEFINER').toBe(false)
+      expect(fn[0]!.pronargs, 'the pruner grew a parameter — the retention window must not be caller-supplied').toBe(0)
+      expect(fn[0]!.def, 'the 90-day retention window changed without a founder decision')
+        .toMatch(/interval\s+'90 days'/)
+
+      // THE 2026-08-11 FIX, asserted on BOTH functions rather than just one: the
+      // first draft set lock_timeout only on the guard (which barely contends).
+      // The contending statement is the rollup's own `on conflict do update`, in
+      // a SEPARATE function — and a function-level SET is restored when THAT
+      // function exits, so each needs its own.
+      const guardFn = (await sql`
+        select pg_get_functiondef(p.oid) as def from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+        where n.nspname = 'public' and p.proname = 'activity_event_guard'
+      `) as unknown as { def: string }[]
+      const rollupFn = (await sql`
+        select pg_get_functiondef(p.oid) as def from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+        where n.nspname = 'public' and p.proname = 'activity_rollup_apply'
+      `) as unknown as { def: string }[]
+      expect(guardFn.length, 'CONTROL: activity_event_guard not found').toBe(1)
+      expect(rollupFn.length, 'CONTROL: activity_rollup_apply not found').toBe(1)
+      expect(guardFn[0]!.def, "the guard's own lock_timeout regressed").toMatch(/SET\s+lock_timeout/i)
+      expect(rollupFn[0]!.def,
+        "THE FIX: activity_rollup_apply lost its OWN lock_timeout — the guard's does not cover it, since a function-level SET restores on exit")
+        .toMatch(/SET\s+lock_timeout/i)
+    } finally {
+      await sql.end()
+    }
+  })
+
+  it('the pruner: postgres can execute it, authenticated/service_role/anon cannot', async () => {
+    const sql = postgres(dbUrl, { prepare: false, max: 1 })
+    try {
+      const acl = (await sql`
+        select r.rolname,
+               has_function_privilege(r.rolname, 'public.activity_events_prune()', 'execute') as prune,
+               has_function_privilege(r.rolname, 'public.is_superadmin()', 'execute') as control
+        from pg_roles r where r.rolname in ('postgres', 'authenticated', 'service_role', 'anon')
+      `) as unknown as { rolname: string; prune: boolean; control: boolean }[]
+      const of = (role: string) => acl.find((r) => r.rolname === role)
+
+      expect(of('authenticated')?.control,
+        'CONTROL: has_function_privilege reports false for a function that IS granted — the probe is broken')
+        .toBe(true)
+      expect(of('postgres')?.prune, 'the owner cannot execute the pruner — retention can never run').toBe(true)
+      for (const role of ['authenticated', 'service_role', 'anon']) {
+        expect(of(role)?.prune, `${role} can EXECUTE the pruner`).toBe(false)
+      }
+    } finally {
+      await sql.end()
+    }
+
+    expect(errored(await owner.rpc('activity_events_prune')),
+      'the superadmin could invoke the pruner over PostgREST').toBe(true)
+    if (serviceKey) {
+      const svc = createClient(url, serviceKey, { auth: { persistSession: false } })
+      expect(errored(await svc.rpc('activity_events_prune')),
+        'service_role could invoke the pruner over PostgREST').toBe(true)
+    }
+  })
+
+  it('exactly three policies exist, none FOR ALL, and none grew a module rank arm', async () => {
+    const sql = postgres(dbUrl, { prepare: false, max: 1 })
+    try {
+      const pol = (await sql`
+        select tablename, policyname, cmd, qual, with_check from pg_policies
+        where schemaname = 'public' and tablename in ('activity_events', 'activity_rollup')
+      `) as unknown as { tablename: string; policyname: string; cmd: string; qual: string; with_check: string }[]
+      const all = (await sql`
+        select count(*)::int as n from pg_policies where schemaname = 'public'
+      `) as unknown as { n: number }[]
+      expect(all[0]!.n,
+        'CONTROL: pg_policies returned almost nothing — a missing policy would read as correctly absent')
+        .toBeGreaterThan(100)
+
+      expect(pol.length, `expected exactly three policies, got ${JSON.stringify(pol.map((p) => p.policyname))}`)
+        .toBe(3)
+      for (const p of pol) {
+        expect(p.cmd, `${p.policyname} is not SELECT/INSERT — a FOR ALL policy's USING silently covers SELECT`)
+          .toMatch(/^(SELECT|INSERT)$/)
+      }
+      expect(pol.every((p) => !/module_position_rank|module_scope_covers/.test(`${p.qual} ${p.with_check}`)),
+        'a policy grew a module rank arm — this is the rank-0 inversion (docs/17)').toBe(true)
+    } finally {
+      await sql.end()
+    }
+  })
+
+  it('both triggers are BOUND and enabled on activity_events, not merely defined', async () => {
+    const sql = postgres(dbUrl, { prepare: false, max: 1 })
+    try {
+      const trg = (await sql`
+        select t.tgname, t.tgenabled from pg_trigger t join pg_class c on c.oid = t.tgrelid
+        where c.relname = 'activity_events' and not t.tgisinternal
+      `) as unknown as { tgname: string; tgenabled: string }[]
+      expect(trg.map((t) => t.tgname).sort(),
+        'expected exactly the guard and rollup triggers').toEqual(['activity_events_guard', 'activity_events_rollup'])
+      expect(trg.every((t) => t.tgenabled === 'O'), 'a trigger is bound but DISABLED').toBe(true)
+    } finally {
+      await sql.end()
+    }
+  })
+
+  it('an org member with NO module_roles row for this module gets actor_grants = [] — a real answer, not a hole', async () => {
+    // THE ONE CASE scripts/verify-activity-capture.mts explicitly says it
+    // cannot cover — its own comment, right after its section 6: every seeded
+    // Demo Salon member already holds SOME salon grant (charlie an explicit
+    // `customer`, grace a SCOPED `manager`), so the empty-actor_grants path the
+    // migration's header argues at length must be legal is not reachable from
+    // seed data. This fixture manufactures it: bob administers Demo Org B and
+    // has never held a nail-salon module_roles row at all.
+    //
+    // Since slice 3 an admin-added member starts PENDING and satisfies no
+    // membership predicate (is_org_member() requires status = 'active'), so
+    // this must ACCEPT the invite — exactly like every other fixture in this
+    // file that adds an org member. `ignoreDuplicates` makes the seed step safe
+    // to repeat across reruns; `acceptInviteAs` already tolerates "no pending
+    // invitation" if a prior run left the seat active.
+    const { error: addErr } = await owner.from('org_members')
+      .upsert({ org_id: salon, user_id: bobId, role: 'member' }, { onConflict: 'org_id,user_id', ignoreDuplicates: true })
+    expect(addErr, `CONTROL: could not seed bob's demo-salon membership: ${JSON.stringify(addErr)}`).toBeNull()
+    await acceptInviteAs('bob@demo.local', salon)
+
+    const action = 'walk_in.added'
+    const before = await eventsOf(bobId, action)
+
+    const ins = await bobFixture.from('activity_events').insert({ org_id: salon, module_key: 'nail-salon', action })
+    expect(ins.error,
+      `CONTROL: bob could not record ${action} once active — is his membership really active? ${JSON.stringify(ins.error)}`)
+      .toBeNull()
+
+    const after = await eventsOf(bobId, action)
+    expect(after.length, "CONTROL: bob's insert was not recorded at all").toBe(before.length + 1)
+
+    const row = after[0]!
+    expect(row.actor_grants, 'bob holds no nail-salon module_roles row, yet actor_grants is not an EMPTY array')
+      .toEqual([])
+    expect(row.actor_org_role, "bob's org seat (a real, active membership) was not recorded").toBe('member')
+  })
+})

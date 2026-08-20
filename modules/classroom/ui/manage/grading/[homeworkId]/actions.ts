@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { DERIVED_SCOPE_PLACEHOLDER } from '@platform/core'
+import { DERIVED_SCOPE_PLACEHOLDER, recordActivity } from '@platform/core'
 import { assignPeerReviews } from '@modules/classroom'
 import { createClient } from '@/lib/supabase/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -84,6 +84,7 @@ export async function submitGaGrade(orgSlug: string, homeworkId: string, formDat
   const supabase = await createClient()
   const error = await upsertGrade(supabase, { classId, homeworkId, studentId, source: 'ga', score })
   fail(error, 'Save GA grade failed')
+  await recordActivity(supabase, { moduleKey: 'classroom', action: 'grade.submitted', orgSlug })
   revalidatePath(`/o/${orgSlug}/m/classroom/manage/grading/${homeworkId}`)
 }
 
@@ -281,6 +282,7 @@ export async function publishFinalGrade(orgSlug: string, homeworkId: string, for
     visible: true,
   })
   fail(error, 'Publish final grade failed')
+  await recordActivity(supabase, { moduleKey: 'classroom', action: 'grade.published', orgSlug })
   revalidatePath(`/o/${orgSlug}/m/classroom/manage/grading/${homeworkId}`)
 }
 

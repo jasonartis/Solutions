@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { DERIVED_SCOPE_PLACEHOLDER } from '@platform/core'
+import { DERIVED_SCOPE_PLACEHOLDER, recordActivity } from '@platform/core'
 import { createClient } from '@/lib/supabase/server'
 
 // Student-facing classroom actions (the landing page).
@@ -34,5 +34,6 @@ export async function answerSurvey(orgSlug: string, surveyId: string, classId: s
         answer,
       })
   if (error) throw new Error(`Submit answer failed: ${error.message}`)
+  await recordActivity(supabase, { moduleKey: 'classroom', action: 'survey.answered', orgSlug })
   revalidatePath(`/o/${orgSlug}/m/classroom`)
 }
