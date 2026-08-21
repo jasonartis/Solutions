@@ -246,17 +246,35 @@ Everything below is open but unranked:
   cannot shrink, zero `.rpc()` calls, pg-boss connects as `postgres`. Watch the next real job run.
   *(The NEW `login-events-prune` job was exercised end-to-end 2026-08-09; that says nothing about
   the others.)*
-- `gh` is NOT installed on this machine, so GitHub Actions logs need the web UI — **but CI
-  PASS/FAIL is readable from the terminal indirectly**: the `deploy` job has `needs: check`,
-  so a `READY` production deployment proves `check` was green. Query it with the
-  `VERCEL_TOKEN` already in `.env.deploy`:
+- `gh` is NOT installed on this machine. **CI PASS/FAIL is readable from the terminal without
+  it** — the `deploy` job has `needs: check`, so a `READY` production deployment proves `check`
+  was green. Query it with the `VERCEL_TOKEN` already in `.env.deploy`:
   `GET https://api.vercel.com/v6/deployments?limit=8` with `Authorization: Bearer <token>`,
   and match `meta.githubCommitSha` against the commit. Gives state/target/sha/time per
-  deploy. Only the UI shows *why* a run failed, but this answers "did it ship?" in seconds.
+  deploy — answers "did it ship?" in seconds. **And the actual failure text IS readable from
+  the terminal too, without `gh` and without a configured PAT (2026-08-21)** — the repo's
+  `.env.accounts` `GITHUB_PAT` field has always been an unfilled template placeholder, not a
+  real token, so don't waste time hunting for one there. Instead reuse Git Credential Manager's
+  own cached OAuth token (the same thing that lets `git push` work without prompting):
+  `printf 'protocol=https\nhost=github.com\n' | git credential fill` prints a `password=` line
+  that IS a usable bearer token for the GitHub REST API. Use it against
+  `GET /repos/<owner>/<repo>/actions/runs?per_page=N` to find the run, then
+  `GET /repos/<owner>/<repo>/actions/jobs/<job_id>/logs` **with `curl -L`** (the endpoint 302s to
+  a signed blob URL — the redirect must be followed or you get an empty file) to get the FULL
+  raw job log as plain text, no zip. This is how the exact e2e failure that broke CI on
+  `d653d4d` was found and fixed same-session — check-run annotations alone (`.../check-runs/
+  <id>/annotations`) only gave a generic "exit code 1" with no Playwright reporter configured for
+  GitHub, so the full log was genuinely necessary, not just a convenience.
   **CI also differs from local in two ways that matter for e2e:** `retries: 1` (local 0) and a
   PREBUILT server via `pnpm start` (local `pnpm dev` compiles routes mid-test) —
   `apps/web/playwright.config.ts:9,15`. So a test that flakes locally may be reliably green in CI
-  and vice versa; judge by the actual CI run.
+  and vice versa; judge by the actual CI run. **And a CI failure that looks like flakiness
+  because two different local reproductions both passed clean is not proof of flakiness** — it
+  can mean the reproduction didn't match CI's literal step order. `.github/workflows/ci.yml` runs
+  `pnpm --filter @platform/db test` immediately before `pnpm test:e2e` on the SAME database with
+  NO reset in between; reproducing that exact order (not just "reset, then eventually run e2e
+  at some point") is what actually surfaces an order-dependent failure like the grace/login-history
+  one below.
 - ~~**The per-person data browser.**~~ **DONE 2026-08-03.** One known gap is still open and
   is the only reason this line survives: **walk-in salon customers have no account, so they are
   not findable** — the fix, if ever wanted, is letting a salon LINK a walk-in to an account when
@@ -296,14 +314,17 @@ Everything below is open but unranked:
   the ruleset really enforces and against whom** — including whether force-push protection
   (docs/12 guard 3) is bypassable too, which is now marked UNVERIFIED. Needs the GitHub UI or
   a token; `gh` is not installed here. Opus tier; ends in a founder decision.
-- **THE PRIVACY-POLICY LINE FOR LOGIN CAPTURE IS AN OUTSTANDING OBLIGATION, NOT A PRE-LAUNCH
-  NICETY (2026-08-09).** docs/12 item 6 said that wording was "a PRECONDITION of shipping"
-  engagement monitoring; phase 1 shipped anyway, so the obligation has changed status rather than
-  disappeared: **the feature is collecting on prod NOW, so the wording is owed before the first
-  real customer account exists.** One line under "what we collect" — *"authentication events (when
-  you sign in)"* — founder-decided, no user-facing notice. Exposure today is nil (12 prod accounts,
-  all demo or the founder's, 7 never signed in) and there is no privacy page yet at all, which is
-  exactly how this could hide inside the pre-launch checklist below. Recorded in docs/12 item 6.
+- **THE PRIVACY-POLICY LINE IS NOW DOUBLY OUTSTANDING, NOT A PRE-LAUNCH NICETY (2026-08-09,
+  ESCALATED 2026-08-21).** docs/12 item 6 said this wording was a PRECONDITION of shipping —
+  phase 1 shipped anyway on 2026-08-09, and **phase 2 also shipped 2026-08-21 without it**, despite
+  docs/17 §9 explicitly saying phase 2's line "must exist BEFORE it ships." Both times recorded
+  honestly rather than the rule being quietly relaxed. **Two lines are now owed, not one**: phase
+  1's "authentication events (when you sign in)" and phase 2's per-org-activity line (materially
+  bigger claim — logging what someone opened, not just that they signed in). Exposure today is
+  still nil (prod's only captured phase-2 event is a demo account) and there is STILL no privacy
+  page of any kind to put either line on — the single most concrete "must happen before a real
+  customer" item on the platform now, precisely because two live features have shipped ahead of it.
+  Full detail: docs/12 item 6.
 - Pre-launch before real customers (docs/12 checklist): automated+tested backups, monitoring,
   2FA, privacy/terms, custom SMTP.
 
@@ -518,7 +539,16 @@ in the sections below.
   helper never chains `.select()` / requests representation, so it was never at risk; the bug was
   in the manual test, not the migration. **When hand-verifying an insert-only, no-self-read table
   via `curl`/PostgREST directly: omit `Prefer: return=representation`, or the false negative will
-  send you hunting a schema bug that isn't there.**
+  send you hunting a schema bug that isn't there.** **The same mechanism, same false negative,
+  shows up in raw SQL too, not just PostgREST** — this is how the true cause was actually found:
+  a diagnostic `insert into activity_events (...) values (...) returning *` via a raw
+  `postgres.js` connection (simulating the caller's session with `set local role authenticated`
+  + `request.jwt.claims`) hit the identical 42501, for the identical reason — `RETURNING`
+  requires the same SELECT-policy check as reading the row back afterward, regardless of whether
+  the read-back is requested via PostgREST's `Prefer` header or SQL's own `RETURNING` clause.
+  Dropping `RETURNING *` (or `RETURNING` any column) from a raw-SQL insert probe on a
+  no-self-read table fixes the false negative exactly like dropping the `Prefer` header does over
+  HTTP — same root cause, two different surfaces.**
 - **`ON DELETE SET NULL` fires the referencing table's BEFORE UPDATE triggers** — Postgres implements the FK action as a real UPDATE. So an append-only `before update or delete ... raise exception` trigger silently makes every row the table has ever referenced UNDELETABLE (the parent DELETE aborts), including whole orgs via a cascading `org_id`. Enforce append-only with GRANTS instead (no UPDATE/DELETE to api roles → `42501`), which is why `vm_moderation_log` has no such trigger. Found live in the 2026-07-31 view-as review, one review after `set null` had been (correctly) required.
 - **A passing NEGATIVE assertion proves nothing unless something nearby proves the subject
   exists** — the vacuity rule, generalised in docs/03 after it appeared three times in one

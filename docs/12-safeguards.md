@@ -200,6 +200,18 @@ Found in a deliberate "what haven't we thought of" pass; ordered by urgency.
    **Phase 2 moves the line again:** logging what a person opened and when, per
    org, is materially more than a login timestamp, and that wording must exist
    BEFORE it ships.
+   **PHASE 2 SHIPPED TO PRODUCTION 2026-08-21 WITHOUT THAT WORDING — recorded
+   honestly, same as phase 1 above, not quietly relaxed.** `20260810010000_activity_events.sql`
+   is applied and ~48 `recordActivity()` call sites across all 6 modules are live; capture is
+   proven working with one real recorded event. **The obligation is now doubly outstanding**: both
+   phase 1's login-timestamp line AND phase 2's per-org-activity line are owed, and there is still
+   no privacy policy page of any kind to put either on. Exposure today remains nil for the same
+   reason as phase 1 — the one real captured phase-2 event is a demo account
+   (`dana@demo.local`), and prod otherwise holds only the 12 demo/founder accounts already
+   described above. **This is the single most concrete "must happen before a real customer"
+   item on the whole platform now** — not because it is hard (it is one page and two sentences),
+   but because two live features have shipped ahead of it and a third module would make it three.
+   Founder's call whether to close it now or keep deferring; not something to start unprompted.
    Unlike the two logs above, the engagement log IS prunable by design (90 days
    raw + a permanent rollup) — a deliberate divergence, see docs/17 §6. **The
    exception turned out NOT to need `SECURITY DEFINER`** (as this item previously
