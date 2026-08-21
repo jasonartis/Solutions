@@ -1,12 +1,17 @@
 # 17 — Engagement monitoring (superadmin)
 
-**Status: PHASES 1 AND 3 BUILT 2026-08-09** (`20260809010000_login_events.sql`; the console page
-at `/console/engagement`, no migration). Phases 2 and 4 are specced or sketched only and are NOT
-approved to build. Login capture is live: an `AFTER UPDATE OF last_sign_in_at` trigger on
-`auth.users` appends to `public.login_events` and maintains a permanent `public.login_rollup`
-summary; a 90-day pruner trims the raw detail. The console page reads both tables and answers §1's
-two directions — see §8b's decisions-log entry for what phase 3 actually built, its test coverage,
-and the schema-friction it reports back per item 12.
+**Status: PHASES 1, 2 AND 3 ARE LIVE ON PRODUCTION** (phase 1 + 3: `20260809010000_login_events.sql`,
+built 2026-08-09; phase 2: `20260810010000_activity_events.sql`, schema built 2026-08-11,
+instrumented and deployed to prod 2026-08-21 — see the 2026-08-16→08-21 decisions-log entry for the
+full story). Phase 4 (hierarchy-governed reads) remains sketched only and is NOT approved to build.
+Login capture is live: an `AFTER UPDATE OF last_sign_in_at` trigger on `auth.users` appends to
+`public.login_events` and maintains a permanent `public.login_rollup` summary; a 90-day pruner trims
+the raw detail. Org-scoped activity capture is also live: ~48 `recordActivity()` call sites across
+all 6 modules write to `public.activity_events`/`activity_rollup` under RLS as the caller — **phase 2
+SHIPS CAPTURE-ONLY, no reader yet** (decisions log item 10), so `/console/engagement` (phase 3)
+still reads phase 1's tables only. The console page answers §1's two directions for logins — see
+§8b's decisions-log entry for what phase 3 actually built, its test coverage, and the schema-friction
+it reports back per item 12.
 **Six things were built differently from the draft below and every one is recorded in the
 decisions log with its reasoning — read that entry before trusting any paragraph in §5 or §6,
 which have been corrected in place.** The largest change: there is NO `profiles` mirror.
@@ -308,7 +313,7 @@ Phase 1 (logins) has no org context at all, so it carries none of these — see 
 | Phase | What | Status |
 |---|---|---|
 | **1** | Login capture: trigger on `auth.users`, read-only `login_events`, permanent `login_rollup` (no `profiles` mirror), prune | **BUILT 2026-08-09** |
-| **2** | Org-scoped activity, written by the app as the user under RLS, carrying org/module/role/scope stamped at write time | Specced here, not approved |
+| **2** | Org-scoped activity, written by the app as the user under RLS, carrying org/module/role/scope stamped at write time | **BUILT, INSTRUMENTED AND LIVE ON PROD 2026-08-21** — capture-only, no reader yet |
 | **3** | The console page: org rollup → drill to people; person → their orgs | **BUILT 2026-08-09** |
 | **4** | Hierarchy-governed visibility (a manager sees those below them) | Future enhancement, §7 — **and it belongs on phase 2's data, not phase 1's; see below** |
 
@@ -840,6 +845,38 @@ the apps-router pages are thin re-export wrappers with no logic of their own):
 ---
 
 ## Decisions log (dated)
+
+- **2026-08-21 — PHASE 2 IS FULLY LIVE ON PRODUCTION, capture proven with a real event.** Closes the
+  instrumentation work opened 2026-08-16 (call sites, RLS test port, prod-verify script — commit
+  `d653d4d`) and a CI regression fixed the same week (commit `f121539`; full account: CLAUDE.md's
+  gotchas and `docs/history/platform-journal.md`'s 2026-08-16→08-21 entry — the short version: the
+  new RLS block's own sign-in as `grace@demo.local` deterministically broke a phase-3 e2e assertion
+  in CI's actual step order, fixed by having that block clean up her login-capture footprint in its
+  own `afterAll`).
+  1. **The migration had never actually reached production.** `20260810010000_activity_events.sql`
+     was committed 2026-08-11 and every doc since called it "built, verified and pushed" — true of
+     GitHub, not of the live Supabase project. `pnpm migrate:prod --dry-run` confirmed it was the
+     only migration missing; applied for real once the app commit (the call sites that actually use
+     the tables) was pushed and deployed, per docs/12's documented order ("never migrate:prod a slice
+     whose app commit is still unpushed").
+  2. **Structural prod-verify: 78/78** (`scripts/prod-verify-activity-events.mts`) — tables, RLS
+     enabled, the ACL asymmetry (activity_events gets INSERT+SELECT, activity_rollup SELECT-only),
+     all 3 policies with no rank arm, both triggers bound and enabled, both trigger functions with
+     their own `lock_timeout` (the 2026-08-11 fix, re-confirmed live on prod), the 3 CHECK
+     constraints, both FK actions, the 4-column rollup primary key, the partial dedupe index, and the
+     pruner's ACL — all exactly as designed.
+  3. **Capture proven live**: one real `walk_in.added` event recorded by `dana@demo.local` against
+     Demo Salon, via a direct authenticated PostgREST insert shaped identically to what
+     `recordActivity()` sends (no client-supplied `user_id`/`occurred_at`/`actor_grants` — all
+     guard-derived). A first attempt at this via `curl` failed with a generic RLS 42501 and
+     reproduced even locally — traced to an unnecessary `Prefer: return=representation` header
+     triggering an implicit post-insert SELECT against a table with no self-read policy, not to any
+     defect in the migration or the app's own call sites (which never request representation). Now a
+     CLAUDE.md gotcha so a future prod-verify session doesn't re-chase the same false lead.
+  4. **What remains, unchanged from item 10 below**: phase 2 still ships capture-only — no console
+     reader, so "which orgs have gone quiet" (§1) is still not answerable from phase 2's data, and
+     retention still isn't enforced on prod until the worker actually runs there
+     (`pnpm worker:prod` stopgap, unchanged).
 
 - **2026-08-16 — THE CONFIRMED-FABLE RE-REVIEW OF `20260809010000` (phase 1) IS DONE. Verdict: SHIP AS-IS
   (already shipped; nothing changes), plus one concrete fix applied to tooling.** Closes the item that had

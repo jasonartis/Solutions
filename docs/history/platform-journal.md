@@ -5,6 +5,60 @@ section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every 
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
 
+- **2026-08-16 → 08-21 (ENGAGEMENT MONITORING PHASE 2 — FULLY SHIPPED: instrumentation, RLS
+  tests, prod deploy, prod-verified with a real captured event. Commits `d653d4d`, `f121539`.
+  Sonnet throughout, one confirmed-Fable subagent pass on phase 1. Full spec: docs/17.)**
+  Finished the three tasks left after 2026-08-11's schema-only session: 48 `recordActivity()`
+  call sites across all 6 modules (parallel Sonnet subagents, one per module, each independently
+  adversarially reviewed — zero findings); the RLS test port of
+  `scripts/verify-activity-capture.mts` into `rls.test.ts` plus the one fixture the probe script
+  couldn't cover (an org member with no `module_roles` row, proving `actor_grants` comes back a
+  real empty array); and `scripts/prod-verify-activity-events.mts`, extending the phase-1
+  template for phase 2's real INSERT path.
+  - **A confirmed-Fable re-review of phase 1's migration also ran** (closing the item open since
+    2026-08-09 — this time via the Agent tool's own `model: "fable"` parameter, a stronger
+    provenance claim than the first pass's self-reported subagent). Verdict: SHIP AS-IS. One
+    concrete fix: a `select current_user` check confirming the worker's pooler connection really
+    authenticates as `postgres` — previously a single one-time manual measurement — is now
+    permanent in both prod-verify scripts.
+  - **Two Docker Desktop host issues hit and fixed** (both now gotchas in CLAUDE.md): Docker
+    coming back up in Windows Containers mode after the founder's reboot (`DockerCli.exe
+    -SwitchDaemon` + full restart), and a crashed `com.docker.backend` ballooning to 13GB+ and
+    starving every relaunch attempt until killed explicitly.
+  - **THE REAL FINDING: CI failed on the first push (`d653d4d`), and it was not a flake.**
+    `.github/workflows/ci.yml` runs `pnpm --filter @platform/db test` immediately before
+    `pnpm test:e2e` on the SAME database with no reset in between. The new phase-2 RLS block
+    signs in as `grace@demo.local` (the seed's only scoped nail-salon manager grant, needed to
+    prove a SCOPED `{role, scope_ref}` pair survives the write path) — but the phase-3 engagement
+    e2e test depends on grace never having signed in anywhere in this shared database. Two local
+    reproductions in a different step order passed clean, which is exactly what made this look
+    like environment-specific flakiness before the CI log (fetched via the GitHub API using Git
+    Credential Manager's cached OAuth token, since no PAT was configured and job-log downloads
+    need repo-admin scope) proved it was 100% deterministic in CI's actual order. **Fixed at the
+    root in `f121539`**: the phase-2 block's own `afterAll` now deletes grace's
+    `login_events`/`login_rollup` rows via a raw owner-level connection (both tables are read-only
+    to every api role including the superadmin, so the ordinary RLS client can't do it) — verified
+    by reproducing CI's literal sequence locally post-fix.
+  - **The migration itself had never actually been applied to production** — "schema built,
+    verified and pushed" (CLAUDE.md, since 2026-08-11) meant pushed to GitHub, not to the live
+    Supabase project; `pnpm migrate:prod --dry-run` confirmed it was the only migration missing.
+    Applied for real (`pnpm migrate:prod`) once the app commit was pushed and deployed, per
+    docs/12's own documented order. Structural prod-verify: 77/78 (the one expected failure being
+    "no real activity yet" — by design).
+  - **A false lead worth recording as a gotcha, not just a war story**: proving live capture on
+    prod with a real `INSERT` via `curl` initially failed with a generic RLS 42501 — reproduced
+    even locally, which correctly redirected suspicion away from "prod is broken" toward "the
+    request is different from what the app sends." The cause: `Prefer: return=representation`
+    makes PostgREST try to `SELECT` the row back after inserting, and `activity_events` has no
+    self-read policy by design (superadmin-only, no `user_id = auth.uid()` arm) — the real
+    `recordActivity()` helper never chains `.select()` and was never at risk. Dropping the header
+    made the same insert succeed instantly, on both prod and local.
+  - **Verification, all real runs**: `turbo run typecheck --force` 9/9, `turbo run build --force`
+    2/2, `pnpm --filter @platform/db test` 139/139 (confirmed three times across resets),
+    `scripts/verify-activity-capture.mts` 53/53, `CI=true pnpm test:e2e` 51/51 (clean, after the
+    grace fix — confirmed via GitHub's own CI run, not just locally), prod-verify 78/78 with one
+    real captured event (dana@demo.local, `walk_in.added`, Demo Salon).
+
 
 - **2026-08-11 (ENGAGEMENT MONITORING PHASE 2 — THE SCHEMA, RECOVERED FROM A LOST SESSION, THEN
   HARDENED AND VERIFIED. Migration `20260810010000_activity_events.sql`. Opus, with a Fable
