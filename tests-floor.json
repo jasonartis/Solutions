@@ -1,6 +1,6 @@
 {
-  "e2e": 49,
-  "rls": 116,
+  "e2e": 51,
+  "rls": 134,
   "_requiredFiles": "Schema-coverage checks. Each is ONE it() whose value is the file, not the count, so a numeric floor would be theatre — the failure mode is the file being deleted or the generated artifact going untracked, after which the suite is green and the guarantee is gone. Removing an entry is a founder decision, exactly like lowering a floor.",
   "requiredFiles": [
     "packages/db/src/data-browser-coverage.test.ts",
