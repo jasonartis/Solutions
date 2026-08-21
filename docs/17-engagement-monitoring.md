@@ -859,19 +859,21 @@ the apps-router pages are thin re-export wrappers with no logic of their own):
      only migration missing; applied for real once the app commit (the call sites that actually use
      the tables) was pushed and deployed, per docs/12's documented order ("never migrate:prod a slice
      whose app commit is still unpushed").
-  2. **Structural prod-verify: 78/78** (`scripts/prod-verify-activity-events.mts`) — tables, RLS
+  2. **Structural prod-verify: 77/77** (`scripts/prod-verify-activity-events.mts`'s first 11
+     sections, everything except the capture-proof check that's item 3's own topic) — tables, RLS
      enabled, the ACL asymmetry (activity_events gets INSERT+SELECT, activity_rollup SELECT-only),
      all 3 policies with no rank arm, both triggers bound and enabled, both trigger functions with
      their own `lock_timeout` (the 2026-08-11 fix, re-confirmed live on prod), the 3 CHECK
      constraints, both FK actions, the 4-column rollup primary key, the partial dedupe index, and the
      pruner's ACL — all exactly as designed.
-  3. **Capture proven live**: one real `walk_in.added` event recorded by `dana@demo.local` against
-     Demo Salon, via a direct authenticated PostgREST insert shaped identically to what
-     `recordActivity()` sends (no client-supplied `user_id`/`occurred_at`/`actor_grants` — all
-     guard-derived). A first attempt at this via `curl` failed with a generic RLS 42501 and
-     reproduced even locally — traced to an unnecessary `Prefer: return=representation` header
-     triggering an implicit post-insert SELECT against a table with no self-read policy, not to any
-     defect in the migration or the app's own call sites (which never request representation). Now a
+  3. **Capture proven live** (closing out the 78th check, for a final 78/78): one real
+     `walk_in.added` event recorded by `dana@demo.local` against Demo Salon, via a direct
+     authenticated PostgREST insert shaped identically to what `recordActivity()` sends (no
+     client-supplied `user_id`/`occurred_at`/`actor_grants` — all guard-derived). A first attempt at
+     this via `curl` failed with a generic RLS 42501 and reproduced even locally — traced to an
+     unnecessary `Prefer: return=representation` header triggering an implicit post-insert SELECT
+     against a table with no self-read policy, not to any defect in the migration or the app's own
+     call sites (which never request representation). Now a
      CLAUDE.md gotcha so a future prod-verify session doesn't re-chase the same false lead.
   4. **What remains, unchanged from item 10 below**: phase 2 still ships capture-only — no console
      reader, so "which orgs have gone quiet" (§1) is still not answerable from phase 2's data, and
