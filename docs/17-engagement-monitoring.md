@@ -856,9 +856,11 @@ the apps-router pages are thin re-export wrappers with no logic of their own):
   1. **The migration had never actually reached production.** `20260810010000_activity_events.sql`
      was committed 2026-08-11 and every doc since called it "built, verified and pushed" — true of
      GitHub, not of the live Supabase project. `pnpm migrate:prod --dry-run` confirmed it was the
-     only migration missing; applied for real once the app commit (the call sites that actually use
-     the tables) was pushed and deployed, per docs/12's documented order ("never migrate:prod a slice
-     whose app commit is still unpushed").
+     only migration missing. **Flagged explicitly to the founder before running it for real**
+     (first live write of this migration to a shared production database, the first genuinely new
+     prod-write action of the session) and the founder confirmed proceeding; applied once the app
+     commit (the call sites that actually use the tables) was pushed and deployed, per docs/12's
+     documented order ("never migrate:prod a slice whose app commit is still unpushed").
   2. **Structural prod-verify: 77/77** (`scripts/prod-verify-activity-events.mts`'s first 11
      sections, everything except the capture-proof check that's item 3's own topic) — tables, RLS
      enabled, the ACL asymmetry (activity_events gets INSERT+SELECT, activity_rollup SELECT-only),
