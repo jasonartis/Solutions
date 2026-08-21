@@ -6,7 +6,8 @@ lean. Newest first. Durable *decisions/conventions* live in their own docs (docs
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
 
 - **2026-08-16 → 08-21 (ENGAGEMENT MONITORING PHASE 2 — FULLY SHIPPED: instrumentation, RLS
-  tests, prod deploy, prod-verified with a real captured event. Commits `d653d4d`, `f121539`.
+  tests, prod deploy, prod-verified with a real captured event. Commits `d653d4d`, `f121539`,
+  `8107548`, `acf6e3c`, `d92459f`.
   Sonnet throughout, one confirmed-Fable subagent pass on phase 1. Full spec: docs/17.)**
   Finished the three tasks left after 2026-08-11's schema-only session: 48 `recordActivity()`
   call sites across all 6 modules (parallel Sonnet subagents, one per module, each independently
@@ -58,6 +59,17 @@ decision log, docs/03 conventions, docs/12 safeguards) — this is the chronolog
     `scripts/verify-activity-capture.mts` 53/53, `CI=true pnpm test:e2e` 51/51 (clean, after the
     grace fix — confirmed via GitHub's own CI run, not just locally), prod-verify 78/78 with one
     real captured event (dana@demo.local, `walk_in.added`, Demo Salon).
+  - **Three small follow-up commits closed out the session's own continuity gaps, found by
+    auditing this session specifically rather than the platform generally**: `8107548` (docs
+    closure — CLAUDE.md/docs/17 status updates now that phase 2 is live); `acf6e3c` (the
+    phase-2 privacy-policy line docs/17 §9 required BEFORE shipping — shipped without it, same
+    as phase 1 did on 2026-08-09, recorded honestly rather than quietly relaxed; plus the
+    GitHub-log-fetching-without-`gh` technique that found the CI root cause; plus the
+    `RETURNING`-clause generalisation of the `Prefer: return=representation` false lead);
+    `d92459f` (the CI test-count ratchet's `rls` floor was never bumped for this session's 18 new
+    tests — 116 stayed on the books while the real count reached 134, silently widening how many
+    tests could be deleted before the ratchet noticed; fixed to the exact anchored count, and the
+    already-drifted `e2e` floor tightened 49 → 51 while touching the same file).
 
 
 - **2026-08-11 (ENGAGEMENT MONITORING PHASE 2 — THE SCHEMA, RECOVERED FROM A LOST SESSION, THEN
