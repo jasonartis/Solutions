@@ -306,19 +306,21 @@ Everything below is open but unranked:
   locked not dropped; `service_role`'s retained TRUNCATE. Plus: generic scope-wrappers deriving
   org from the entity row; generalize coarse `<prefix>_can_manage(org)`; per-class storage
   scoping; per-module scoped-assignment UIs.
-- **What should actually gate `master`? — OPEN, raised 2026-08-07, full brief in docs/12
-  item 10.** Every direct push prints `Bypassed rule violations … Required status check
-  "check" is expected`. Two facts settle the panic and open the real question: **a required
-  status check can never be satisfied by a direct push** (the check is triggered BY the push,
-  so the commit has no result yet — it is a PR mechanism), and **prod is gated by `needs:
-  check` inside the workflow, not by any branch rule**, so "READY proves CI was green" still
-  holds exactly. The live exposure is only that a RED COMMIT CAN LAND ON MASTER. Wants a
-  comprehensive review of the balance (drop the misleading rule / PRs for
-  `supabase/migrations/` only / PRs wholesale / a pre-push hook), plus the deeper question of
-  whether an AI agent should hold bypass rights on master at all. **First step: find out what
-  the ruleset really enforces and against whom** — including whether force-push protection
-  (docs/12 guard 3) is bypassable too, which is now marked UNVERIFIED. Needs the GitHub UI or
-  a token; `gh` is not installed here. Opus tier; ends in a founder decision.
+- **What should actually gate `master`? — INVESTIGATION DONE 2026-08-28, the decision itself
+  still OPEN. Full facts in docs/12 item 10.** Read live via the GitHub API using Git
+  Credential Manager's cached token (no `gh`, no PAT needed — same technique as the CI-log
+  trick below). **Corrects a prior assumption:** this is CLASSIC branch protection, not the
+  newer Rulesets feature (`/rulesets` is empty; `/branches/master/protection` is not) — which
+  matters because classic protection can't do path-scoped rules (e.g. "PRs only for
+  `supabase/migrations/`") without migrating to a Ruleset first. **Confirmed: one single flag,
+  `enforce_admins: false`, is the whole mechanism** — it exempts an admin from the required
+  status check AND force-push AND deletion protection alike, resolving docs/12 guard 3's
+  "UNVERIFIED" flag (yes, same hole, not a second one). **There is exactly one collaborator on
+  the repo — the founder, admin role — and Claude Code pushes authenticate as that same
+  credential**, so "should an AI hold bypass rights" is concretely "should Claude Code's pushes
+  bypass CI the same way my own do," since no separate, narrower credential exists today. No PR
+  review requirement is configured at all, even hypothetically. Options now costed against
+  these corrected facts in docs/12 item 10. Ends in a founder decision.
 - **THE PRIVACY-POLICY LINE IS NOW DOUBLY OUTSTANDING, NOT A PRE-LAUNCH NICETY (2026-08-09,
   ESCALATED 2026-08-21).** docs/12 item 6 said this wording was a PRECONDITION of shipping —
   phase 1 shipped anyway on 2026-08-09, and **phase 2 also shipped 2026-08-21 without it**, despite

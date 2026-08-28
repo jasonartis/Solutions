@@ -22,14 +22,23 @@ rot; pipelines don't.
    marker `DESTRUCTIVE-CHANGE-APPROVED` — which may only be added after the
    founder explicitly approves that specific change.
 3. **Branch protection on master.** Force-pushes and branch deletion are
-   blocked at GitHub; history cannot be rewritten away.
-   **UNVERIFIED SINCE 2026-08-07 — do not quote this as fact until item 10 is
-   done.** The 2026-08-07 push proved the ruleset on `master` is BYPASSABLE by
-   the pushing account (it bypassed the required-status-check rule outright).
-   Whether the force-push and deletion rules are bypassable by that same role is
-   unknown, and cannot be checked from this machine — `gh` is not installed and
-   there is no GitHub token in `.env.deploy`. A safeguard doc asserting a
-   protection nobody has tested is the same failure as a vacuous test.
+   configured as blocked at GitHub; history cannot be rewritten away **by a
+   non-admin**.
+   **VERIFIED 2026-08-28 (item 10 investigation) — confirms and RESOLVES the
+   2026-08-07 "unverified" flag, in the direction the flag feared.** Read via
+   the GitHub REST API using Git Credential Manager's cached OAuth token (the
+   same technique CLAUDE.md documents for reading Action logs —
+   `printf 'protocol=https\nhost=github.com\n' | git credential fill`), no `gh`
+   or dedicated PAT needed. `GET /repos/.../branches/master/protection` shows
+   `allow_force_pushes.enabled: false`, `allow_deletions.enabled: false` —
+   AND `enforce_admins.enabled: false`. Classic branch protection ties every
+   configured rule to that ONE exemption flag: since it's off, an account with
+   admin on the repo is exempt from ALL of them, not just the required status
+   check that was already known to bypass. So yes — the same account that
+   bypasses the status check can also force-push and delete the branch; it is
+   one hole, not two. See item 10 for the full picture (which API is actually
+   in play, who holds admin, and what pushes through Claude Code authenticate
+   as).
 4. **RLS is the tenancy floor.** 7 isolation tests + per-module guard-trigger
    verifications; the web app has no service-role key to leak (worker only).
 5. **Prod seeding is demo-scoped.** The seed's deletes are keyed to the demo
@@ -326,15 +335,40 @@ Found in a deliberate "what haven't we thought of" pass; ordered by urgency.
    "A second superadmin" remains the trigger for revisiting this policy — now to
    implement the decision above, not to make it.
 
-10. **What should actually gate `master`? — OPEN, needs a comprehensive review
-    (raised 2026-08-07; NOT launch-blocking, but decide it deliberately rather
-    than by habit).** Every direct push prints
+10. **What should actually gate `master`? — investigation DONE 2026-08-28, the
+    decision itself still OPEN (raised 2026-08-07; NOT launch-blocking, but
+    decide it deliberately rather than by habit).** Every direct push prints
     `Bypassed rule violations for refs/heads/master: Required status check
-    "check" is expected.` — and the balance behind that is unexamined.
+    "check" is expected.` — and the balance behind that is now fully examined,
+    not just theorized about.
 
-    **Established facts, so a reviewer does not re-derive them:**
-    (a) The wording is GitHub *rulesets*, not classic branch protection, and
-    `is expected` means "no result reported for this commit yet", not "failed".
+    **CORRECTED FACT (2026-08-28): this is CLASSIC branch protection, NOT
+    GitHub's newer Rulesets feature** — the previous version of this item had
+    that backwards. Confirmed two ways: `GET /repos/.../rulesets` returns an
+    empty array (no rulesets exist on this repo at all), while
+    `GET /repos/.../branches/master/protection` (the classic API) returns the
+    full configured rule. This matters for the options below, not just as
+    trivia: classic protection has one blunt `enforce_admins` on/off switch
+    covering every rule at once, where rulesets support scoped bypass lists
+    (e.g. "this app bypasses, this team doesn't") and path-filtered rules
+    (e.g. "require a PR only under `supabase/migrations/`"). **The
+    `supabase/migrations/`-only-PRs option below is not available under the
+    current classic-protection setup — it would require migrating to a
+    ruleset first.**
+
+    **Access is no longer blocked.** Read via the GitHub REST API using Git
+    Credential Manager's cached OAuth token — the same credential that lets
+    `git push` work without prompting, extracted with
+    `printf 'protocol=https\nhost=github.com\n' | git credential fill`. No
+    `gh` install and no dedicated PAT needed for reading. (Only reads were
+    performed; whether that same token can WRITE a settings change, e.g. via
+    `PATCH .../branches/master/protection`, is untested.)
+
+    **Established facts, confirmed against the real config, not re-derived:**
+    (a) `required_status_checks`: one check named `check` (GitHub Actions app
+    id 15368), `strict: false` (does not require the branch to be up to date).
+    `is expected` in the push message means "no result reported for this
+    commit yet", not "failed".
     (b) **A required status check can NEVER be satisfied by a direct push,
     structurally.** The `check` job is triggered BY the push (`on: push:
     branches: [master]`), so at rule-evaluation time the commit has zero status
@@ -346,7 +380,28 @@ Found in a deliberate "what haven't we thought of" pass; ordered by urgency.
     just never deploys.
     (d) The rule is not inert everywhere: it would genuinely block merging a PR.
     Only the direct-push path can do nothing with it.
-    (e) The real cost today is a false signal in two directions — the repo
+    (e) **No PR review requirement is configured at all** (no
+    `required_pull_request_reviews` key in the response) — so today, even a PR
+    could be merged with zero review. Worth knowing before costing the "adopt
+    PRs" options: PRs alone add no review gate unless one is added at the same
+    time.
+    (f) **`enforce_admins.enabled: false` is the single mechanism behind every
+    bypass** — confirmed in item 3 above, it is not separate from the
+    status-check bypass, it is the SAME flag exempting an admin from
+    everything configured on this branch (status check, force-push block,
+    deletion block alike).
+    (g) **There is exactly one collaborator on the repo: `jasonartis`
+    (the founder), with `admin` role.** No second human account, no bot
+    account, no service account exists today.
+    (h) **Claude Code pushes authenticate as that same founder credential** —
+    Git Credential Manager's cached OAuth token, the founder's own GitHub
+    login. There is no separate "AI agent" identity on GitHub with its own,
+    possibly narrower, permissions; a push made through Claude Code and a push
+    typed by hand bypass the same rules for the same reason, because they are
+    the same account. Narrowing what Claude Code can bypass, without
+    narrowing the founder's own pushes too, is not possible with today's
+    single shared credential.
+    (i) The real cost today is a false signal in two directions — the repo
     settings imply master is gated when the path actually used bypasses them,
     and every push prints an alarming line that is always benign. **A warning
     you always ignore has stopped being a warning**, which is the same failure
@@ -354,33 +409,36 @@ Found in a deliberate "what haven't we thought of" pass; ordered by urgency.
 
     **What the review must actually answer** — the question is a BALANCE, not a
     toggle, which is why it is a review and not a one-line fix:
-    - Should an AI agent hold bypass rights on `master` at all? That is the
-      deeper question under the surface one, and it is a judgement about how
-      this repo is worked, not about GitHub.
-    - Is red-on-master acceptable given a solo founder and a `needs: check`
+    - Should an AI agent hold bypass rights on `master` at all? Per fact (h)
+      above, this is really "should pushes made through Claude Code bypass CI
+      the same way my own manual pushes do" — there is no separate credential
+      to answer differently for, unless one is created (e.g. a scoped PAT
+      issued to Claude Code specifically, held by a non-admin account).
+    - Is red-on-master acceptable given a solo founder (fact (g): literally no
+      one else could be blocked by a stricter rule today) and a `needs: check`
       deploy gate? (Recovery is one more commit; the cost is a confusing
       history and a broken starting point for the next session.)
-    - Options seen so far, none yet endorsed: drop the required-check rule as
-      misleading; require PRs only for the changes where red-master is expensive
-      (`supabase/migrations/`) and keep direct pushes elsewhere; adopt PRs
-      wholesale with a merge queue; or keep the status quo and formalise the
-      pre-push local verification this session did by hand. A pre-push hook
-      running the ratchet + typecheck is a fifth option nobody has costed.
-    - **First concrete step regardless: find out what the ruleset really
-      enforces and against whom** — including whether force-push and deletion
-      (item 3) are bypassable by the same role. That needs the GitHub web UI or
-      a token; neither `gh` nor a token exists on this machine.
+    - Options, now costed against the corrected facts above: **drop** the
+      required-check rule as misleading (cheapest, changes nothing about risk,
+      just stops the false signal); **turn `enforce_admins` on** (blocks EVERY
+      direct push, including the founder's own, until CI has run — forces a
+      PR-based workflow for literally everything, a real workflow change for a
+      one-person repo); **migrate to a Ruleset** to get path-scoped PRs
+      (`supabase/migrations/` only) with everything else still direct-pushable
+      — the only option that gets selective gating, but is new surface area to
+      configure and verify; **adopt PRs wholesale**, which per fact (e) needs
+      an explicit review requirement added too or it gates nothing meaningful;
+      or **keep the status quo and formalize the pre-push local verification**
+      sessions already do by hand as an actual pre-push git hook (ratchet +
+      typecheck), costing nothing in GitHub config.
 
     **This item ends in a SHIPPED PROCESS, not a memo.** Deliverables: (1) the
-    facts above confirmed against the real ruleset, (2) a recommendation with
-    its trade-off stated, (3) the founder's decision recorded here as a dated
-    entry, and (4) the change actually made — settings, workflow, hook, or
-    CONTRIBUTING note as the decision requires — plus whatever this document and
-    CLAUDE.md must say afterwards.
-
-    **BLOCKED ON ACCESS, and this is the first thing to sort out.** Both reading
-    the ruleset and changing it need GitHub admin access that this machine does
-    not have: `gh` is not installed and `.env.deploy` holds no GitHub token.
+    facts above confirmed against the real ruleset — DONE 2026-08-28, (2) a
+    recommendation with its trade-off stated, (3) the founder's decision
+    recorded here as a dated entry, and (4) the change actually made —
+    settings, workflow, hook, or CONTRIBUTING note as the decision requires —
+    plus whatever this document and CLAUDE.md must say afterwards. Steps 2-4
+    still need the founder.
     Either provision a PAT with repo-admin scope into `.env.deploy` (same
     pattern as `VERCEL_TOKEN`, and note it widens what a session can do to the
     repo — that trade-off is itself part of this item's question), or the
