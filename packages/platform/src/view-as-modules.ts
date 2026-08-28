@@ -6,25 +6,31 @@
 // 2026-07-30 amendment exists to close.
 //
 // WHICH MODULES HAVE EDGES ON (build decision 2026-07-30; nail-salon added
-// 2026-08-04 after its own surface review):
-//   classroom  — ON. §11 sequencing puts classroom first, §8's own tab sketch is
-//                classroom, it holds the one pair the spec left explicitly open
-//                (professor -> student), and it is the only module with real
-//                SCOPED grants in the seed, so scope intersection is exercisable.
-//   nail-salon — ON for the five staff-to-staff pairs (mode 1 on all five, mode 2
-//                on the two into `worker`); all four customer pairs OFF and
-//                re-confirmed. Reviewed 2026-08-04 — see the block above that
-//                declaration for the finding that decided every pair.
-//   speed-dating and the rank-0 vocabularies — every pair explicitly OFF.
+// 2026-08-04, speed-dating 2026-08-28, both after their own surface review):
+//   classroom    — ON. §11 sequencing puts classroom first, §8's own tab sketch is
+//                  classroom, it holds the one pair the spec left explicitly open
+//                  (professor -> student), and it is the only module with real
+//                  SCOPED grants in the seed, so scope intersection is exercisable.
+//   nail-salon   — ON for the five staff-to-staff pairs (mode 1 on all five, mode 2
+//                  on the two into `worker`); all four customer pairs OFF and
+//                  re-confirmed. Reviewed 2026-08-04 — see the block above that
+//                  declaration for the finding that decided every pair.
+//   speed-dating — ON for the three staff-to-staff pairs (mode 1 on all three; mode
+//                  2 off on every one — staff reach here is rank/scope-narrowed,
+//                  never person-narrowed, unlike nail-salon's `worker`). All three
+//                  pairs into `participant` stay permanently OFF (§8.1 point 7's
+//                  end-user ban). Reviewed 2026-08-28 — see the block above that
+//                  declaration.
+//   The rank-0 vocabularies (matchmaking, synagogue-schedules, visual-messaging) —
+//   every pair explicitly OFF (they have none to turn on until rank-mapped).
 //
 // The line is principled, not arbitrary: §8.1 point 9 says a position's surface
 // classification is "decided in each module's security review." An edge may
-// therefore only be ON in a module that has HAD that review. Classroom got it in
-// slice 5 and nail-salon on 2026-08-04; speed-dating's six pairs are enumerated
-// below and still await theirs. Turning one on is flipping booleans, writing the
-// surfaces, and one `create or replace` of `module_view_as_edge()` — never
-// inventing a mechanism (nail-salon's review needed no new mechanism, and says so
-// where it came closest).
+// therefore only be ON in a module that has HAD that review — classroom in slice
+// 5, nail-salon 2026-08-04, speed-dating 2026-08-28. Turning one on is flipping
+// booleans, writing the surfaces, and one `create or replace` of
+// `module_view_as_edge()` — never inventing a mechanism (neither nail-salon's nor
+// speed-dating's review needed a new one, and each says so where it came closest).
 //
 // A pleasant consequence of ranks being what they are today: only classroom
 // (2 pairs), nail-salon (9) and speed-dating (6) have ANY rank-differential
@@ -1198,6 +1204,13 @@ export const nailSalonViewAs = declareViewAs({
 // which is how §8.1 point 7's `viewAs: none` end-user ban is expressed under
 // the amendment — point 11 subsumes the flag as a special case rather than
 // keeping a second mechanism.
+//
+// SURFACE SECURITY REVIEW DONE 2026-08-28 for the three remaining pairs
+// (admin->organizer, admin->host, organizer->host). Verified against the
+// CURRENT policies (`sd_interest_select`/`sd_matches_select` as rewritten by
+// 20260726030000, not the base migration) and the live console
+// (modules/speed-dating/ui/events/[eventId]/page.tsx), the same discipline as
+// nail-salon's 2026-08-04 review.
 // ---------------------------------------------------------------------------
 const SD_PARTICIPANT_BAN =
   'OFF permanently, not pending review — this is §8.1 point 7\'s end-user view-as ban ' +
@@ -1208,30 +1221,353 @@ const SD_PARTICIPANT_BAN =
   'empty of everything that matters or would put a third party\'s one-sided secret on a ' +
   'staff screen. Changing this needs a dated founder decision, not a build-time judgement.'
 
-const SD_AWAITS_REVIEW =
-  'OFF pending speed-dating\'s own view-as surface security review (docs/15 §8.1 point 9). ' +
-  'Staff-to-staff and plausible — but note a host deliberately CANNOT read sd_interest or ' +
-  'sd_matches (20260709050000: "matching data is sensitive; host\'s domain is lobby/reports"), ' +
-  'so an organizer tab rendered for a host must respect an exclusion the organizer\'s own ' +
-  'ambient reach does not impose. That is exactly the kind of thing a surface review settles.'
+// Shared reasoning for every ON pair below: staff reach here is RANK/SCOPE
+// -narrowed (module_position_rank + module_scope_covers via
+// sd_can_organize_event/sd_can_staff_event_of), never PERSON-narrowed — no
+// sd_ column can name "the organizer" or "the host" without falling back to
+// an authorship stamp (sd_events.created_by, sd_reports.reviewed_by) that
+// would under-show the tab by hiding most of what the position reaches.
+// Mirrors nail-salon's SALON_NARROWING/manage-tier reasoning, one rung down.
+const SD_NOT_PERSON_FILTERABLE =
+  'Mode 2 is off: this position\'s reach is rank/scope-gated (module_position_rank + ' +
+  'module_scope_covers), never person-gated. The only columns naming this position are ' +
+  'authorship stamps (sd_events.created_by, sd_reports.reviewed_by), and keying on either ' +
+  'would UNDER-show the tab by hiding every event/report this holder did not personally ' +
+  'create or review — which is most of what the position actually reaches.'
 
 export const speedDatingViewAs = declareViewAs({
   positions: { admin: 3, organizer: 2, host: 1, participant: 0 },
   edges: {
     admin: {
-      organizer: { mode1: false, mode2: false, note: SD_AWAITS_REVIEW },
-      host: { mode1: false, mode2: false, note: SD_AWAITS_REVIEW },
+      organizer: {
+        mode1: true,
+        mode2: false,
+        note:
+          'MODE 1 ON, MODE 2 OFF (review 2026-08-28). On the seven event-scoped tables gated by ' +
+          'sd_can_organize_event/sd_can_staff_event_of (sd_events, sd_participants, sd_rounds, ' +
+          'sd_pairings, sd_reports, sd_interest, sd_matches), admin (rank 3) and organizer ' +
+          "(rank 2) both clear module_position_rank('speed-dating',·) >= 2, so within whatever " +
+          'scope each grant covers they see identically-shaped rows — the same "same predicate, ' +
+          'still worth a tab" case as nail-salon\'s admin -> manager. Where they diverge: ' +
+          'sd_can_manage (is_org_admin(org) OR has_module_role(org,\'speed-dating\',\'admin\')) ' +
+          'has never had an organizer arm, so sd_blocks (the block list\'s staff-read arm) and ' +
+          'sd_bans (the platform-style ban list) are invisible to every organizer, however ' +
+          'senior — exactly the absence mode 1 earns its place showing. ' +
+          SD_NOT_PERSON_FILTERABLE +
+          ' FOUNDER: flag if a person-scoped organizer view is wanted — it needs a different ' +
+          'mode-2 definition, not something this review can turn on for free.',
+      },
+      host: {
+        mode1: true,
+        mode2: false,
+        note:
+          'MODE 1 ON, MODE 2 OFF (review 2026-08-28). Host is a genuinely NARROWER position, ' +
+          'not the same predicate at smaller scope: sd_can_staff_event_of = ' +
+          'sd_can_organize_event OR module_caller_covers_role(...,\'host\'), so host reads ' +
+          'sd_events/sd_participants/sd_rounds/sd_pairings/sd_reports at the same ' +
+          'scope-intersected breadth as an organizer — but sd_interest_select and ' +
+          'sd_matches_select check ONLY sd_can_organize_event, with no staff/host arm in any ' +
+          'version (20260709050000: "host is NOT granted interest read; matching data is ' +
+          'sensitive, host\'s domain is lobby/reports"). A host has zero read path to either, ' +
+          'declared unreadableByPosition — verified against the live console ' +
+          '(modules/speed-dating/ui/events/[eventId]/page.tsx), whose staff-tier block never ' +
+          'touches interests/matches, only the organizer-only block does. Same absence for ' +
+          'sd_blocks/sd_bans (admin-only, no organizer OR host arm) and sd_notes (author-only, ' +
+          'no staff arm ever). Speed-dating\'s version of nail-salon\'s admin -> worker pair. ' +
+          SD_NOT_PERSON_FILTERABLE,
+      },
       participant: { mode1: false, mode2: false, note: SD_PARTICIPANT_BAN },
     },
     organizer: {
-      host: { mode1: false, mode2: false, note: SD_AWAITS_REVIEW },
+      host: {
+        mode1: true,
+        mode2: false,
+        note:
+          'MODE 1 ON, MODE 2 OFF (review 2026-08-28) — the pair originally left pending exactly ' +
+          'because an organizer\'s own ambient reach includes sd_interest/sd_matches (via ' +
+          'sd_can_organize_event), which host categorically lacks (see admin -> host above). ' +
+          'Rendering the HOST surface for an organizer caller needed no new machinery: the ' +
+          'renderer only ever queries the tables on the TARGET position\'s declared surface, ' +
+          'and host\'s surface omits sd_interest/sd_matches entirely (unreadableByPosition ' +
+          'instead) — so an organizer viewing "as host" never touches either table, regardless ' +
+          'of what the organizer\'s own client could read. Same excluded/unreadableByPosition ' +
+          'discipline nail-salon\'s worker review established, one rung down the ladder. ' +
+          'Everything host DOES read is a strict subset of what an organizer already reads at ' +
+          'the same scope, so mode 1 widens nothing. ' +
+          SD_NOT_PERSON_FILTERABLE,
+      },
       participant: { mode1: false, mode2: false, note: SD_PARTICIPANT_BAN },
     },
     host: {
       participant: { mode1: false, mode2: false, note: SD_PARTICIPANT_BAN },
     },
   },
+
   scopeEntity: { table: 'sd_events', idColumn: 'id', nodeColumn: 'scope_node_id' },
+
+  // ---------------------------------------------------------------------
+  // Surfaces. Both positions below account for all TEN sd_ tables — role,
+  // unreadableByPosition, personal, or excluded — none fall through.
+  // `personal` is empty for both, and that emptiness is itself the finding:
+  // speed-dating has no staff-personal layer (sd_notes is a PARTICIPANT
+  // concept, not a staff one — it sits in unreadableByPosition, not
+  // personal, because the POSITION has no read arm at all, a different claim
+  // than personal would make about a table the VIEWER can partly reach).
+  // ---------------------------------------------------------------------
+  surfaces: {
+    organizer: {
+      label: 'Organizer',
+      summary:
+        'An organizer\'s whole live-console reach at the events their grant covers: full event ' +
+        'setup and lifecycle, the roster (including audience/mentor observer seats), rounds and ' +
+        'the pairing/rooms grid, and safety reports. Missing entirely: the org\'s block list and ' +
+        'platform ban list (admin-only), every participant\'s private notepad (author-only, not ' +
+        'even organizers), and — see the caveat below — a raw view of interest marks/matches.',
+      role: [
+        {
+          table: 'sd_events',
+          label: 'Events in reach',
+          columns: [
+            'id', 'name', 'description', 'scheduled_at', 'lobby_opens_at', 'state',
+            'round_duration_seconds', 'break_duration_seconds', 'rounds_planned', 'format',
+            'allow_repeat_pairings', 'resume_review_enabled', 'current_round_id',
+            'created_by', 'created_at',
+          ],
+          subjectColumn: null,
+          scopeColumn: 'id',
+          orderBy: { column: 'scheduled_at', ascending: false },
+          caveat:
+            'No state filter — the staff arm of sd_events_select (sd_can_staff_event_of) sees ' +
+            'every state including draft, unlike the participant arm which only shows ' +
+            'open/running/complete/cancelled.',
+        },
+        {
+          table: 'sd_participants',
+          label: 'Roster (incl. audience/mentor seats)',
+          columns: [
+            'id', 'event_id', 'user_id', 'seat_type', 'pool_side', 'status',
+            'checked_in', 'checked_in_at', 'mentee_participant_id',
+            'allows_audience', 'allows_mentor', 'profile_card', 'created_at',
+          ],
+          subjectColumn: null,
+          scopeColumn: 'event_id',
+          caveat:
+            'The full `profile` jsonb answer snapshot is left off the allow-list as noise — the ' +
+            'live console (modules/speed-dating/ui/events/[eventId]/page.tsx) never selects it ' +
+            'either, only the short profile_card blurb.',
+        },
+        {
+          table: 'sd_rounds',
+          label: 'Rounds',
+          columns: ['id', 'event_id', 'round_number', 'state', 'starts_at', 'ends_at', 'break_ends_at'],
+          subjectColumn: null,
+          scopeColumn: 'event_id',
+          orderBy: { column: 'round_number', ascending: true },
+        },
+        {
+          table: 'sd_pairings',
+          label: 'Rooms grid',
+          columns: [
+            'id', 'event_id', 'round_id', 'participant_a_id', 'participant_b_id',
+            'room_ref', 'room_provider', 'created_at',
+          ],
+          subjectColumn: null,
+          scopeColumn: 'event_id',
+          caveat:
+            'Connection status only, never video — there is no recording, ever, and no video ' +
+            'column in the schema at all (product promise, 20260709050000 header). room_ref/' +
+            'room_provider are currently always null in practice: the video-provider ' +
+            'integration is deliberately not built yet.',
+        },
+        {
+          table: 'sd_reports',
+          label: 'Safety reports',
+          columns: [
+            'id', 'event_id', 'reporter_participant_id', 'reported_participant_id', 'pairing_id',
+            'reason', 'detail', 'during_call', 'state', 'reviewed_by', 'reviewed_at', 'created_at',
+          ],
+          subjectColumn: null,
+          scopeColumn: 'event_id',
+          orderBy: { column: 'created_at', ascending: false },
+          caveat:
+            'reviewed_by/reviewed_at are triage stamps, not used as a subject column for the ' +
+            'same under-showing reason as sd_events.created_by (see the pair notes above). ' +
+            'reported_participant_id can be null (ON DELETE SET NULL) if the reported seat is ' +
+            'later removed.',
+        },
+      ],
+      personal: [],
+      excluded: [
+        {
+          table: 'sd_interest',
+          why:
+            'An organizer CAN read this in full (sd_can_organize_event, no further ' +
+            'restriction) — genuinely within their RLS reach and named as "post-event stats" in ' +
+            'the module header. Excluded anyway: the live console ' +
+            '(modules/speed-dating/ui/events/[eventId]/page.tsx) never renders a raw ' +
+            'per-mark grid to any human, only an aggregate count, and the module\'s own design ' +
+            'repeatedly treats this table as privacy-critical ("one-sided interest reveals ' +
+            'nothing" — the same phrase justifies the permanent participant ban above). ' +
+            'Rendering the raw table on an admin-facing tab would show MORE than what the real ' +
+            'organizer console ever displays, which is the falsely-INFORMATIVE failure mode for ' +
+            'a feature whose whole point is "show what this position actually sees" — so this ' +
+            'follows the same excluded/noise discipline as e.g. sal_customers.notes, just for a ' +
+            'sensitivity reason instead of a noise one. FOUNDER: if organizers are meant to work ' +
+            'from raw interest data day to day (not just the aggregate the console shows today), ' +
+            'this should flip to role instead — flagging rather than deciding unilaterally.',
+        },
+        {
+          table: 'sd_matches',
+          why:
+            'Same reasoning and the same live-console fact as sd_interest above: an organizer ' +
+            'can read every match row including unrevealed ones (sd_can_organize_event, no ' +
+            'reveal-gate arm), but the console only ever shows a revealed/total count, never ' +
+            'raw rows. Excluded for the identical reason. FOUNDER: same flag as sd_interest — ' +
+            'revisit together if the console ever grows a raw matches view.',
+        },
+      ],
+      unreadableByPosition: [
+        {
+          table: 'sd_blocks',
+          why:
+            'sd_blocks_select is blocker_user_id = auth.uid() OR sd_can_manage(org_id), and ' +
+            'sd_can_manage is is_org_admin(org) OR has_module_role(org,\'speed-dating\',\'admin\') ' +
+            '— no organizer arm in any version. An organizer never sees who blocked whom, ' +
+            'however senior.',
+        },
+        {
+          table: 'sd_bans',
+          why:
+            'sd_bans_all_manage is sd_can_manage(org_id) only, the same admin-only gate as ' +
+            'sd_blocks (no organizer arm) — the platform ban list is invisible to every ' +
+            'organizer.',
+        },
+        {
+          table: 'sd_notes',
+          why:
+            'sd_notes_all_own is author_user_id = auth.uid() and is the ONLY policy on the ' +
+            'table (for all) — explicitly excluded from the blanket organize-write policy by ' +
+            'original design ("a personal notepad, not event data"). No staff arm has ever ' +
+            'existed; an organizer cannot read a participant\'s private notes about anyone.',
+        },
+      ],
+    },
+
+    host: {
+      label: 'Host',
+      summary:
+        'What a lobby/rooms host actually sees: the same roster, rounds and pairings grid as an ' +
+        'organizer, plus safety-report triage — but never the interest marks or the match ' +
+        'ledger (matching data is staff-restricted to organize tier only; host\'s domain is ' +
+        'lobby/reports), and never the block list, ban list, or anyone\'s private notes.',
+      role: [
+        {
+          table: 'sd_events',
+          label: 'Events in reach',
+          columns: [
+            'id', 'name', 'description', 'scheduled_at', 'lobby_opens_at', 'state',
+            'round_duration_seconds', 'break_duration_seconds', 'rounds_planned', 'format',
+            'allow_repeat_pairings', 'resume_review_enabled', 'current_round_id',
+            'created_by', 'created_at',
+          ],
+          subjectColumn: null,
+          scopeColumn: 'id',
+          orderBy: { column: 'scheduled_at', ascending: false },
+          caveat:
+            'Identical breadth to the organizer surface\'s sd_events section — ' +
+            'sd_can_staff_event_of ORs in sd_can_organize_event, so a host sees every event ' +
+            'state an organizer does.',
+        },
+        {
+          table: 'sd_participants',
+          label: 'Roster (incl. audience/mentor seats)',
+          columns: [
+            'id', 'event_id', 'user_id', 'seat_type', 'pool_side', 'status',
+            'checked_in', 'checked_in_at', 'mentee_participant_id',
+            'allows_audience', 'allows_mentor', 'profile_card', 'created_at',
+          ],
+          subjectColumn: null,
+          scopeColumn: 'event_id',
+          caveat:
+            'Same read reach as organizer\'s roster section (sd_can_staff_event_of). A host\'s ' +
+            'WRITE path is narrower (sd_pin_participant limits a host to flipping status -> ' +
+            'removed on someone else\'s row) but that is a write restriction, not a read one, ' +
+            'so it does not change this surface.',
+        },
+        {
+          table: 'sd_rounds',
+          label: 'Rounds',
+          columns: ['id', 'event_id', 'round_number', 'state', 'starts_at', 'ends_at', 'break_ends_at'],
+          subjectColumn: null,
+          scopeColumn: 'event_id',
+          orderBy: { column: 'round_number', ascending: true },
+        },
+        {
+          table: 'sd_pairings',
+          label: 'Rooms grid',
+          columns: [
+            'id', 'event_id', 'round_id', 'participant_a_id', 'participant_b_id',
+            'room_ref', 'room_provider', 'created_at',
+          ],
+          subjectColumn: null,
+          scopeColumn: 'event_id',
+          caveat:
+            'Connection status only, never video — same as the organizer surface; a host\'s ' +
+            'reach here is identical to an organizer\'s (both via sd_can_staff_event_of).',
+        },
+        {
+          table: 'sd_reports',
+          label: 'Safety reports',
+          columns: [
+            'id', 'event_id', 'reporter_participant_id', 'reported_participant_id', 'pairing_id',
+            'reason', 'detail', 'during_call', 'state', 'reviewed_by', 'reviewed_at', 'created_at',
+          ],
+          subjectColumn: null,
+          scopeColumn: 'event_id',
+          orderBy: { column: 'created_at', ascending: false },
+          caveat:
+            'This is host\'s core duty per the module comment ("handles reported rooms") — ' +
+            'host gets its own sd_reports_update_staff policy (organize-write does not cover ' +
+            'host) so it can triage state/review fields.',
+        },
+      ],
+      personal: [],
+      excluded: [],
+      unreadableByPosition: [
+        {
+          table: 'sd_interest',
+          why:
+            'sd_interest_select checks ONLY sd_can_organize_event (20260726030000) — there has ' +
+            'never been a staff_event/host arm, per the original 20260709050000 comment ("host ' +
+            'is NOT granted interest read; matching data is sensitive, host\'s domain is lobby/' +
+            'reports, not who-liked-whom"). A host has zero read path — verified against the ' +
+            'live console, whose staff-tier block never references sd_interest at all.',
+        },
+        {
+          table: 'sd_matches',
+          why:
+            'sd_matches_select checks ONLY sd_can_organize_event, same as sd_interest — a host ' +
+            'cannot see that a match exists at all, revealed or not.',
+        },
+        {
+          table: 'sd_blocks',
+          why:
+            'sd_can_manage (blocker_user_id = auth.uid() OR sd_can_manage(org_id)) has no ' +
+            'organizer OR host arm — same absence as the organizer surface above.',
+        },
+        {
+          table: 'sd_bans',
+          why: 'sd_can_manage is admin-only — same absence as the organizer surface above.',
+        },
+        {
+          table: 'sd_notes',
+          why:
+            'author_user_id = auth.uid() is the ONLY policy on the table, ever — no staff arm ' +
+            'exists for organizer OR host.',
+        },
+      ],
+    },
+  },
 })
 
 // ---------------------------------------------------------------------------

@@ -19,14 +19,19 @@ A multi-tenant modular platform: each client engagement produces a **module** bu
      and update only the compact "Now / Next / Standing rules" below. A fresh chat must never
      pay for the full journal. See "Session hygiene". -->
 
-**Now (2026-08-28) — the view-as surface-coverage ratchet AND classroom's own re-classification
-both shipped the same day (picked WITH the founder from "Next / open"): `packages/db/src/
-view-as-coverage.test.ts`, 140/140 db tests, no migration. `KNOWN_GAPS` is empty — no module
-carries an accepted backlog. The master-gating question (docs/12 item 10) was investigated the
-same session (facts verified live via the GitHub API) — the decision itself is still the
-founder's. Speed-dating's 6 view-as pairs are IN PROGRESS in a background agent, not yet reviewed
-or integrated. Pick the next item WITH the founder from the "Next / open" list once that lands;
-do not start unprompted (standing rule).**
+**Now (2026-08-28) — a full session of items picked WITH the founder from "Next / open," all
+shipped the same day, no migrations: (1) the view-as surface-coverage ratchet
+(`packages/db/src/view-as-coverage.test.ts`); (2) classroom's own re-classification, closing its
+`KNOWN_GAPS` backlog; (3) speed-dating's 3 staff-to-staff view-as pairs (drafted by a background
+agent, independently fact-checked against live RLS/columns, one judgment call overridden — see
+the slice-5 entry below). `KNOWN_GAPS` is empty across every module. 140/140 db tests passing
+throughout, including live-verify checks (a real superadmin reading every new table, real
+seeded organizer/host accounts confirming the unreadable/excluded claims). The master-gating
+question (docs/12 item 10) was investigated the same session (facts verified live via the GitHub
+API) — the decision itself is still the founder's, as is the one flagged judgment call in the
+speed-dating review (organizer's `sd_interest`/`sd_matches` classified `excluded` rather than
+`role` — see the slice-5 entry). Nothing else is in flight. Pick the next item WITH the founder
+from the "Next / open" list; do not start unprompted (standing rule).**
 
 **Host state, 2026-08-12:** the machine was migrated to a new Windows profile
 (`C:\Users\yarmishj.AEI-LT-JYARMISH`) after the old one was lost. Claude's own state — memories,
@@ -196,18 +201,28 @@ Everything below is open but unranked:
   no rank/seniority/appointment-chain column) — so a second, narrower question (what determines
   "lower"?) has to be answered with a real second operator in front of you before this becomes a
   migration. "A second superadmin" remains the trigger — now to implement this, not to decide it.
-- **Slice 5 remaining follow-ons:** ~~the nail-salon surface review~~ **DONE 2026-08-04**
-  (see Previously). Left: **speed-dating's 6 pairs** — and note its review is genuinely harder than
-  the salon's, because a host deliberately cannot read `sd_interest`/`sd_matches` while an
-  organizer can, so an organizer rendering a host tab must respect an exclusion their own
-  ambient reach does not impose (the salon had no equivalent: manager ⊇ cashier ⊇ worker with
-  one clean exception). Its four `participant` pairs stay permanently OFF. Also still open:
-  whether view-as **targets are notified** (§8.1 point 6 leaves it a per-module product
-  call). *(professor→student, the `is_org_admin` question and the slice-5 prod push are all
-  SETTLED.)* **Reusable lesson from the salon review, worth carrying into speed-dating's:**
-  ask of each position whether its reach is a function of WHO it is or only of WHAT SCOPE it
-  covers — mode 2 is only honest for the former, and a mode-1-only pair needs no migration
-  arm at all.
+- ~~**Slice 5 remaining follow-ons:**~~ **ALL DONE.** Nail-salon's surface review DONE 2026-08-04;
+  **speed-dating's 3 staff-to-staff pairs (admin→organizer, admin→host, organizer→host) DONE
+  2026-08-28** — its review was genuinely harder than the salon's, exactly for the reason
+  predicted below: a host deliberately cannot read `sd_interest`/`sd_matches` while an organizer
+  can, so rendering a host tab for an organizer caller has to respect an exclusion the
+  organizer's own ambient reach does not impose. Resolved with no new mechanism (same
+  `unreadableByPosition` discipline nail-salon's worker review established) — the renderer only
+  ever queries the TARGET's declared surface, and host's surface simply omits both tables. **One
+  judgment call made without a founder round-trip, flagged in-line for later review**: organizer's
+  own RLS-genuine read access to `sd_interest`/`sd_matches` was classified `excluded` rather than
+  `role`, because the live console only ever shows an aggregate count for either table, never raw
+  rows — showing the raw grid on an admin-facing view-as tab would make the tab MORE informative
+  than what an organizer's real day-to-day console displays, the opposite failure from
+  under-showing. Two other things settled the same review: mode 2 is OFF on all three pairs
+  (staff reach here is rank/scope-narrowed, never person-narrowed — no clean single exception
+  the way salon's worker was), and all three `participant` pairs (not four — corrected a stale
+  count in this file) stay permanently OFF, unchanged. Still open, unrelated to this review:
+  whether view-as **targets are notified** (§8.1 point 6 leaves it a per-module product call).
+  **Reusable lesson from the salon review, carried into speed-dating's and worth keeping for the
+  next module too:** ask of each position whether its reach is a function of WHO it is or only of
+  WHAT SCOPE it covers — mode 2 is only honest for the former, and a mode-1-only pair needs no
+  migration arm at all.
 - ~~**Seed the salon's back office.**~~ **DONE 2026-08-05.** (Salon demo logins are
   now: **frank = admin**, alice = manager, eve = cashier, dana = worker, charlie = customer.)
 - ~~**`cls_exam_papers` zero-row / exam section unfalsifiable.**~~ **DONE 2026-08-09**,
