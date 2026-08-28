@@ -19,10 +19,13 @@ A multi-tenant modular platform: each client engagement produces a **module** bu
      and update only the compact "Now / Next / Standing rules" below. A fresh chat must never
      pay for the full journal. See "Session hygiene". -->
 
-**Now (2026-08-28) — the view-as surface-coverage ratchet (picked WITH the founder from "Next /
-open") just shipped: `packages/db/src/view-as-coverage.test.ts`, 140/140 db tests, no migration.
-Classroom's own re-classification is deliberately deferred, not done — see that item below.
-Nothing else is in flight. Pick the next item WITH the founder from the "Next / open" list;
+**Now (2026-08-28) — the view-as surface-coverage ratchet AND classroom's own re-classification
+both shipped the same day (picked WITH the founder from "Next / open"): `packages/db/src/
+view-as-coverage.test.ts`, 140/140 db tests, no migration. `KNOWN_GAPS` is empty — no module
+carries an accepted backlog. The master-gating question (docs/12 item 10) was investigated the
+same session (facts verified live via the GitHub API) — the decision itself is still the
+founder's. Speed-dating's 6 view-as pairs are IN PROGRESS in a background agent, not yet reviewed
+or integrated. Pick the next item WITH the founder from the "Next / open" list once that lands;
 do not start unprompted (standing rule).**
 
 **Host state, 2026-08-12:** the machine was migrated to a new Windows profile
@@ -213,22 +216,28 @@ Everything below is open but unranked:
   publishes nothing, precisely so it cannot collide with the classroom exam e2e's own
   `Midterm`. Reasoning in the journal.
 - ~~**Machine-enforce "every module table is classified on every surface."**~~ **RATCHET DONE
-  2026-08-28** — `packages/db/src/view-as-coverage.test.ts` now enumerates each module's real
-  tables from `pg_catalog` (by the prefix its own declaration uses, so no hand-maintained
-  prefix map to drift) and fails on any table missing from role/personal/excluded/
-  unreadableByPosition **or a nested `embed`** on any declared surface, with a
-  `KNOWN_GAPS` baseline so only NEW gaps fail the build (same shape as
-  `data-browser-coverage.test.ts`'s tier-2 backlog report). Verified it has real teeth, not
-  just a pass: deliberately removed one accepted entry (failed, naming the exact table) and
-  deliberately added a stale one already-satisfied entry (failed the other direction too), then
-  restored and reran clean — 140/140 db tests. **STILL OPEN, deliberately deferred, not
-  forgotten:** classroom's own re-classification. It FAILS today's stricter question if the
-  baseline were empty — GA classifies 9/16 real `cls_` tables, Student 13/16 (counting embeds) —
-  frozen in `KNOWN_GAPS` rather than answered, because each of the ~10 gaps is a real per-table
-  RLS judgment call (e.g. can a GA actually read `cls_exams`?), not mechanical. Nail-salon has
-  zero gaps under the same check — the control that proves this isn't vacuous for a module that
-  actually got its table-by-table review. Opus-tier if picked up (per the original estimate);
-  ~half a day.
+  2026-08-28, AND CLASSROOM'S OWN RE-CLASSIFICATION IS ALSO DONE THE SAME DAY — `KNOWN_GAPS` is
+  now EMPTY, no module carries an accepted backlog.** `packages/db/src/view-as-coverage.test.ts`
+  enumerates each module's real tables from `pg_catalog` (by the prefix its own declaration
+  uses) and fails on any table missing from role/personal/excluded/unreadableByPosition **or a
+  nested `embed`** on any declared surface. Verified it has real teeth: deliberately removed an
+  accepted entry (failed, naming the exact table) and added a stale one (failed the other
+  direction), restored, reran clean.
+  Classroom's ~10 gaps (GA was missing 7/16 `cls_` tables, Student 3/16) were each resolved by
+  reading the REAL page that reads the table (`modules/classroom/ui/*.tsx`), not inferred from
+  RLS alone — and that grounding surfaced findings worth keeping: `cls_courses` is read-but-
+  never-rendered by a GA (it's purely an internal staff/GA-detection probe in the real pages, so
+  `excluded`); `cls_exams.structure` is a `{label,points}[]` point breakdown the exam-grading
+  console uses to size the score form, not an answer key, so it's safe to surface; a GA has real
+  RLS access to `cls_submission_files` that the actual grading page never uses — a genuine
+  product gap this review found, not a security exclusion; and the existing GA `cls_grades` entry
+  was separately missing a `detail` column the exam console reads (fixed alongside, since it was
+  found along the way — same spirit as nail-salon's review fixing what it found). Verified live,
+  not just typed: full db suite 140/140, including the existing test that has a real superadmin
+  session read every declared surface table **and embed** — proving the new entries aren't
+  over-claiming access, not just internally consistent. Nail-salon and classroom now both clear
+  the same bar; `KNOWN_GAPS` stays in place as a live mechanism for whichever module needs it
+  next (matchmaking/synagogue-schedules/visual-messaging, once rank-mapped).
 - Slice 3 remainder: **entity-level joinPolicy** (invite-only/request-approval/open per
   class/location/event) — deferred follow-on. Slice 4 (defaults-on-join) is the only
   unbuilt slice left.

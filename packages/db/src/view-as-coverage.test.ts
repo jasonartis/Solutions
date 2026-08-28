@@ -13,15 +13,23 @@
 // open exactly the way the salon block comment warns.
 //
 // BASELINE-AND-RATCHET, not a backfill (CLAUDE.md's own recommended shape,
-// with precedent in data-browser-coverage.test.ts's tier-2 backlog report):
-// classroom predates the salon review's table-by-table rigor and is
-// genuinely incomplete today. Measured against the real migration
-// (20260708010000_classroom.sql) on 2026-08-28: GA classifies 9 of 16 real
-// `cls_` tables, Student 13 of 16 (counting tables reachable only through an
-// `embed`). Rather than block this check on a classroom re-review, today's
-// real gaps are frozen in KNOWN_GAPS below — the test fails only on anything
-// NEW. Nail-salon has zero gaps under this same check, which is the control
-// that proves the check isn't vacuous for a fully-classified module.
+// with precedent in data-browser-coverage.test.ts's tier-2 backlog report).
+// Classroom predated the salon review's table-by-table rigor and was
+// genuinely incomplete when this check first shipped (2026-08-28): GA
+// classified 9 of 16 real `cls_` tables, Student 13 of 16. Rather than block
+// the check on a classroom re-review, those gaps were frozen in KNOWN_GAPS
+// and the test failed only on anything NEW — then, same day, classroom's own
+// reclassification closed every one of them (each grounded in the actual
+// modules/classroom/ui page that reads the table, not inferred from RLS
+// alone — see the caveats on the new entries in view-as-modules.ts for what
+// was found: `cls_courses` is read-but-never-rendered, `cls_exams.structure`
+// is a safe-to-show point breakdown not an answer key, GA has unused RLS
+// access to `cls_submission_files`, etc.). KNOWN_GAPS is now empty for every
+// module — nail-salon and classroom both clear the same bar. Left as a live
+// mechanism (not deleted) so the NEXT module that predates full review
+// (matchmaking, synagogue-schedules, visual-messaging, once rank-mapped) has
+// somewhere to freeze its own backlog without being forced into a same-day
+// reclassification the way this ratchet's design deliberately avoids requiring.
 import { describe, expect, it } from 'vitest'
 import postgres from 'postgres'
 import { moduleRegistry, type PositionSurface } from '@platform/core'
@@ -29,27 +37,13 @@ import { moduleRegistry, type PositionSurface } from '@platform/core'
 const dbUrl = process.env.DATABASE_URL ?? 'postgresql://postgres:postgres@127.0.0.1:54322/postgres'
 
 /**
- * Classroom's accepted backlog, frozen 2026-08-28. Each is a real
- * `cls_` table not yet classified as role/personal/excluded/
- * unreadableByPosition against the position's actual RLS policy on that
- * surface. Shrink this list (never grow it) as classroom's own review
- * answers each one — an empty list for a module means it is fully
- * classified, the same bar nail-salon already clears.
+ * Per-module, per-surface accepted backlog. Each entry is a real table not
+ * yet classified as role/personal/excluded/unreadableByPosition against the
+ * position's actual RLS policy on that surface. Shrink (never grow) as each
+ * module's own review answers its gaps — an empty list for a module means it
+ * is fully classified.
  */
-const KNOWN_GAPS: Record<string, Record<string, string[]>> = {
-  classroom: {
-    ga: [
-      'cls_courses',
-      'cls_materials',
-      'cls_publications',
-      'cls_submission_files',
-      'cls_exams',
-      'cls_surveys',
-      'cls_exam_papers',
-    ],
-    student: ['cls_submission_files', 'cls_exams', 'cls_surveys'],
-  },
-}
+const KNOWN_GAPS: Record<string, Record<string, string[]>> = {}
 
 /** Every table name a surface claims to account for — the three off-lists, plus embeds. */
 function coveredTables(surface: PositionSurface): Set<string> {

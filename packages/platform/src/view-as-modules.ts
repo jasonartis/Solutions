@@ -128,12 +128,17 @@ export const classroomViewAs = declareViewAs({
           label: 'Grades this GA entered',
           columns: [
             'id', 'class_id', 'student_id', 'homework_id', 'exam_id',
-            'source', 'score', 'graded_by', 'is_final', 'visible',
+            'source', 'score', 'detail', 'graded_by', 'is_final', 'visible',
           ],
           // The GA surface is defined BY the grader, so that is who a row is about.
           subjectColumn: 'graded_by',
           scopeColumn: 'class_id',
           filter: [{ column: 'source', eq: 'ga' }],
+          caveat:
+            '`detail` added 2026-08-28 (coverage review): the exam-grading console ' +
+            '(modules/classroom/ui/manage/exams/[examId]/page.tsx) reads it for the ' +
+            "per-subproblem score breakdown (`{problems: {...}}`) — was missing from this " +
+            'allow-list even though the column was already readable.',
         },
         {
           table: 'cls_review_comments',
@@ -161,6 +166,63 @@ export const classroomViewAs = declareViewAs({
           orderBy: { column: 'posted_at', ascending: false },
           limit: 20,
         },
+        // Four entries below added 2026-08-28, closing the coverage-ratchet gap
+        // (packages/db/src/view-as-coverage.test.ts's KNOWN_GAPS baseline). Each
+        // is grounded in a REAL page a GA actually visits — modules/classroom/ui/
+        // page.tsx (the shared classes/publications/surveys landing page every
+        // class member sees) or ui/manage/exams/[examId]/page.tsx (the exam
+        // grading console) — not inferred from RLS alone.
+        {
+          table: 'cls_publications',
+          label: 'Published materials',
+          columns: ['id', 'class_id', 'material_id', 'visible_from', 'visible_until'],
+          embed: [{ alias: 'material', table: 'cls_materials', columns: ['id', 'title', 'kind'] }],
+          subjectColumn: null,
+          scopeColumn: 'class_id',
+          // Deliberately NOT `visibilityWindow`, unlike the identical-looking
+          // entry on the student surface below — see the caveat.
+          caveat:
+            'Same query as the student landing page (ui/page.tsx), but NOT badged with ' +
+            "`visibilityWindow` the way the student entry is: cls_materials_select's " +
+            '`cls_is_ga_course` arm grants a GA unconditional read regardless of the ' +
+            "publication's visibility window (it is an OR alongside the window check), so a " +
+            "GA's embed never comes back null for an unpublished-to-students material — there " +
+            'is nothing to badge "hidden until X" for a GA the way there is for a student.',
+        },
+        {
+          table: 'cls_exams',
+          label: 'Exams',
+          columns: ['id', 'class_id', 'title', 'structure'],
+          subjectColumn: null,
+          scopeColumn: 'class_id',
+          caveat:
+            '`structure` is `{label, points}[]` — the problem/point breakdown the exam-grading ' +
+            'console uses to size the score-entry form, not an answer key, so it is safe on ' +
+            "this allow-list. A GA also encounters an exam's `title` via the shared landing " +
+            "page's grades embed, but this section is the fuller, real GA-specific usage.",
+        },
+        {
+          table: 'cls_exam_papers',
+          label: 'Exam scans to grade',
+          columns: ['id', 'class_id', 'exam_id', 'student_id', 'storage_path'],
+          // A GA reads every student's scans for an exam they GA for, not one
+          // person's — same shape as "Submissions to grade" above.
+          subjectColumn: null,
+          scopeColumn: 'class_id',
+          caveat: 'Row existence + storage path only, mirroring the exam-grading console.',
+        },
+        {
+          table: 'cls_surveys',
+          label: 'Surveys',
+          columns: ['id', 'class_id', 'question', 'results_visible'],
+          subjectColumn: null,
+          scopeColumn: 'class_id',
+          orderBy: { column: 'sort', ascending: true },
+          caveat:
+            'Definitions only. A GA has no read arm on individual answers ' +
+            '(`cls_survey_answers`, declared `unreadableByPosition` below) and sees results only ' +
+            'via the `cls_survey_results` aggregate definer, not a raw table.',
+        },
       ],
       // Nothing in classroom is RLS-unreadable to a professor in scope — the
       // module has no sd_notes analogue. Recorded as an empty list rather than
@@ -169,7 +231,26 @@ export const classroomViewAs = declareViewAs({
       // Nothing on the GA surface is RLS-hidden from a professor in scope, so
       // there is no personal layer here in §8.1 point 1's strict sense.
       personal: [],
-      excluded: [],
+      excluded: [
+        {
+          table: 'cls_courses',
+          why:
+            'A GA CAN read this (`cls_is_ga_course`, confirmed 2026-08-28) — both ui/page.tsx ' +
+            "and the exam-grading console query `cls_courses` (`.select('id').limit(1)`) purely " +
+            'as an internal staff/GA-detection probe. No course field is ever rendered; the GA ' +
+            'console has no course-browsing view at all, only the classes a GA is assigned to.',
+        },
+        {
+          table: 'cls_submission_files',
+          why:
+            'A GA CAN read a submission\'s attached files (`cls_is_ga_class` arm on ' +
+            'cls_submission_files_select, confirmed 2026-08-28), but the real grading queue ' +
+            '(ui/manage/grading/[homeworkId]/page.tsx) never fetches them — a genuine product ' +
+            'gap found by this review (a GA grading a submission cannot see what the student ' +
+            'attached), not a deliberate design choice, and not something view-as creates or ' +
+            'fixes.',
+        },
+      ],
       // Absent because the GA cannot read them, not because we declined to
       // render them — a different claim from `excluded`, about a different
       // reader, and separately test-enforced (a real GA is asserted unable to
@@ -272,6 +353,19 @@ export const classroomViewAs = declareViewAs({
               table: 'cls_review_comments',
               columns: ['id', 'author_id', 'file_path', 'line_start', 'line_end', 'body', 'created_at'],
             },
+            // Added 2026-08-28 (coverage review): the SAME hop problem as the
+            // comments embed above — `cls_submission_files` names its person
+            // through `submission_id`, not a direct user-id column, so it can
+            // only be expressed as an embed here, never a standalone section.
+            // Confirmed against the real query in TWO pages: the student's own
+            // homework page (ui/homework/[homeworkId]/page.tsx, own submission)
+            // and the peer-review page (ui/review/[assignmentId]/page.tsx,
+            // reviewing someone else's) both select the same columns.
+            {
+              alias: 'files',
+              table: 'cls_submission_files',
+              columns: ['id', 'file_name', 'storage_path', 'size_bytes'],
+            },
           ],
           subjectColumn: 'student_id',
           scopeColumn: 'class_id',
@@ -296,6 +390,11 @@ export const classroomViewAs = declareViewAs({
             'id', 'class_id', 'student_id', 'homework_id', 'exam_id',
             'source', 'score', 'is_final', 'visible',
           ],
+          // Added 2026-08-28: the live landing page (ui/page.tsx) embeds
+          // `exam:cls_exams(title)` alongside this exact query. `title` only —
+          // never `structure` — since a student has no legitimate use for the
+          // problem/point breakdown the way a GA grading the exam does.
+          embed: [{ alias: 'exam', table: 'cls_exams', columns: ['title'] }],
           subjectColumn: 'student_id',
           scopeColumn: 'class_id',
           // Mirrors the student's own RLS arm exactly: is_final AND visible.
@@ -306,6 +405,20 @@ export const classroomViewAs = declareViewAs({
           caveat:
             'Deliberately the published set only. Draft and instructor-source cells the ' +
             'professor can see are not part of what the student sees.',
+        },
+        {
+          table: 'cls_surveys',
+          label: 'Surveys',
+          columns: ['id', 'class_id', 'question', 'results_visible'],
+          subjectColumn: null,
+          scopeColumn: 'class_id',
+          orderBy: { column: 'sort', ascending: true },
+          caveat:
+            'Added 2026-08-28 (coverage review) — definitions only, from the same shared ' +
+            'landing-page query GA reads (ui/page.tsx). A student\'s own answer comes from ' +
+            'cls_survey_answers (not part of this table, already correctly outside this list); ' +
+            'aggregate results, when the professor has flipped a survey visible, come via the ' +
+            'cls_survey_results definer, not a raw table.',
         },
         {
           table: 'cls_review_assignments',
@@ -575,17 +688,16 @@ export const nailSalonViewAs = declareViewAs({
   // point 9's "explicit, per table" is only a real classification if nothing
   // falls off the list unremarked.
   //
-  // THAT ACCOUNTING IS HAND-CHECKED, NOT MACHINE-ENFORCED, and saying so is part
-  // of the claim. `viewAsCompleteness()` only refuses a table appearing in TWO
-  // lists; it never enumerates the module's real tables and never looks at
-  // `embed`. So a future `sal_tips` migration would leave all three surfaces
-  // silently incomplete with CI green — §8.1 point 9's "unclassified defaults to
-  // PERSONAL" failing open. The precedent that would close it is
-  // packages/db/src/data-browser-coverage.test.ts, which reads `pg_catalog` and
-  // fails on any person column no list accounts for. Deliberately NOT added here:
-  // it is a platform-wide check and classroom's surfaces do not classify every
-  // `cls_` table, so switching it on is its own piece of work with its own
-  // reclassification. Recorded as a follow-on rather than implied to be in place.
+  // THIS ACCOUNTING IS NOW MACHINE-ENFORCED (2026-08-28) —
+  // packages/db/src/view-as-coverage.test.ts enumerates every module's real
+  // tables from `pg_catalog` (including tables reachable only through an
+  // `embed`) and fails the build if a future migration (a `sal_tips`, say)
+  // leaves any surface silently incomplete. `viewAsCompleteness()` above still
+  // only checks a declaration's INTERNAL consistency (no table in two lists,
+  // etc.) — the coverage test is the one that checks against the database.
+  // Nail-salon has zero gaps under it; classroom (whose surfaces predated this
+  // rigor) was brought to the same bar the same day — see the coverage test's
+  // own header comment for what was found and fixed.
   //
   // COLUMN-LEVEL exclusions are prose, and that is a live API gap. Every one made
   // below (`sal_customers.notes`, appointment `notes`/`checklist`, the bill reason
