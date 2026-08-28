@@ -19,8 +19,11 @@ A multi-tenant modular platform: each client engagement produces a **module** bu
      and update only the compact "Now / Next / Standing rules" below. A fresh chat must never
      pay for the full journal. See "Session hygiene". -->
 
-**Now (2026-08-21) — nothing is in flight. Pick the next item WITH the founder from the "Next /
-open" list below; do not start unprompted (standing rule).**
+**Now (2026-08-28) — the view-as surface-coverage ratchet (picked WITH the founder from "Next /
+open") just shipped: `packages/db/src/view-as-coverage.test.ts`, 140/140 db tests, no migration.
+Classroom's own re-classification is deliberately deferred, not done — see that item below.
+Nothing else is in flight. Pick the next item WITH the founder from the "Next / open" list;
+do not start unprompted (standing rule).**
 
 **Host state, 2026-08-12:** the machine was migrated to a new Windows profile
 (`C:\Users\yarmishj.AEI-LT-JYARMISH`) after the old one was lost. Claude's own state — memories,
@@ -209,21 +212,23 @@ Everything below is open but unranked:
   starting condition** — the seeded exam is titled `Quiz 1 — Warm-up`, grades nobody and
   publishes nothing, precisely so it cannot collide with the classroom exam e2e's own
   `Midterm`. Reasoning in the journal.
-- **STILL OPEN, and the one gap the salon review deliberately did not close: machine-enforce
-  "every module table is classified on every surface."** Today it is HAND-checked —
-  `viewAsCompleteness()` only refuses a table appearing in two lists; it never enumerates the
-  module's real tables and never inspects `embed`. So a future `sal_tips` migration leaves all
-  three surfaces silently incomplete with CI green, and §8.1 point 9's "unclassified defaults
-  to PERSONAL" fails open. Not a leak (view-as can only render what is declared) — a false
-  CLAIM, which the next reader trusts. The pattern to copy is
-  `packages/db/src/data-browser-coverage.test.ts` (reads `pg_catalog`, never
-  `information_schema`). **The catch that makes it more than an afternoon: classroom would FAIL
-  it today** — its student/GA surfaces were never classified table-by-table the way salon's
-  were. Recommended shape: **baseline-and-ratchet** — snapshot today's unclassified set as an
-  accepted list and fail only on anything NEW (the data browser's own test already reports its
-  backlog without failing, so there is precedent). That gets the guarantee going forward
-  without forcing the classroom back-classification. Opus; ~2 hours as a ratchet, ~half a day
-  if classroom is classified properly at the same time.
+- ~~**Machine-enforce "every module table is classified on every surface."**~~ **RATCHET DONE
+  2026-08-28** — `packages/db/src/view-as-coverage.test.ts` now enumerates each module's real
+  tables from `pg_catalog` (by the prefix its own declaration uses, so no hand-maintained
+  prefix map to drift) and fails on any table missing from role/personal/excluded/
+  unreadableByPosition **or a nested `embed`** on any declared surface, with a
+  `KNOWN_GAPS` baseline so only NEW gaps fail the build (same shape as
+  `data-browser-coverage.test.ts`'s tier-2 backlog report). Verified it has real teeth, not
+  just a pass: deliberately removed one accepted entry (failed, naming the exact table) and
+  deliberately added a stale one already-satisfied entry (failed the other direction too), then
+  restored and reran clean — 140/140 db tests. **STILL OPEN, deliberately deferred, not
+  forgotten:** classroom's own re-classification. It FAILS today's stricter question if the
+  baseline were empty — GA classifies 9/16 real `cls_` tables, Student 13/16 (counting embeds) —
+  frozen in `KNOWN_GAPS` rather than answered, because each of the ~10 gaps is a real per-table
+  RLS judgment call (e.g. can a GA actually read `cls_exams`?), not mechanical. Nail-salon has
+  zero gaps under the same check — the control that proves this isn't vacuous for a module that
+  actually got its table-by-table review. Opus-tier if picked up (per the original estimate);
+  ~half a day.
 - Slice 3 remainder: **entity-level joinPolicy** (invite-only/request-approval/open per
   class/location/event) — deferred follow-on. Slice 4 (defaults-on-join) is the only
   unbuilt slice left.
@@ -408,6 +413,22 @@ in the sections below.
   session memory pressure" gotcha below, but the causality here runs the other way — the crash caused
   the memory pressure, not the reverse — so don't assume freeing RAM elsewhere first will help; check
   for a stray `com.docker.backend` specifically.
+- **DOCKER CAN FAIL TO BIND A SUPABASE PORT WITH "forbidden by its access permissions" EVEN
+  THOUGH NOTHING IS USING IT (2026-08-28).** After Docker Desktop wasn't running and was started
+  fresh, `supabase start` failed recreating the db container: `listen tcp 0.0.0.0:54322: bind: An
+  attempt was made to access a socket in a way forbidden by its access permissions.` `docker
+  inspect`/`Get-NetTCPConnection` both confirmed nothing was actually listening on that port — this
+  is NOT "port in use." **Cause: Windows had 54322 inside a Hyper-V/WSL dynamic TCP port EXCLUSION
+  range** (`netsh interface ipv4 show excludedportrange protocol=tcp` — look for a range spanning
+  the port; ours was `54238-54337`), which blocks any process from binding it regardless of whether
+  anything holds it. A full Docker Desktop restart and even `wsl --shutdown` did NOT clear it.
+  **Fix (needs an ELEVATED prompt — same category as the `docker-users` group gotcha, on the
+  founder): `net stop winnat` then `net start winnat`**, which resets Windows' NAT service and
+  regenerates the exclusion list without that port. Confirmed the range was gone via the same
+  `netsh` command immediately after, then `supabase start` succeeded on the next try with no other
+  changes. **Do not mistake this for the "Kong stale route" or "Windows-containers mode" gotchas
+  above — the tell is the literal string "forbidden by its access permissions" on a bind, paired
+  with a confirmed-empty port.**
 - **A HANGING `git push` IS USUALLY A CREDENTIAL DIALOG WAITING ON THE FOUNDER'S DESKTOP, NOT A
   NETWORK PROBLEM (2026-08-11 — cost ~10 minutes across two timeouts).** `git push` produced NO
   output and hit a 3-minute and then a 7-minute timeout, while `git ls-remote --heads origin`
