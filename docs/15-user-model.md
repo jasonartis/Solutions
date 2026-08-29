@@ -910,13 +910,44 @@ vocabulary gets locked.
     again at the `exists` over `module_roles`. Both conclusions were true; the stated
     mechanism was the wrong one. Corrected in place so the follow-on's migration header does
     not inherit it.
-  - **Finding 6 is RECORDED, NOT CLOSED, and is on the Next list.** `blinded` — the "your own
-    RLS may have emptied this" detector — is computed ONCE for the module's `scopeEntity`
-    table and never per role table. A future migration dropping an `is_org_admin` arm on an
-    ordinary role table yields a silent, error-free, UNBADGED empty section. The migration in
-    this very build (`20260806010000`) is proof the category already bit once; it was caught
-    only because it hit the scope-entity table, whose symptom is loud — every scoped section
-    empties at once.
+  - ~~**Finding 6 is RECORDED, NOT CLOSED, and is on the Next list.**~~ **CLOSED 2026-08-28.**
+    `blinded` — the "your own RLS may have emptied this" detector — was computed ONCE for the
+    module's `scopeEntity` table and never per role table. A future migration dropping an
+    `is_org_admin` arm on an ordinary role table yielded a silent, error-free, UNBADGED empty
+    section. The migration in this very build (`20260806010000`) is proof the category already
+    bit once; it was caught only because it hit the scope-entity table, whose symptom is loud —
+    every scoped section empties at once.
+    **THE FIX, and why it is the only one available.** An empty read and a policy-denied read
+    are INDISTINGUISHABLE over PostgREST — both are zero rows with a null error — so nothing
+    about the narrowed read can separate them, and the keystone forbids the renderer a second
+    authority to compare against. The only signal left is to ask the SAME RLS-enforced client
+    the same question with every declared narrowing dropped: *can you read any row of this table
+    anywhere in this org?* That is `tableReachable()` in `apps/web/lib/view-as.ts`, and it sets
+    `RenderedSection.emptyReason` to `narrowed` (the declared scope/person/filter/retention
+    narrowing explains the emptiness — a real finding about the position) or `unverified` (it
+    does not, and the page must not claim it does). Keystone-safe by construction: same client,
+    inside `org_id`, one already-allow-listed column, the row discarded — only a boolean leaves
+    the function, so it cannot widen a surface because it cannot put a row on one.
+    **WHAT THE MEASUREMENT CHANGED — the copy, and it is worth knowing before touching it.**
+    Measured against the seeded DB before writing the wording: the superadmin reads ≥1 row of
+    **all 28** declared surface tables across **every** org × module the Owner Console offers,
+    so the badge is unreachable from that console today and does not fire spuriously. The only
+    in-module holder who trips it is **grace**, the seed's one location-scoped salon manager,
+    on five tables — because Uptown legitimately has no appointments, customers or bills. So the
+    common trigger is a NARROW GRANT, not a bug, and the copy names all three readings (nobody
+    has anything here / your grant covers none of it / you cannot read it at all) instead of
+    crying failure. Over-cautious by design, exactly as `blinded` itself already is.
+    **TESTED ON BOTH SIDES, and the asymmetry is deliberate.** The e2e suite asserts the badge
+    does NOT over-fire — narrowing the Owner Console to Uptown empties several sections and each
+    must still render the plain wording — because a badge that fired on every empty section
+    would be the warning nobody reads (docs/12 item 10 names that failure). The positive side
+    could not be asserted there: no console-reachable combination produces it, and the one
+    holder who does is grace, whom the e2e suite must never sign in as (its phase-3 engagement
+    test depends on her having never signed in). So the PREMISE is proven in the db suite
+    instead, inside the block that already signs her in and already cleans up her login rows,
+    with a non-emptiness control so it cannot pass on an empty table. **The positive block's
+    own RENDERING is therefore not covered by a test** — recorded plainly rather than implied,
+    since finding 5's lesson is that an honesty signal needs a test that renders it.
 
   **THE MIGRATION, and the general lesson in it.** `20260806010000_sal_locations_superadmin_read.sql`
   restores the superadmin's SELECT on `sal_locations`, lost when `20260726010000` split a

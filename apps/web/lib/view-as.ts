@@ -328,6 +328,29 @@ export type RenderedSection = {
    * own grant scope, which is what makes the comparison.
    */
   scopeFilter: 'applied' | 'not-scoped' | 'not-narrowed'
+  /**
+   * WHY AN EMPTY SECTION IS EMPTY — set only when the section rendered zero rows
+   * without an error, because only then is there a question to answer.
+   *
+   * `narrowed`   — this caller CAN read rows of this table in this org, so the
+   *                declared narrowing (scope, person, `filter`, or `hiddenWhen`)
+   *                is what emptied the section. A real finding about the
+   *                position or the scope, and safe to state plainly.
+   * `unverified` — this caller cannot read a single row of this table in this
+   *                org at all. "This position sees nothing here" and "your own
+   *                RLS is blind to this table" are indistinguishable from here,
+   *                so the page must not claim the first.
+   *
+   * THE PER-TABLE HALF OF `blinded` (docs/15 finding 6, recorded 2026-08-06,
+   * closed 2026-08-28). `RenderedSurface.blinded` asks this question ONCE, for
+   * the module's `scopeEntity`, and structurally cannot answer it for any other
+   * table — so a migration dropping an `is_org_admin` arm on an ordinary role
+   * table produced a silent, error-free, UNBADGED empty section and the page
+   * said "Nothing here" about a table it simply could not read. That is not a
+   * leak (view-as can only render what is declared) but a FALSE CLAIM, which the
+   * next reader trusts — the failure class docs/03 #18 exists for.
+   */
+  emptyReason?: 'narrowed' | 'unverified'
 }
 
 export type RenderedSurface = {
@@ -608,6 +631,44 @@ function windowStateOf(spec: NonNullable<SurfaceTable['visibilityWindow']>, row:
  * affected section is tagged `not-narrowed` and badged rather than passed off as
  * a person view.
  */
+/**
+ * Can this caller read ANY row of `table` in this org, with every narrowing the
+ * surface declares dropped?
+ *
+ * WHY A SECOND QUERY AND NOT AN INFERENCE. Over PostgREST an empty result and a
+ * policy-denied result are byte-identical — zero rows, no error — so nothing
+ * about the narrowed read can tell them apart. Asking again without the
+ * narrowing is the only signal available to a client that, by the keystone, may
+ * never hold a second authority. It is the same trick `resolveScope` plays for
+ * the scope entity (nodes>0 with entities=0), generalised to a table that has no
+ * such natural control.
+ *
+ * KEYSTONE-SAFE, which is the load-bearing part: it runs the SAME RLS-enforced
+ * client, stays inside `org_id`, selects one column that is already on the
+ * surface's own allow-list, and DISCARDS the row it gets. The only thing that
+ * escapes this function is one boolean — it cannot widen a surface because it
+ * cannot put a row on one, and it reports nothing about rows the caller could
+ * not already read itself.
+ *
+ * COST is paid only where the question exists: a section that returned rows has
+ * already proven its table readable and never probes. An all-empty surface costs
+ * one extra `limit 1` per section, which is the degenerate case anyway and this
+ * is an operator diagnostic screen, not a hot path.
+ */
+async function tableReachable(
+  supabase: SupabaseClient,
+  table: string,
+  column: string,
+  orgId: string,
+): Promise<boolean> {
+  const { data, error } = await supabase.from(table).select(column).eq('org_id', orgId).limit(1)
+  // A probe that ERRORS is evidence AGAINST reachability, never for it, so it
+  // must not read as "readable, therefore the emptiness is honest". Fail closed
+  // to `unverified` — the same over-cautious posture `blinded` already takes.
+  if (error) return false
+  return (data ?? []).length > 0
+}
+
 export async function renderSurface(
   supabase: SupabaseClient,
   decl: ViewAsDeclaration,
@@ -653,9 +714,11 @@ export async function renderSurface(
     let query = supabase.from(spec.table).select(select).eq('org_id', orgId)
     if (spec.scopeColumn && scope.entityIds !== null) {
       if (scope.entityIds.length === 0) {
-        // Empty because scope resolution produced nothing. Whether that is the
-        // truth is `scope.blinded`/`scope.error`'s question, reported once for
-        // the whole surface rather than repeated on every section.
+        // Empty because scope resolution produced nothing. Whether the SCOPE is
+        // trustworthy is `scope.blinded`/`scope.error`'s question, reported once
+        // for the whole surface rather than repeated on every section — but
+        // "can I read this table at all" is a separate axis the scope flag
+        // cannot speak to, so it is still asked here.
         sections.push({
           table: spec.table,
           label: spec.label,
@@ -664,6 +727,11 @@ export async function renderSurface(
           caveat: spec.caveat,
           personFilter,
           scopeFilter,
+          // `columns[0]` is always present — viewAsCompleteness() refuses a
+          // role table declaring no columns.
+          emptyReason: (await tableReachable(supabase, spec.table, spec.columns[0]!, orgId))
+            ? 'narrowed'
+            : 'unverified',
         })
         continue
       }
@@ -694,6 +762,16 @@ export async function renderSurface(
       rows = rows.filter((r) => !hiddenFromTarget(spec.hiddenWhen!, r, spec.scopeColumn!, scope.cutoffs))
     }
 
+    // Asked AFTER `hiddenWhen`, deliberately: retention hiding is a declared
+    // narrowing like any other, so a section it empties is `narrowed`, not
+    // unverifiable. Only an empty section raises the question at all.
+    let emptyReason: RenderedSection['emptyReason']
+    if (rows.length === 0) {
+      emptyReason = (await tableReachable(supabase, spec.table, spec.columns[0]!, orgId))
+        ? 'narrowed'
+        : 'unverified'
+    }
+
     sections.push({
       table: spec.table,
       label: spec.label,
@@ -701,6 +779,7 @@ export async function renderSurface(
       caveat: spec.caveat,
       personFilter,
       scopeFilter,
+      emptyReason,
       rows: rows.map((r) => ({
         values: r,
         windowState: spec.visibilityWindow ? windowStateOf(spec.visibilityWindow, r) : null,

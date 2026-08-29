@@ -1529,9 +1529,21 @@ test('view-as: professor tabs, mode 1, and a logged read-only mode 2 on a named 
   // that actually populate it — `excluded` (the viewer CAN read it; we decline
   // to render) and `unreadableByPosition` (the POSITION cannot read it at all),
   // which are different claims about different readers.
+  // SCOPED TO THE PANEL AND EXACT, since 2026-08-28 — the second time this
+  // assertion's page-wide `getByText` has bitten, and the first time it FAILED
+  // rather than passing wrongly. Classroom's student surface gained a
+  // `cls_surveys` section whose caveat prose legitimately mentions
+  // `cls_survey_answers`, so the bare substring matched two elements and tripped
+  // strict mode. The prose is right and the assertion was loose: what this test
+  // means is "the leaves-out panel NAMES this table", and a table name always
+  // renders as its own `font-mono` span (components/view-as/off-surface.tsx).
+  // Say that, and prose elsewhere can never collide with it again.
   await page.getByText('What this view deliberately leaves out').click()
-  await expect(page.getByText('cls_survey_answers')).toBeVisible()
-  await expect(page.getByText('cls_courses')).toBeVisible()
+  const leftOut = page
+    .locator('details')
+    .filter({ hasText: 'What this view deliberately leaves out' })
+  await expect(leftOut.getByText('cls_survey_answers', { exact: true })).toBeVisible()
+  await expect(leftOut.getByText('cls_courses', { exact: true })).toBeVisible()
 
   // Leaving drops the session; the banner goes with it.
   await page.getByRole('button', { name: 'Stop viewing as' }).click()
@@ -1844,6 +1856,25 @@ test('owner console view-as: mode 3 on a location-narrowed position badges the o
   await expect(page.getByText(/Uptown opening/)).toBeVisible()
   await expect(catalog.getByText('Pedicure', { exact: true })).not.toBeVisible()
   await expect(page.getByText('every sal_locations — no scope filter')).not.toBeVisible()
+
+  // `emptyReason` MUST NOT OVER-FIRE (docs/15 finding 6, closed 2026-08-28).
+  // Narrowing to Uptown empties several sections — Uptown has no appointments,
+  // customers or bills — and each one is now asked "can this caller read this
+  // table at all?" before the page says anything about it. The superadmin can
+  // (org-wide), so the honest answer is the declared narrowing, and these must
+  // render the plain wording, NOT the "cannot tell you which" block.
+  //
+  // This is the assertion that guards the likely regression. The badge's whole
+  // value is being rare: one that fired on every empty section would be the
+  // warning nobody reads, which is the failure docs/12 item 10 names by name.
+  // Located by its EXACT heading, not `hasText`: Playwright's hasText is a
+  // case-insensitive substring, and the earnings-ledger caveat says "paid
+  // bills", so a text filter would match two sections and silently pick one.
+  const bills = page
+    .locator('section')
+    .filter({ has: page.getByRole('heading', { name: 'Bills', exact: true }) })
+  await expect(bills.getByText('Nothing here.')).toBeVisible()
+  await expect(page.getByText(/cannot tell you which of three things/)).not.toBeVisible()
 })
 
 test('owner console view-as: mode 2 is refused where no row is about a person, and names the mode that answers', async ({

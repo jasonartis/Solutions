@@ -5,6 +5,81 @@ section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every 
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
 
+- **2026-08-28 (VIEW-AS HONESTY + COVERAGE — four items closed in one session, NO MIGRATIONS.
+  Sonnet for 1–3, Opus for 4 after the founder switched tiers mid-session. Commits `9e03e60`,
+  `a37bf76`, `d5a8769`, `f3bcaa6`, + this one.)** Everything here is about the same underlying
+  worry — a view-as surface that makes a CLAIM it has not earned — approached from four sides.
+  - **1. The surface-coverage ratchet** (`packages/db/src/view-as-coverage.test.ts`).
+    `viewAsCompleteness()` only ever checked a declaration's INTERNAL consistency; nothing
+    compared it to the DATABASE, and nothing looked inside `embed`. So a future `sal_tips`
+    migration would have left every salon surface silently incomplete with CI green. The new
+    test enumerates each module's real tables from `pg_catalog` by the prefix its own
+    declaration uses (no hand-maintained prefix map to drift) and fails on anything unaccounted
+    for. Baseline-and-ratchet per CLAUDE.md's own recommendation, with `KNOWN_GAPS` freezing
+    what was already broken. **Proved it had teeth before trusting it:** removed an accepted
+    entry (failed, naming the table), added an already-satisfied one (failed the other
+    direction — the staleness check), restored, reran clean.
+  - **2. Classroom's re-classification**, which emptied that baseline the same day (GA was
+    missing 7/16 `cls_` tables, Student 3/16). Each gap answered by reading the REAL page that
+    queries the table, not inferred from RLS — and that grounding is what produced the findings
+    worth keeping: `cls_courses` is read-but-never-rendered by a GA (a pure staff-detection
+    probe, so `excluded`); `cls_exams.structure` is a `{label,points}[]` the grading console
+    uses to size its form, not an answer key; **a GA has RLS access to `cls_submission_files`
+    that the real grading page never uses** — a genuine product gap this review found, not a
+    security exclusion; and the existing GA `cls_grades` entry was separately missing a `detail`
+    column the exam console reads.
+  - **3. Speed-dating's 3 staff-to-staff pairs** (admin→organizer, admin→host, organizer→host),
+    the last slice-5 follow-on. Drafted by a background subagent, then **independently
+    fact-checked line by line before integrating** — every cited policy and column re-read from
+    the current migrations, which matters because the base migration's `sd_interest`/`sd_matches`
+    policies were later rewritten by `20260726030000`. The pair the review existed for
+    (organizer→host) needed **no new mechanism**: the renderer only queries the TARGET's
+    declared surface, and host's surface simply omits both tables. **One judgment call was
+    overridden rather than accepted:** the agent classified organizer's genuine RLS access to
+    `sd_interest`/`sd_matches` as `role`; changed to `excluded`, because the live console only
+    ever shows an aggregate count, and rendering the raw grid would make the view-as tab MORE
+    revealing than the real console — the falsely-INFORMATIVE mirror of docs/03 #18's usual
+    failure. Flagged for the founder in both the code and CLAUDE.md.
+  - **4. Finding 6 — the per-table `blinded` gap (Opus).** `blinded` answered "your own RLS may
+    have emptied this" ONCE, for the module's `scopeEntity`, and could never answer it for an
+    ordinary role table — so a dropped `is_org_admin` arm rendered as a confident "Nothing
+    here", a false claim rather than a leak. **The constraint that shapes the whole fix:** an
+    empty read and a policy-denied read are byte-identical over PostgREST (zero rows, null
+    error), and the keystone forbids the renderer a second authority to compare against — so
+    the only signal available is to ask the SAME client the same question with every declared
+    narrowing dropped. That is `tableReachable()`, setting `emptyReason` to `narrowed` or
+    `unverified`. **Measured before writing the copy, and the measurement changed it:** the
+    superadmin reads ≥1 row of all 28 declared surface tables in every console-reachable
+    org × module, and the only in-module holder who trips the badge is grace, the seed's one
+    scoped salon manager, on 5 tables — because Uptown legitimately has no appointments. So the
+    normal trigger is **a narrow grant, not a bug**, and the wording names all three readings
+    instead of crying failure. **The docs prevented a self-inflicted CI break here:** the
+    obvious e2e fixture was grace, and CLAUDE.md's own gotcha records that signing her in breaks
+    the phase-3 engagement test deterministically. So e2e asserts the badge does NOT over-fire
+    (the regression that would actually matter — a badge on every empty section is the warning
+    nobody reads), and the PREMISE is proven in the db suite inside the block that already signs
+    her in and already cleans up. **The positive block's own rendering is left untested and said
+    so plainly**, since finding 5's lesson is that an honesty signal needs a test that renders it.
+  - **One real regression caught, and only by e2e.** Item 2's new `cls_surveys` caveat mentions
+    `cls_survey_answers` in prose, which tripped Playwright strict mode in an unrelated test
+    whose page-wide `getByText` then matched two elements. **That test's own comment records it
+    had already been bitten once by the same looseness** — passing for the wrong reason back
+    then, failing outright now. Fixed by making the assertion say what it means (scoped to the
+    leaves-out panel, exact match on the `font-mono` table-name span) rather than by rewording
+    the prose. Lesson worth its line: **items 1–3 were verified with typecheck + the db suite
+    only; the break existed for three commits and just wasn't run into.** Final verification was
+    done in CI's exact order — db 141/141 → e2e 51/51 on the same database with no reset between.
+  - Also this session, **not** a build item: **docs/12 item 10's investigation** (`a37bf76`).
+    Read master's protection live via the GitHub API using Git Credential Manager's cached OAuth
+    token — no `gh`, no PAT. **Corrected a standing assumption:** it is CLASSIC branch
+    protection, not Rulesets (`/rulesets` is empty), which is why path-scoped rules ("PRs only
+    for `supabase/migrations/`") are not available without migrating first. Confirmed the whole
+    bypass is ONE flag, `enforce_admins: false`, which resolves guard 3's "UNVERIFIED" —
+    force-push and deletion bypass the same way the status check does, one hole not two. And:
+    exactly one collaborator exists (the founder, admin), and Claude Code's pushes authenticate
+    as that same credential, so "should an AI hold bypass rights" is concretely "should Claude
+    Code's pushes bypass CI the same way mine do." The decision stays the founder's.
+
 - **2026-08-16 → 08-21 (ENGAGEMENT MONITORING PHASE 2 — FULLY SHIPPED: instrumentation, RLS
   tests, prod deploy, prod-verified with a real captured event. Commits `d653d4d`, `f121539`,
   `8107548`, `acf6e3c`, `d92459f`.

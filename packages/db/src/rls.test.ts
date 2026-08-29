@@ -3314,6 +3314,48 @@ describe('org-scoped activity (engagement monitoring phase 2, 20260810010000)', 
     }
   })
 
+  it('view-as `emptyReason`: a SCOPED grant reads a declared surface table as zero-rows-NO-ERROR (docs/15 finding 6)', async () => {
+    // THE PREMISE THE PER-TABLE HONESTY BADGE RESTS ON, proven against real
+    // RLS rather than assumed (apps/web/lib/view-as.ts `tableReachable`).
+    //
+    // `RenderedSection.emptyReason` exists because an empty read and a
+    // policy-denied read are INDISTINGUISHABLE over PostgREST — both are zero
+    // rows with a null error — so a view-as section that renders "Nothing here"
+    // may be reporting either. This asserts that shape really occurs, using the
+    // seed's only scoped salon manager: grace governs Uptown, which has no
+    // appointments, so she reads none ANYWHERE in the org even though the table
+    // is full of Downtown rows.
+    //
+    // Lives here rather than in the e2e suite for a measured reason, recorded so
+    // the next reader does not go looking: on 2026-08-28 NO console-reachable
+    // combination produced this state (the superadmin reads >=1 row of all 28
+    // declared surface tables across every org x module the Owner Console
+    // offers), and the ONE in-module holder who does trip it is grace — whom the
+    // e2e suite must never sign in as, because its phase-3 engagement test
+    // depends on her having never signed in. This block already signs her in and
+    // already cleans up her login rows in its afterAll, so the premise is
+    // provable here and only here.
+    const { data: seen, error } = await grace
+      .from('sal_appointments')
+      .select('id')
+      .eq('org_id', salon)
+      .limit(1)
+
+    // The shape itself: NOT an error. An error would be a different (louder,
+    // already-handled) case — `RenderedSection.error` renders its own red block.
+    expect(error, `grace got an ERROR, not an empty read: ${JSON.stringify(error)}`).toBeNull()
+    expect((seen ?? []).length, 'grace can see an appointment — the premise no longer holds').toBe(0)
+
+    // NON-VACUITY (docs/03's rule): the zero above must be about grace's REACH,
+    // not about an empty table. Without this the assertion would keep passing if
+    // every appointment were deleted, and would then be proving nothing at all.
+    const { data: exist } = await owner.from('sal_appointments').select('id').eq('org_id', salon).limit(1)
+    expect(
+      (exist ?? []).length,
+      'demo-salon has NO appointments at all, so grace reading none proves nothing',
+    ).toBeGreaterThan(0)
+  })
+
   it('CONTROL: a salon worker can record an action, the superadmin reads it, and the rollup counts it BY ACTION', async () => {
     // Everything below is vacuous without this — the same role this block's
     // opening test plays for login capture.

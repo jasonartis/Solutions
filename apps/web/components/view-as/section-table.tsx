@@ -63,8 +63,27 @@ export function SectionTable({
           the ladder&rsquo;s RLS or a wrong surface declaration — never something view-as should bridge.
         </p>
       )}
-      {section.rows.length === 0 && !section.error && (
+      {/* AN EMPTY SECTION IS A CLAIM, AND IT USED TO BE AN UNEARNED ONE.
+          "Nothing here" reads as "this position sees nothing here" — a
+          statement about the POSITION. But a table this caller's own RLS cannot
+          read returns exactly the same thing: zero rows, no error. So until
+          2026-08-28 a dropped policy arm rendered as a confident blank, which is
+          docs/15 finding 6 and the same false-claim failure the surface-level
+          `blinded` banner already existed to prevent one table higher up.
+          `emptyReason` splits the two, and the wording follows that banner's
+          voice: state the fact, name both readings, refuse to pick one. */}
+      {section.rows.length === 0 && !section.error && section.emptyReason !== 'unverified' && (
         <p className="text-sm text-gray-400">Nothing here.</p>
+      )}
+      {section.rows.length === 0 && !section.error && section.emptyReason === 'unverified' && (
+        <p className="rounded bg-amber-50 p-2 text-xs text-amber-800">
+          Empty, and this page cannot tell you which of three things it means: that nobody has
+          anything here, that your own grant covers no part of this table, or that your own
+          permissions cannot read it at all. Your account returns no rows of{' '}
+          <span className="font-mono">{section.table}</span> anywhere in this org, and all three
+          look identical from here. A narrowly scoped grant reaches this state legitimately, so
+          it is not on its own a finding about this position.
+        </p>
       )}
       {section.rows.length > 0 && (
         <div className="overflow-x-auto">

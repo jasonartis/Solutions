@@ -24,14 +24,18 @@ shipped the same day, no migrations: (1) the view-as surface-coverage ratchet
 (`packages/db/src/view-as-coverage.test.ts`); (2) classroom's own re-classification, closing its
 `KNOWN_GAPS` backlog; (3) speed-dating's 3 staff-to-staff view-as pairs (drafted by a background
 agent, independently fact-checked against live RLS/columns, one judgment call overridden — see
-the slice-5 entry below). `KNOWN_GAPS` is empty across every module. 140/140 db tests passing
-throughout, including live-verify checks (a real superadmin reading every new table, real
-seeded organizer/host accounts confirming the unreadable/excluded claims). The master-gating
-question (docs/12 item 10) was investigated the same session (facts verified live via the GitHub
-API) — the decision itself is still the founder's, as is the one flagged judgment call in the
-speed-dating review (organizer's `sd_interest`/`sd_matches` classified `excluded` rather than
-`role` — see the slice-5 entry). Nothing else is in flight. Pick the next item WITH the founder
-from the "Next / open" list; do not start unprompted (standing rule).**
+the slice-5 entry below); and — after the founder switched the session to Opus — **(4) the
+per-table `blinded` honesty gap, docs/15 finding 6, CLOSED**. `KNOWN_GAPS` is empty across every
+module. Verified in **CI's exact order** at the end: db **141/141** → e2e **51/51** on the same
+database with no reset between (the documented order-dependency trap), plus typecheck 9/9 and a
+clean build. The master-gating question (docs/12 item 10) was investigated the same session
+(facts verified live via the GitHub API) — the decision itself is still the founder's, as is the
+one flagged judgment call in the speed-dating review (organizer's `sd_interest`/`sd_matches`
+classified `excluded` rather than `role` — see the slice-5 entry). **One known test gap is
+recorded, not hidden:** finding 6's positive badge has no rendering test (unreachable from the
+console; the only holder who reaches it is grace, whom e2e must never sign in as). Nothing else
+is in flight. Pick the next item WITH the founder from the "Next / open" list; do not start
+unprompted (standing rule).**
 
 **Host state, 2026-08-12:** the machine was migrated to a new Windows profile
 (`C:\Users\yarmishj.AEI-LT-JYARMISH`) after the old one was lost. Claude's own state — memories,
@@ -180,12 +184,19 @@ Everything below is open but unranked:
   claim rested on a single one-time manual measurement and is now a permanent, re-runnable check in
   both `scripts/prod-verify-login-events.mts` and `scripts/prod-verify-activity-events.mts`. Full
   writeup → docs/17's decisions log, 2026-08-16 entry.
-- **`blinded` CHECKS ONE TABLE PER MODULE** (the `scopeEntity`), never per role table — so a
-  future migration dropping an `is_org_admin` arm on an ordinary role table gives a silent,
-  error-free, **UNBADGED** empty section. `20260806010000` is proof the category already bit
-  once, caught only because it hit the scope-entity table, whose symptom is loud. *(Promoted
-  2026-08-09 out of the struck-through view-as item, where it was invisible. Full context:
-  docs/15 finding 6.)*
+- ~~**`blinded` CHECKS ONE TABLE PER MODULE**~~ **DONE 2026-08-28 (Opus), no migration.** Every
+  EMPTY view-as section now asks the caller's own client whether it can read that table at all
+  with the declared narrowing dropped (`tableReachable()` → `RenderedSection.emptyReason`), so
+  "Nothing here" is only said when the narrowing genuinely explains it; otherwise the page names
+  all three readings and refuses to pick one. Keystone-safe (same RLS client, one boolean
+  leaves the probe). **Measured before writing the copy:** the superadmin reads ≥1 row of all
+  28 declared surface tables in every console-reachable org × module, so it never fires there;
+  the one holder who trips it is grace, the scoped salon manager, on 5 tables — i.e. **a narrow
+  grant is the normal trigger, not a bug**, and the wording says so. e2e asserts it does NOT
+  over-fire; the db suite proves the premise (zero-rows-NO-error) with a non-emptiness control.
+  **Known gap, recorded not hidden: the positive block's own rendering has no test** — it is
+  unreachable from the console, and the only holder who reaches it is grace, whom e2e must
+  never sign in as. Full reasoning: docs/15 finding 6.
 - **Should `view_as_sessions`' own whole-org admin read be narrowed by hierarchy?** Today it
   is whole-org, since an org admin has no scope dimension — and the data browser makes that
   data *findable* where it was merely readable. Same founder principle as the second-superadmin
