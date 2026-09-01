@@ -16,16 +16,23 @@ export const dynamic = 'force-dynamic'
 // real RLS-safe database round-trip without a new grant or migration.
 export async function GET() {
   const supabase = await createClient()
-  const { error } = await supabase.rpc('syn_public_weeks', { p_org_slug: 'demo-shul' })
+  const { data, error } = await supabase.rpc('syn_public_weeks', { p_org_slug: 'demo-shul' })
+
+  // A missing `demo-shul` org comes back as `data: null, error: null` (the
+  // RPC ran fine, it just found nothing) — the same shape a genuine outage
+  // of the RLS/grant path can't produce, but one that would still mean the
+  // probe stopped proving anything. Treat it as unhealthy too.
+  const healthy = !error && !!data
+  const reason = error ? error.message : !data ? 'demo-shul RPC returned no data' : undefined
 
   return NextResponse.json(
     {
-      ok: !error,
+      ok: healthy,
       checkedAt: new Date().toISOString(),
-      ...(error ? { error: error.message } : {}),
+      ...(reason ? { error: reason } : {}),
     },
     {
-      status: error ? 503 : 200,
+      status: healthy ? 200 : 503,
       headers: { 'Cache-Control': 'no-store' },
     },
   )
