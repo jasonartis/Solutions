@@ -34,13 +34,9 @@ decision log, docs/03 conventions, docs/12 safeguards) — this is the chronolog
     failure mode actually prints.** A component whose success case is silence cannot be
     verified by observing silence.
   - **[docs/18-go-live-checklist.md](../18-go-live-checklist.md) written** in answer to the
-    founder's question — the minimal ordered list to take on a real client and build them a
-    module on the infrastructure we have. 8 items, ~4–6 sessions plus ~1 hour of founder
-    account chores; its §4 names what was deliberately left OFF so the omissions read as
-    decisions. Monitoring is first because docs/12 items 1 and 2 compound: Supabase free-tier
-    pauses itself after ~7 days idle and there is no monitoring at all, so **a quiet week takes
-    prod down today** and nothing says so — and a 5-minute uptime ping is both the alert and
-    the activity that prevents the pause. Founder chose this path for the next session.
+    founder's question "what would it take to take on a real client and build them a module?"
+    — read it there rather than duplicated here. The founder chose that path for the next
+    session, starting at its item 1 (monitoring).
   - **docs/04 was found stale and given an end state.** A survey (subagent, hand-verified on
     its load-bearing claims) established the platform is ~85–90% complete against current
     scope, with go-live at ~5–8 sessions and everything currently scoped at ~25–40. The build

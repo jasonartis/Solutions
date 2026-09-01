@@ -30,13 +30,10 @@ building: which query can `anon` legitimately make for the `/healthz` probe**, g
 route handlers, config, scripts and docs, no migrations or RLS — switch up to Opus only if
 something turns out to touch `supabase/migrations/`. Nothing is in flight; the tree is clean
 and pushed.
-**THE FOUNDER'S DECISION QUEUE lives in [docs/18](docs/18-go-live-checklist.md) §4 and in the
-"Next / open" list below** — six items are waiting on him, not on effort (privacy wording,
-what gates `master`, the `sd_interest`/`sd_matches` classification, the two `profiles` /
-`view_as_sessions` hierarchy questions, and the second-superadmin ordering, which is genuinely
-unbuildable until a second operator exists). **Standing instruction, 2026-08-29: do not block
-on any of them** — record the question where it belongs, flag it in the reply, and move to the
-next unblocked item.
+**Standing instruction, 2026-08-29: DO NOT BLOCK ON A FOUNDER DECISION** — record the question
+where it belongs, flag it in the reply, and move to the next unblocked item. The queue itself
+is [docs/18](docs/18-go-live-checklist.md) §4 (six items, waiting on him rather than on
+effort); do not re-list it here.
 
 **Previously (2026-08-28/29) — a long session of items picked WITH the founder from "Next /
 open," all shipped, no migrations: (1) the view-as surface-coverage ratchet
