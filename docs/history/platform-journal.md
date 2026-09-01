@@ -5,6 +5,61 @@ section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every 
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
 
+- **2026-08-31/09-01 (GO-LIVE CHECKLIST ITEM 1 — MONITORING + KEEP-ALIVE. Sonnet. Commit
+  `267dd4a`.)**
+  - **`/healthz` shipped** (`apps/web/app/healthz/route.ts`): the open question — "which query
+    can `anon` legitimately make, given the 2026-07-28 sweep left it holding no table grants in
+    `public`?" — was answered by measurement, not guesswork. A subagent traced
+    `apps/web/app/s/[orgSlug]` and found it calls exactly two `anon`-executable security-definer
+    RPCs (`syn_public_weeks`/`syn_public_week`, the only two functions the sweep re-granted).
+    `/healthz` reuses `syn_public_weeks` against `demo-shul` — the permanently-seeded synagogue
+    org whose current week the seed script already keeps published "so the public page shows
+    it," i.e. already-living infrastructure, not a new fixture. Hardened once past the obvious
+    case: `supabase.rpc()` returns `{data: null, error: null}` for an org slug that doesn't
+    resolve — not an error — so a missing `demo-shul` would have silently reported `ok:true`
+    from a check that had stopped proving anything; fixed to treat null data as unhealthy too.
+    Explicitly uncacheable (`dynamic = 'force-dynamic'` + `Cache-Control: no-store`), on top of
+    Route Handlers already not being cached by default in this Next version.
+  - **Sentry wired, guarded on `NEXT_PUBLIC_SENTRY_DSN`** (`apps/web/instrumentation.ts` +
+    `instrumentation-client.ts` + `app/global-error.tsx`, current Next-16 file-convention
+    approach — no `sentry.*.config.ts`, no `withSentryConfig` wrapper, since source-map upload
+    needs an org/project that doesn't exist until the founder creates the account). Inert with
+    no DSN: no init, nothing sent.
+  - **A real, reusable exFAT-drive finding.** Adding `@sentry/nextjs` broke `next build` LOCALLY
+    with `TurbopackInternalError: failed to create junction point`, naming
+    `require-in-the-middle`/`import-in-the-middle`. Root cause, confirmed by reading Next's own
+    bundled docs (this Next version has real breaking changes from training-data Next, per
+    `apps/web/AGENTS.md`'s own warning): both packages sit on Next's `serverExternalPackages`
+    default list — packages Next externalizes rather than bundles, which means physically
+    linking them into `.next/node_modules` — and exFAT cannot create that link, the identical
+    reason `workspace:*` was already banned (docs/01). It reproduced even with ONLY the
+    client-side instrumentation file present, because `next build` still resolves the package's
+    Node entry points during SSR — dropping server-side usage would not have avoided it. **Never
+    verified locally as broken and left at that**: opened a real (if throwaway) PR to trigger
+    GitHub Actions' `check` job on Ubuntu, zero deploy risk since `deploy` only runs on a
+    `master` push — `pnpm build` passed clean there, twice (once per commit), proving this is a
+    Windows-only local-build artifact, not a real defect, before it ever touched master. Any
+    future dependency on that same externals list (`pg`, `sharp`, `playwright`, `bcrypt`, …)
+    will hit the identical wall; verify the same way rather than assuming the dependency itself
+    is broken. Rule + the full externals list pointer → CLAUDE.md's exFAT bullet and docs/18
+    item 1.
+  - **A stale-docs near-miss, corrected by the founder rather than assumed.** `.env.accounts`'s
+    still-blank `UPTIMEROBOT_LOGIN_EMAIL`/`PASSWORD` (with the original "FILL IN" TODO comment
+    intact) looked like solid evidence the account was never created — consistent with three
+    other docs (docs/04, docs/12, docs/18) all saying monitoring didn't exist yet. It was wrong:
+    the founder had a real UptimeRobot weekly-report email and a live dashboard entry, monitor
+    on `https://solutions-platform.vercel.app/s/pozne`, 100% uptime the prior week. Independently
+    corroborated with a direct `curl` (`HTTP 200`) before trusting it. The credentials were just
+    never copied back into the local template after being created straight on uptimerobot.com —
+    absence of a RECORD is not absence of the THING. docs/14 already had this right and very
+    nearly got "corrected" into being wrong; reverted, and the other three docs' stale "no
+    monitoring exists" framing is what actually needed the fix (docs/18 item 1, CLAUDE.md).
+  - **Verified via CI in the exact sequence that matters**, not just typecheck: `check` job
+    green on Ubuntu (build + `pnpm --filter @platform/db test` + full e2e) on both commits
+    pushed to the verification PR, merged to master only after both were green, `deploy` ran for
+    real on the master push. Founder action still open: create the free Sentry account, paste
+    the DSN into Vercel as `NEXT_PUBLIC_SENTRY_DSN`. UptimeRobot needed nothing — see above.
+
 - **2026-08-29 (THE WORKER'S SILENT JOBS + THE GO-LIVE CHECKLIST. Opus. Commits `e98d1d3`,
   `29c7d23`, + this one. Same session as the 2026-08-28 entry below; split out because the
   worker finding stands on its own.)**

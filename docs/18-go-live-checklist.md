@@ -21,7 +21,7 @@ minutes, not sessions, and several can happen in parallel with build work.
 
 | # | Item | Whose job | Size | Blocks what |
 |---|------|-----------|------|-------------|
-| 1 | Monitoring + keep-alive | Claude builds, founder makes 2 free accounts | ~1 session | Silent outages; **prod pausing itself** |
+| 1 | Monitoring + keep-alive | **CODE DONE.** Founder: 1 free Sentry account (UptimeRobot already existed) | ~1 session | Silent outages; **prod pausing itself** |
 | 2 | Automated + tested backups | Claude | ~1–2 sessions | Unrecoverable data loss |
 | 3 | Privacy + terms page | Claude drafts, **founder owns wording** | ~1 session | Legal exposure the moment a real person signs in |
 | 4 | Worker on a real host | Claude (runbook exists) | ~30 min | Retention never runs in prod |
@@ -35,7 +35,50 @@ Items 5 and 6 can be done today and are independent of everything else.
 
 ---
 
-## 1. Monitoring + keep-alive — *do this first*
+## 1. Monitoring + keep-alive — *do this first* — **CODE DONE 2026-08-31/09-01, verified live on prod**
+
+**Status: the app-side half is shipped and prod-verified.** `/healthz`
+(`apps/web/app/healthz/route.ts`) and Sentry's guarded wiring
+(`apps/web/instrumentation.ts` + `instrumentation-client.ts` +
+`app/global-error.tsx`) are on master and deployed. **One founder action
+remains: create the free Sentry account and paste the DSN into Vercel as
+`NEXT_PUBLIC_SENTRY_DSN`** — until then Sentry stays inert by design (no
+crash, no code path taken, just never initialized). See docs/14 for the
+account row.
+
+**UptimeRobot is NOT a founder action — it already exists and is live**
+(confirmed 2026-08-31: a real monitor on `https://solutions-platform.vercel.app/s/pozne`,
+100% uptime the prior week, corroborated independently by curling the URL
+directly). This checklist item's own premise ("founder makes 2 free
+accounts") was half wrong — only Sentry is actually new. **Recommended
+follow-up, not required:** add a second UptimeRobot monitor on `/healthz`
+once convenient — it's a purpose-built JSON probe (proves the DB
+round-trip specifically) rather than a full page render, and free-tier
+UptimeRobot allows 50 monitors, so this is additive, not a replacement.
+
+**A genuinely new exFAT-drive finding, worth keeping for the next session
+that adds any dependency in this family:** adding `@sentry/nextjs` broke
+`next build` LOCALLY on this Windows/exFAT machine with a Turbopack
+`TurbopackInternalError: failed to create junction point` naming
+`require-in-the-middle`/`import-in-the-middle` — Next.js's own
+`serverExternalPackages` default list (any dependency Next treats as
+"don't bundle, use native Node `require`") needs a real symlink/junction
+into `.next/node_modules`, which exFAT cannot create, for the SAME reason
+`workspace:*` links were already banned (docs/01). This is NOT a code bug
+and NOT specific to how minimally Sentry is used — it reproduced even
+with only the client-side instrumentation file present, because
+`next build` still resolves the package's Node entry points during SSR.
+**Verified via a throwaway PR against GitHub Actions (Ubuntu, real
+symlinks): `pnpm build` passes clean on Linux** — proving this is a local
+Windows-only limitation, not a real defect, before it ever reached
+master. Any FUTURE dependency on Next's `serverExternalPackages` list
+(`pg`, `sharp`, `playwright`, `bcrypt`, etc. — full list in
+`node_modules/next/dist/docs/.../serverExternalPackages.md`) will hit the
+exact same local-build wall; verify the same way (a PR triggers `check`
+on Linux with zero deploy risk, since `deploy` only runs on a master
+push) rather than assuming the dependency is broken.
+
+
 
 **Why it is first, and why it is not merely prudent.** docs/12 item 1: Supabase free-tier
 projects **pause themselves after ~7 days without activity**, and docs/12 item 2: there is

@@ -19,17 +19,18 @@ A multi-tenant modular platform: each client engagement produces a **module** bu
      and update only the compact "Now / Next / Standing rules" below. A fresh chat must never
      pay for the full journal. See "Session hygiene". -->
 
-**NEXT SESSION STARTS HERE (handoff written 2026-08-29): the founder has chosen the GO-LIVE
-path — read [docs/18-go-live-checklist.md](docs/18-go-live-checklist.md) and start at its
-item 1 (monitoring + keep-alive).** That doc is the minimal ordered list to take on a real
-client and build them a module; it names who does what, the sizes, and — in its §4 — what was
-deliberately left OFF and why. **Item 1 carries one unsolved question to settle while
-building: which query can `anon` legitimately make for the `/healthz` probe**, given the
-2026-07-28 ACL sweep left `anon` holding nothing in `public` (mirror whatever
-`apps/web/app/s/` already reads). **Sonnet is the right tier** for the whole checklist — it is
-route handlers, config, scripts and docs, no migrations or RLS — switch up to Opus only if
-something turns out to touch `supabase/migrations/`. Nothing is in flight; the tree is clean
-and pushed.
+**NEXT SESSION STARTS HERE (handoff written 2026-09-01): GO-LIVE CHECKLIST ITEM 1 IS CODE-DONE,
+VERIFIED ON CI, AND DEPLOYED — move to item 2 (automated + tested backups).** Read
+[docs/18-go-live-checklist.md](docs/18-go-live-checklist.md); full item-1 story in the
+2026-08-31/09-01 journal entry. One founder action is still open but NOT blocking: create a
+free Sentry account and paste the DSN into Vercel as `NEXT_PUBLIC_SENTRY_DSN` — inert until
+then. UptimeRobot needed no founder action; it already existed and was live the whole time
+(this checklist's own premise that neither account existed was half wrong — worth checking any
+"needs a founder account" item against reality before assuming, the same lesson that nearly
+produced the opposite mistake this session). **Sonnet is the right tier** for the whole
+checklist — route handlers, config, scripts and docs, no migrations or RLS — switch up to Opus
+only if something touches `supabase/migrations/`. Nothing is in flight; the tree is clean and
+pushed.
 **Standing instruction, 2026-08-29: DO NOT BLOCK ON A FOUNDER DECISION** — record the question
 where it belongs, flag it in the reply, and move to the next unblocked item. The queue itself
 is [docs/18](docs/18-go-live-checklist.md) §4 (six items, waiting on him rather than on
@@ -684,7 +685,7 @@ in the sections below.
 - **Security invariant:** every module table has `org_id` + RLS policy; web app queries as the user (RLS enforced); service-role key only in the worker.
 - **Code style:** explicit over clever — the founder codes alongside AI (Apps Script/JS background; Copilot may be used too). Fewer abstractions, standard patterns, inline docs where intent isn't obvious.
 - Module tables are prefixed (`mm_`, `cls_`, `syn_`, `vm_`, `sal_`, `sd_`); modules never import other modules; shared behavior goes through `packages/platform`.
-- **exFAT constraint:** the repo drive (D:) can't do symlinks. NO `workspace:*` dependencies — internal packages are imported via `@platform/*` tsconfig path aliases, and `.npmrc` pins `node-linker=hoisted`. Details + deferred NTFS revert: docs/01.
+- **exFAT constraint:** the repo drive (D:) can't do symlinks. NO `workspace:*` dependencies — internal packages are imported via `@platform/*` tsconfig path aliases, and `.npmrc` pins `node-linker=hoisted`. Details + deferred NTFS revert: docs/01. **Same constraint, new manifestation (2026-08-31):** any dependency on Next's `serverExternalPackages` default list (`require-in-the-middle`/`import-in-the-middle` via `@sentry/nextjs`, also `pg`/`sharp`/`playwright`/`bcrypt`/etc.) breaks `next build` LOCALLY with a Turbopack junction-point error — Next needs a real symlink into `.next/node_modules` for anything it externalizes rather than bundles. Not a code bug: verified `pnpm build` passes clean on GitHub Actions' Ubuntu runner. Full story + the verify-via-throwaway-PR technique: docs/18 item 1.
 
 ## Founder profile & working style (canonical — mirror of any session memory)
 
