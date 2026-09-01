@@ -29,7 +29,14 @@ building: which query can `anon` legitimately make for the `/healthz` probe**, g
 `apps/web/app/s/` already reads). **Sonnet is the right tier** for the whole checklist — it is
 route handlers, config, scripts and docs, no migrations or RLS — switch up to Opus only if
 something turns out to touch `supabase/migrations/`. Nothing is in flight; the tree is clean
-and pushed through `e98d1d3`.
+and pushed.
+**THE FOUNDER'S DECISION QUEUE lives in [docs/18](docs/18-go-live-checklist.md) §4 and in the
+"Next / open" list below** — six items are waiting on him, not on effort (privacy wording,
+what gates `master`, the `sd_interest`/`sd_matches` classification, the two `profiles` /
+`view_as_sessions` hierarchy questions, and the second-superadmin ordering, which is genuinely
+unbuildable until a second operator exists). **Standing instruction, 2026-08-29: do not block
+on any of them** — record the question where it belongs, flag it in the reply, and move to the
+next unblocked item.
 
 **Previously (2026-08-28/29) — a long session of items picked WITH the founder from "Next /
 open," all shipped, no migrations: (1) the view-as surface-coverage ratchet
@@ -297,24 +304,16 @@ Everything below is open but unranked:
   fixes the other. **CI is deliberately STRICTER (5s expect, 30s test) against a PREBUILT app**, so
   a slow assertion there means something is genuinely slow. Full reasoning → journal 2026-07-30 +
   2026-08-05.
-- ~~Low-priority verification: **the worker's PRE-EXISTING jobs**~~ **DONE 2026-08-29 (Opus), and it
-  was NOT the no-op it looked like.** The assumption held — `service_role`'s reads all still work,
-  14/14 via the new **`scripts/verify-worker-jobs.mts`** (rescue-driven for real: it marks a pair
-  stale, runs the tick, and asserts the flag CLEARS — "6 pairs recomputed" on the verifying run).
-  **But the proposed method — "watch the next real job run" — could never have worked, and that is
-  the finding.** Three of the four pre-existing jobs SWALLOWED their entry query's error: a denied
-  read left `data` null, `null ?? []` became an empty list, and the job returned as though there
-  were nothing to do. **A broken job and an idle job printed the identical (empty) log** while
-  `/healthz` kept reporting a fresh heartbeat. Now checked in all four. Two were worse than silent:
-  the orchestrator read `sd_rounds` into `?? []`, which its next branch reads as *"a fresh event
-  with no rounds yet"* — so a transient error on an event that already had rounds sent it to BUILD
-  ROUND 1 (bounded only by the single-active-round guard trigger, i.e. by luck); and it built the
-  block list from an unchecked read, where an empty list is indistinguishable from *"nobody blocked
-  anybody"* — **a failed read would have paired two people who explicitly blocked each other**,
-  breaking module 6's "never pair me with them again" safety promise. **The reusable rule → docs/03:
-  `?? []` on an unchecked query result manufactures a confident empty answer out of an error** — the
-  same false-claim family as docs/15 finding 6, one layer down. `classroom-retention.ts` always got
-  it right and was the in-repo precedent the fix copied.
+- ~~Low-priority verification: **the worker's PRE-EXISTING jobs**~~ **DONE 2026-08-29 (Opus).**
+  The assumption held (`service_role`'s reads all still work — 14/14 via the new
+  **`scripts/verify-worker-jobs.mts`**, which drives the rescore tick for real). **But the
+  proposed method, "watch the next real job run," could never have worked:** three of the four
+  jobs swallowed their entry query's error, so a broken job and an idle job printed the
+  identical empty log. Two were worse than silent — incl. one where a failed `sd_blocks` read
+  would have paired two people who explicitly blocked each other. **Reusable rule → docs/03's
+  vacuity section (`?? []` on an unchecked result manufactures a confident empty answer), with
+  the corollary: before planning to verify something by watching a log, confirm the failure
+  mode actually prints.** Full story → journal 2026-08-29.
 - `gh` is NOT installed on this machine. **CI PASS/FAIL is readable from the terminal without
   it** — the `deploy` job has `needs: check`, so a `READY` production deployment proves `check`
   was green. Query it with the `VERCEL_TOKEN` already in `.env.deploy`:
@@ -514,7 +513,11 @@ in the sections below.
   Files\nodejs\pnpx'`). Non-admin fix: `corepack enable --install-directory <writable dir>` then
   prepend that dir to `$env:PATH` in EVERY command (shell state does not persist between tool
   calls). Appeared in the same session as the Docker mode flip, so suspect a common cause if both
-  show up together.
+  show up together. **TURBO'S SYMPTOM FOR THIS IS UNRECOGNISABLE — `x Unable to find package
+  manager binary: cannot find binary path` (2026-08-29).** It names neither `pnpm` nor PATH, and
+  it fails the whole `turbo run` before any task starts, so it reads as a broken turbo install.
+  It is only this. Same fix: prepend the shim dir to PATH in the same command
+  (`export PATH="<dir>:$PATH" && pnpm exec turbo run typecheck --concurrency=1`).
 - **DOCKER DESKTOP CAN DIE OUTRIGHT UNDER A LONG SESSION'S MEMORY PRESSURE, and the symptom
   reads as a test failure (2026-08-09).** After a session of resets + builds + Playwright runs,
   the db suite reported `ECONNREFUSED 127.0.0.1:54321/54322` and 104 tests SKIPPED — which

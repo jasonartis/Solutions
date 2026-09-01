@@ -2,6 +2,14 @@
 
 Strategy (docs/00 principle 1): build real modules first, extract the platform from what they share. Order decided 2026-07-06.
 
+> **THIS FILE IS STALE BEYOND 2026-07-16 — read the "Where we actually are" section at the
+> bottom first.** M0–M6 below all shipped, but the plan was never extended past them, so it
+> describes none of the six weeks of work that followed (the shared user model and its slices,
+> view-as, the per-person data browser, engagement monitoring phases 1–3, the Owner Console
+> tooling). The de-facto roadmap since then has been CLAUDE.md's "Next / open" list. Recorded
+> 2026-08-29 rather than silently left, because a plan that stops without saying so reads as a
+> plan that was completed.
+
 ## M0 — Foundation skeleton (deliberately thin)
 
 Repo scaffold (pnpm+Turborepo monorepo, TypeScript, lint/format), Supabase local + cloud project, Drizzle + first migration, auth (login/signup/magic link), core tables (orgs, org_members, org_modules, module_roles), app shell (nav shows enabled modules), platform-owner console (create org, toggle entitlements), seed script, CI (typecheck/test/migrate/deploy), Vercel deployment, Sentry + UptimeRobot.
@@ -65,3 +73,56 @@ Last on purpose: leans on module 1's primitives (questions, matches, orgs) plus 
 - Every milestone updates docs + CLAUDE.md (stale docs are bugs).
 - Backups verified by actually restoring (docs/05) before any real client data exists.
 - Google Sheets connector matured opportunistically (M2 roster sync first, general import later) — it's the client-migration on-ramp.
+
+---
+
+## Where we actually are (surveyed 2026-08-29)
+
+Produced by a full read of CLAUDE.md, docs/00/01/03/12/15, every module spec and the journal,
+in answer to the founder's question *"what would it take to complete the platform as it is
+scoped now?"*. **The load-bearing claims below were re-verified by hand** (this file's last
+date, the primitives catalog, the slice markers); the sizings are estimates and are labelled
+as such.
+
+**Status: all seven milestones above (M0 → M6) are delivered.** 6 real modules live in
+production plus `modules/sample` as the template, 41 migrations applied, ~18 of the 22
+primitives in docs/01's catalog extracted, 141 db + 51 e2e tests green in CI's exact order.
+Roughly **85–90% complete against the platform's current scope**.
+
+**Remaining, at the pace the journal actually shows (~2–3 sessions/week):**
+
+| Bucket | Size |
+|---|---|
+| **Go-live: enough to take a first paying client** — see [docs/18](18-go-live-checklist.md) | **~5–8 sessions ≈ 2–3 weeks** |
+| Unbuilt user-model slices (slice 4 defaults-on-join; entity-level joinPolicy) | 3–5 sessions |
+| Module tails — largest single item is speed-dating's Jitsi video (needs a VPS); also the two **unbuilt primitives, Notifications and Conversations** (docs/01 lines 87–88) | 10–15 sessions |
+| Deferred hardening (mostly optional) | 8–12 sessions |
+| **Everything currently scoped** | **~25–40 sessions ≈ 10–16 weeks** |
+
+**Excluded from those numbers, deliberately:** modules 7 (Redt-It) and 8 (Energy Analytics),
+both marked DRAFT / NOT SCOPED — module 8 needs a file-level investigation of the legacy app
+before it can even be estimated; any new client engagement; and the **generalization pass**
+docs/00 warns about, which reselling an *existing* module to a *second* client would need and
+which nobody has budgeted.
+
+**The honest caveat about the total: there is no defined finish line.** The scope past M6 is a
+living list, not a plan with a bottom — which is the real reason the range is wide, and is why
+the go-live subset is the number worth planning against.
+
+**Two external clocks:** Supabase removes the legacy auto-expose **2026-10-30** (when the
+`ALTER DEFAULT PRIVILEGES` drift item stops being theoretical), and Vercel Hobby prohibits
+commercial use the day a client pays (docs/18 item 5).
+
+### Doc contradictions found by the same survey — not yet fixed
+
+Recorded so the next reader does not trust the wrong one. None is urgent; all are cheap.
+
+1. **This file said classroom "has no known remaining gaps against its own spec"** — the
+   module-2 spec itself still lists **professor role scoping as OPEN**.
+2. **docs/15 §11 slice 2 (per-module ladders) carries no `[BUILT]` marker**, while CLAUDE.md
+   states slice 4 is "the only unbuilt slice left." Both are defensible readings of a partial
+   truth: 3 of the 6 modules are rank-mapped, so slice 2 is genuinely *partial*, not done.
+3. The privacy-policy line is called a **precondition** of shipping in both docs/12 item 6 and
+   docs/17 §9, yet engagement monitoring phases 1 and 2 shipped without it. That was recorded
+   honestly at the time rather than the rule being relaxed — but the two statements still
+   contradict each other on the page.

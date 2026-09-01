@@ -5,6 +5,55 @@ section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every 
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
 
+- **2026-08-29 (THE WORKER'S SILENT JOBS + THE GO-LIVE CHECKLIST. Opus. Commits `e98d1d3`,
+  `29c7d23`, + this one. Same session as the 2026-08-28 entry below; split out because the
+  worker finding stands on its own.)**
+  - **The item read "low-priority verification: the pre-existing jobs were never exercised
+    after the ACL sweep… watch the next real job run." The assumption was right and the METHOD
+    was impossible.** `service_role`'s reads all still work — 14/14 via the new
+    **`scripts/verify-worker-jobs.mts`**, which drives the rescore tick for real (marks a pair
+    stale, runs it, asserts the flag clears — "6 pairs recomputed" on the verifying run) rather
+    than asserting the absence of a throw. But **three of the four jobs SWALLOWED their entry
+    query's error**: `const { data } = await admin.from(t).select(...)` discards `error`, then
+    the code branches on `(data ?? []).length`. A denied read became "nothing to do", so **a
+    broken job and an idle job printed the identical empty log** while `/healthz` kept
+    reporting a fresh heartbeat. No amount of watching could ever have told them apart.
+  - **Two cases were worse than silent.** The speed-dating orchestrator read `sd_rounds` into
+    `?? []`, and its next branch reads empty as *"a fresh event with no rounds yet"* — so a
+    transient error on an event that already had rounds sent it to BUILD ROUND 1, bounded only
+    by the single-active-round guard trigger, i.e. by luck. And it built its personal-block
+    list the same way, where an empty list is indistinguishable from *"nobody blocked
+    anybody"* — **a failed `sd_blocks` read would have put two people who explicitly blocked
+    each other into a video room together**, breaking module 6's "never pair me with them
+    again" safety promise. `classroom-retention.ts` had always checked its error and was the
+    in-repo precedent the fix copied, which is why the fix invented nothing.
+  - **Rule → docs/03's vacuity section: `?? []` on an unchecked query result manufactures a
+    confident empty answer out of an error** — the same false-claim family as docs/15 finding
+    6, one layer down, but in production code rather than a test. With the corollary that is
+    the real lesson here: **before planning to verify something by watching a log, confirm the
+    failure mode actually prints.** A component whose success case is silence cannot be
+    verified by observing silence.
+  - **[docs/18-go-live-checklist.md](../18-go-live-checklist.md) written** in answer to the
+    founder's question — the minimal ordered list to take on a real client and build them a
+    module on the infrastructure we have. 8 items, ~4–6 sessions plus ~1 hour of founder
+    account chores; its §4 names what was deliberately left OFF so the omissions read as
+    decisions. Monitoring is first because docs/12 items 1 and 2 compound: Supabase free-tier
+    pauses itself after ~7 days idle and there is no monitoring at all, so **a quiet week takes
+    prod down today** and nothing says so — and a 5-minute uptime ping is both the alert and
+    the activity that prevents the pause. Founder chose this path for the next session.
+  - **docs/04 was found stale and given an end state.** A survey (subagent, hand-verified on
+    its load-bearing claims) established the platform is ~85–90% complete against current
+    scope, with go-live at ~5–8 sessions and everything currently scoped at ~25–40. The build
+    plan's own last date was **2026-07-16** and it carried no milestone for the six weeks
+    since, so it read as a plan that had been completed. It now carries a "Where we actually
+    are" section with those numbers, the exclusions (modules 7/8, the generalization pass), the
+    two external clocks (Supabase's 2026-10-30 auto-expose removal; Vercel Hobby's commercial
+    ban), and **three doc contradictions the survey turned up** — classroom's "no known gaps"
+    vs its spec's open professor-scoping item; docs/15 §11 slice 2 unmarked while CLAUDE.md
+    calls slice 4 the only unbuilt one (both are half-right: 3 of 6 modules are rank-mapped);
+    and the privacy line being called a shipping *precondition* in two places it was shipped
+    without.
+
 - **2026-08-28 (VIEW-AS HONESTY + COVERAGE — four items closed in one session, NO MIGRATIONS.
   Sonnet for 1–3, Opus for 4 after the founder switched tiers mid-session. Commits `9e03e60`,
   `a37bf76`, `d5a8769`, `f3bcaa6`, + this one.)** Everything here is about the same underlying

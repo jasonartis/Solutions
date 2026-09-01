@@ -1211,6 +1211,16 @@ export const nailSalonViewAs = declareViewAs({
 // 20260726030000, not the base migration) and the live console
 // (modules/speed-dating/ui/events/[eventId]/page.tsx), the same discipline as
 // nail-salon's 2026-08-04 review.
+//
+// ONE JUDGEMENT LEFT DELIBERATELY BROAD, recorded so it reads as a choice: the
+// column allow-lists below are wider than what the live console's own
+// `.select()` calls fetch today (it never reads `profile`, and its report list
+// omits `during_call`/`pairing_id`). They are kept at what the POSITION can
+// legitimately read and would plausibly need, matching nail-salon's style,
+// because the tab answers "what does this position see?" rather than "what does
+// today's page happen to render." Trimming them to mirror the live UI literally
+// is a defensible alternative a future reviewer may prefer — it would narrow,
+// never widen, so it needs no migration.
 // ---------------------------------------------------------------------------
 const SD_PARTICIPANT_BAN =
   'OFF permanently, not pending review — this is §8.1 point 7\'s end-user view-as ban ' +
