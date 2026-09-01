@@ -76,12 +76,21 @@ function makeAdminClient(): SupabaseClient | null {
 }
 
 async function pollJobRequests(admin: SupabaseClient) {
-  const { data: jobs } = await admin
+  // Error CHECKED, not discarded (2026-08-29). This poller runs every 5s and
+  // logs nothing on a normal empty tick, so a failed read looked exactly like
+  // "no pending jobs" — the queue would stop draining while the log stayed
+  // clean and `/healthz` kept reporting a fresh heartbeat. Every user-visible
+  // job in the platform (today: the synagogue render) arrives through here.
+  const { data: jobs, error } = await admin
     .from('job_requests')
     .select('id, org_id, kind, payload')
     .eq('status', 'pending')
     .order('created_at')
     .limit(3)
+  if (error) {
+    console.error(`[job poller] could not read job_requests: ${error.message}`)
+    return
+  }
 
   for (const job of jobs ?? []) {
     const handler = jobHandlers[job.kind]

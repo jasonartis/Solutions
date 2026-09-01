@@ -281,11 +281,24 @@ Everything below is open but unranked:
   fixes the other. **CI is deliberately STRICTER (5s expect, 30s test) against a PREBUILT app**, so
   a slow assertion there means something is genuinely slow. Full reasoning → journal 2026-07-30 +
   2026-08-05.
-- Low-priority verification: **the worker's PRE-EXISTING jobs** were never exercised after the ACL
-  sweep (neither suite touches them). Should be unaffected — `service_role`'s privileges provably
-  cannot shrink, zero `.rpc()` calls, pg-boss connects as `postgres`. Watch the next real job run.
-  *(The NEW `login-events-prune` job was exercised end-to-end 2026-08-09; that says nothing about
-  the others.)*
+- ~~Low-priority verification: **the worker's PRE-EXISTING jobs**~~ **DONE 2026-08-29 (Opus), and it
+  was NOT the no-op it looked like.** The assumption held — `service_role`'s reads all still work,
+  14/14 via the new **`scripts/verify-worker-jobs.mts`** (rescue-driven for real: it marks a pair
+  stale, runs the tick, and asserts the flag CLEARS — "6 pairs recomputed" on the verifying run).
+  **But the proposed method — "watch the next real job run" — could never have worked, and that is
+  the finding.** Three of the four pre-existing jobs SWALLOWED their entry query's error: a denied
+  read left `data` null, `null ?? []` became an empty list, and the job returned as though there
+  were nothing to do. **A broken job and an idle job printed the identical (empty) log** while
+  `/healthz` kept reporting a fresh heartbeat. Now checked in all four. Two were worse than silent:
+  the orchestrator read `sd_rounds` into `?? []`, which its next branch reads as *"a fresh event
+  with no rounds yet"* — so a transient error on an event that already had rounds sent it to BUILD
+  ROUND 1 (bounded only by the single-active-round guard trigger, i.e. by luck); and it built the
+  block list from an unchecked read, where an empty list is indistinguishable from *"nobody blocked
+  anybody"* — **a failed read would have paired two people who explicitly blocked each other**,
+  breaking module 6's "never pair me with them again" safety promise. **The reusable rule → docs/03:
+  `?? []` on an unchecked query result manufactures a confident empty answer out of an error** — the
+  same false-claim family as docs/15 finding 6, one layer down. `classroom-retention.ts` always got
+  it right and was the in-repo precedent the fix copied.
 - `gh` is NOT installed on this machine. **CI PASS/FAIL is readable from the terminal without
   it** — the `deploy` job has `needs: check`, so a `READY` production deployment proves `check`
   was green. Query it with the `VERCEL_TOKEN` already in `.env.deploy`:

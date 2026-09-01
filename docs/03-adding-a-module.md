@@ -579,6 +579,25 @@ others:
   table holds rows (past RLS, via a direct SQL count) and that the caller sees some. The
   `sal_locations` outage this build fixed would have passed an error-free check throughout.
 
+- **`?? []` ON AN UNCHECKED QUERY RESULT MANUFACTURES A CONFIDENT EMPTY ANSWER OUT OF AN
+  ERROR (2026-08-29).** Not a test rule but the same family one layer down, in production
+  code — and it is how a *verification plan* can be vacuous, not just an assertion. Three of
+  the four pre-existing worker jobs read `const { data } = await admin.from(t).select(...)`,
+  discarding `error`, then branched on `(data ?? []).length`. A denied or failed read
+  therefore became "there is nothing to do", so **a broken job and an idle job printed the
+  identical empty log** while `/healthz` reported a healthy heartbeat — which is why
+  CLAUDE.md's standing plan to "watch the next real job run" could never have verified them,
+  however long anyone watched. Two cases were worse than silent: the speed-dating
+  orchestrator read `sd_rounds` into `?? []` and its next branch reads empty as *"a fresh
+  event with no rounds yet"*, so a transient error sent it to build round 1 on an event that
+  already had rounds (bounded only by a guard trigger); and it built its personal-block list
+  the same way, where empty is indistinguishable from *"nobody blocked anybody"* — a failed
+  read would have paired two people who had explicitly blocked each other. → **Check `error`
+  on every query whose emptiness drives a decision, and log it loudly**; `?? []` is only safe
+  once you know the read succeeded. → Corollary for verification: **before planning to verify
+  something by watching a log, confirm the failure mode actually prints.** A component whose
+  success case is silence cannot be verified by observing silence.
+
 - **A FIXTURE MUST NOT PRE-SATISFY ANOTHER TEST'S STARTING CONDITION (2026-08-07).** The
   vacuity rule usually bites a test; this is it biting the SEED. Peer-review rows were seeded
   onto the same homework the grading-workflow e2e drives from `submitted` to `done`. That did
