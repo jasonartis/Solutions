@@ -166,6 +166,23 @@ Found in a deliberate "what haven't we thought of" pass; ordered by urgency.
 3. **Account 2FA.** GitHub, Vercel, and Supabase accounts are the real keys
    to everything (pipeline, secrets, database). Enable 2FA on all three —
    a compromised GitHub account defeats every safeguard in this file.
+   **FOUND AND FIXED 2026-09-01: the repo had drifted PUBLIC**, contradicting
+   docs/14's "private" claim and the platform's whole security model (RLS is
+   supposed to be the enforcement, not obscurity of the policy SQL, but
+   source + every migration + every RLS policy definition being world-
+   readable is still real exposure this platform never intended). Cause
+   unknown — not investigated, since fixing it was more urgent than
+   explaining it. **Verified clean before flipping it back**: searched the
+   FULL git history (not just the current tree) for committed secrets —
+   `.env`/`.env.deploy`/`.env.accounts` were never committed at any point
+   (only their `.example` templates are tracked), and no service-role key,
+   GitHub PAT, Vercel token, or DB password pattern appears anywhere in any
+   commit. So the exposure was source/schema/policy visibility only, not a
+   live credential leak — no rotation was needed. Flipped back to private
+   via the GitHub API (founder-approved) and confirmed. **No monitoring
+   exists for this drifting again** — worth a periodic manual check
+   (`GET /repos/jasonartis/Solutions` → `"private"`) until real monitoring
+   of account/repo settings exists, which is not itself on this checklist.
 4. **Demo superadmin (FIXED 2026-07-10).** The prod seed had made
    owner@demo.local a platform superadmin guarded by the demo password —
    demoted on prod, and the seed now only grants superadmin locally.
