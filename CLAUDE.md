@@ -19,8 +19,20 @@ A multi-tenant modular platform: each client engagement produces a **module** bu
      and update only the compact "Now / Next / Standing rules" below. A fresh chat must never
      pay for the full journal. See "Session hygiene". -->
 
-**Now (2026-08-28) — a full session of items picked WITH the founder from "Next / open," all
-shipped the same day, no migrations: (1) the view-as surface-coverage ratchet
+**NEXT SESSION STARTS HERE (handoff written 2026-08-29): the founder has chosen the GO-LIVE
+path — read [docs/18-go-live-checklist.md](docs/18-go-live-checklist.md) and start at its
+item 1 (monitoring + keep-alive).** That doc is the minimal ordered list to take on a real
+client and build them a module; it names who does what, the sizes, and — in its §4 — what was
+deliberately left OFF and why. **Item 1 carries one unsolved question to settle while
+building: which query can `anon` legitimately make for the `/healthz` probe**, given the
+2026-07-28 ACL sweep left `anon` holding nothing in `public` (mirror whatever
+`apps/web/app/s/` already reads). **Sonnet is the right tier** for the whole checklist — it is
+route handlers, config, scripts and docs, no migrations or RLS — switch up to Opus only if
+something turns out to touch `supabase/migrations/`. Nothing is in flight; the tree is clean
+and pushed through `e98d1d3`.
+
+**Previously (2026-08-28/29) — a long session of items picked WITH the founder from "Next /
+open," all shipped, no migrations: (1) the view-as surface-coverage ratchet
 (`packages/db/src/view-as-coverage.test.ts`); (2) classroom's own re-classification, closing its
 `KNOWN_GAPS` backlog; (3) speed-dating's 3 staff-to-staff view-as pairs (drafted by a background
 agent, independently fact-checked against live RLS/columns, one judgment call overridden — see
@@ -33,8 +45,12 @@ clean build. The master-gating question (docs/12 item 10) was investigated the s
 one flagged judgment call in the speed-dating review (organizer's `sd_interest`/`sd_matches`
 classified `excluded` rather than `role` — see the slice-5 entry). **One known test gap is
 recorded, not hidden:** finding 6's positive badge has no rendering test (unreachable from the
-console; the only holder who reaches it is grace, whom e2e must never sign in as). Nothing else
-is in flight. Pick the next item WITH the founder from the "Next / open" list; do not start
+console; the only holder who reaches it is grace, whom e2e must never sign in as). **(5) The
+worker's pre-existing jobs were verified (14/14, `scripts/verify-worker-jobs.mts`) — and three
+of the four turned out to SWALLOW their entry query's error, so the "watch the next real job
+run" plan could never have worked; two cases were worse than silent, incl. one where a failed
+`sd_blocks` read would have paired people who blocked each other.** Rule → docs/03. Then pick
+the next item WITH the founder from the "Next / open" list; do not start
 unprompted (standing rule).**
 
 **Host state, 2026-08-12:** the machine was migrated to a new Windows profile
