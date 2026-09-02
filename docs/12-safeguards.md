@@ -191,6 +191,24 @@ Found in a deliberate "what haven't we thought of" pass; ordered by urgency.
    complains. 10-minute founder setup when ready: UptimeRobot (free) on the
    site URL + `/healthz` of the worker; Sentry (free tier) DSN into the web
    app. Both were deferred from M0.
+2a. **VERCEL SILENTLY BLOCKED EVERY DEPLOYMENT FROM 2026-09-01 17:35 THROUGH 2026-09-02
+   11:49 — found and fixed 2026-09-02.** Cause: the git commit author email
+   (`jasonartisenergy@gmail.com`, this machine's global git config) didn't match the Vercel
+   team owner's registered email (`jasonartisenergy1@gmail.com`, one character different) —
+   Vercel enforces this match even for CLI/token-based deploys (`vercel deploy --prebuilt`),
+   not just its own git-integration auto-deploys, because the CLI still attaches git commit
+   metadata that the same protection checks against. **Every affected deployment showed
+   `state: BLOCKED` in Vercel's own API — not `ERROR`, not `CANCELED` with a clear reason — the
+   GitHub Actions job just reported `conclusion: cancelled` with no explanation printed
+   anywhere in the CI log.** Confirmed via `GET /v6/deployments` directly, since neither GitHub's
+   UI nor the workflow log said why. **Real impact was nil**: every blocked commit in that
+   window touched only docs/infra (backup.yml, docs updates), never `apps/web` — so production
+   kept correctly serving the last successful deploy the whole time, just not the newest one.
+   Fix: `git config --global user.email` changed to match Vercel's registered owner email
+   (the smaller, local, instantly-reversible side to fix — not Vercel's account email, which
+   would touch login/billing). **Any future push whose commit author doesn't match a Vercel
+   team member's email will silently block the same way — check `GET /v6/deployments`'s `state`
+   field if a deploy job ever shows `cancelled` with no visible reason.**
 3. **Account 2FA.** GitHub, Vercel, and Supabase accounts are the real keys
    to everything (pipeline, secrets, database). Enable 2FA on all three —
    a compromised GitHub account defeats every safeguard in this file.
