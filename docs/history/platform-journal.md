@@ -5,6 +5,45 @@ section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every 
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
 
+- **2026-09-02 (GO-LIVE CHECKLIST ITEM 8 — ONBOARDING REHEARSAL, PLUS A REAL DEPLOY-BLOCKING
+  BUG FOUND AND FIXED ALONG THE WAY. Sonnet.)**
+  - **Item 3's draft** (privacy + terms, `/privacy`, not linked in nav) written and pushed for
+    founder review — plain-language coverage of the two owed lines from docs/12 item 6
+    (auth events, per-org activity) and the superadmin-lookup-log deletion tension. Founder
+    owns final wording; nothing here is published copy yet.
+  - **A real production incident, found by accident and fixed same-session: Vercel had been
+    silently BLOCKING every deployment since the afternoon before**, discovered only because
+    the founder hit a confusing error trying to add the Sentry env var ("Git author … must
+    have access to the team… Hobby teams do not support collaboration"). Root cause: the git
+    commit author email (`jasonartisenergy@gmail.com`, this machine's global git config) didn't
+    match the Vercel team owner's registered email (`jasonartisenergy1@gmail.com` — one
+    character different) — and Vercel enforces that match even for CLI/token-based deploys,
+    not just its own git-triggered ones, because the CLI still attaches git commit metadata.
+    **Nothing in GitHub's own UI or logs said why** — every blocked run just showed
+    `conclusion: cancelled` with zero explanation; the real reason (`state: BLOCKED`) was only
+    visible by querying Vercel's own `/v6/deployments` API directly. Real impact was nil (every
+    blocked commit was docs/infra, never `apps/web`), but the fix mattered: without it, the
+    Sentry DSN would never have taken effect. Fixed with one `git config --global user.email`
+    change (deliberately the git side, not Vercel's account email — smaller, local, instantly
+    reversible), then verified for real: pushed a new commit under the corrected identity,
+    confirmed `state: READY` in Vercel's API, and confirmed Sentry's code is genuinely compiled
+    into the live site's JS (grepped the actual served bundles for "sentry"), not just
+    configured in a dashboard. Full writeup: docs/12 item 2a.
+  - **Item 8 (onboarding rehearsal), done for real against production**, signed in as the
+    actual superadmin (real credentials, filled into `.env.accounts` by the founder
+    specifically for this — the RLS-gated path, not a service-role bypass). All six console
+    operations (create org → enable module → resolve member by email → add active → grant
+    module role → read every write back with real counts) worked cleanly first try. **Two real
+    findings**: the console has NO `deleteOrg` path at all (cleanup needed a raw SQL connection
+    — safe, since every FK cascades correctly except the audit log's deliberate `SET NULL`,
+    but not founder-reachable without help); and a new client's people must sign up for an
+    account BEFORE an admin can add them (`org_find_user_by_email` returns nothing otherwise) —
+    a real sequencing fact for onboarding communication, not a bug. Full writeup: docs/18 item 8.
+  - **One clean example of "measure before assuming" saving real time**: a first verification
+    query returned `null` and looked like a production bug (write succeeded, read-back empty)
+    — turned out to be a bug in the VERIFICATION script's own PostgREST embed syntax, caught by
+    re-running with explicit error logging before writing up a false finding.
+
 - **2026-09-01/02 (GO-LIVE CHECKLIST ITEM 2 — AUTOMATED, TESTED BACKUPS + A PUBLIC-REPO CATCH.
   Sonnet. Commits `3851074`, `00c6f9c`, docs-only follow-ups.)**
   - **`.github/workflows/backup.yml` shipped**: reuses `pnpm backup:prod` unchanged, runs it

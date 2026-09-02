@@ -28,7 +28,7 @@ minutes, not sessions, and several can happen in parallel with build work.
 | 5 | Vercel Pro | Founder | ~10 min, ~$20/mo | **Commercial use is prohibited on Hobby** |
 | 6 | 2FA on GitHub / Vercel / Supabase | Founder | ~15 min | One compromised account defeats every safeguard |
 | 7 | Custom SMTP | Founder account + Claude config | ~half session | Auth email rate limits at real volume |
-| 8 | Onboarding rehearsal | Claude + founder | ~half session | Finding gaps live, in front of the client |
+| 8 | Onboarding rehearsal | **DONE 2026-09-02.** | ~half session | Finding gaps live, in front of the client |
 
 **Total: roughly 4–6 sessions of build work, plus about an hour of founder account chores.**
 Items 5 and 6 can be done today and are independent of everything else.
@@ -162,15 +162,44 @@ database — a compromised GitHub account defeats every safeguard in docs/12. Fi
 docs/12 item 7: Supabase's built-in sender is rate-limited and unsuitable for real signup
 volume. Needs a sending domain and a provider account.
 
-## 8. Onboarding rehearsal
+## 8. Onboarding rehearsal — **DONE 2026-09-02**
 
-The console already has the whole surface — `createOrg`, `toggleModule` (entitlements),
-`addMember`, `addModuleRole` (see `apps/web/app/(app)/console/actions.ts`) — so onboarding
-is an operational gap, not a build one. Rehearse it end to end against production **as a
-throwaway org**, write the click-path down, then delete it. Finding a missing step during a
-rehearsal costs minutes; finding it in front of the client costs trust.
+Rehearsed end to end against **real production**, signed in as the actual superadmin (not a
+service-role bypass — this exercises the exact RLS-gated path the console UI uses):
+create org → enable a module → resolve an existing member by email → add them active →
+grant a module role → read every write back with real row counts (not a vacuous check).
+All six steps worked cleanly on the first try. Full click-path, in order:
 
-Rotate the demo password afterwards (docs/12 item 4).
+1. `orgs.insert({name, slug})` — creates the org.
+2. `org_modules.upsert({org_id, module_key, enabled: true})` — turns on one module.
+3. `rpc('org_find_user_by_email', {check_org_id, target_email})` — resolves an email to a
+   user id, scoped to the org (the same RPC `addMember`'s UI uses).
+4. `org_members.insert({org_id, user_id, role, status: 'active'})` — superadmin-only escape
+   hatch to add someone already-active rather than pending (docs/03 slice 3).
+5. `module_roles.upsert({org_id, user_id, module_key, role})` — grants the module-level role.
+6. Read every row back independently (org, membership, module role) with real `select`s, not
+   `pg_stat_user_tables`-style shortcuts.
+
+**Two real findings, not hypothetical:**
+- **The console has NO way to delete an org.** `apps/web/app/(app)/console/actions.ts` has no
+  `deleteOrg` — cleaning up the throwaway org needed a direct owner-level SQL connection
+  (`delete from orgs where id = …`), bypassing the app entirely. Every `org_id`-referencing
+  table cascades correctly except `superadmin_lookup_log` (deliberately `SET NULL`, matching
+  its append-only design elsewhere in this doc set) — so a raw delete is SAFE, just not
+  reachable from the UI. **This is a real operational gap**: today, undoing an onboarding
+  mistake (wrong slug, wrong client) requires a Claude session with `.env.deploy` access, not
+  something the founder can do solo from the console. Not launch-blocking (mistakes are rare
+  and reversible with help), but worth a founder decision on whether it's worth building.
+- **A new client's people must sign up for an account BEFORE an admin can add them** —
+  `resolveEmailToUserId`/`org_find_user_by_email` returns nothing for an email with no
+  account yet, and the real UI surfaces this as "No user found … they must sign up first."
+  This is expected behavior (by design, not a bug), but it's a real sequencing fact for
+  onboarding communication: tell a new client's members to create their login first, THEN
+  the admin adds them — not the other way around.
+
+Rotate the demo password afterwards (docs/12 item 4) — **still open**, unrelated to this
+rehearsal (this rehearsal used an existing demo user, `dana@demo.local`, read-only from its
+perspective; nothing about the demo password was touched).
 
 ---
 

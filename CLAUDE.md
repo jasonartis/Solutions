@@ -19,16 +19,21 @@ A multi-tenant modular platform: each client engagement produces a **module** bu
      and update only the compact "Now / Next / Standing rules" below. A fresh chat must never
      pay for the full journal. See "Session hygiene". -->
 
-**NEXT SESSION STARTS HERE (handoff written 2026-09-02): GO-LIVE CHECKLIST ITEMS 1 AND 2 ARE
-BOTH DONE — move to item 3 (privacy + terms page).** Read
-[docs/18-go-live-checklist.md](docs/18-go-live-checklist.md); full stories in the
-2026-08-31/09-01 and 2026-09-01/02 journal entries. **Two founder actions are open but NOT
-blocking:** (1) create a free Sentry account and paste the DSN into Vercel as
-`NEXT_PUBLIC_SENTRY_DSN` — inert until then; (2) item 3 needs the founder's own wording for
-what the platform collects — Claude drafts, founder owns the words, per docs/18 §3. **A real
-mid-session finding, fixed, not just noted: the GitHub repo had drifted PUBLIC** (contradicting
-docs/14 and the whole security model) — verified no secrets were ever committed across full
-git history, then flipped back to private (founder-approved). Full story: docs/12 item 3.
+**NEXT SESSION STARTS HERE (handoff written 2026-09-02): GO-LIVE CHECKLIST ITEMS 1, 2, AND 8
+ARE ALL DONE — item 3 (privacy + terms) has a DRAFT AWAITING FOUNDER REVIEW at `/privacy`
+(not linked in nav).** Read [docs/18-go-live-checklist.md](docs/18-go-live-checklist.md); full
+stories in the 2026-08-31/09-01, 2026-09-01/02, and 2026-09-02 journal entries. Remaining
+items 4-7 all block on a founder-created account first (Hetzner, Resend) or are pure
+founder-side actions (Vercel Pro billing, 2FA) — nothing Claude can start unprompted.
+**Two real production findings this session, both fixed, not just noted:**
+(1) the GitHub repo had drifted PUBLIC (contradicting docs/14) — verified no secrets were ever
+committed across full git history, flipped back to private (founder-approved), docs/12 item 3;
+(2) **Vercel had been silently BLOCKING every deployment** since a git-commit-author email
+mismatch (`jasonartisenergy@gmail.com` vs the Vercel team owner's
+`jasonartisenergy1@gmail.com`) — nothing in GitHub's UI said why, only Vercel's own API showed
+`state: BLOCKED`. Fixed (`git config --global user.email`) and verified end-to-end (a real
+deploy went `READY`, Sentry's code confirmed compiled into the live bundle). Full story:
+docs/12 item 2a.
 **Sonnet is the right tier** for the whole checklist — route handlers, config, scripts and
 docs, no migrations or RLS — switch up to Opus only if something touches
 `supabase/migrations/`. Nothing is in flight; the tree is clean and pushed.
