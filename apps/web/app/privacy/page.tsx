@@ -11,72 +11,26 @@ export default function PrivacyPage() {
       <h1 className="mb-2 text-2xl font-semibold">Privacy Policy</h1>
       <p className="mb-8 text-sm text-gray-500">Last updated: [DATE]</p>
 
-      <Section title="What we collect">
-        <p>When you use this platform, we collect:</p>
-        <ul className="list-disc space-y-2 pl-6">
-          <li>
-            <strong>Your account information</strong> — email address, and any profile
-            information you provide (such as your name).
-          </li>
-          <li>
-            <strong>Authentication events</strong> — a record of when you sign in. This helps us
-            keep accounts secure and understand whether the platform is being used.
-          </li>
-          <li>
-            <strong>Activity within your organizations</strong> — for the organizations you
-            belong to, we record what you did and when (for example, that you registered for an
-            event, submitted an assignment, or booked an appointment). This helps administrators
-            of your organization see participation and helps us operate the platform reliably.
-          </li>
-          <li>
-            <strong>Administrative access records</strong> — if platform staff ever need to look
-            at your account to help with a support request or investigate an issue, we keep a
-            permanent record that this happened (who looked, when, whose account). You cannot be
-            looked at without this being recorded.
-          </li>
-        </ul>
-      </Section>
-
-      <Section title="How long we keep it">
+      <div className="space-y-4 text-sm leading-relaxed text-gray-700">
         <p>
-          Authentication and activity records are kept in detail for 90 days, then reduced to a
-          summary (for example, "last seen" and basic counts) that we keep permanently. The
-          administrative access record described above is kept permanently and cannot be
-          shortened or deleted — see below for why.
-        </p>
-      </Section>
-
-      <Section title="Who can see it">
-        <p>
-          Ordinary members of your organization cannot see this data about you. It is visible
-          only to your organization's administrators (for participation summaries) and to
-          platform staff (for security and support purposes).
-        </p>
-      </Section>
-
-      <Section title="Deletion requests">
-        <p>
-          You can ask us to delete your account and personal information at any time. When you
-          do, we will remove your profile information and disconnect it from your activity
-          history.
+          We keep track of what happens on the platform — like when you sign in and what you do
+          within your organization — to keep things running smoothly and to help keep your
+          account safe.
         </p>
         <p>
-          <strong>One deliberate exception:</strong> the administrative access record described
-          above (who looked at an account, and when) is never deleted, even for accounts that
-          are removed — it becomes anonymous (no longer linked to your name), but the fact that a
-          lookup happened, on that date, is kept permanently. This is by design: a security
-          record that can be erased on request isn't a meaningful security record. It exists to
-          protect you — so that any access to your account is independently auditable, including
-          after the fact.
+          If anyone on our staff ever needs to look at your account (for example, to help with a
+          support question), that's tracked too — so there's always a record of who looked, and
+          when.
         </p>
-      </Section>
-
-      <Section title="Questions">
         <p>
-          Contact [FOUNDER EMAIL] with any questions about this policy or to make a data
-          request.
+          You can ask us to delete your account and personal info at any time. The one exception
+          is that staff-access record — it stays on file permanently, even after your account is
+          deleted, so it's no longer tied to your name, but the fact that someone looked, and
+          when, is kept. That's on purpose: a record of staff access that could be erased
+          wouldn't really protect anyone.
         </p>
-      </Section>
+        <p>Questions? Contact [FOUNDER EMAIL].</p>
+      </div>
 
       <hr className="my-10 border-gray-200" />
 
