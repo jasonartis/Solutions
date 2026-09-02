@@ -1,6 +1,12 @@
 // DRAFT — not linked from any nav yet (docs/18 item 3). Founder owns the
 // final wording; this is Claude's first pass for review, not published
 // copy. Reachable directly at /privacy for review purposes only.
+//
+// Deliberately kept SHORT and plain-language (founder feedback, 2026-09-02:
+// a fuller legal-style version reads as scary to regular users). A more
+// detailed version covering the same facts is kept at
+// docs/privacy-detailed-draft.md for later — an audit, a legal review, or a
+// larger/more regulated client that needs it.
 export default function PrivacyPage() {
   return (
     <main className="mx-auto max-w-2xl px-4 py-12 text-gray-800">
