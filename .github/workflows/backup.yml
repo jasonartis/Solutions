@@ -1,0 +1,51 @@
+name: Backup
+
+# Go-live checklist item 2 (docs/18): automated, off-Supabase, founder-
+# controlled backups. Reuses the existing pnpm backup:prod script unchanged
+# (scripts/prod-backup.ts) — this workflow's only job is to run it on a
+# schedule and durably store the output, since a GitHub Actions runner's own
+# disk disappears when the job ends.
+on:
+  schedule:
+    - cron: '0 9 * * *' # 09:00 UTC daily — low-traffic window
+  workflow_dispatch: {} # manual "Run workflow" button, for testing
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # scripts/prod-backup.ts reads a real .env.deploy file (same contract
+      # as local use) rather than process.env directly, so it needs zero
+      # changes to run here — this step just materializes the two fields it
+      # actually reads from repository secrets.
+      - name: Write prod credentials
+        run: |
+          {
+            echo "SUPABASE_PROJECT_REF=${{ secrets.PROD_SUPABASE_PROJECT_REF }}"
+            echo "SUPABASE_DB_PASSWORD=${{ secrets.PROD_SUPABASE_DB_PASSWORD }}"
+          } > .env.deploy
+
+      - run: pnpm backup:prod
+
+      - name: Locate this run's dump
+        id: find
+        run: echo "dir=$(ls -d backups/*/ | tail -1)" >> "$GITHUB_OUTPUT"
+
+      # Durable storage off Supabase, off the dev PC, off Vercel. Retention
+      # is bounded (GitHub's own ceiling on a personal-account private repo)
+      # — this is the "protects against a bad day between deploys" net, not
+      # a permanent archive. docs/14 already earmarks Backblaze B2 for
+      # unbounded off-site retention once that's worth the extra account.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: prod-backup-${{ github.run_id }}
+          path: ${{ steps.find.outputs.dir }}
+          retention-days: 90
