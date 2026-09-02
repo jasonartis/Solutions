@@ -25,12 +25,16 @@ ARE ALL DONE — item 3 (privacy + terms) has a DRAFT AWAITING FOUNDER REVIEW at
 stories in the 2026-08-31/09-01, 2026-09-01/02, and 2026-09-02 journal entries. Remaining
 items 4-7 all block on a founder-created account first (Hetzner, Resend) or are pure
 founder-side actions (Vercel Pro billing, 2FA) — nothing Claude can start unprompted.
-**Two real production findings this session, both fixed, not just noted:**
+**Two real production findings this session, both resolved:**
 (1) the GitHub repo had drifted PUBLIC (contradicting docs/14) — verified no secrets were ever
-committed across full git history, flipped back to private (founder-approved), docs/12 item 3;
-(2) **Vercel had been silently BLOCKING every deployment** since a git-commit-author email
-mismatch (`jasonartisenergy@gmail.com` vs the Vercel team owner's
-`jasonartisenergy1@gmail.com`) — nothing in GitHub's UI said why, only Vercel's own API showed
+committed across full git history, then flipped private, THEN flipped back to PUBLIC again
+same day after it turned out private repos meter Actions minutes and this account had already
+been charged $13.45 for overage — **repo is deliberately PUBLIC as of 2026-09-02, do not
+"fix" this back to private without first designing CI-usage discipline (docs/12 item 3 has
+the concrete candidate rules, none decided yet)**; (2) **Vercel had been silently BLOCKING
+every deployment** since a git-commit-author email mismatch (`jasonartisenergy@gmail.com` vs
+the Vercel team owner's `jasonartisenergy1@gmail.com`) — nothing in GitHub's UI said why, only
+Vercel's own API showed
 `state: BLOCKED`. Fixed (`git config --global user.email`) and verified end-to-end (a real
 deploy went `READY`, Sentry's code confirmed compiled into the live bundle). Full story:
 docs/12 item 2a.

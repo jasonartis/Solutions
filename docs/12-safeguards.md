@@ -212,23 +212,53 @@ Found in a deliberate "what haven't we thought of" pass; ordered by urgency.
 3. **Account 2FA.** GitHub, Vercel, and Supabase accounts are the real keys
    to everything (pipeline, secrets, database). Enable 2FA on all three —
    a compromised GitHub account defeats every safeguard in this file.
-   **FOUND AND FIXED 2026-09-01: the repo had drifted PUBLIC**, contradicting
-   docs/14's "private" claim and the platform's whole security model (RLS is
-   supposed to be the enforcement, not obscurity of the policy SQL, but
-   source + every migration + every RLS policy definition being world-
-   readable is still real exposure this platform never intended). Cause
-   unknown — not investigated, since fixing it was more urgent than
-   explaining it. **Verified clean before flipping it back**: searched the
-   FULL git history (not just the current tree) for committed secrets —
-   `.env`/`.env.deploy`/`.env.accounts` were never committed at any point
-   (only their `.example` templates are tracked), and no service-role key,
-   GitHub PAT, Vercel token, or DB password pattern appears anywhere in any
-   commit. So the exposure was source/schema/policy visibility only, not a
-   live credential leak — no rotation was needed. Flipped back to private
-   via the GitHub API (founder-approved) and confirmed. **No monitoring
-   exists for this drifting again** — worth a periodic manual check
-   (`GET /repos/jasonartis/Solutions` → `"private"`) until real monitoring
-   of account/repo settings exists, which is not itself on this checklist.
+   **REPO VISIBILITY: PUBLIC, DELIBERATELY, AS OF 2026-09-02 — a cost
+   decision, not a security lapse. Read this before ever flipping it private
+   again.** Full sequence: found drifted PUBLIC 2026-09-01 (contradicting
+   docs/14's "private" claim); verified clean before doing anything — searched
+   the FULL git history (not just the current tree) for committed secrets,
+   found none (`.env`/`.env.deploy`/`.env.accounts` were never committed at
+   any point, only their `.example` templates; no service-role key/GitHub
+   PAT/Vercel token/DB password pattern anywhere in any commit) — so the
+   original exposure was source/schema/policy visibility only, never a live
+   credential leak. Flipped to private (founder-approved) same day. **Then,
+   2026-09-02, CI started failing instantly with zero steps run** — GitHub's
+   own annotation: *"recent account payments have failed or your spending
+   limit needs to be increased."* Checked the real billing page together:
+   **$13.45 already charged** for Actions minutes beyond the included
+   2,000/month — private repos meter Actions minutes, public repos don't.
+   This was NOT primarily caused by that one session's testing (measured:
+   only ~35 real minutes run since the private flip) — it's cumulative usage
+   across the project's history, most likely from whatever earlier stretch
+   the repo was genuinely private before drifting public. **Founder decision:
+   revert to public for now** (stops further Actions charges immediately;
+   does not undo the $13.45 already billed) **and revisit going private only
+   after CI-usage discipline is actually designed**, not before. Flipped back
+   to public via the GitHub API same day, confirmed.
+
+   **OPEN, NOT YET DESIGNED — do this BEFORE the next attempt to go private:**
+   a concrete plan to keep Actions minutes cheap on a metered private repo.
+   Candidates worth evaluating when that session happens, none decided yet:
+   - **`paths-ignore` on push triggers for pure docs/markdown changes** —
+     today, a docs-only commit still runs the FULL ~15-20 minute suite
+     (build + db tests + full e2e), identically to an app-code change. A
+     large fraction of this platform's commits are docs-only (journal
+     entries, checklist updates); skipping the full suite for those alone
+     would likely be the single biggest saving.
+   - **Diagnose before re-running.** The 2026-09-02 Vercel git-author
+     investigation burned several full pipeline re-runs before reading the
+     actual error message via the API — reading first, re-running only once
+     confident, would have cost a fraction of the minutes for the same
+     answer.
+   - **A non-zero but small spending limit** (e.g. $5–10) instead of the
+     account default of $0 — turns a hard, confusing instant block into a
+     graceful warning with headroom, without writing a blank check.
+   - **Batch small doc-only commits** rather than pushing each one
+     individually, if that fits how a session is already working — fewer
+     pushes, fewer full-suite triggers.
+   No monitoring exists for the repo drifting visibility again either way —
+   worth a periodic manual check (`GET /repos/jasonartis/Solutions` →
+   `"private"`) until real monitoring of account/repo settings exists.
 4. **Demo superadmin (FIXED 2026-07-10).** The prod seed had made
    owner@demo.local a platform superadmin guarded by the demo password —
    demoted on prod, and the seed now only grants superadmin locally.
