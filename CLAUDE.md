@@ -19,18 +19,19 @@ A multi-tenant modular platform: each client engagement produces a **module** bu
      and update only the compact "Now / Next / Standing rules" below. A fresh chat must never
      pay for the full journal. See "Session hygiene". -->
 
-**NEXT SESSION STARTS HERE (handoff written 2026-09-01): GO-LIVE CHECKLIST ITEM 1 IS CODE-DONE,
-VERIFIED ON CI, AND DEPLOYED — move to item 2 (automated + tested backups).** Read
-[docs/18-go-live-checklist.md](docs/18-go-live-checklist.md); full item-1 story in the
-2026-08-31/09-01 journal entry. One founder action is still open but NOT blocking: create a
-free Sentry account and paste the DSN into Vercel as `NEXT_PUBLIC_SENTRY_DSN` — inert until
-then. UptimeRobot needed no founder action; it already existed and was live the whole time
-(this checklist's own premise that neither account existed was half wrong — worth checking any
-"needs a founder account" item against reality before assuming, the same lesson that nearly
-produced the opposite mistake this session). **Sonnet is the right tier** for the whole
-checklist — route handlers, config, scripts and docs, no migrations or RLS — switch up to Opus
-only if something touches `supabase/migrations/`. Nothing is in flight; the tree is clean and
-pushed.
+**NEXT SESSION STARTS HERE (handoff written 2026-09-02): GO-LIVE CHECKLIST ITEMS 1 AND 2 ARE
+BOTH DONE — move to item 3 (privacy + terms page).** Read
+[docs/18-go-live-checklist.md](docs/18-go-live-checklist.md); full stories in the
+2026-08-31/09-01 and 2026-09-01/02 journal entries. **Two founder actions are open but NOT
+blocking:** (1) create a free Sentry account and paste the DSN into Vercel as
+`NEXT_PUBLIC_SENTRY_DSN` — inert until then; (2) item 3 needs the founder's own wording for
+what the platform collects — Claude drafts, founder owns the words, per docs/18 §3. **A real
+mid-session finding, fixed, not just noted: the GitHub repo had drifted PUBLIC** (contradicting
+docs/14 and the whole security model) — verified no secrets were ever committed across full
+git history, then flipped back to private (founder-approved). Full story: docs/12 item 3.
+**Sonnet is the right tier** for the whole checklist — route handlers, config, scripts and
+docs, no migrations or RLS — switch up to Opus only if something touches
+`supabase/migrations/`. Nothing is in flight; the tree is clean and pushed.
 **Standing instruction, 2026-08-29: DO NOT BLOCK ON A FOUNDER DECISION** — record the question
 where it belongs, flag it in the reply, and move to the next unblocked item. The queue itself
 is [docs/18](docs/18-go-live-checklist.md) §4 (six items, waiting on him rather than on

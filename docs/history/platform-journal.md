@@ -5,6 +5,56 @@ section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every 
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
 
+- **2026-09-01/02 (GO-LIVE CHECKLIST ITEM 2 — AUTOMATED, TESTED BACKUPS + A PUBLIC-REPO CATCH.
+  Sonnet. Commits `3851074`, `00c6f9c`, docs-only follow-ups.)**
+  - **`.github/workflows/backup.yml` shipped**: reuses `pnpm backup:prod` unchanged, runs it
+    nightly (09:00 UTC) plus on manual dispatch, uploads the dump as a 90-day-retention GitHub
+    Actions artifact. Two new repo secrets (`PROD_SUPABASE_PROJECT_REF`,
+    `PROD_SUPABASE_DB_PASSWORD`) rather than a new account — founder chose this over Backblaze
+    B2 after seeing the actual tradeoff stated as a scenario (bounded retention, zero new
+    accounts vs. unbounded retention, one new signup). **Verified with a real manual run**, not
+    just a green YAML lint: a genuine 304KB artifact from live prod data, confirmed present via
+    the API before trusting the schedule.
+  - **The rehearsal — the actual deliverable the checklist item was written around — is done
+    too**, and it was a real rehearsal, not a dry run: the founder created a live throwaway
+    Supabase project (`us-east-2`), found its connection details through a materially
+    reorganized dashboard UI (several rounds of "which button/tab" back-and-forth — worth
+    remembering that this dashboard has moved since training data, same family as the Next-16
+    warning), and the just-tested backup artifact's `schema.sql`+`data.sql` were restored into
+    it for real. Both files applied cleanly; `data.sql` was loaded inside a transaction with
+    `session_replication_role = replica` set first (the standard technique for skipping
+    trigger/FK-check firing during a bulk load — stronger than pg_restore's
+    `--disable-triggers` since it's role-scoped, not per-table).
+  - **A real vacuous-test trap, caught rather than walked into.** The first verification
+    attempt read `pg_stat_user_tables.n_live_tup`, which showed 0 on every table right after
+    the load — that column is autovacuum/ANALYZE-maintained statistics, not a live count, and
+    trusting it would have reported "restore looks empty" for a restore that actually worked.
+    Switched to direct `select count(*)` on real tables (`orgs`, `org_members`, `profiles`,
+    etc.) and got real numbers — **profiles: 12**, matching this platform's own account count
+    exactly. Scratch project deleted after. Full writeup: docs/12's "Backups" section.
+  - **A genuine, unrelated finding surfaced mid-session and fixed immediately, not filed for
+    later: the GitHub repo had drifted PUBLIC.** `GET /repos/jasonartis/Solutions` returned
+    `"private": false` — contradicting docs/14 and the platform's whole security posture.
+    Before touching anything, searched the FULL git history (not just the current tree, since a
+    public repo exposes every past commit too) for committed secrets: `.env`/`.env.deploy`/
+    `.env.accounts` were never committed at any point, and no service-role key/GitHub PAT/
+    Vercel token/DB password pattern appears in any commit. Exposure was source/schema/RLS-
+    policy visibility only, not a live credential leak — no rotation needed. Flipped back to
+    private via the GitHub API, founder-approved, confirmed. Cause not investigated (fixing it
+    was more urgent than explaining it); no monitoring exists to catch this drifting again.
+  - **`pnpm backup:envs` added on a founder request that arrived mid-session**, unrelated to
+    the checklist item itself: a way to snapshot every real local `.env*` file (6 found across
+    the repo) into a timestamped same-drive folder, for protection against an accidental
+    edit/delete of the working copy. Explicitly NOT a substitute for the password-manager
+    guidance docs/12 already gives `.env.deploy`/`.env.accounts` specifically — same-drive
+    doesn't survive a dead disk. Tested for real (6/6 files copied, content diffed identical)
+    before calling it done.
+  - **One clean decision-by-scenario worth keeping as a model**: rather than asking "GitHub
+    Actions or Backblaze B2?" as a bare label choice, both options were framed with the actual
+    consequence ("expires after ~90 days, zero new accounts" vs. "never expires, one new
+    signup") — the founder's own long-stated preference (CLAUDE.md's "ask choices as
+    scenarios"), and it produced a fast, confident answer instead of a round-trip.
+
 - **2026-08-31/09-01 (GO-LIVE CHECKLIST ITEM 1 — MONITORING + KEEP-ALIVE. Sonnet. Commit
   `267dd4a`.)**
   - **`/healthz` shipped** (`apps/web/app/healthz/route.ts`): the open question — "which query

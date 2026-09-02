@@ -22,7 +22,7 @@ minutes, not sessions, and several can happen in parallel with build work.
 | # | Item | Whose job | Size | Blocks what |
 |---|------|-----------|------|-------------|
 | 1 | Monitoring + keep-alive | **CODE DONE.** Founder: 1 free Sentry account (UptimeRobot already existed) | ~1 session | Silent outages; **prod pausing itself** |
-| 2 | Automated + tested backups | Claude | ~1–2 sessions | Unrecoverable data loss |
+| 2 | Automated + tested backups | **DONE 2026-09-01/02.** | ~1–2 sessions | Unrecoverable data loss |
 | 3 | Privacy + terms page | Claude drafts, **founder owns wording** | ~1 session | Legal exposure the moment a real person signs in |
 | 4 | Worker on a real host | Claude (runbook exists) | ~30 min | Retention never runs in prod |
 | 5 | Vercel Pro | Founder | ~10 min, ~$20/mo | **Commercial use is prohibited on Hobby** |
@@ -106,15 +106,19 @@ is itself the activity that prevents the pause.
 **Founder:** free UptimeRobot account (50 monitors), free Sentry account, paste the DSN
 into Vercel's env vars.
 
-## 2. Automated, tested backups
+## 2. Automated, tested backups — **DONE 2026-09-01/02**
 
-docs/12 item 8, a founder decision of 2026-07-27. Today recovery leans entirely on
-Supabase's own retention and **nobody has ever performed a restore**. An untested backup is
-a belief, not a safeguard — the first rehearsal must not be during a real incident.
+docs/12 item 8, a founder decision of 2026-07-27. Full story, including the vacuous-test
+trap avoided while verifying the restore: docs/12's "Backups" section.
 
-Scheduled dumps the founder controls, stored off Supabase, **plus one rehearsed restore**
-into a scratch project, with the result written down. The rehearsal is the deliverable; the
-dump script is the easy half.
+`.github/workflows/backup.yml` runs the existing `pnpm backup:prod` script nightly and
+stores the dump as a GitHub Actions artifact (90-day retention) — founder-controlled, off
+Supabase/Vercel/the dev PC, no new account. Verified with a real manual run (304KB artifact
+from actual prod data). **The rehearsal — the actual deliverable, not the dump script —
+is done too**: restored a real backup into a throwaway Supabase project and proved it with
+live `select count(*)` queries (not the stale `pg_stat_user_tables` statistics column,
+which read 0 right after the load and would have been a false negative). Scratch project
+deleted after.
 
 ## 3. Privacy + terms page
 

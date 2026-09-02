@@ -108,9 +108,37 @@ rot; pipelines don't.
 - `pnpm backup:prod` dumps prod schema + data to `backups/<timestamp>/`
   (git-ignored, local disk). Run it **before any risky prod operation** and
   weekly regardless. First backup taken 2026-07-10.
-- The Supabase free tier has no automated backups — this script is currently
-  the only net. (Upgrading to Supabase Pro adds daily backups; revisit when
-  revenue starts.)
+- The Supabase free tier has no automated backups — confirmed live 2026-09-01
+  via the scratch project's own General settings page (no PITR/automated-
+  backup option shown, only manual "Restart"/"Pause"/"Delete" and a Pro-only
+  custom-domains upsell — consistent with free tier having none).
+- **AUTOMATED since 2026-09-01/02** (go-live checklist item 2):
+  `.github/workflows/backup.yml` runs the same `pnpm backup:prod` script
+  nightly (09:00 UTC) via GitHub Actions and uploads the dump as a repo
+  artifact (90-day retention) — durable off Supabase, off Vercel, and off
+  the dev PC, using two new repo secrets (`PROD_SUPABASE_PROJECT_REF`,
+  `PROD_SUPABASE_DB_PASSWORD`) rather than a new account. **Verified
+  end-to-end, not just written**: a manual `workflow_dispatch` run produced
+  a real 304KB artifact from the actual prod database. Bounded retention
+  (not a permanent archive) is a known tradeoff — Backblaze B2 stays the
+  earmarked upgrade (docs/14) for unbounded off-site retention once that's
+  worth a new account.
+- **RESTORE REHEARSED AND PROVEN, 2026-09-01/02** — the deliverable item 2
+  actually asked for, not just the dump script. Restored the tested backup
+  artifact's `schema.sql` + `data.sql` into a real throwaway Supabase
+  project (founder-created, `us-east-2`, deleted after). Both files applied
+  cleanly (`data.sql` loaded inside a transaction with
+  `session_replication_role = replica` set, so triggers/FK checks didn't
+  fire mid-load — the standard technique, stronger than pg_restore's
+  `--disable-triggers` since it's role-scoped rather than per-table).
+  **Verified with real row counts, not `pg_stat_user_tables.n_live_tup`** —
+  that statistics column read 0 on every table checked immediately after
+  the load, because autovacuum/ANALYZE hadn't run yet; trusting it would
+  have been the exact vacuous-test trap this doc already warns about
+  elsewhere. A direct `select count(*)` against `orgs`/`org_members`/
+  `profiles`/etc. showed real numbers matching the platform's known state
+  (**profiles: 12** — the exact account count CLAUDE.md's own history
+  cites repeatedly). Restore capability is proven working, not assumed.
 
 ## Recovery playbook
 
