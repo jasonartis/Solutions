@@ -26,12 +26,19 @@ minutes, not sessions, and several can happen in parallel with build work.
 | 3 | Privacy + terms page | Claude drafts, **founder owns wording** | ~1 session | Legal exposure the moment a real person signs in |
 | 4 | Worker on a real host | Claude (runbook exists) | ~30 min | Retention never runs in prod |
 | 5 | Vercel Pro | Founder | ~10 min, ~$20/mo | **Commercial use is prohibited on Hobby** |
-| 6 | 2FA on GitHub / Vercel / Supabase | Founder — **raised 2026-09-03, deliberately deferred** (his call, not urgent while no real client exists yet) | ~15 min | One compromised account defeats every safeguard |
+| 6 | 2FA on GitHub / Vercel / Supabase | Founder — **raised 2026-09-03, deliberately deferred until the first real client is signed** | ~15 min | One compromised account defeats every safeguard |
 | 7 | Custom SMTP | Founder account + Claude config | ~half session | Auth email rate limits at real volume |
 | 8 | Onboarding rehearsal | **DONE 2026-09-02.** | ~half session | Finding gaps live, in front of the client |
 
 **Total: roughly 4–6 sessions of build work, plus about an hour of founder account chores.**
 Items 5 and 6 can be done today and are independent of everything else.
+
+**STATUS AS OF 2026-09-03: items 1, 2, 3 (draft awaiting founder review), and 8 are done.
+Items 4, 5, 6, and 7 are ALL DELIBERATELY PAUSED, founder's call, same trigger: they each add
+real cost or a new external dependency (a VPS, a $20/mo plan, a domain + email service) to
+solve a problem that only exists once a real client generates real volume — no real client
+exists yet. Extract-don't-speculate applies to this checklist too, not just to code. Revisit
+items 4/5/6/7 together when the first real client is signed, not before.**
 
 ---
 

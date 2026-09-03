@@ -19,12 +19,15 @@ A multi-tenant modular platform: each client engagement produces a **module** bu
      and update only the compact "Now / Next / Standing rules" below. A fresh chat must never
      pay for the full journal. See "Session hygiene". -->
 
-**NEXT SESSION STARTS HERE (handoff written 2026-09-02): GO-LIVE CHECKLIST ITEMS 1, 2, AND 8
-ARE ALL DONE — item 3 (privacy + terms) has a DRAFT AWAITING FOUNDER REVIEW at `/privacy`
-(not linked in nav).** Read [docs/18-go-live-checklist.md](docs/18-go-live-checklist.md); full
-stories in the 2026-08-31/09-01, 2026-09-01/02, and 2026-09-02 journal entries. Remaining
-items 4-7 all block on a founder-created account first (Hetzner, Resend) or are pure
-founder-side actions (Vercel Pro billing, 2FA) — nothing Claude can start unprompted.
+**NEXT SESSION STARTS HERE (handoff written 2026-09-03): GO-LIVE CHECKLIST ITEMS 1, 2, AND 8
+ARE DONE; item 3's simplified draft is at `/privacy` (not linked in nav) awaiting founder
+review; items 4, 5, 6, AND 7 ARE ALL DELIBERATELY PAUSED — founder's call, extract-don't-
+speculate applies: each adds real cost or a new dependency (VPS, $20/mo plan, a domain, 2FA
+setup friction) for a problem that only exists once a real client generates real volume.
+DO NOT start any of 4/5/6/7 unprompted — revisit together when the first real client is
+signed, per docs/18's status note.** Read
+[docs/18-go-live-checklist.md](docs/18-go-live-checklist.md); full stories in the
+2026-08-31/09-01, 2026-09-01/02, and 2026-09-02 journal entries.
 **Two real production findings this session, both resolved:**
 (1) the GitHub repo had drifted PUBLIC (contradicting docs/14) — verified no secrets were ever
 committed across full git history, then flipped private, THEN flipped back to PUBLIC again
