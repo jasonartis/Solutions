@@ -130,6 +130,21 @@ export const classroomViewAs = declareViewAs({
           limit: 100,
         },
         {
+          table: 'cls_submission_files',
+          label: 'Attached submission files',
+          columns: ['id', 'class_id', 'submission_id', 'file_name', 'storage_path', 'size_bytes'],
+          // Same shape as cls_submissions just above: a GA sees every submission's
+          // files in scope, not one student's.
+          subjectColumn: null,
+          scopeColumn: 'class_id',
+          caveat:
+            'Moved here 2026-09-03 from `excluded`, now that the grading console ' +
+            '(ui/manage/grading/[homeworkId]/page.tsx) actually fetches and shows these ' +
+            "(as signed download links, matching the peer-review page's existing pattern) — " +
+            'previously RLS-readable but never queried by any real page, which is why it used ' +
+            'to be excluded rather than role.',
+        },
+        {
           table: 'cls_grades',
           label: 'Grades this GA entered',
           columns: [
@@ -245,16 +260,6 @@ export const classroomViewAs = declareViewAs({
             "and the exam-grading console query `cls_courses` (`.select('id').limit(1)`) purely " +
             'as an internal staff/GA-detection probe. No course field is ever rendered; the GA ' +
             'console has no course-browsing view at all, only the classes a GA is assigned to.',
-        },
-        {
-          table: 'cls_submission_files',
-          why:
-            'A GA CAN read a submission\'s attached files (`cls_is_ga_class` arm on ' +
-            'cls_submission_files_select, confirmed 2026-08-28), but the real grading queue ' +
-            '(ui/manage/grading/[homeworkId]/page.tsx) never fetches them — a genuine product ' +
-            'gap found by this review (a GA grading a submission cannot see what the student ' +
-            'attached), not a deliberate design choice, and not something view-as creates or ' +
-            'fixes.',
         },
       ],
       // Absent because the GA cannot read them, not because we declined to

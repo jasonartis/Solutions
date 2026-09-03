@@ -322,13 +322,19 @@ test('classroom module: grading workflow — GA grade, peer review, finalize, pu
   await page.getByRole('link', { name: 'Homework 1 — Descriptive statistics' }).click()
   await expect(page.getByRole('heading', { name: /^Grading —/ })).toBeVisible()
 
-  await page.getByRole('button', { name: 'Move submitted → GA grading' }).click()
-
   // Row-scope by the exact student-name cell — a `hasText` row filter would
   // also match the OTHER student's row once the peer-review column mentions
   // this name (e.g. "Dana D" appears inside Charlie's row as "Dana D: pending").
   const rowFor = (name: string) =>
     page.locator('tbody tr').filter({ has: page.getByRole('cell', { name, exact: true }) })
+
+  // The GA/professor grading console used to never show what a student
+  // attached (real RLS access existed, no page ever queried it — closed
+  // 2026-09-03). Charlie's file was uploaded by the earlier "can submit
+  // homework files" test against this same Homework 1 submission.
+  await expect(rowFor('Charlie C').getByRole('link', { name: 'homework1-answer.txt' })).toBeVisible()
+
+  await page.getByRole('button', { name: 'Move submitted → GA grading' }).click()
 
   await rowFor('Charlie C').locator('input[name="score"]').fill('85')
   await rowFor('Charlie C').getByRole('button', { name: 'Save' }).click()

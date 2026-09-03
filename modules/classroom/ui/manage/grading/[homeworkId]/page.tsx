@@ -56,6 +56,27 @@ export default async function GradingPage(props: {
         .eq('homework_id', homeworkId),
     ])
 
+  // A GA/professor grading a submission could never see what the student
+  // actually attached — real RLS access existed, no page ever used it
+  // (packages/platform/src/view-as-modules.ts, moved out of `excluded`
+  // 2026-09-03). Same signed-URL pattern as ui/review/[assignmentId]/page.tsx.
+  const submissionIds = (submissions ?? []).map((s) => s.id)
+  const { data: submissionFiles } = submissionIds.length
+    ? await supabase
+        .from('cls_submission_files')
+        .select('id, submission_id, file_name, storage_path')
+        .in('submission_id', submissionIds)
+    : { data: [] as { id: string; submission_id: string; file_name: string; storage_path: string }[] }
+
+  const filesBySubmission = new Map<string, { name: string; url: string }[]>()
+  for (const f of submissionFiles ?? []) {
+    const { data } = await supabase.storage.from('cls-submissions').createSignedUrl(f.storage_path, 3600)
+    if (!data?.signedUrl) continue
+    const list = filesBySubmission.get(f.submission_id) ?? []
+    list.push({ name: f.file_name, url: data.signedUrl })
+    filesBySubmission.set(f.submission_id, list)
+  }
+
   const nameOf = (userId: string) => {
     const p = (profiles ?? []).find((pr) => pr.user_id === userId)
     return p?.display_name || p?.email || userId
@@ -127,11 +148,12 @@ export default async function GradingPage(props: {
       )}
 
       <div className="overflow-x-auto">
-      <table className={`w-full ${isProfessor ? 'min-w-[640px]' : 'min-w-[420px]'} text-sm`}>
+      <table className={`w-full ${isProfessor ? 'min-w-[760px]' : 'min-w-[520px]'} text-sm`}>
         <thead>
           <tr className="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-500">
             <th className="py-2 pr-3">Student</th>
             <th className="py-2 pr-3">State</th>
+            <th className="py-2 pr-3">Files</th>
             <th className="py-2 pr-3">GA grade</th>
             {/* Peer/Final are professor work product — a GA sees only grades
                 they entered themselves (RLS returns nothing here anyway). */}
@@ -163,6 +185,21 @@ export default async function GradingPage(props: {
                       </label>
                       <button className="text-[10px] text-blue-600 hover:underline">Set</button>
                     </form>
+                  )}
+                </td>
+                <td className="py-2 pr-3 text-xs">
+                  {(filesBySubmission.get(s.id) ?? []).length === 0 ? (
+                    <span className="text-gray-300">—</span>
+                  ) : (
+                    <ul className="space-y-0.5">
+                      {filesBySubmission.get(s.id)!.map((f) => (
+                        <li key={f.name}>
+                          <a href={f.url} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">
+                            {f.name}
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
                   )}
                 </td>
                 <td className="py-2 pr-3">
@@ -215,7 +252,7 @@ export default async function GradingPage(props: {
           })}
           {(submissions ?? []).length === 0 && (
             <tr>
-              <td colSpan={isProfessor ? 5 : 3} className="py-4 text-center text-gray-400">
+              <td colSpan={isProfessor ? 6 : 4} className="py-4 text-center text-gray-400">
                 No submissions yet.
               </td>
             </tr>
