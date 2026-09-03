@@ -19,6 +19,23 @@ function myzmanimEnv(): Record<string, string> {
   return user && key ? { MYZMANIM_USER: user, MYZMANIM_KEY: key } : {}
 }
 
+// Platform identity pass-through (company name, contact email, and anything
+// similar added later) — one place to fill these in (.env.deploy) rather
+// than hardcoding them into individual pages. Not secret, just not always
+// finalized; each maps 1:1 to a NEXT_PUBLIC_ var of the same suffix.
+function platformIdentityEnv(): Record<string, string> {
+  const deployPath = resolve(repoRoot, '.env.deploy')
+  if (!existsSync(deployPath)) return {}
+  const content = readFileSync(deployPath, 'utf8')
+  const get = (k: string) => new RegExp(`^${k}=(.*)$`, 'm').exec(content)?.[1]?.trim() ?? ''
+  const out: Record<string, string> = {}
+  for (const key of ['PLATFORM_COMPANY_NAME', 'PLATFORM_CONTACT_EMAIL']) {
+    const value = get(key)
+    if (value) out[`NEXT_PUBLIC_${key}`] = value
+  }
+  return out
+}
+
 const dryRun = process.argv.includes('--dry-run')
 
 let status = supabaseStatus()
@@ -67,6 +84,7 @@ if (status) {
       NEXT_PUBLIC_SUPABASE_URL: apiUrl,
       NEXT_PUBLIC_SUPABASE_ANON_KEY: anonKey,
       ...myzmanim,
+      ...platformIdentityEnv(),
     })
     writeEnvFile(resolve(repoRoot, 'apps/worker/.env'), {
       DATABASE_URL: dbUrl,

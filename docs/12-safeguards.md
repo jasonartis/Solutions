@@ -212,7 +212,10 @@ Found in a deliberate "what haven't we thought of" pass; ordered by urgency.
 3. **Account 2FA.** GitHub, Vercel, and Supabase accounts are the real keys
    to everything (pipeline, secrets, database). Enable 2FA on all three —
    a compromised GitHub account defeats every safeguard in this file.
-   **RAISED 2026-09-03, DELIBERATELY DEFERRED (founder's call).** Confirmed
+   **RAISED 2026-09-03, DELIBERATELY DEFERRED (founder's call) — REVISIT WHEN
+   THE FIRST REAL CLIENT IS SIGNED, not before.** That's the trigger, same
+   shape as other "not worth building ahead of a real need" deferrals in this
+   doc set. Confirmed
    along the way: Supabase's dashboard MFA is authenticator-app-only (no
    email option — intentional, email 2FA is the weakest form since a
    compromised email often also unlocks password-reset flows everywhere

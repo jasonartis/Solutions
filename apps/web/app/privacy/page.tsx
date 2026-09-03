@@ -7,7 +7,16 @@
 // detailed version covering the same facts is kept at
 // docs/privacy-detailed-draft.md for later — an audit, a legal review, or a
 // larger/more regulated client that needs it.
+const LAST_UPDATED = 'September 3, 2026'
+
 export default function PrivacyPage() {
+  // Platform identity — filled in via .env.deploy (see scripts/dev.ts
+  // platformIdentityEnv()) rather than hardcoded, since these aren't
+  // finalized yet. Falls back to a visible placeholder so an unset value
+  // is obvious on the page rather than silently blank.
+  const companyName = process.env.NEXT_PUBLIC_PLATFORM_COMPANY_NAME || '[COMPANY NAME NOT SET]'
+  const contactEmail = process.env.NEXT_PUBLIC_PLATFORM_CONTACT_EMAIL || '[CONTACT EMAIL NOT SET]'
+
   return (
     <main className="mx-auto max-w-2xl px-4 py-12 text-gray-800">
       <p className="mb-6 rounded border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900">
@@ -15,7 +24,7 @@ export default function PrivacyPage() {
       </p>
 
       <h1 className="mb-2 text-2xl font-semibold">Privacy Policy</h1>
-      <p className="mb-8 text-sm text-gray-500">Last updated: [DATE]</p>
+      <p className="mb-8 text-sm text-gray-500">Last updated: {LAST_UPDATED}</p>
 
       <div className="space-y-4 text-sm leading-relaxed text-gray-700">
         <p>
@@ -35,20 +44,20 @@ export default function PrivacyPage() {
           when, is kept. That's on purpose: a record of staff access that could be erased
           wouldn't really protect anyone.
         </p>
-        <p>Questions? Contact [FOUNDER EMAIL].</p>
+        <p>Questions? Contact {contactEmail}.</p>
       </div>
 
       <hr className="my-10 border-gray-200" />
 
       <h1 className="mb-2 text-2xl font-semibold">Terms of Service</h1>
-      <p className="mb-8 text-sm text-gray-500">Last updated: [DATE]</p>
+      <p className="mb-8 text-sm text-gray-500">Last updated: {LAST_UPDATED}</p>
 
       <Section title="The short version">
         <p>
-          This platform is provided by [FOUNDER/COMPANY NAME] to power the organization you're a
-          member of (shown in your account). Your organization's administrators manage your
-          membership and access; we provide the underlying technology and are responsible for
-          keeping it running and your data secure.
+          This platform is provided by {companyName} to power the organization you're a member of
+          (shown in your account). Your organization's administrators manage your membership and
+          access; we provide the underlying technology and are responsible for keeping it running
+          and your data secure.
         </p>
       </Section>
 
@@ -63,8 +72,8 @@ export default function PrivacyPage() {
       <Section title="No warranty / limitation of liability">
         <p>
           The service is provided "as is." We work to keep it reliable and your data safe, but we
-          don't guarantee uninterrupted availability, and [FOUNDER/COMPANY NAME]'s liability for
-          any issue is limited to the extent permitted by law.
+          don't guarantee uninterrupted availability, and {companyName}'s liability for any issue
+          is limited to the extent permitted by law.
         </p>
       </Section>
 
