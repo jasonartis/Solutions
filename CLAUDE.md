@@ -19,35 +19,44 @@ A multi-tenant modular platform: each client engagement produces a **module** bu
      and update only the compact "Now / Next / Standing rules" below. A fresh chat must never
      pay for the full journal. See "Session hygiene". -->
 
-**NEXT SESSION STARTS HERE (handoff written 2026-09-03): GO-LIVE CHECKLIST ITEMS 1, 2, AND 8
-ARE DONE; item 3's simplified draft is at `/privacy` (not linked in nav) awaiting founder
-review; items 4, 5, 6, AND 7 ARE ALL DELIBERATELY PAUSED — founder's call, extract-don't-
-speculate applies: each adds real cost or a new dependency (VPS, $20/mo plan, a domain, 2FA
-setup friction) for a problem that only exists once a real client generates real volume.
-DO NOT start any of 4/5/6/7 unprompted — revisit together when the first real client is
-signed, per docs/18's status note.** Read
-[docs/18-go-live-checklist.md](docs/18-go-live-checklist.md); full stories in the
-2026-08-31/09-01, 2026-09-01/02, and 2026-09-02 journal entries.
-**Two real production findings this session, both resolved:**
-(1) the GitHub repo had drifted PUBLIC (contradicting docs/14) — verified no secrets were ever
-committed across full git history, then flipped private, THEN flipped back to PUBLIC again
-same day after it turned out private repos meter Actions minutes and this account had already
-been charged $13.45 for overage — **repo is deliberately PUBLIC as of 2026-09-02, do not
-"fix" this back to private without first designing CI-usage discipline (docs/12 item 3 has
-the concrete candidate rules, none decided yet)**; (2) **Vercel had been silently BLOCKING
-every deployment** since a git-commit-author email mismatch (`jasonartisenergy@gmail.com` vs
-the Vercel team owner's `jasonartisenergy1@gmail.com`) — nothing in GitHub's UI said why, only
-Vercel's own API showed
-`state: BLOCKED`. Fixed (`git config --global user.email`) and verified end-to-end (a real
-deploy went `READY`, Sentry's code confirmed compiled into the live bundle). Full story:
-docs/12 item 2a.
-**Sonnet is the right tier** for the whole checklist — route handlers, config, scripts and
-docs, no migrations or RLS — switch up to Opus only if something touches
-`supabase/migrations/`. Nothing is in flight; the tree is clean and pushed.
+**NEXT SESSION STARTS HERE (handoff written 2026-09-03): THE GO-LIVE CHECKLIST IS DONE FOR
+NOW — 1, 2, 3, AND 8 ALL SHIPPED; 4, 5, 6, 7 ARE ALL DELIBERATELY PAUSED** (founder's call,
+extract-don't-speculate: each adds real cost or a new dependency for a problem that only
+exists once a real client generates real volume — **do not start any of them unprompted,
+revisit together when the first real client is signed**, per docs/18's status note).
+**FOUNDER HAS CHOSEN THE NEXT BODY OF WORK: complete the Visual Messaging module** — the two
+concrete items are (1) per-org tunable size/opacity guards (fixed defaults today, make them
+configurable), and (2) org-per-group auto-creation for ad-hoc groups (**confirm exact scope
+with the founder before building — flagged as awaiting his confirmation, not yet a settled
+design**). A third known gap, anonymous public view-links, is explicitly deferred as
+post-v1 — do not build it as part of "completing" this module. Read
+docs/modules/module-4-visual-messaging.md before starting. **Sonnet is the right tier** to
+start; say so and switch to Opus only if either item turns out to need real RLS/migration
+work (neither obviously should). Read [docs/18-go-live-checklist.md](docs/18-go-live-checklist.md)
+for the full go-live story; full dated detail in the 2026-08-31 → 2026-09-03 journal entries.
+
+**Two real production incidents this session, both resolved, full detail in docs/12 items 2a
+and 3 — read those before touching repo visibility or the deploy pipeline again:**
+(1) the GitHub repo drifted PUBLIC, was verified clean (no secrets in full git history) and
+flipped private, then flipped back to PUBLIC same day after discovering private repos meter
+Actions minutes and this account had already been charged for overage — **repo is
+deliberately PUBLIC as of 2026-09-02; do not "fix" this back to private without first
+designing the CI-usage discipline docs/12 item 3 lists as candidates, none decided yet**;
+(2) Vercel was silently BLOCKING every deployment over a git-commit-author email mismatch
+(`jasonartisenergy@gmail.com` vs the Vercel team owner's `jasonartisenergy1@gmail.com`) —
+GitHub's own UI never said why, only Vercel's `/v6/deployments` API showed `state: BLOCKED`.
+Fixed via `git config --global user.email` (already applied on this machine) and verified
+end-to-end. **A related, separate finding: local `next build` AND `next dev` are both fully
+blocked on this machine** by the exFAT/Turbopack/`@sentry/nextjs` junction-point issue (see
+the exFAT bullet below) — verify any UI change via CI, not locally, until that's resolved.
+
+Also shipped this session, smaller: the classroom grading console now shows a submission's
+attached files (real RLS access existed, no page ever queried it — `git log` commit
+`e90868c`); the 3 doc-contradictions the 2026-08-29 survey flagged as "cheap, not yet fixed"
+are now actually fixed (commit `808b3bf`).
+
 **Standing instruction, 2026-08-29: DO NOT BLOCK ON A FOUNDER DECISION** — record the question
-where it belongs, flag it in the reply, and move to the next unblocked item. The queue itself
-is [docs/18](docs/18-go-live-checklist.md) §4 (six items, waiting on him rather than on
-effort); do not re-list it here.
+where it belongs, flag it in the reply, and move to the next unblocked item.
 
 **Previously (2026-08-28/29) — a long session of items picked WITH the founder from "Next /
 open," all shipped, no migrations: (1) the view-as surface-coverage ratchet
@@ -354,6 +363,23 @@ Everything below is open but unranked:
   NO reset in between; reproducing that exact order (not just "reset, then eventually run e2e
   at some point") is what actually surfaces an order-dependent failure like the grace/login-history
   one below.
+- **Diagnosing a CI job that fails INSTANTLY with an EMPTY steps array (2026-09-02)** — this is
+  never a code/test failure; the job never started. The tell: `GET /repos/<owner>/<repo>/actions/
+  runs/<id>/jobs` shows `"steps": []` and `completed_at` within 1-2 seconds of `started_at`. The
+  reason is NOT in the run/job JSON at all — it's only on
+  `GET /repos/<owner>/<repo>/check-runs/<job_id>/annotations`, which for a billing block reads
+  exactly *"The job was not started because recent account payments have failed or your
+  spending limit needs to be increased."* Same credential-token technique as above. **Separately,
+  to check ACTUAL GitHub Actions minutes usage** (not just whether a block is happening):
+  `GET /repos/<owner>/<repo>/actions/runs/<run_id>/timing` returns `billable.UBUNTU.total_ms` —
+  but that field is METERED OVERAGE ONLY (minutes beyond the free included amount), not total
+  usage, and reads `0` even while blocked (free quota can run out with zero paid overage ever
+  incurred, if the account's spending limit is $0). To approximate ACTUAL total minutes consumed
+  when the billable field is unhelpful, sum `(updated_at - run_started_at)` across
+  `GET /repos/<owner>/<repo>/actions/runs?per_page=100` — but exclude any run whose `conclusion`
+  is `cancelled`/`skipped`/blocked-instantly, since those can show a wildly inflated apparent
+  duration (one observed at 369 minutes for a run that actually ran 0 seconds) that has nothing
+  to do with real compute time.
 - ~~**The per-person data browser.**~~ **DONE 2026-08-03.** One known gap is still open and
   is the only reason this line survives: **walk-in salon customers have no account, so they are
   not findable** — the fix, if ever wanted, is letting a salon LINK a walk-in to an account when
