@@ -533,6 +533,13 @@ All of this is RLS/trigger territory ⇒ **Opus + full docs/03 #12 rhythm**, sli
    as real users; RLS suite 23/23.
 2. **Per-module ladders** — each module declares its tier vocabulary + manage edges;
    classroom first (professor grants GA/student — the already-agreed next piece).
+   **[PARTIAL — 3 of 6 modules rank-mapped: classroom (2026-07-24, "slice 2b" in the journal),
+   speed-dating and nail-salon (both 2026-07-26). The three single-entity modules
+   (matchmaking/synagogue-schedules/visual-messaging) are NOT yet mapped — their vocabularies
+   are entirely rank 0, so nothing is blocked by this, but this slice is not "done," only
+   started. Corrects a doc contradiction found 2026-08-29: CLAUDE.md's "Next / open" list calls
+   slice 4 "the only unbuilt slice left," which is true only in the narrow sense that no OTHER
+   slice is entirely zero-progress — slice 2 itself is genuinely partial, not finished.]**
 3. **Join policies + invite-accept** — entity-level joinPolicy everywhere; org-level
    invite-accept (touches `is_org_member()` — the most sensitive slice).
    **[org-level invite-accept BUILT 2026-07-27 — `20260727010000_org_invite_accept.sql`

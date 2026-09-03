@@ -437,6 +437,13 @@ the policy — "authentication events (when you sign in)" under what we collect 
 org, is materially more than a login timestamp. That wording must exist **before** phase 2
 ships, not after.
 
+**AS SHIPPED, correction 2026-09-03: that precondition did NOT hold.** Phase 2 shipped to
+production 2026-08-21 without the wording (docs/12 item 6 records this honestly, dated, at the
+time it happened — this line simply never got updated afterward, so it kept asserting a rule
+that had already been broken). Both phase 1's and phase 2's lines are still owed as of this
+correction; treat docs/12 item 6 as the current, accurate state of this obligation, not this
+section — this section is kept as the original design intent, not a live status claim.
+
 Two further constraints already on the books: an engagement row is personal data about its
 subject, so it is disclosable in a subject-access request and must appear in the per-person data
 browser; and any FK to `auth.users`/`profiles` must be declared in `data-browser-modules.ts` or

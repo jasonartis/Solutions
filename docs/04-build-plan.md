@@ -36,7 +36,12 @@ Why second: the founder's most mature existing solution, and it forces files/sto
 
 **Acceptance:** a full simulated course cycle in staging with seeded students: publish materials on a schedule → students submit multi-file homework → GA grades by subproblem → peer review round-trips with the assignment matrix → gradebook computes `0.2*peer+0.8*GA`-style combination → student sees only Final when flipped visible → retention sweep hides submissions.
 
-**Status (2026-07-09, later): core spec surface COMPLETE.** Beyond the 2026-07-09-morning core loop, subsequent slices shipped: exam grading (problem structure, per-subproblem scoring, published finals), per-class surveys with aggregate reveal, **automatic weighted gradebook combination** (GA+peer blend, renormalized, override-wins), and the retention sweep (daily worker job purging/hiding expired materials/publications per settings). Submission retention's founder decisions (never delete; hide from students+GAs after a per-class date; professor manual re-reveal) were also **implemented** the same window (`20260709080000_classroom_submission_retention.sql` — `cls_classes.submissions_hidden_from`, `cls_submissions.visible_override_until`, both wired to UI) — the module spec doc had gone stale claiming this was still an open item; corrected 2026-07-12. **Module 2 has no known remaining gaps against its own spec.** GA-specific dedicated views (vs. the shared grading console) remain a nice-to-have, not required — this is the only unbuilt item, and it's explicitly optional.
+**Status (2026-07-09, later): core spec surface COMPLETE.** Beyond the 2026-07-09-morning core loop, subsequent slices shipped: exam grading (problem structure, per-subproblem scoring, published finals), per-class surveys with aggregate reveal, **automatic weighted gradebook combination** (GA+peer blend, renormalized, override-wins), and the retention sweep (daily worker job purging/hiding expired materials/publications per settings). Submission retention's founder decisions (never delete; hide from students+GAs after a per-class date; professor manual re-reveal) were also **implemented** the same window (`20260709080000_classroom_submission_retention.sql` — `cls_classes.submissions_hidden_from`, `cls_submissions.visible_override_until`, both wired to UI) — the module spec doc had gone stale claiming this was still an open item; corrected 2026-07-12. **Correction (2026-09-03, found by the 2026-08-29 survey below): this file previously said
+"Module 2 has no known remaining gaps against its own spec" — the module's own spec
+(docs/modules/module-2-classroom.md's "Professor role scoping" section) lists that item as
+`still OPEN, don't build` (2026-07-16, needs a founder decision + real RLS work, Opus tier).
+The claim above was wrong; the spec is the source of truth. GA-specific dedicated views (vs.
+the shared grading console) remain a separate nice-to-have, not required.
 
 ## Extraction pass (after M2)
 
@@ -113,16 +118,18 @@ the go-live subset is the number worth planning against.
 `ALTER DEFAULT PRIVILEGES` drift item stops being theoretical), and Vercel Hobby prohibits
 commercial use the day a client pays (docs/18 item 5).
 
-### Doc contradictions found by the same survey — not yet fixed
+### Doc contradictions found by the same survey — **ALL FIXED 2026-09-03**
 
-Recorded so the next reader does not trust the wrong one. None is urgent; all are cheap.
+Recorded so the next reader does not trust the wrong one. None was urgent; all were cheap.
 
-1. **This file said classroom "has no known remaining gaps against its own spec"** — the
-   module-2 spec itself still lists **professor role scoping as OPEN**.
-2. **docs/15 §11 slice 2 (per-module ladders) carries no `[BUILT]` marker**, while CLAUDE.md
-   states slice 4 is "the only unbuilt slice left." Both are defensible readings of a partial
-   truth: 3 of the 6 modules are rank-mapped, so slice 2 is genuinely *partial*, not done.
-3. The privacy-policy line is called a **precondition** of shipping in both docs/12 item 6 and
-   docs/17 §9, yet engagement monitoring phases 1 and 2 shipped without it. That was recorded
-   honestly at the time rather than the rule being relaxed — but the two statements still
-   contradict each other on the page.
+1. ~~This file said classroom "has no known remaining gaps against its own spec"~~ — **fixed**:
+   this file's M2 status now says professor role scoping is `still OPEN, don't build`, matching
+   the module-2 spec (the actual source of truth for that item).
+2. ~~docs/15 §11 slice 2 (per-module ladders) carries no `[BUILT]` marker~~ — **fixed**: it now
+   carries a `[PARTIAL — 3 of 6 modules rank-mapped]` marker, reconciling it with CLAUDE.md's
+   "slice 4 is the only unbuilt slice left" (true only in the narrow "no OTHER slice is
+   zero-progress" sense — slice 2 itself was genuinely partial, not finished).
+3. ~~The privacy-policy line is called a precondition in both docs/12 item 6 and docs/17 §9~~ —
+   **fixed**: docs/17 §9 now carries a correction pointing to docs/12 item 6 as the current,
+   accurate state of that obligation (still owed, both phases) rather than repeating a
+   precondition claim that had already been broken by the time phase 2 shipped.
