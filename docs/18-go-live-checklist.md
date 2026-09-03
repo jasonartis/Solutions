@@ -26,7 +26,7 @@ minutes, not sessions, and several can happen in parallel with build work.
 | 3 | Privacy + terms page | Claude drafts, **founder owns wording** | ~1 session | Legal exposure the moment a real person signs in |
 | 4 | Worker on a real host | Claude (runbook exists) | ~30 min | Retention never runs in prod |
 | 5 | Vercel Pro | Founder | ~10 min, ~$20/mo | **Commercial use is prohibited on Hobby** |
-| 6 | 2FA on GitHub / Vercel / Supabase | Founder | ~15 min | One compromised account defeats every safeguard |
+| 6 | 2FA on GitHub / Vercel / Supabase | Founder — **raised 2026-09-03, deliberately deferred** (his call, not urgent while no real client exists yet) | ~15 min | One compromised account defeats every safeguard |
 | 7 | Custom SMTP | Founder account + Claude config | ~half session | Auth email rate limits at real volume |
 | 8 | Onboarding rehearsal | **DONE 2026-09-02.** | ~half session | Finding gaps live, in front of the client |
 

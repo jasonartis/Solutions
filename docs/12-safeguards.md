@@ -212,6 +212,19 @@ Found in a deliberate "what haven't we thought of" pass; ordered by urgency.
 3. **Account 2FA.** GitHub, Vercel, and Supabase accounts are the real keys
    to everything (pipeline, secrets, database). Enable 2FA on all three —
    a compromised GitHub account defeats every safeguard in this file.
+   **RAISED 2026-09-03, DELIBERATELY DEFERRED (founder's call).** Confirmed
+   along the way: Supabase's dashboard MFA is authenticator-app-only (no
+   email option — intentional, email 2FA is the weakest form since a
+   compromised email often also unlocks password-reset flows everywhere
+   else); GitHub's is currently unconfigured (plain password only). Vercel
+   has a team-level "2FA Enforcement" toggle rather than a personal 2FA
+   setting of its own (this account signs into Vercel via GitHub SSO) —
+   **flagged but NOT tested: enabling it warns that CI/CD tokens belonging
+   to users without 2FA stop working**, which would hit the exact
+   `VERCEL_TOKEN` this platform's deploy pipeline depends on. If this is
+   revisited, enable GitHub's 2FA FIRST, then test a real deploy immediately
+   after flipping Vercel's enforcement toggle — don't trust it silently,
+   the same lesson as the 2026-09-02 deploy-block incident above.
    **REPO VISIBILITY: PUBLIC, DELIBERATELY, AS OF 2026-09-02 — a cost
    decision, not a security lapse. Read this before ever flipping it private
    again.** Full sequence: found drifted PUBLIC 2026-09-01 (contradicting
