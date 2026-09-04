@@ -3730,3 +3730,143 @@ describe('org-scoped activity (engagement monitoring phase 2, 20260810010000)', 
     expect(row.actor_org_role, "bob's org seat (a real, active membership) was not recorded").toBe('member')
   })
 })
+
+describe('visual messaging: a seat requires ACTIVE org membership (20260904010000)', () => {
+  // THE BUG THIS PINS (pre-existing, found 2026-09-04 while designing ad-hoc
+  // groups): the four vm_ access predicates gated purely on a
+  // vm_conversation_members row, never on membership of the conversation's ORG.
+  // So a seat alone granted reads of every layer, reaction and roster row in
+  // the conversation to someone who was not in that org at all —
+  // requireOrgModule() 404s them in the UI, but the UI is not the gate.
+  //
+  // EVE IS THE RIGHT OUTSIDER, not an arbitrary one: she shares demo-salon,
+  // demo-match and demo-dating with alice, so an ordinary email lookup
+  // (profiles_select_shared_org) genuinely resolves her — i.e. she is reachable
+  // through the real addMember path — while being NO member of demo-visual.
+  // Picking a user who shared no org with anyone would prove a weaker thing.
+  //
+  // THE CONTROL THAT MAKES THE NEGATIVE NON-VACUOUS IS THE SEAT ITSELF: "eve
+  // reads nothing" is trivially true if her seat was never created (the insert
+  // silently failing, the conversation being empty, the fixture not running).
+  // So this block asserts, via service-role, that her ACTIVE seat row exists
+  // AND that dana — a real demo-visual member with an identical seat — reads
+  // the layer through the same policies, before asserting eve reads none.
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
+
+  let admin: SupabaseClient
+  let eve: SupabaseClient
+  let dana: SupabaseClient
+  let visualOrg: string
+  let conversationId: string
+  let eveId: string
+  let danaId: string
+
+  beforeAll(async () => {
+    if (!serviceKey) throw new Error('SUPABASE_SERVICE_ROLE_KEY not set — run `pnpm dev` once')
+    admin = createClient(url, serviceKey, { auth: { persistSession: false } })
+    eve = await signIn('eve@demo.local')
+    dana = await signIn('dana@demo.local')
+
+    visualOrg = (await admin.from('orgs').select('id').eq('slug', 'demo-visual').single()).data!.id as string
+    eveId = (await admin.from('profiles').select('user_id').eq('email', 'eve@demo.local').single()).data!
+      .user_id as string
+    danaId = (await admin.from('profiles').select('user_id').eq('email', 'dana@demo.local').single()).data!
+      .user_id as string
+
+    // The seed deliberately creates NO conversations for demo-visual ("created
+    // through the UI", seed.ts) and deletes any that exist, so this block must
+    // build its own fixture rather than lean on seeded content.
+    const conv = await admin
+      .from('vm_conversations')
+      .insert({ org_id: visualOrg, title: 'RLS fixture — seat/org gate', created_by: danaId })
+      .select('id')
+      .single()
+    if (conv.error) throw new Error(`fixture conversation failed: ${conv.error.message}`)
+    conversationId = conv.data!.id as string
+
+    const layer = await admin.from('vm_layers').insert({
+      org_id: visualOrg,
+      conversation_id: conversationId,
+      author_id: danaId,
+      path: 'server-assigned',
+      content: { image: { path: `${visualOrg}/${conversationId}/fixture.png` } },
+    })
+    if (layer.error) throw new Error(`fixture root layer failed: ${layer.error.message}`)
+
+    // Identical seats for both: same role, same status. The ONLY difference
+    // between dana and eve is org membership, which is precisely the variable
+    // under test.
+    const seats = await admin.from('vm_conversation_members').insert([
+      { org_id: visualOrg, conversation_id: conversationId, user_id: danaId, role: 'participant' },
+      { org_id: visualOrg, conversation_id: conversationId, user_id: eveId, role: 'participant' },
+    ])
+    if (seats.error) throw new Error(`fixture seats failed: ${seats.error.message}`)
+  })
+
+  afterAll(async () => {
+    // Cascades layers/members/reactions. Keeps the suite re-runnable and leaves
+    // demo-visual as the seed intended it (no conversations).
+    if (conversationId) await admin.from('vm_conversations').delete().eq('id', conversationId)
+  })
+
+  it('CONTROL: eve really does hold an ACTIVE seat, and really is not in the org', async () => {
+    const seat = await admin
+      .from('vm_conversation_members')
+      .select('status, role, org_id')
+      .eq('conversation_id', conversationId)
+      .eq('user_id', eveId)
+      .maybeSingle()
+    expect(seat.data, 'fixture seat for eve does not exist — every negative below would be vacuous').not.toBeNull()
+    expect(seat.data!.status).toBe('active')
+    // vm_sync_from_conversation derives org_id from the conversation, so this
+    // also proves the seat is stamped with demo-visual, not something else.
+    expect(seat.data!.org_id).toBe(visualOrg)
+
+    const membership = await admin
+      .from('org_members')
+      .select('status')
+      .eq('org_id', visualOrg)
+      .eq('user_id', eveId)
+      .maybeSingle()
+    expect(membership.data, 'eve is an org member of demo-visual — she is the wrong fixture user').toBeNull()
+  })
+
+  it('CONTROL: dana, an active org member with the same seat, DOES read the conversation', async () => {
+    const layers = await dana.from('vm_layers').select('id').eq('conversation_id', conversationId)
+    expect(layers.error).toBeNull()
+    expect(layers.data!.length, 'dana reads no layers — the fixture content or her seat is broken, not RLS')
+      .toBeGreaterThan(0)
+
+    const isMember = await dana.rpc('vm_is_conv_member', { check_conversation_id: conversationId })
+    expect(isMember.data, 'vm_is_conv_member is false for a real member with a seat').toBe(true)
+  })
+
+  it('eve, holding an active seat but NOT in the org, reads no conversation content', async () => {
+    const layers = await eve.from('vm_layers').select('id').eq('conversation_id', conversationId)
+    expect(layers.error).toBeNull()
+    expect(layers.data, 'a non-member of the org read conversation LAYERS through a bare seat').toEqual([])
+
+    const reactions = await eve.from('vm_reactions').select('id').eq('conversation_id', conversationId)
+    expect(reactions.data ?? [], 'a non-member of the org read conversation REACTIONS').toEqual([])
+  })
+
+  it('eve fails every vm_ access predicate for that conversation', async () => {
+    for (const fn of ['vm_is_conv_member', 'vm_can_post', 'vm_can_moderate', 'vm_is_conv_admin']) {
+      const r = await eve.rpc(fn, { check_conversation_id: conversationId })
+      expect(r.error, `${fn} errored for eve: ${JSON.stringify(r.error)}`).toBeNull()
+      expect(r.data, `${fn} returned TRUE for a bare seat held by a non-member of the org`).toBe(false)
+    }
+  })
+
+  it('eve cannot read the roster, so she cannot enumerate who is in the conversation', async () => {
+    const roster = await eve
+      .from('vm_conversation_members')
+      .select('user_id')
+      .eq('conversation_id', conversationId)
+    // vm_members_select has a `user_id = auth.uid()` arm, so eve may see her
+    // OWN seat row — by design (docs/03 #15's bootstrap) and harmless. What she
+    // must not see is anyone else's.
+    const others = (roster.data ?? []).filter((r) => r.user_id !== eveId)
+    expect(others, 'a non-member of the org read OTHER peoples roster rows').toEqual([])
+  })
+})

@@ -153,12 +153,46 @@ export async function addMember(orgSlug: string, conversationId: string, formDat
   if (!email) throw new Error('Email is required')
 
   const supabase = await createClient()
+
+  // Derive the org from the CONVERSATION, not from the route slug: the
+  // membership check below has to be about the org whose content this seat
+  // would expose. (vm_members_scope overwrites any client-supplied org_id
+  // from the conversation anyway, so this is also the value that will be
+  // stored — passing the slug's org was always cosmetic.)
+  const { data: conv } = await supabase
+    .from('vm_conversations')
+    .select('org_id')
+    .eq('id', conversationId)
+    .single()
+  if (!conv) throw new Error('Conversation not found')
+
   const { data: profile } = await supabase.from('profiles').select('user_id').eq('email', email).maybeSingle()
   if (!profile) throw new Error('No user with that email in your organization')
-  const { data: org } = await supabase.from('orgs').select('id').eq('slug', orgSlug).single()
+
+  // The target must be an ACTIVE member of the conversation's org. A seat row
+  // alone grants reads of every layer, reaction, roster row and vm-images
+  // object in the conversation (the vm_is_conv_* predicates gate on the seat),
+  // so without this an org member could hand a NON-member of that org full
+  // access to its content — the same finding classroom guards against in
+  // modules/classroom/ui/manage/actions.ts, whose comment explains why the
+  // email lookup above is not itself a bound. 20260904010000 is the real gate;
+  // this check exists so the UI reports it as a clear error instead of an
+  // opaque RLS failure.
+  const { data: member } = await supabase
+    .from('org_members')
+    .select('user_id')
+    .eq('org_id', conv.org_id)
+    .eq('user_id', profile.user_id)
+    .eq('status', 'active')
+    .maybeSingle()
+  if (!member) {
+    throw new Error(
+      `No user found with email ${email} in this organization — add them as an org member first (and they must have accepted the invite)`,
+    )
+  }
 
   const { error } = await supabase.from('vm_conversation_members').insert({
-    org_id: org!.id,
+    org_id: conv.org_id,
     conversation_id: conversationId,
     user_id: profile.user_id,
     role: 'participant',
