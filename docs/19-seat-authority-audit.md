@@ -228,6 +228,14 @@ the parent needed.
 Four modules, RLS + policies → **Opus, full docs/03 #12 rhythm.** Not a quick
 follow-up commit.
 
+**KEEP IT TO THE ONE-LINE CONJUNCT — do not build new mechanism here.**
+[docs/15 §4](15-user-model.md) already plans to fold these per-module roster
+tables into `module_roles` as proper entity-scoped grants, and that fold would
+fix this class *structurally* (grants resolve through the
+`module_caller_covers_*` family, which has required active org membership since
+`20260727010000`). So this remediation is the stopgap on the way there: add the
+conjunct, add the missing tests, and leave the redesign to that slice.
+
 ## Two things this audit did NOT establish
 
 - **Whether any of it is live on prod.** That needs read-only row counts: are

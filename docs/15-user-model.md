@@ -170,6 +170,18 @@ add a **`scope_ref`** column (null = global), a **`granted_by`** column (see §7
 and the generic rank lookup, then port the `guard_hierarchy` trigger. Per-module
 roster tables (`cls_class_members`, `vm_conversation_members`) are today's ad-hoc
 versions of "entity-scoped grants" and eventually fold into the same shape.
+**AND THAT FOLD WOULD SUBSUME A LIVE SECURITY CLASS — see
+[docs/19](19-seat-authority-audit.md) (2026-09-04).** Those roster tables confer
+authority from the bare existence of a row, with no `is_org_member()` conjunct,
+so a roster row outlives the org membership that justified it: 8 functions and 5
+inline policy arms across four modules are affected. Folding them into
+`module_roles` fixes it structurally, because grants resolve through the
+`module_caller_covers_*` family, which has required ACTIVE org membership since
+`20260727010000`. Two consequences worth knowing in both directions: whoever does
+this fold should know it **replaces** docs/19's per-function patch rather than
+adding to it; and whoever does docs/19's patch first should keep it to the
+one-line conjunct and **not** build new mechanism, because this fold is the
+intended destination.
 
 ### 4.1 Hardening commitments (independent Fable red-team, 2026-07-20)
 

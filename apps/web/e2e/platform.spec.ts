@@ -915,6 +915,19 @@ test('speed-dating module: register → round → mutual interest → reveal', a
   // Lobby/live-round panel: charlie's current pairing + a live countdown.
   await expect(page.getByRole('heading', { name: 'Right now' })).toBeVisible()
   await expect(page.getByText(/Round 1 — you're with Dana D\. Ends in/)).toBeVisible()
+
+  // Video (module 6 remaining item 1, 2026-09-04): proves the WIRING —
+  // button -> getVideoJoinToken server action -> the video-provider factory
+  // -> a clear error surfaced in the UI. This is genuinely everything that
+  // CAN be proven without a real Jitsi server: JITSI_DOMAIN/APP_ID/APP_SECRET
+  // are unset everywhere (local, CI, prod alike — the self-hosted VPS is a
+  // paused go-live item), so getVideoProvider() throws by design and the
+  // client's catch block renders that message rather than attempting a
+  // WebRTC connection lib-jitsi-meet has nowhere real to make.
+  await page.getByRole('button', { name: 'Join video' }).click()
+  await expect(page.getByText('Jitsi video is not configured', { exact: false })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Try again' })).toBeVisible()
+
   const metSection = page.locator('section').filter({ hasText: 'People you met' })
   await expect(metSection).toBeVisible()
   await expect(metSection.getByText('Dana D')).toBeVisible()

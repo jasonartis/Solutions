@@ -17,6 +17,7 @@ import {
 } from '../../actions'
 import { getEventSides, type SideKey } from '../../event-format'
 import LiveRoundRefresh from './live-round-refresh'
+import VideoRoom from './video-room'
 
 function formatCountdown(ms: number): string {
   const total = Math.max(0, Math.round(ms / 1000))
@@ -407,6 +408,23 @@ export default async function EventPage(props: {
                 <p className="mt-2 border-t border-indigo-100 pt-2 text-sm italic text-indigo-800">
                   &quot;{profileCardFor(myCurrentPartnerId)}&quot;
                 </p>
+              )}
+              {/* Video (item 1, remaining work — 2026-09-04): only the two
+                  seats actually in THIS pairing, only while it's live, only
+                  for a real participant seat — never staff/observer, never a
+                  bye. authorizeVideoJoin (src/video/authorize.ts) re-checks
+                  all of this server-side; this render gate is UX, not the
+                  security boundary. Keyed on the pairing so the next round's
+                  fresh pairing mounts a new instance instead of reusing a
+                  stale connection. */}
+              {!onBreak && myCurrentPairing && myCurrentPartnerId && mySeat.seat_type === 'participant' && (
+                <VideoRoom
+                  key={myCurrentPairing.id}
+                  orgSlug={orgSlug}
+                  eventId={eventId}
+                  pairingId={myCurrentPairing.id}
+                  roundEndsAt={roundEndsAt ? roundEndsAt.toISOString() : null}
+                />
               )}
             </section>
           )}
