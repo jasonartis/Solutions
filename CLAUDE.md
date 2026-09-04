@@ -809,16 +809,10 @@ in the sections below.
   → And do not "fix" a sweep like this by reverting the other session's files: they may already
   have built on them, and a revert can destroy live work. Leave the code, correct the record, and
   TELL the founder, because that session's own git view now shows its work committed by someone
-  else.
-  **A THIRD variant, hit live 2026-09-04 despite staging explicit paths correctly: the shared
-  `.git/index` itself races.** `git add <my files>` … (other work in between, widening the
-  window) … `git add docs/foo.md` … `git commit` landed a commit containing ONLY `docs/foo.md`
-  — the other session's own `git commit`, run in the gap, had consumed the shared index and
-  committed MY three already-staged files under ITS unrelated message. Nothing was lost (the
-  files are correctly in the tree, just mis-attributed to the wrong commit message), but it is
-  a real race, not a hypothetical one. → Run `git add <paths> && git commit -m "..."` as ONE
-  shell invocation immediately back-to-back, not as two separate tool calls with any other work
-  between them — shrink the window instead of trying to eliminate it.
+  else. **Confirmed from the other side of this exact incident (the speed-dating session whose
+  files rode along):** nothing was lost, master still compiled, and the fix above (`git commit --
+  <paths>`) is the one to use going forward — a same-session "add and commit back-to-back" habit
+  is only a narrower window, not a closed one.
 - **A one-off script run with `tsx` must live INSIDE the repo** — Node resolves
   dependencies from the script's own location, not the cwd, so a scratchpad script
   importing `@supabase/supabase-js` fails with ERR_MODULE_NOT_FOUND however you invoke it.
