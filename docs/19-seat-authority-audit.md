@@ -227,8 +227,13 @@ follow-up commit.
   there `sd_participants` / `mm_matchmaker_assignments` / `sal_appointments.worker_id`
   rows whose holder has no active `org_members` row? Cheap; the
   `scripts/prod-verify-*.mts` pooler template fits. **Not run.** A local exploit
-  probe was also deliberately not run, because a second session was using the
-  shared local database at the time.
+  probe was not run either — it would mutate shared local state (revoking a
+  seeded user's org membership) mid-session, and the catalog evidence above is
+  already conclusive as to the missing conjunct. *(An earlier revision of this
+  line claimed the probe was skipped because a second session was using the
+  local database. That was an assumption stated as fact — no second session
+  existed. Corrected 2026-09-04; the docs/03 tally rule applies to a doc's own
+  stated reasons, not just its numbers.)*
 - **Test coverage.** A targeted grep of `packages/db/src/rls.test.ts` found the
   13 `org_members ... .delete()` call sites are all fixture teardown, not
   assertions — i.e. **no test asserts that a module roster row stops conferring
