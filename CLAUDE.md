@@ -786,6 +786,41 @@ in the sections below.
 - **Code style:** explicit over clever — the founder codes alongside AI (Apps Script/JS background; Copilot may be used too). Fewer abstractions, standard patterns, inline docs where intent isn't obvious.
 - Module tables are prefixed (`mm_`, `cls_`, `syn_`, `vm_`, `sal_`, `sd_`); modules never import other modules; shared behavior goes through `packages/platform`.
 - **exFAT constraint:** the repo drive (D:) can't do symlinks. NO `workspace:*` dependencies — internal packages are imported via `@platform/*` tsconfig path aliases, and `.npmrc` pins `node-linker=hoisted`. Details + deferred NTFS revert: docs/01. **Same constraint, new manifestation (2026-08-31, confirmed 2026-09-03 to hit `next dev` too, not just `next build`):** any dependency on Next's `serverExternalPackages` default list (`require-in-the-middle`/`import-in-the-middle` via `@sentry/nextjs`, also `pg`/`sharp`/`playwright`/`bcrypt`/etc.) breaks BOTH LOCALLY with a Turbopack junction-point error — Next needs a real symlink into `.next/node_modules` (`.next/dev/node_modules` for the dev server) for anything it externalizes rather than bundles. **Practical consequence: local e2e (`pnpm dev`-backed) is now fully blocked on this machine** as long as `@sentry/nextjs` is a dependency — verify UI changes via CI's e2e run instead (Linux, unaffected) rather than locally. Not a code bug: verified `pnpm build` passes clean on GitHub Actions' Ubuntu runner. Full story + the verify-via-throwaway-PR technique: docs/18 item 1.
+  **INVESTIGATED PROPERLY 2026-09-04 (Opus) — IT CANNOT BE FIXED IN PLACE. Four workarounds
+  tried, all dead; do not spend a session re-deriving them:**
+  1. **The root cause, proved in two commands rather than assumed.** `mklink /J` on **C: (NTFS)**
+     → *"Junction created"*, and the target reads through it. The same command on **D: (exFAT)** →
+     ***"Local NTFS volumes are required to complete the operation."*** Turbopack's actual failure
+     is creating a junction at `apps/web/.next/node_modules/require-in-the-middle-<hash>` pointing
+     at the hoisted root `node_modules` — i.e. the junction lives INSIDE the build output dir.
+  2. **`distDir` onto NTFS — IMPOSSIBLE, don't try.** Next's own bundled docs
+     (`node_modules/next/dist/docs/.../distDir.md`) state it *"should not leave your project
+     directory. For example, `../build` is an invalid directory."* So the output cannot be moved
+     to a filesystem that supports junctions.
+  3. **`next build --webpack` (Next 16 DOES have the flag) — gets FURTHER but still fails.** First
+     error is exFAT's, and is fixable: `EISDIR: illegal operation on a directory, readlink
+     '.../route.ts'` (exFAT answers a readlink on a regular file with EISDIR, not EINVAL), cured by
+     a `webpack: (c) => { c.resolve.symlinks = false; return c }` config. Past that it dies in
+     Next's OWN plugin — `FlightClientEntryPlugin.createActionAssets: Cannot read properties of
+     undefined (reading 'server')` — i.e. Next 16's webpack path is not viable for an app built on
+     server actions. **Also note the trap if anyone retries: Next 16 fails a TURBOPACK build that
+     merely FINDS a webpack config**, so such a key must be attached conditionally (e.g. behind an
+     env var) or CI breaks.
+  4. **Dropping `@sentry/nextjs` — NOT an option.** It is genuinely wired in at three call sites
+     (`apps/web/instrumentation.ts`, `instrumentation-client.ts`, `app/global-error.tsx`), i.e.
+     real error monitoring and a pre-launch-checklist item — not an unused dependency.
+     `require-in-the-middle` arrives transitively and is on Next's DEFAULT `serverExternalPackages`
+     list, which is what makes Turbopack want the junction; `next.config.ts` has no Sentry wrapper,
+     so removing a wrapper is not available either.
+  **THE ONLY REAL FIX IS MOVING THE REPO TO NTFS** (C: measured 2026-09-04 at 154GB free), which
+  would also let docs/01's `workspace:*` ban and `node-linker=hoisted` pin be dropped — they exist
+  for this same no-symlinks reason. That is docs/01's already-deferred "NTFS revert", now with the
+  evidence attached. **FOUNDER'S CALL, and treat it as a deliberate maintenance task, not a quick
+  move:** it needs a fresh `pnpm install`, manual copying of the gitignored `.env*` files, and a
+  `supabase stop`/`start` + `db reset` + seed from the new path (the CLI derives its container
+  names from the project directory, e.g. `supabase_db_Solutions_Platform`, so a moved directory
+  can read as a new project). Until then, **verify UI via CI's e2e, which does work** — proven
+  this session by an e2e that failed in CI, was diagnosed from the CI log, and passed on re-land.
 
 ## Founder profile & working style (canonical — mirror of any session memory)
 
