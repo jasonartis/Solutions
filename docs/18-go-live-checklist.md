@@ -264,7 +264,11 @@ None of these blocks a first client. Recorded so their absence reads as a decisi
   `service_role`'s retained TRUNCATE, the per-position × per-table visibility map. One has
   an external clock worth tracking: **Supabase removes the legacy auto-expose 2026-10-30**,
   which is when the `ALTER DEFAULT PRIVILEGES` drift item stops being theoretical.
-- **Speed-dating video (Jitsi)** — the largest single unbuilt item on the platform, and
-  irrelevant unless the first client is a speed-dating client.
+- **Speed-dating video (Jitsi)** — **updated 2026-09-04**: the provider interface, JWT
+  join-token issuance, and the click-to-join UI are all shipped and CI-verified (module-6
+  spec's dated entries); what remains is a real Jitsi server (local `docker-jitsi-meet` or
+  the deployed VPS) to prove the actual WebRTC connection, plus the VPS deploy decision
+  itself — still the largest single piece of INFRASTRUCTURE the platform is missing, just
+  no longer unbuilt code. Still irrelevant unless the first client is a speed-dating client.
 - **Modules 7 and 8** — both marked DRAFT / NOT SCOPED; module 8 needs a file-level
   investigation of the legacy app before it can even be estimated.
