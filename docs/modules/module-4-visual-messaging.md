@@ -57,7 +57,7 @@ Paid org workspaces (firms annotating drawings); animated layers (explicitly out
 
 `vm_` tables live (`supabase/migrations/20260709100000_visual_messaging.sql`, local + prod): `vm_conversations`, `vm_layers` (the materialized-path tree), `vm_conversation_members`, `vm_reactions`, `vm_flags`, `vm_moderation_log` (append-only — no user update/delete GRANTs at all). Manifest registered but **not enabled for any org** — schema only, no UI, dark. Agent-drafted (`modules/visual-messaging/schema-draft.sql`), hand security-reviewed (`schema-fixes.sql`), **16/16 live guard assertions**.
 
-Key design (agent decisions A1–A10, reviewer-confirmed): the root image IS a layer (path `1`, one-root partial unique); `child_count` is a direct column so childless/immutable checks never self-reference the table (docs/03 #15); branch freeze is stored at the freeze point and computed for descendants by path prefix; ad-hoc person-to-person groups = auto-created lightweight orgs (**pending founder confirmation**); audit rows survive deletion of what they describe (SET NULL, not cascade); org module roles are `admin`/`moderator`/`member` while per-conversation seats are the spec's participant/viewer/moderator/admin.
+Key design (agent decisions A1–A10, reviewer-confirmed): the root image IS a layer (path `1`, one-root partial unique); `child_count` is a direct column so childless/immutable checks never self-reference the table (docs/03 #15); branch freeze is stored at the freeze point and computed for descendants by path prefix; ad-hoc person-to-person groups = auto-created lightweight orgs (**DECIDED 2026-09-04 — per-pair lightweight orgs confirmed, NOT one shared org; see "SHAPE DECIDED" below**); audit rows survive deletion of what they describe (SET NULL, not cascade); org module roles are `admin`/`moderator`/`member` while per-conversation seats are the spec's participant/viewer/moderator/admin.
 
 Security-review pass (T1–T8 built; T9 public deep-link definer fns ship with the UI; T10 decided — flags/reactions stay possible under freeze since flagging frozen content is a safety need): **atomic reply-path assignment** (parent row lock serializes concurrent siblings — client-supplied path/child_count ignored; replies to tombstoned/frozen parents rejected); child-count maintenance on delete; the layer pin (author edits content only while childless — "immutable once replied-on" — structure pinned below org manage, tombstone stamps forced server-side); **audited moderation RPCs** `vm_tombstone_layer` (original content preserved into the mod log, then blanked) / `vm_restore_layer` (restores from the log) / `vm_set_branch_frozen`; `vm_join_conversation` (settings-gated, refuses banned); member pins (no self-promotion/self-unban, **last-admin-standing guard**); flag-triage pins with server-side review stamps; the `vm-images` bucket with conversation-membership storage policies (not plain org membership — the module-2 finding class).
 
@@ -78,7 +78,8 @@ moderation log) ship alongside.
 **Not yet built (the gesture/PWA layer):** swipe navigation, sibling
 carousel + dots, zoomed-out thumbnail grids (needs the worker rasterizer),
 image stamps/text/emoji tools, moderation queue UI, deep links for
-non-members, org-per-group auto-creation (pending founder confirmation).
+non-members, org-per-group auto-creation (**shape DECIDED 2026-09-04, still
+unbuilt — see "SHAPE DECIDED" below; no longer awaiting confirmation**).
 
 ## Gesture layer + moderation queue shipped (2026-07-10)
 
@@ -535,6 +536,34 @@ would close it if ever wanted.
      platform (every `recordActivity` call site is in a server action).
    - Resolution creates a **pending** org seat, so accept-first holds
      identically for new and existing invitees.
+   - **THE TRIGGER RUNS WITH NO JWT, WHICH DISABLES THE MACHINERY THAT WOULD
+     OTHERWISE ENFORCE THAT.** `org_members_guard_hierarchy`'s INSERT
+     normalization is gated on `auth.uid() is not null`
+     (`20260727010000:533-540`), and an `auth.users` AFTER INSERT trigger has no
+     JWT — so inside it NONE of `new.status := 'pending'`, the `invited_by`
+     server-stamp, or the rank ladder (bypassed outright at `:543`) applies.
+     Three silent consequences:
+     * Nothing stops the trigger writing `status='active'`. The column default
+       covers a trigger that omits it, but a naive "resolving the invite means
+       making them a member" implementation would mint an **active,
+       unconsented seat** and quietly defeat the accept-first decision. Set
+       `'pending'` explicitly and assert it.
+     * **`invited_by` is NOT auto-stamped, and `org_accept_invite()` REQUIRES
+       it** — `if inv.invited_by is null ... raise 'This invitation is no
+       longer valid — ask an admin to re-invite you'` (`:666-682`). A trigger
+       that does not set `invited_by` itself therefore produces an invite the
+       invitee can NEVER accept, failing with a message that misdescribes the
+       cause. This is the most likely way to ship this subtly broken.
+     * The rank check is gone, so write `role = 'member'` literally — never a
+       value taken from the invite row without validating it.
+   - **THE FAIL-OPEN SWALLOW OWES AN HONESTY SURFACE** (docs/03's auth-trigger
+     rule: a silent failure is invisible, so the surface reading the data must
+     render an honesty signal, with a test that renders it). A failed
+     resolution leaves the invite row untouched and says nothing, so the roster
+     must distinguish **four** states that would otherwise all read as "pending
+     signup": awaiting signup, expired, target deleted, and *we tried and could
+     not process this*. Rendering them identically is how a permanently-stuck
+     invite looks exactly like a patient one.
    - `invited_by` (FK → `auth.users`) must be declared in
      `data-browser-modules.ts` or `data-browser-coverage.test.ts` TIER 1 fails.
 5. **Self-block.** Permit a self-UPDATE of `vm_conversation_members.status` to
