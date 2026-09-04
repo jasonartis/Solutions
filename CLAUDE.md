@@ -499,9 +499,15 @@ Everything below is open but unranked:
   honestly rather than the rule being quietly relaxed. **Two lines are now owed, not one**: phase
   1's "authentication events (when you sign in)" and phase 2's per-org-activity line (materially
   bigger claim — logging what someone opened, not just that they signed in). Exposure today is
-  still nil (prod's only captured phase-2 event is a demo account) and there is STILL no privacy
-  page of any kind to put either line on — the single most concrete "must happen before a real
-  customer" item on the platform now, precisely because two live features have shipped ahead of it.
+  still nil (prod's only captured phase-2 event is a demo account).
+  **CORRECTED 2026-09-04: a `/privacy` PAGE NOW EXISTS** (`apps/web/app/privacy/page.tsx`, go-live
+  item 3, commit `6033ae9`, linked from the footer). This bullet and docs/12 item 6 both previously
+  said there was "no privacy page of any kind" — false since that commit, and it auto-loaded into
+  every session. So the task is no longer "there is nowhere to put these lines"; it is **"the page
+  exists and does not yet contain them,"** which is a smaller, entirely concrete edit. **And a
+  THIRD line is owed as soon as ad-hoc groups ship** — the pending-invite table stores the email
+  address of a person who has NO account, a data subject with no export, no data-browser presence
+  and no deletion route (detail: docs/modules/module-4's "TWO PRIVACY OBLIGATIONS" section).
   Full detail: docs/12 item 6.
 - Pre-launch before real customers (docs/12 checklist): automated+tested backups, monitoring,
   2FA, privacy/terms, custom SMTP.

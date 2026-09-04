@@ -155,6 +155,13 @@ any of her old appointments still in `checked_in`/`in_progress`.
 
 ## 5. FOUNDER DECISION FLAGGED (do not bundle it with the fix)
 
+**Consequence for the Jitsi video work happening in parallel (2026-09-04): do
+NOT build room authorization on `sd_in_event`.** It answers "is this person in
+the event," which is both too broad (a host-ejected participant still passes it,
+per the finding below) and about to change. Room-join authority must key on the
+specific `sd_pairings` row for the current round — that is the only predicate
+that expresses "this person belongs in THIS video room right now."
+
 `sd_in_event` has **no `status` filter at all**. `sd_pin_participant`
 (`20260709050000:1103-1145`) exists precisely so a host can flip
 `status → 'removed'` for a disruptive attendee — but that removal does not

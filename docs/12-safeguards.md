@@ -311,6 +311,16 @@ Found in a deliberate "what haven't we thought of" pass; ordered by urgency.
    relaxing the rule.** The practical exposure today is nil — prod holds 12
    accounts, all demo or the founder's own, of which 7 have never signed in, and
    there is no privacy policy page yet at all (that page is this very item). But
+   *(**CORRECTED 2026-09-04: the page now EXISTS** — `apps/web/app/privacy/page.tsx`,
+   shipped as go-live item 3 in commit `6033ae9` and linked from the footer. The
+   clause above was true when written and is not any more. The obligation is
+   therefore no longer "there is nowhere to put the wording" but **"the page is
+   live and does not yet carry these lines"** — a concrete edit, not a build.
+   **A THIRD owed line joins the two below the moment ad-hoc visual-messaging
+   groups ship:** their pending-invite table stores the email of a person who has
+   NO account — no export, no data-browser presence, no deletion route, since
+   every one of those keys on a user. See docs/modules/module-4-visual-messaging.md's
+   "TWO PRIVACY OBLIGATIONS THIS CREATES" section.)*  But
    the obligation has changed status: it is no longer "write it before you build
    the feature", it is **"the feature is collecting now, so the wording is owed
    before the first real customer account exists."** Do not let the pre-launch

@@ -478,7 +478,16 @@ would close it if ever wanted.
    superadmin-write-only, so an ordinary user cannot mint one. It creates the
    org `kind='personal'`, adds the caller as active owner, enables
    `visual-messaging`, and grants the caller the `module_roles` row that
-   conversation-creation requires (verified chain:
+   conversation-creation requires.
+   **TWO SILENT TRAPS HERE, both of which fail with no error at all.** (a)
+   `org_members.status` **DEFAULTS to `'pending'`** since `20260727010000:63`, so
+   the owner insert must name `status='active'` EXPLICITLY — the obvious insert
+   leaves the creator a pending member, `is_org_member()` returns false, and they
+   cannot use the org they just created. (b) The `module_roles` grant is not
+   optional garnish: `vm_conversations_insert_creator` requires
+   `vm_is_module_member` → `has_module_role`, so without it the user reaches
+   their own personal org and simply cannot start a conversation. Assert BOTH in
+   the tests — each one's failure mode is an empty screen, not an exception (verified chain:
    `vm_conversations_insert_creator` → `vm_is_module_member` →
    `has_module_role`). **This is the rate-limit / abuse choke point** — cap
    per-user creations here, not elsewhere.
@@ -548,6 +557,38 @@ would close it if ever wanted.
   implies"*). docs/16 notes it *"is not a new workstream; it is the acceptance
   test for"* the tenancy-core slice.
 - **Anonymous public view-links** — still deferred post-v1, unchanged.
+
+### TWO PRIVACY OBLIGATIONS THIS CREATES — neither is optional, both are easy to miss
+
+These came out of the adversarial review of the *rejected* shared-org design and
+**survive the per-pair choice unchanged**, so they were nearly lost with it.
+
+1. **An invite stores the email of a person who has NO ACCOUNT — a data subject
+   the platform currently has no story for.** They cannot be found in the data
+   browser (docs/13 keys on a *user*), cannot export (the export slice is defined
+   by AUTHORSHIP and they have authored nothing), and the privacy policy's
+   deletion route is "ask us to delete your account" — which they do not have.
+   This is the same shape as the already-recorded walk-in-salon-customer gap
+   (a person with no account, therefore unfindable). **Minimum bar before this
+   ships: the 30-day expiry (already decided) plus the admin-visible cancel
+   action must actually be the deletion mechanism, and be described as such** —
+   they are the only way a non-user's address leaves the system.
+2. **A privacy-policy line is OWED, and it is a third one, not a rephrasing of
+   the two docs/12 item 6 already tracks** (auth events; per-org activity). The
+   published `/privacy` page currently says nothing about holding the email
+   address of someone who never signed up — verified 2026-09-04, zero coverage
+   in `docs/privacy-detailed-draft.md`. docs/12 item 6 called such a line a
+   PRECONDITION of shipping and was overridden twice before; **do not make it
+   three.**
+
+**Related expectation-setting point, worth deciding the copy for rather than
+discovering later:** `vm_is_conv_admin` includes `vm_can_manage` → `is_org_admin`
+→ `is_superadmin`, so the platform owner can read, post into, and delete **every
+ad-hoc conversation**. That is already true of every org's module data and is not
+a new hole — but "a private picture conversation with my sister" invites an
+expectation that org-scoped business data does not, and per-pair orgs make these
+conversations feel personal in a way nothing else on the platform does. Say
+something honest in the UI, or decide deliberately not to.
 
 ### What this must SHIP WITH — the RLS assertions, each pinning a named failure
 
