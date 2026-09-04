@@ -169,6 +169,53 @@ test('org settings: org admin edits module settings; non-admins are locked out',
   await expect(page.getByText('404')).toBeVisible()
 })
 
+test('org settings: visual-messaging image-stamp guards are per-org tunable', async ({ page }) => {
+  // The spec's image-stamp guards ("default max stamp size relative to canvas
+  // (admin/org-tunable)" + "default slight transparency") were fixed constants
+  // until 2026-09-04; they now live in org_modules.settings, edited here.
+  // No migration was needed — 20260712030000's org-admin settings policy
+  // already covers every module's settings.
+  await signIn(page, 'alice@demo.local')
+  await page.goto('/o/demo-visual/settings')
+  const vm = page.locator('section', { hasText: 'Visual Messaging — image-stamp guards' })
+  await expect(vm.getByRole('heading', { name: 'Visual Messaging — image-stamp guards' })).toBeVisible()
+
+  const size = vm.getByLabel('Max image-stamp size')
+  const opacity = vm.getByLabel('Image-stamp opacity')
+  // Unset settings fall back to the shipped defaults (0.3 / 0.85), shown as percent.
+  await expect(size).toHaveValue('30')
+  await expect(opacity).toHaveValue('85')
+
+  // Change BOTH to distinct values and prove they persist — a same-value
+  // round-trip (the pattern the synagogue test above uses for drift-safety)
+  // would pass even if the write did nothing at all.
+  await size.fill('45')
+  await opacity.fill('60')
+  let saved = page.waitForResponse((r) => r.request().method() === 'POST')
+  await vm.getByRole('button', { name: 'Save guards' }).click()
+  await saved
+  await expect(vm.getByLabel('Max image-stamp size')).toHaveValue('45')
+  await expect(vm.getByLabel('Image-stamp opacity')).toHaveValue('60')
+
+  // Restore the defaults, so a re-run starts from the same state as a fresh
+  // seed (this suite is documented as assuming fresh seed data).
+  await vm.getByLabel('Max image-stamp size').fill('30')
+  await vm.getByLabel('Image-stamp opacity').fill('85')
+  saved = page.waitForResponse((r) => r.request().method() === 'POST')
+  await vm.getByRole('button', { name: 'Save guards' }).click()
+  await saved
+  await expect(vm.getByLabel('Max image-stamp size')).toHaveValue('30')
+  await expect(vm.getByLabel('Image-stamp opacity')).toHaveValue('85')
+
+  // The section is per-ENTITLEMENT, not global: demo-shul has no
+  // visual-messaging, so it must not appear there — paired with a positive
+  // assertion that the synagogue section DOES, so this negative cannot pass
+  // just because the page failed to render (the vacuity rule, docs/03).
+  await page.goto('/o/demo-shul/settings')
+  await expect(page.getByRole('heading', { name: 'Synagogue Schedules — location' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Visual Messaging — image-stamp guards' })).not.toBeVisible()
+})
+
 test('alice sees a generated week in the synagogue schedules module', async ({ page }) => {
   await signIn(page, 'alice@demo.local')
   await expect(page.getByText('Demo Synagogue')).toBeVisible()
