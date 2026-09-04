@@ -70,7 +70,10 @@ export default async function EventPage(props: {
     supabase.from('sd_participants').select('id, user_id, status, seat_type, checked_in, profile_card, pool_side').eq('event_id', eventId),
     supabase.from('sd_pairings').select('id, round_id, participant_a_id, participant_b_id').eq('event_id', eventId),
     supabase.from('sd_interest').select('rater_participant_id, target_participant_id, verdict').eq('event_id', eventId),
-    supabase.from('sd_matches').select('participant_a_id, participant_b_id, revealed').eq('event_id', eventId),
+    supabase
+      .from('sd_matches')
+      .select('participant_a_id, participant_b_id, revealed, contact_shared')
+      .eq('event_id', eventId),
     supabase.from('profiles').select('user_id, display_name, email'),
     supabase.from('sd_rounds').select('id, round_number, state, ends_at').eq('event_id', eventId),
     supabase
@@ -392,6 +395,19 @@ export default async function EventPage(props: {
                   )}
                 </p>
               )}
+              {/* Resume-review (item 2, remaining work — 2026-09-04): the
+                  card belongs WHILE paired, not only after the encounter in
+                  "People you met" below. The spec's "up next: her card"
+                  before a round starts isn't representable yet — the
+                  rotation engine builds one round at a time (no future
+                  pairing exists to preview during a break) — so this shows
+                  the card for the CURRENT partner only, the one moment the
+                  schema can actually support today. */}
+              {event.resume_review_enabled && !onBreak && myCurrentPartnerId && profileCardFor(myCurrentPartnerId) && (
+                <p className="mt-2 border-t border-indigo-100 pt-2 text-sm italic text-indigo-800">
+                  &quot;{profileCardFor(myCurrentPartnerId)}&quot;
+                </p>
+              )}
             </section>
           )}
 
@@ -500,7 +516,21 @@ export default async function EventPage(props: {
                   .filter((m) => m.revealed)
                   .map((m, i) => {
                     const other = m.participant_a_id === mySeat.id ? m.participant_b_id : m.participant_a_id
-                    return <li key={i}>{seatName(other)} is interested too.</li>
+                    const otherUserId = (participants ?? []).find((p) => p.id === other)?.user_id
+                    // Populated only when the organizer enabled "share
+                    // contact on match" for this event (event-format.ts) —
+                    // empty otherwise, matching the schema's own default.
+                    const contact = otherUserId
+                      ? ((m.contact_shared as Record<string, { displayName: string | null; email: string | null }> | null)?.[
+                          otherUserId
+                        ] ?? null)
+                      : null
+                    return (
+                      <li key={i}>
+                        {seatName(other)} is interested too.
+                        {contact?.email && <span className="ml-2 text-xs text-gray-500">— {contact.email}</span>}
+                      </li>
+                    )
                   })}
               </ul>
             </section>

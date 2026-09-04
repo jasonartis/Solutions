@@ -230,3 +230,104 @@ e2e (register → capacity forces waitlist → withdraw → organizer promotes).
 `registerForEvent` and `promoteNextWaitlisted` both route the count through
 the RPC (one source of truth). RLS 16/16, e2e 33/33. The promotion mechanism
 (`promoteNextWaitlisted`) was already correct and staff-safe.
+
+## Video-provider interface, JWT join tokens, and contact-share population (2026-09-04, Sonnet — no migration)
+
+The three items CLAUDE.md's "Still remaining" line carried forward. Ordered
+per the founder's brief: the non-UI half first, because local `next dev`/
+`next build` are both blocked on this machine (exFAT/Turbopack/`@sentry/
+nextjs` junction-point issue) — verified via `pnpm exec turbo run typecheck
+--force` (9/9 packages clean) and the db/module test suites (147 db tests,
+21 new speed-dating unit tests), never via a running browser.
+
+**1. Jitsi video — the provider interface + JWT issuance (the largest
+unbuilt item, still not deployed).** `modules/speed-dating/src/video/`:
+`provider.ts` (the interface: `createRoom`/`issueToken`/`closeRoom`, matching
+the schema's `room_ref`/`room_provider` slots verbatim), `jitsi.ts` (the
+self-hosted implementation — `createRoom` is synchronous-in-spirit and makes
+no network call, since self-hosted Jitsi creates rooms lazily on first join;
+`issueToken` signs a short-lived (15 min) `jose` HS256 JWT in Jitsi's
+documented auth shape, `context.user.moderator` always `false` for a
+participant, `context.features.{recording,livestreaming}` always `false` —
+belt-and-suspenders alongside the "no recording, ever" product promise),
+`config.ts` (env-driven factory: `JITSI_DOMAIN`/`JITSI_APP_ID`/
+`JITSI_APP_SECRET`, none set anywhere today since the VPS is a paused
+go-live item), `authorize.ts` (pure authorization logic — see the landmine
+note below). 21 unit tests (`jitsi.test.ts`, `authorize.test.ts`) verify JWT
+claims/expiry/round-trip and every refusal branch.
+
+**The docs/19 landmine, respected by construction:** `authorizeVideoJoin`
+keys the join decision on the SPECIFIC PAIRING (the caller's own seat must be
+one of the pairing's two seats), never on `sd_in_event()` — which has no
+`status` filter and is inside a pending platform-wide remediation. None of
+the four frozen functions (`sd_owns_participant`/`sd_in_event`/
+`sd_paired_with`/`sd_mentors`) were touched. Staff/observer seats are refused
+a join token even though RLS lets staff SELECT every pairing for the rooms
+grid — "connection status only, never video feeds" (spec) is enforced at the
+authorization layer, not by RLS, because RLS's read scope for staff is
+deliberately broader than what staff may actually be handed.
+
+**Wiring, no migration:** both places that create a real (non-bye) pairing —
+the worker orchestrator (`apps/worker/src/jobs/speed-dating-orchestrator.ts`)
+and the manual "run next round" action (`runPairingRound`) — now call
+`tryCreateVideoRoom()` and stamp `room_ref`/`room_provider` on insert.
+`tryCreateVideoRoom` returns `null` **silently** when video is unconfigured
+(true everywhere today) so the already-shipped, video-less rotation engine
+is unaffected; a configured-but-failing provider still logs loudly (the
+same discipline the orchestrator already carries for `?? []`). A new server
+action, `getVideoJoinToken(orgSlug, eventId, pairingId)`, issues the
+per-user token on demand — not yet wired to any button (no UI this pass).
+
+**NOT done, and worth naming explicitly:** standing up
+`jitsi/docker-jitsi-meet` locally (JWT auth config to match the env vars
+above), the actual `lib-jitsi-meet` embed / call UI, and the audience/mentor
+observer video surface (`authorizeVideoJoin` explicitly refuses non-
+`participant` seat types — a deliberate exclusion, not an oversight).
+
+**2. Resume-review profiles beyond the profile card.** The existing card was
+only ever shown AFTER an encounter, in "People you met" — the spec's actual
+ask ("shown to scheduled partners before the event or during breaks") was
+unmet. Fixed the one moment the schema can actually support today: the
+"Right now" live-round panel now shows the CURRENT partner's card WHILE
+paired (not after). **A true "up next" preview (spec: "up next: Sarah — her
+card") remains unbuilt and is a real structural gap, not an oversight**: the
+rotation engine builds one round at a time (the worker orchestrator only
+creates round N+1 once round N's break fully elapses), so there is no future
+pairing to preview during a break. Building it would mean pre-computing the
+next round before the current one ends — a real change to the orchestrator's
+own timing model, out of scope for this pass. The pre-event full "partner
+list on the left" (spec line 22) has the same structural blocker and is
+likewise unbuilt.
+
+**3. Contact-share population on reveal.** `sd_matches.contact_shared`
+turned out to need NO migration: the table already carries a real
+client-side `sd_matches_write_organize` "for all" policy gated on
+`sd_can_organize(org_id)` (`20260709050000:751-757`) — an organizer's own
+RLS-enforced UPDATE, not a definer bypass. Per the schema's own header note
+("no share-prefs column in v1"), the spec's "per user preferences OR
+organizer designation for the event" resolves entirely to the second half:
+a new per-event toggle, `format.shareContactOnMatch`
+(`modules/speed-dating/ui/event-format.ts`, Zod-validated-at-write-site
+jsonb — docs/03 rule #7, no migration), off by default. When on,
+`revealMatches` (`ui/actions.ts`) populates each newly-revealed match's
+`contact_shared` with both sides' display name + email (from `profiles`),
+keyed by user id — idempotent (only touches matches whose `contact_shared`
+is still the RPC's `{}` default, so a re-reveal never clobbers). Rendered in
+the "It's a match!" section when present.
+
+**RLS-suite verified (`packages/db/src/rls.test.ts`, extends the "speed-
+dating scoped authority" describe block), and it caught a real test-design
+bug before it shipped:** the first draft reused the block's own `dana`/
+`frank` fixtures — but that describe block's `beforeAll` grants dana a
+GLOBAL organizer role and an earlier `it` grants frank a scoped host seat,
+so the "a participant cannot write contact_shared" assertion passed for the
+wrong reason (a real staff grant, not RLS refusing an ordinary participant).
+Rewritten with charlie/eve (demo-dating participants untouched by any other
+test in the block) — the vacuity rule bit a second time inside the same
+test: an UPDATE from a non-staff caller matches **zero rows** under RLS
+rather than erroring, so "no error" proves nothing; the assertion checks the
+value is unchanged, not merely that the call didn't throw a JS exception.
+
+Full suite verified clean after all three items: `pnpm exec turbo run
+typecheck --force` 9/9, `pnpm exec turbo run test --force` 147 db tests + 21
+new speed-dating unit tests (rotation's existing 7 unaffected), all green.

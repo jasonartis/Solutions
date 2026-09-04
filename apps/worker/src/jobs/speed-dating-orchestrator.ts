@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import {
   buildNextRound,
   rotationExhausted,
+  tryCreateVideoRoom,
   type SeatPair,
 } from '../../../../modules/speed-dating/src/index'
 
@@ -163,12 +164,20 @@ export async function runOrchestratorTick(admin: SupabaseClient): Promise<void> 
     }
 
     for (const p of plan.pairs) {
+      // Video room, only for a real meeting (never a bye). tryCreateVideoRoom
+      // returns null — quietly — when video isn't configured yet (it isn't,
+      // anywhere, today: the self-hosted Jitsi VPS is a paused go-live item),
+      // so this never blocks the rotation engine that already ships without
+      // it. A configured-but-failing provider still logs loudly there.
+      const room = p.b ? await tryCreateVideoRoom({ eventId: event.id, roundId: round!.id }) : null
       const { error } = await admin.from('sd_pairings').insert({
         org_id: event.org_id,
         event_id: event.id,
         round_id: round!.id,
         participant_a_id: p.a,
         participant_b_id: p.b,
+        room_ref: room?.roomRef ?? null,
+        room_provider: room?.provider ?? null,
       })
       if (error) console.error(`[orchestrator] pairing failed: ${error.message}`)
     }

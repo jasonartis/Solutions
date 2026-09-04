@@ -5,6 +5,34 @@ section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every 
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
 
+- **2026-09-04 (MODULE 6, SPEED DATING: the video-provider interface + Jitsi JWT issuance,
+  contact-share population on reveal, and resume-review's live-panel gap — all shipped,
+  no migration, Sonnet.)** Full detail: the module-6 spec's own 2026-09-04 entry. One-line
+  summary of each: (1) `modules/speed-dating/src/video/` — the `VideoProvider` interface
+  + self-hosted Jitsi implementation (`jose` HS256 JWTs, 15-min TTL, never persisted) +
+  pure `authorizeVideoJoin` logic keyed on the SPECIFIC PAIRING (docs/19 landmine respected
+  — never `sd_in_event()`, none of the four frozen functions touched, staff/observer seats
+  refused a token even though RLS lets staff read the pairing for the rooms grid). Wired
+  into both places that create a real pairing (the worker orchestrator + the manual
+  "run next round" action) via a `tryCreateVideoRoom()` that degrades silently when video
+  is unconfigured (true everywhere today — the VPS is still a paused go-live item) but logs
+  loudly on a real provider failure. 21 new unit tests. NOT done: standing up
+  `docker-jitsi-meet` locally, the actual call UI, the audience/mentor observer surface.
+  (2) The resume-review profile card was only ever shown AFTER an encounter — now also
+  shown WHILE paired, in the live "Right now" panel (the one moment the schema can support
+  today; a true pre-round "up next" preview needs the orchestrator to precompute a future
+  round, a real structural change left unbuilt and named as such). (3) `sd_matches.
+  contact_shared` turned out to need NO migration — the table already has a real
+  client-side organizer UPDATE policy. A new per-event jsonb toggle
+  (`format.shareContactOnMatch`) gates `revealMatches` populating each match's contact
+  info from `profiles`. The RLS test written for it caught its own design bug before
+  shipping (reused fixtures that secretly held staff grants from earlier tests in the same
+  describe block — rewritten with untouched participants) and hit the vacuity rule a second
+  time (a non-staff UPDATE matches zero rows under RLS rather than erroring, so the
+  assertion checks the value is unchanged, not merely that the call didn't throw). Verified:
+  `turbo typecheck --force` 9/9, `turbo test --force` all green (147 db tests incl. the new
+  RLS test, 21 new speed-dating unit tests, existing 7 rotation tests unaffected).
+
 - **2026-09-03/04 (VISUAL MESSAGING: ITEM 1 SHIPPED, ITEM 2's SHAPE DECIDED AND REVERSED,
   AND A LIVE CROSS-ORG HOLE FOUND AND CLOSED. Sonnet → Opus mid-session, correctly.)**
   - **Item 1 — per-org tunable image-stamp guards — SHIPPED** (`1bb84f1`, no migration).

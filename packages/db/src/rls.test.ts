@@ -1193,6 +1193,89 @@ describe('speed-dating scoped authority (slice 2 — 20260726030000)', () => {
     // …cannot grant anything at event2 (scope not covered by an event1 grant).
     expect(errored(await grant(bob, uid.frank, 'host', ids.event2Node))).toBe(true)
   })
+
+  it("contact-share population (module 6 remaining item 3) writes through the organizer's REAL RLS policy, never a participant's", async () => {
+    // The app's populateContactShare (modules/speed-dating/ui/actions.ts)
+    // relies on sd_matches_write_organize (the "for all" organize-write
+    // policy, 20260709050000:751-757) already covering UPDATE for
+    // sd_can_organize — this proves that reliance is sound, and that no
+    // participant write path exists to bypass it, purely via RLS.
+    //
+    // DELIBERATELY charlie/eve, not dana/frank: THIS describe block's own
+    // beforeAll grants dana a GLOBAL organizer role (scope_ref null, "proves
+    // global covers all"), and the enrollment-guard test above grants frank
+    // a host@event1 seat — either would make the negative assertion below
+    // pass for the wrong reason (a real organizer/staff grant, not RLS
+    // refusing an ordinary participant). charlie/eve are demo-dating
+    // participants (seed.ts) untouched by any other test in this block.
+    const charlieC = await signIn('charlie@demo.local')
+    const eveC = await signIn('eve@demo.local')
+    const charlieId = (await charlieC.auth.getUser()).data.user!.id
+    const eveId = (await eveC.auth.getUser()).data.user!.id
+
+    const { data: charlieSeat, error: charlieRegErr } = await charlieC
+      .from('sd_participants')
+      .insert({ org_id: datingOrg, event_id: ids.event1, user_id: charlieId })
+      .select('id')
+      .single()
+    expect(charlieRegErr).toBeNull()
+    const { data: eveSeat, error: eveRegErr } = await eveC
+      .from('sd_participants')
+      .insert({ org_id: datingOrg, event_id: ids.event1, user_id: eveId })
+      .select('id')
+      .single()
+    expect(eveRegErr).toBeNull()
+
+    // Reciprocal interest — the AFTER trigger (sd_interest_mutual) upserts an
+    // unrevealed sd_matches row.
+    expect(
+      okWrite(
+        await charlieC
+          .from('sd_interest')
+          .insert({ org_id: datingOrg, event_id: ids.event1, rater_participant_id: charlieSeat!.id, target_participant_id: eveSeat!.id, verdict: 'interested' }),
+      ),
+    ).toBe(true)
+    expect(
+      okWrite(
+        await eveC
+          .from('sd_interest')
+          .insert({ org_id: datingOrg, event_id: ids.event1, rater_participant_id: eveSeat!.id, target_participant_id: charlieSeat!.id, verdict: 'interested' }),
+      ),
+    ).toBe(true)
+
+    // Non-emptiness control (docs/03 vacuity rule): prove the trigger really
+    // created a row before testing anything about writing to it.
+    const { data: matchRow } = await bob
+      .from('sd_matches')
+      .select('id, contact_shared')
+      .eq('event_id', ids.event1)
+      .or(`participant_a_id.eq.${charlieSeat!.id},participant_a_id.eq.${eveSeat!.id}`)
+      .limit(1)
+      .maybeSingle()
+    expect(matchRow).not.toBeNull()
+
+    expect(okWrite(await bob.rpc('sd_reveal_matches', { check_event_id: ids.event1 }))).toBe(true)
+
+    const contact = {
+      [charlieId]: { displayName: 'Charlie C', email: 'charlie@demo.local' },
+      [eveId]: { displayName: 'Eve E', email: 'eve@demo.local' },
+    }
+    // bob = organizer@event1 → the write the app relies on succeeds.
+    expect(okWrite(await bob.from('sd_matches').update({ contact_shared: contact }).eq('id', matchRow!.id))).toBe(true)
+
+    // A match PARTY (plain participant, no staff/organizer grant anywhere)
+    // has no write policy at all, so an UPDATE from charlie matches zero
+    // rows under RLS rather than erroring — the vacuity rule means "no
+    // error" proves nothing; assert the value is UNCHANGED.
+    await charlieC.from('sd_matches').update({ contact_shared: {} }).eq('id', matchRow!.id)
+    const { data: afterCharlie } = await bob.from('sd_matches').select('contact_shared').eq('id', matchRow!.id).single()
+    expect(afterCharlie!.contact_shared).toEqual(contact)
+
+    // And a match party CAN read the populated value once revealed (the
+    // ordinary sd_matches_select policy, unchanged by this work).
+    const { data: seenByCharlie } = await charlieC.from('sd_matches').select('contact_shared').eq('id', matchRow!.id).single()
+    expect((seenByCharlie!.contact_shared as Record<string, { email: string | null }>)[eveId]?.email).toBe('eve@demo.local')
+  })
 })
 
 // ---------------------------------------------------------------------------

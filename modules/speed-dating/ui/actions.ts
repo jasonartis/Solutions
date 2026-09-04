@@ -2,9 +2,9 @@
 
 import { revalidatePath } from 'next/cache'
 import { DERIVED_SCOPE_PLACEHOLDER, recordActivity } from '@platform/core'
-import { buildNextRound } from '@modules/speed-dating'
+import { authorizeVideoJoin, buildNextRound, getVideoProvider, tryCreateVideoRoom } from '@modules/speed-dating'
 import { createClient } from '@/lib/supabase/server'
-import { getEventSides, parseEventFormat, type SideKey } from './event-format'
+import { getEventSides, getShareContactOnMatch, parseEventFormat, type SideKey } from './event-format'
 
 // Speed-dating actions. RLS + the sd_ guard triggers are the enforcement
 // layer (organize-write for event control, insert-self/pins for participants,
@@ -264,12 +264,18 @@ export async function runPairingRound(orgSlug: string, eventId: string) {
   fail(roundErr, 'Create round failed')
 
   for (const p of plan.pairs) {
+    // Mirrors the orchestrator's own room stamping (speed-dating-
+    // orchestrator.ts) — same tolerant-of-unconfigured-video behavior, so a
+    // manually-run round produces an equivalent pairing row.
+    const room = p.b ? await tryCreateVideoRoom({ eventId, roundId: round!.id }) : null
     const { error } = await supabase.from('sd_pairings').insert({
       org_id: DERIVED_SCOPE_PLACEHOLDER, // derived by trigger
       event_id: eventId,
       round_id: round!.id,
       participant_a_id: p.a,
       participant_b_id: p.b,
+      room_ref: room?.roomRef ?? null,
+      room_provider: room?.provider ?? null,
     })
     fail(error, 'Create pairing failed')
   }
@@ -314,12 +320,123 @@ export async function markInterest(
   revalidatePath(`/o/${orgSlug}/m/speed-dating/events/${eventId}`)
 }
 
+// Contact-share population (spec: "contact shared per user preferences or
+// organizer designation for the event" — there is no per-user preference
+// column in v1, per the schema's own header note, so the event's
+// shareContactOnMatch toggle IS the whole mechanism). Runs AS THE ORGANIZER,
+// after sd_reveal_matches has flipped revealed=true — sd_matches has a real
+// client-side "for all" organize-write policy (sd_matches_write_organize,
+// gated on sd_can_organize), so this is an ordinary RLS-enforced UPDATE, not
+// a definer bypass. Idempotent: only touches matches whose contact_shared is
+// still the RPC's empty default, so re-running reveal (e.g. after more
+// matches land) never clobbers an already-populated row.
+async function populateContactShare(supabase: Awaited<ReturnType<typeof createClient>>, eventId: string) {
+  const { data: matches, error: matchesErr } = await supabase
+    .from('sd_matches')
+    .select('id, participant_a_id, participant_b_id, contact_shared')
+    .eq('event_id', eventId)
+    .eq('revealed', true)
+  fail(matchesErr, 'Read matches for contact-share failed')
+  const pending = (matches ?? []).filter((m) => !m.contact_shared || Object.keys(m.contact_shared).length === 0)
+  if (pending.length === 0) return
+
+  const seatIds = [...new Set(pending.flatMap((m) => [m.participant_a_id, m.participant_b_id]))]
+  const { data: seats, error: seatsErr } = await supabase.from('sd_participants').select('id, user_id').in('id', seatIds)
+  fail(seatsErr, 'Read participants for contact-share failed')
+  const userOfSeat = new Map((seats ?? []).map((s) => [s.id, s.user_id as string]))
+
+  const userIds = [...new Set([...userOfSeat.values()])]
+  const { data: profiles, error: profilesErr } = await supabase
+    .from('profiles')
+    .select('user_id, display_name, email')
+    .in('user_id', userIds)
+  fail(profilesErr, 'Read profiles for contact-share failed')
+  const profileOfUser = new Map((profiles ?? []).map((p) => [p.user_id, p]))
+
+  const errors: string[] = []
+  for (const m of pending) {
+    const userA = userOfSeat.get(m.participant_a_id)
+    const userB = userOfSeat.get(m.participant_b_id)
+    if (!userA || !userB) continue // a seat RLS hid or that vanished — skip, don't guess
+    const contactFor = (userId: string) => {
+      const p = profileOfUser.get(userId)
+      return { displayName: p?.display_name ?? null, email: p?.email ?? null }
+    }
+    const { error } = await supabase
+      .from('sd_matches')
+      .update({ contact_shared: { [userA]: contactFor(userA), [userB]: contactFor(userB) } })
+      .eq('id', m.id)
+    if (error) errors.push(`match ${m.id}: ${error.message}`)
+  }
+  if (errors.length > 0) throw new Error(`Contact-share population failed for ${errors.length} match(es): ${errors.join('; ')}`)
+}
+
 export async function revealMatches(orgSlug: string, eventId: string) {
   const supabase = await createClient()
   const { error } = await supabase.rpc('sd_reveal_matches', { check_event_id: eventId })
   fail(error, 'Reveal failed')
+
+  const { data: event } = await supabase.from('sd_events').select('format').eq('id', eventId).single()
+  if (getShareContactOnMatch(event?.format)) {
+    await populateContactShare(supabase, eventId)
+  }
+
   await recordActivity(supabase, { moduleKey: 'speed-dating', action: 'matches.revealed', orgSlug })
   revalidatePath(`/o/${orgSlug}/m/speed-dating/events/${eventId}`)
+}
+
+// Per-user, short-lived Jitsi join token — issued on demand, never persisted
+// (schema header note). Authorization is the security-sensitive part: see
+// authorizeVideoJoin's own header for why it keys on the SPECIFIC PAIRING
+// (docs/19 landmine — never sd_in_event()) and why staff/observer seats are
+// refused even though RLS lets staff SELECT every pairing for the rooms
+// grid ("connection status only, never video feeds", spec).
+export async function getVideoJoinToken(orgSlug: string, eventId: string, pairingId: string) {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) throw new Error('Not signed in')
+
+  const [{ data: pairing }, { data: mySeatRow }] = await Promise.all([
+    supabase
+      .from('sd_pairings')
+      .select('id, round_id, participant_a_id, participant_b_id, room_ref, room_provider')
+      .eq('id', pairingId)
+      .eq('event_id', eventId)
+      .maybeSingle(),
+    supabase.from('sd_participants').select('id, seat_type').eq('event_id', eventId).eq('user_id', user.id).maybeSingle(),
+  ])
+  if (!pairing) throw new Error('Pairing not found')
+
+  const { data: round } = await supabase.from('sd_rounds').select('ends_at').eq('id', pairing.round_id).maybeSingle()
+
+  const decision = authorizeVideoJoin({
+    pairing: {
+      participantAId: pairing.participant_a_id,
+      participantBId: pairing.participant_b_id,
+      roomRef: pairing.room_ref,
+    },
+    round: { endsAt: round?.ends_at ?? null },
+    mySeat: mySeatRow ? { id: mySeatRow.id, seatType: mySeatRow.seat_type } : null,
+    now: new Date(),
+  })
+  if (!decision.ok) throw new Error(decision.reason)
+
+  const { data: profile } = await supabase.from('profiles').select('display_name, email').eq('user_id', user.id).maybeSingle()
+
+  const provider = getVideoProvider()
+  const { token, expiresAt } = await provider.issueToken({
+    roomRef: pairing.room_ref!,
+    userId: user.id,
+    displayName: profile?.display_name || profile?.email || 'Guest',
+    email: profile?.email,
+    // No participant ever holds Jitsi moderator rights — the organizer
+    // console is a separate surface, and "no recording, ever" is a product
+    // promise a dater can't override from inside the call.
+    moderator: false,
+  })
+  return { token, roomRef: pairing.room_ref!, domain: provider.domain, expiresAt: expiresAt.toISOString() }
 }
 
 // Private notepad (spec: strictly author-only, never visible to organizers —

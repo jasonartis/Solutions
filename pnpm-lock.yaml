@@ -149,6 +149,10 @@ importers:
         version: 5.9.3
 
   modules/speed-dating:
+    dependencies:
+      jose:
+        specifier: ^6.2.3
+        version: 6.2.3
     devDependencies:
       typescript:
         specifier: ^5.9.0

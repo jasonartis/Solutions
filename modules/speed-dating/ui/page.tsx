@@ -72,6 +72,10 @@ export default async function SpeedDatingPage(props: { params: Promise<{ orgSlug
                 <input type="checkbox" name="resumeReview" />
                 Resume-review (participants see profile cards)
               </label>
+              <label className="flex items-center gap-1 text-sm text-gray-600">
+                <input type="checkbox" name="shareContactOnMatch" />
+                Share contact info on mutual match
+              </label>
             </div>
             <details className="rounded border border-gray-100 p-2">
               <summary className="cursor-pointer text-sm text-gray-600">
