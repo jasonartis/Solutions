@@ -418,3 +418,10 @@ crashes to the nearest error boundary, and nothing in any existing test
 asserts a specific thrown message's text. This module's video UI is the
 first place attempting that pattern, which is exactly why nobody had hit
 the redaction before.
+
+**Confirmed green**: commit `61551ab` (the return-value fix) came back
+`completed success` on GitHub Actions — the full pipeline (typecheck,
+build, seed, db tests, e2e including the corrected "Join video" assertion)
+passed on the first try after the fix. This closes out module 6's three
+remaining items for this session. What's left is named above and is
+infrastructure-gated (a real Jitsi server), not code-gated.

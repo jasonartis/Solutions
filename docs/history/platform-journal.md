@@ -5,23 +5,35 @@ section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every 
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
 
-- **2026-09-04 (MODULE 6, SPEED DATING: the video-provider interface + Jitsi JWT issuance,
-  contact-share population on reveal, and resume-review's live-panel gap — all shipped,
-  no migration, Sonnet.)** Full detail: the module-6 spec's own 2026-09-04 entry. One-line
-  summary of each: (1) `modules/speed-dating/src/video/` — the `VideoProvider` interface
-  + self-hosted Jitsi implementation (`jose` HS256 JWTs, 15-min TTL, never persisted) +
-  pure `authorizeVideoJoin` logic keyed on the SPECIFIC PAIRING (docs/19 landmine respected
-  — never `sd_in_event()`, none of the four frozen functions touched, staff/observer seats
-  refused a token even though RLS lets staff read the pairing for the rooms grid). Wired
-  into both places that create a real pairing (the worker orchestrator + the manual
-  "run next round" action) via a `tryCreateVideoRoom()` that degrades silently when video
-  is unconfigured (true everywhere today — the VPS is still a paused go-live item) but logs
-  loudly on a real provider failure. 21 new unit tests. NOT done: standing up
-  `docker-jitsi-meet` locally, the actual call UI, the audience/mentor observer surface.
-  (2) The resume-review profile card was only ever shown AFTER an encounter — now also
-  shown WHILE paired, in the live "Right now" panel (the one moment the schema can support
-  today; a true pre-round "up next" preview needs the orchestrator to precompute a future
-  round, a real structural change left unbuilt and named as such). (3) `sd_matches.
+- **2026-09-04 (MODULE 6, SPEED DATING: the video-provider interface, the click-to-join
+  video UI, contact-share population on reveal, and resume-review's live-panel gap — all
+  shipped, no migration, Sonnet, final commit CI-GREEN.)** Full detail: the module-6 spec's
+  own 2026-09-04 entry. One-line summary of each: (1) `modules/speed-dating/src/video/` —
+  the `VideoProvider` interface + self-hosted Jitsi implementation (`jose` HS256 JWTs,
+  15-min TTL, never persisted) + pure `authorizeVideoJoin` logic keyed on the SPECIFIC
+  PAIRING (docs/19 landmine respected — never `sd_in_event()`, none of the four frozen
+  functions touched, staff/observer seats refused a token even though RLS lets staff read
+  the pairing for the rooms grid). Wired into both places that create a real pairing (the
+  worker orchestrator + the manual "run next round" action) via a `tryCreateVideoRoom()`
+  that degrades silently when video is unconfigured (true everywhere today — the VPS is
+  still a paused go-live item) but logs loudly on a real provider failure. 21 new unit
+  tests. **The click-to-join UI itself was also built the same session**
+  (`video-room.tsx`, wraps `getVideoJoinToken` + `lib-jitsi-meet` loaded at join time from
+  the configured provider's domain), verified via CI's e2e (local `next dev`/`build` are
+  both confirmed dead — see the exFAT bullet). **CI caught two real bugs on the way, both
+  fixed**: a wrong e2e assertion (expected the provider-factory's throw; `room_ref` is
+  actually null first since video is unconfigured everywhere, so `authorizeVideoJoin`'s
+  "room not ready" check fires a step earlier), and a genuine production bug — THROWING
+  from a Server Action for an expected refusal gets its message REDACTED to a generic one
+  in production (Next's own documented expected-vs-uncaught split), so no refusal reason
+  would ever have reached a real user. Fixed by returning `{ok, reason}` instead of
+  throwing; recorded as **docs/03 convention #22**, a platform-wide pattern, not a
+  speed-dating quirk. NOT done: standing up `docker-jitsi-meet` (or the VPS) to verify the
+  actual WebRTC call sequence against a real server, and the audience/mentor observer
+  surface. (2) The resume-review profile card was only ever shown AFTER an encounter — now
+  also shown WHILE paired, in the live "Right now" panel (the one moment the schema can
+  support today; a true pre-round "up next" preview needs the orchestrator to precompute a
+  future round, a real structural change left unbuilt and named as such). (3) `sd_matches.
   contact_shared` turned out to need NO migration — the table already has a real
   client-side organizer UPDATE policy. A new per-event jsonb toggle
   (`format.shareContactOnMatch`) gates `revealMatches` populating each match's contact
@@ -31,7 +43,12 @@ decision log, docs/03 conventions, docs/12 safeguards) — this is the chronolog
   time (a non-staff UPDATE matches zero rows under RLS rather than erroring, so the
   assertion checks the value is unchanged, not merely that the call didn't throw). Verified:
   `turbo typecheck --force` 9/9, `turbo test --force` all green (147 db tests incl. the new
-  RLS test, 21 new speed-dating unit tests, existing 7 rotation tests unaffected).
+  RLS test, 21 new speed-dating unit tests, existing 7 rotation tests unaffected); final
+  commit `61551ab` confirmed `completed success` on GitHub Actions.
+  **Also this session, a git-index race hit twice** (once from each side): a concurrent
+  session's `git commit` swept up 3 already-`git add`-ed speed-dating files under its own
+  unrelated message (nothing lost, just mis-attributed — see CLAUDE.md's gotcha, now
+  consolidated to one entry with the fix, `git commit -- <paths>`).
 
 - **2026-09-03/04 (VISUAL MESSAGING: ITEM 1 SHIPPED, ITEM 2's SHAPE DECIDED AND REVERSED,
   AND A LIVE CROSS-ORG HOLE FOUND AND CLOSED. Sonnet → Opus mid-session, correctly.)**

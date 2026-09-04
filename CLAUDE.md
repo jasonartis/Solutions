@@ -26,15 +26,21 @@ exists once a real client generates real volume — **do not start any of them u
 revisit together when the first real client is signed**, per docs/18's status note).
 **NEXT SESSION STARTS HERE (handoff rewritten 2026-09-04). VISUAL MESSAGING: item 1 SHIPPED,
 item 2's SHAPE IS DECIDED BUT NOT BUILT — building it is the next body of work.**
-- **2026-09-04, module 6 (speed dating), Sonnet, no migration: video-provider interface +
-  Jitsi JWT issuance, contact-share population on reveal, and resume-review's live-panel
-  gap are all SHIPPED.** Full detail: the module-6 spec's own dated entry +
-  docs/history/platform-journal.md. NOT done: standing up `docker-jitsi-meet` locally, the
-  actual call UI, the audience/mentor observer video surface, and a true pre-round "up
+- **2026-09-04, module 6 (speed dating), Sonnet, no migration: video-provider interface,
+  the click-to-join video UI, contact-share population on reveal, and resume-review's
+  live-panel gap are all SHIPPED and CI-GREEN.** Full detail: the module-6 spec's own
+  dated entry + docs/history/platform-journal.md. **Two real bugs found and fixed by CI,
+  not locally** (local UI is unverifiable — the exFAT/Turbopack/`@sentry/nextjs` bug
+  below): a wrong e2e assertion, and a genuine production bug where THROWING from a
+  Server Action for an expected refusal gets its message REDACTED — fixed by returning
+  `{ok, reason}` instead of throwing (new convention, docs/03 #22, applies platform-wide
+  to any future direct-await-a-server-action UI). Final commit (`61551ab`) confirmed
+  `completed success` on GitHub Actions. **Still NOT done, and blocked on infrastructure
+  not code:** standing up `docker-jitsi-meet` (or the deployed VPS) to verify the actual
+  `lib-jitsi-meet` WebRTC call sequence — nothing in this repo can prove that without a
+  real Jitsi server; the audience/mentor observer video surface; and a true pre-round "up
   next" profile-card preview (needs the orchestrator to precompute a future round — a real
-  structural change, not started). Verified via `turbo typecheck`/`turbo test --force`
-  only — **local UI is still unverifiable** (the exFAT/Turbopack/`@sentry/nextjs` bug
-  below), so nothing about the video/resume-review UI has been seen running.
+  structural change, not started).
 - **(1) Per-org tunable size/opacity guards: DONE** (`1bb84f1`, no migration —
   `org_modules.settings` + `/o/[orgSlug]/settings`).
 - **(2) Ad-hoc person-to-person groups: the shape is SETTLED — per-pair lightweight orgs,
