@@ -137,8 +137,22 @@ export default function VideoRoom({
   async function join() {
     setError(null)
     setStatus('joining')
+    // getVideoJoinToken returns a discriminated union rather than throwing
+    // for an expected refusal (not seated, round ended, video not
+    // configured) — a THROWN Server Action error gets its message REDACTED
+    // in a production build (Next's own documented expected-vs-uncaught
+    // split), so a refusal reason would never actually reach the user. Only
+    // genuine client-side failures from here on (lib-jitsi-meet itself) are
+    // real thrown exceptions, since they never cross the Server Action
+    // boundary.
+    const result = await getVideoJoinToken(orgSlug, eventId, pairingId)
+    if (!result.ok) {
+      setError(result.reason)
+      setStatus('error')
+      return
+    }
     try {
-      const { token, roomRef, domain } = await getVideoJoinToken(orgSlug, eventId, pairingId)
+      const { token, roomRef, domain } = result
       await loadJitsiScript(domain)
       const JitsiMeetJS = window.JitsiMeetJS
       if (!JitsiMeetJS) throw new Error('The video library did not load')

@@ -391,12 +391,27 @@ export async function revealMatches(orgSlug: string, eventId: string) {
 // (docs/19 landmine — never sd_in_event()) and why staff/observer seats are
 // refused even though RLS lets staff SELECT every pairing for the rooms
 // grid ("connection status only, never video feeds", spec).
-export async function getVideoJoinToken(orgSlug: string, eventId: string, pairingId: string) {
+//
+// Returns a discriminated union rather than THROWING for every refusal —
+// per Next's own documented split (node_modules/next/dist/docs/01-app/
+// 01-getting-started/10-error-handling.md): "avoid using try/catch blocks
+// and throw errors [for expected errors]. Instead, model expected errors as
+// return values." A thrown Error from a Server Action is treated as an
+// UNCAUGHT EXCEPTION and gets its message REDACTED to a generic one in a
+// production build (the `digest`-only log this module's first CI run
+// surfaced) — every refusal here (not seated, round ended, video not
+// configured) is a normal, anticipated state, not a bug, so none of them may
+// throw or the caller never actually sees why.
+export type VideoJoinResult =
+  | { ok: true; token: string; roomRef: string; domain: string; expiresAt: string }
+  | { ok: false; reason: string }
+
+export async function getVideoJoinToken(orgSlug: string, eventId: string, pairingId: string): Promise<VideoJoinResult> {
   const supabase = await createClient()
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  if (!user) throw new Error('Not signed in')
+  if (!user) return { ok: false, reason: 'Not signed in' }
 
   const [{ data: pairing }, { data: mySeatRow }] = await Promise.all([
     supabase
@@ -407,7 +422,7 @@ export async function getVideoJoinToken(orgSlug: string, eventId: string, pairin
       .maybeSingle(),
     supabase.from('sd_participants').select('id, seat_type').eq('event_id', eventId).eq('user_id', user.id).maybeSingle(),
   ])
-  if (!pairing) throw new Error('Pairing not found')
+  if (!pairing) return { ok: false, reason: 'Pairing not found' }
 
   const { data: round } = await supabase.from('sd_rounds').select('ends_at').eq('id', pairing.round_id).maybeSingle()
 
@@ -421,11 +436,17 @@ export async function getVideoJoinToken(orgSlug: string, eventId: string, pairin
     mySeat: mySeatRow ? { id: mySeatRow.id, seatType: mySeatRow.seat_type } : null,
     now: new Date(),
   })
-  if (!decision.ok) throw new Error(decision.reason)
+  if (!decision.ok) return { ok: false, reason: decision.reason }
 
   const { data: profile } = await supabase.from('profiles').select('display_name, email').eq('user_id', user.id).maybeSingle()
 
-  const provider = getVideoProvider()
+  let provider: ReturnType<typeof getVideoProvider>
+  try {
+    provider = getVideoProvider()
+  } catch (err) {
+    return { ok: false, reason: err instanceof Error ? err.message : 'Video is not configured' }
+  }
+
   const { token, expiresAt } = await provider.issueToken({
     roomRef: pairing.room_ref!,
     userId: user.id,
@@ -436,7 +457,7 @@ export async function getVideoJoinToken(orgSlug: string, eventId: string, pairin
     // promise a dater can't override from inside the call.
     moderator: false,
   })
-  return { token, roomRef: pairing.room_ref!, domain: provider.domain, expiresAt: expiresAt.toISOString() }
+  return { ok: true, token, roomRef: pairing.room_ref!, domain: provider.domain, expiresAt: expiresAt.toISOString() }
 }
 
 // Private notepad (spec: strictly author-only, never visible to organizers —

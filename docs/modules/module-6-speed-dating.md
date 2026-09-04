@@ -389,3 +389,32 @@ Typecheck verified (`pnpm --filter web exec tsc --noEmit` clean, then the
 full `turbo run typecheck --force` 9/9). The corrected e2e assertion has
 **not yet** been observed passing — pushed for the next CI run to be the
 first real proof, per this session's own established "verify via CI" path.
+
+**That CI run found a second, more real bug — not a text mismatch this
+time.** The server log showed the right error ("The room is not ready
+yet") being thrown, but carrying a `digest` field, and the client-side
+assertion still couldn't find the text. Cause: `node_modules/next/dist/
+docs/01-app/01-getting-started/10-error-handling.md` splits errors into
+two categories with opposite handling — *"expected errors... avoid using
+try/catch blocks and throw errors. Instead, model expected errors as
+return values"* vs. uncaught exceptions, which "will then be caught by
+error boundaries" and get their message REDACTED to a generic one in a
+production build (the `digest` is Next's server-side correlation id for
+that redaction). Every refusal `getVideoJoinToken` produced (not seated,
+round ended, video unconfigured) is a normal, anticipated state — a THROW
+was the wrong shape for all of them, and the client would never actually
+see why in production, however correct the reason string was. **Fixed**:
+`getVideoJoinToken` now returns `{ok:true, ...} | {ok:false, reason}`
+instead of throwing for any of those cases; `video-room.tsx`'s `join()`
+checks `result.ok` directly rather than relying on a caught exception.
+Genuine client-side failures (the `lib-jitsi-meet` connection sequence
+itself) are unaffected — they're real thrown JS exceptions that never
+cross the Server Action boundary, so Next's redaction doesn't apply to
+them. **Worth keeping as a platform lesson**: no other action in this
+module (or, by the same reasoning, likely the platform) has ever needed a
+thrown error's exact message to reach the client inline — every existing
+action is invoked via `<form action>`, where an uncaught throw just
+crashes to the nearest error boundary, and nothing in any existing test
+asserts a specific thrown message's text. This module's video UI is the
+first place attempting that pattern, which is exactly why nobody had hit
+the redaction before.

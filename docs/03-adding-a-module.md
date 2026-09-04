@@ -875,6 +875,40 @@ mechanism is proven in the managed environment, but it carries rules that are no
       undecided should say so where the BUILDER will look**, not only in its own
       decision checklist. docs/16 now carries an update block at the top for
       exactly this reason.
+
+## A Server Action must not THROW an expected refusal (2026-09-04)
+
+22. **Model an expected refusal as a return value, never a thrown `Error`** —
+    found live building module 6's video-join action. Next's own vendored docs
+    (`node_modules/next/dist/docs/01-app/01-getting-started/10-error-handling.md`)
+    split errors into two categories with opposite handling: *expected* errors
+    ("server-side form validation or failed requests... model expected errors
+    as return values") vs. *uncaught exceptions* ("handled by throwing errors,
+    which will then be caught by error boundaries"). A THROWN Server Action
+    error is the second category, and in a **production build its message is
+    REDACTED to a generic one** — the client gets a `digest` for correlation,
+    not the text you threw. `getVideoJoinToken` threw `Error('The room is not
+    ready yet')` and similar for every ordinary refusal; the CI e2e run showed
+    the server log stamping a `digest` on it and the client-rendered text
+    missing entirely — no local `next dev`/`next build` on this machine to
+    have caught it any other way (see the exFAT bullet below).
+    - **Why every prior action in this platform got away without this:**
+      every existing server action is invoked via `<form action={fn}>`, where
+      an uncaught throw just crashes to the nearest `error.tsx` boundary — no
+      code anywhere tries to render a thrown message's exact text inline. A
+      client component that directly `await`s an imported action and wants to
+      show the SPECIFIC reason (not just "something failed") is the case this
+      bites, and no module had done that until this one.
+    - → Return `{ ok: true, ...data } | { ok: false, reason: string }` from
+      the action for every anticipated refusal; only let a throw escape for a
+      genuine bug-class condition you WANT redacted/logged-with-digest rather
+      than shown to the user. The caller checks `result.ok` — no try/catch
+      needed around the action call itself.
+    - **Does not apply to genuinely client-side errors** (a WebRTC/library
+      failure that never crosses the Server Action boundary) — those are
+      ordinary thrown JS exceptions, caught with a normal try/catch, and
+      Next's redaction has no bearing on them.
+
 ## Hard rules
 
 1. **Never fork a platform primitive.** If the notifications/files/workflow primitive almost fits, extend it in `packages/platform` (benefiting every module) — don't copy it into the module.
