@@ -211,6 +211,27 @@ open:**
   `owner@demo.local`/`password123` is silent, and that account is not a superadmin on prod.
   Tidy-up, founder's call because it touches credential files: add them to `.env.accounts.example`
   + `.env.deploy`, or just document the export line. Full story → journal.
+**TOP OPEN SECURITY ITEM (found + verified 2026-09-04, NOT fixed): A MODULE ROSTER ROW
+OUTLIVES THE ORG MEMBERSHIP THAT JUSTIFIED IT — 8 functions + 5 inline policy arms across
+matchmaking (HIGH), speed-dating (HIGH), nail-salon (MEDIUM) and classroom (MEDIUM, reaches
+Storage so real submission FILES are downloadable). Full verified inventory + remediation
+shape: [docs/19-seat-authority-audit.md](docs/19-seat-authority-audit.md).** Today's
+`20260904010000` fixed the visual-messaging instance; this is the same class everywhere else.
+**The trigger is ordinary revocation, not an insider insert:** `removeOrgMember` deletes one
+row and NOTHING in the schema FKs `org_members` (verified, zero matches), so revoking a seat
+— or re-inviting, which leaves `status='pending'` — leaves every module roster row intact and
+still granting access, permanently. An ex-stylist keeps every customer's phone/email/notes; an
+ex-matchmaker keeps assigned singles' full questionnaires; an ejected speed-dating participant
+keeps the live event, their revealed matches and contact details. `20260727010000` closed
+exactly this for `module_roles` authority (seventeen predicates) and could not touch
+module-owned rosters. Rule → docs/03 #20. **Opus + full docs/03 #12 rhythm; four modules, so
+it is its own slice, not a follow-up commit.** One item inside it (`sd_in_event` has no
+`status` filter, so host-ejection doesn't revoke event reads) is a FOUNDER DECISION — §5 of
+docs/19 — because it changes what ejection means; do not bundle it. Two things the audit
+deliberately did NOT establish: whether it is live on prod (needs a read-only row count, script
+template named in docs/19) and test coverage (a targeted grep found NO test asserts a roster
+row stops conferring authority after membership ends — add one per module when fixing).
+
 Everything below is open but unranked:
 - **ENGAGEMENT MONITORING — PHASES 1, 2 AND 3 ALL LIVE ON PROD (phase 2 shipped and prod-verified
   2026-08-21 — see "Previously" above and the journal for the full story).** §12 remains the build

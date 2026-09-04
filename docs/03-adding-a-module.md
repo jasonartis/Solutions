@@ -808,6 +808,30 @@ mechanism is proven in the managed environment, but it carries rules that are no
       a user who shares three other orgs with the inviter (so a genuine
       `addMember` lookup resolves her) while being no member of the target org.
       An outsider who shares nothing with anyone proves a weaker claim.
+    - **IT IS A CLASS, NOT AN INSTANCE — 8 functions and 5 inline policy arms
+      across FOUR modules are still unfixed. Full verified inventory:
+      [docs/19-seat-authority-audit.md](19-seat-authority-audit.md).** The vm fix
+      (`20260904010000`) closed one. Matchmaking and speed-dating are HIGH;
+      nail-salon and classroom MEDIUM (classroom's reaches Storage, so real
+      submission FILES are downloadable).
+    - **AND THE REAL TRIGGER IS REVOCATION, NOT AN INSERT.** The vm instance
+      needed someone to insert a seat for an outsider; the rest need nothing.
+      `removeOrgMember` (`apps/web/lib/org-members.ts:89-92`) deletes exactly one
+      row, and **nothing in the schema has a foreign key to `org_members`**
+      (verified: zero matches for `references public.org_members`). So revoking a
+      membership — or re-inviting, which leaves `status = 'pending'` — leaves
+      every module roster row intact and still conferring authority, forever.
+      `20260727010000` closed exactly this hole for `module_roles`-derived
+      authority by patching seventeen predicates; it could not touch
+      module-OWNED rosters. **So when adding any roster table, assume the ordinary
+      "someone leaves" path is the exploit, and ask what still reads that row
+      tomorrow.**
+    - **Trace every function to its LATEST `create or replace` before calling it
+      vulnerable.** `cls_is_class_member` reads as bare in its original migration
+      and was silently cured months later; a single-migration grep reports a false
+      positive. Better: read the live catalog (`pg_get_functiondef`) — and carry a
+      CONTROL of functions known to be already fixed, so a green result proves the
+      method discriminates rather than that the query is broken.
 
 ## Before designing a mechanism, search docs/ for a prior REVIEW of it (2026-09-04)
 
