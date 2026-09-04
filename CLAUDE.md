@@ -267,6 +267,14 @@ row stops conferring authority after membership ends — add one per module when
   / it never resolved" contradiction gets shipped.
 
 Everything below is open but unranked:
+- **CI NEVER RUNS ANY MODULE'S OWN UNIT TEST SUITE — found 2026-09-04, not fixed.**
+  `.github/workflows/ci.yml` runs `pnpm --filter @platform/db test` (the RLS suite) but no
+  `pnpm test`/`turbo run test`/per-module test step, so every `modules/<key>/src/*.test.ts`
+  file (rotation.test.ts, peer-review.test.ts, this session's 21 new speed-dating video
+  tests, etc.) has never once been exercised by CI — only manually, locally. Full detail +
+  why not fixed inline (a shared-pipeline change, deliberately not made unilaterally):
+  docs/12 item 1's addendum. Founder call: add a test step to `ci.yml`, verified clean
+  across every module first.
 - **ENGAGEMENT MONITORING — PHASES 1, 2 AND 3 ALL LIVE ON PROD (phase 2 shipped and prod-verified
   2026-08-21 — see "Previously" above and the journal for the full story).** §12 remains the build
   brief it always was, but **note two places it is now WRONG and
