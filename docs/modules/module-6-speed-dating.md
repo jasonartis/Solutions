@@ -331,3 +331,53 @@ value is unchanged, not merely that the call didn't throw a JS exception.
 Full suite verified clean after all three items: `pnpm exec turbo run
 typecheck --force` 9/9, `pnpm exec turbo run test --force` 147 db tests + 21
 new speed-dating unit tests (rotation's existing 7 unaffected), all green.
+
+## The video UI itself (same session, immediately after) — click-to-join wired, the actual call unverified
+
+Checked whether the exFAT/Turbopack local-build blocker (CLAUDE.md) had been
+fixed by the other session working in parallel: **it has not, and cannot be
+fixed in place** (`81d4840`, investigated same-day — four workarounds tried,
+all dead ends; the only real fix is an NTFS repo move, a founder call, not
+attempted here). Proceeded anyway, verifying via CI per that commit's own
+established pattern ("verify UI via CI's e2e, which does work").
+
+`modules/speed-dating/ui/events/[eventId]/video-room.tsx` — a client
+component wrapping `getVideoJoinToken`, `lib-jitsi-meet` loaded at join time
+from the CONFIGURED provider's own domain (never bundled — self-hosted Jitsi
+serves it at a fixed path), with a minimal hand-written type shape for the
+handful of `lib-jitsi-meet` calls actually used (there is no official/
+bundled TS package for it). Idle → joining → in_call → left/error states;
+auto-leaves at the round's `ends_at` (mirroring `authorizeVideoJoin`'s own
+server-side cutoff) and on unmount. **A real breaking-change trap avoided by
+reading the vendored docs first** (`apps/web/AGENTS.md`'s standing warning —
+this Next version differs from training data): `node_modules/next/dist/docs`
+states a Server Action must be invoked "from a form, or from an event
+handler or `useEffect` **wrapped in `startTransition`**" — training data's
+bare `async onClick` pattern is not the sanctioned one here, so the join
+button uses `useTransition`.
+
+Wired into the "Right now" panel (`page.tsx`), gated on the same shape
+`authorizeVideoJoin` re-checks server-side — real pairing, not on break, a
+genuine `participant` seat — with an explicit comment that this render gate
+is UX, not the security boundary (the server action is). Keyed on the
+pairing id so the next round's fresh pairing mounts a new instance instead
+of reusing a stale connection.
+
+**e2e extended, not new** (`platform.spec.ts`'s existing speed-dating flow):
+clicks "Join video" and asserts the "Jitsi video is not configured" message
+— genuinely the most that can be proven anywhere right now, since
+`JITSI_DOMAIN`/`JITSI_APP_ID`/`JITSI_APP_SECRET` are unset on this machine,
+in CI, and on prod alike (the VPS is still a paused go-live item). This
+proves the full wiring — button → server action → `authorizeVideoJoin` →
+the provider factory → the error surfacing correctly in the UI — without
+attempting a WebRTC connection `lib-jitsi-meet` has nowhere real to make.
+**What remains genuinely unverified by anything in this repo:** whether the
+`lib-jitsi-meet` call sequence itself (connection → conference → track
+attach) is correct against a REAL Jitsi server — that needs either a local
+`docker-jitsi-meet` (Docker is available on this machine; not stood up this
+pass) or the deployed VPS, neither of which exists yet.
+
+Typecheck verified (`pnpm --filter web exec tsc --noEmit` clean, then the
+full `turbo run typecheck --force` 9/9); the new e2e assertion itself has
+**not** been observed passing anywhere — pushed for CI to be the first real
+run, per this session's own established "verify via CI" path.
