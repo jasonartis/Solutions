@@ -85,6 +85,26 @@ exact same local-build wall; verify the same way (a PR triggers `check`
 on Linux with zero deploy risk, since `deploy` only runs on a master
 push) rather than assuming the dependency is broken.
 
+**UPDATE 2026-09-04 — this was investigated to a conclusion, and the conclusion
+is that IT CANNOT BE FIXED IN PLACE. Do not re-attempt the workarounds; four
+were tried and all are dead, recorded with their exact error signatures in
+CLAUDE.md's exFAT bullet under "Key standing decisions":** `distDir` onto an
+NTFS path (Next's own docs forbid leaving the project directory), `next build
+--webpack` (the flag exists in Next 16 and gets past exFAT's `readlink` error
+with `resolve.symlinks = false`, then dies inside Next's own
+`FlightClientEntryPlugin`), dropping `@sentry/nextjs` (it is genuinely wired in
+at three call sites — real error monitoring, and item 2 of this very checklist),
+and any in-place filesystem trick (exFAT hosts neither junctions nor volume
+mount points). The root cause was proved rather than inferred: `mklink /J`
+succeeds on C: (NTFS) and fails on D: (exFAT) with *"Local NTFS volumes are
+required to complete the operation."* **The only real fix is moving the repo to
+NTFS** — which would also retire docs/01's `workspace:*` ban and the
+`node-linker=hoisted` pin, since both exist for this same reason. Founder's
+call; CLAUDE.md carries the step-by-step including which gitignored files git
+will not bring. **Until then the verify-via-CI advice above remains correct and
+is proven to work** — an e2e failed in CI on 2026-09-04, was diagnosed from the
+CI log, and passed on re-land, with no local run at any point.
+
 
 
 **Why it is first, and why it is not merely prudent.** docs/12 item 1: Supabase free-tier

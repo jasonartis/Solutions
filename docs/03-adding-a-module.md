@@ -598,6 +598,21 @@ others:
   something by watching a log, confirm the failure mode actually prints.** A component whose
   success case is silence cannot be verified by observing silence.
 
+- **ASSERTING A FORM FIELD RIGHT AFTER TYPING INTO IT IS VACUOUS — RELOAD FIRST (2026-09-04).**
+  A settings-form e2e that fills a value, submits, and asserts the field now holds that value is
+  asserting its own keystrokes: the input reads back what was typed whether or not the write ever
+  reached Postgres. Shipped exactly that in the first cut of the image-stamp-guards test, where
+  it would have passed while proving nothing about persistence. → **Put a `page.reload()` between
+  the save and the assertion**, so what is asserted is the SERVER's value. Note the same test also
+  saved the SAME values back for drift-safety (the pattern its neighbour uses) — which is a second
+  way to pass while proving nothing, so change the value, assert, then restore it.
+  **The related timing trap, which is what actually turned CI red:** `waitForResponse()` waits for
+  the server action's POST **response**, NOT for the `revalidatePath` re-render that follows it.
+  With an UNCONTROLLED input (`defaultValue`), that late re-render can land AFTER the next
+  `fill()` and reset the field from server state, silently discarding what was just typed — so a
+  test that chains two saves clobbers its own second one. Same family as the `<details open>`
+  entry above: DOM state React does not control, reconciled rather than replaced. A reload between
+  steps fixes both problems at once.
 - **A FIXTURE MUST NOT PRE-SATISFY ANOTHER TEST'S STARTING CONDITION (2026-08-07).** The
   vacuity rule usually bites a test; this is it biting the SEED. Peer-review rows were seeded
   onto the same homework the grading-workflow e2e drives from `submitted` to `done`. That did

@@ -241,6 +241,20 @@ deliberately did NOT establish: whether it is live on prod (needs a read-only ro
 template named in docs/19) and test coverage (a targeted grep found NO test asserts a roster
 row stops conferring authority after membership ends — add one per module when fixing).
 
+- **LATENT BUG, found in passing 2026-09-04, NOT fixed: `profiles.email` IS NEVER SYNCED after a
+  user changes their auth email.** `handle_new_user()` sets it once at signup and **no trigger on
+  `auth.users` email-change exists** (verified: zero matches for email-sync patterns across every
+  migration, and zero `auth.updateUser` calls anywhere in `apps/web`, so the product has no
+  email-change UI today either — which is the only reason this is not already biting). It matters
+  the moment either becomes true: **any email→user lookup reads `profiles.email` and would
+  silently miss a user who changed their address** — `org_find_user_by_email` does exactly this,
+  and so would the ad-hoc-invite work (docs/modules/module-4's SHAPE DECIDED entry). Two honest
+  options when it comes up: sync `profiles.email` from an `auth.users` AFTER UPDATE trigger (note
+  docs/03's auth-trigger criticality rules), or make every lookup read `auth.users.email` through
+  a definer instead. **Pick ONE source of truth deliberately** — today's half-and-half (the
+  resolver reading live `auth.users`, the lookup reading stale `profiles`) is how a "we found them
+  / it never resolved" contradiction gets shipped.
+
 Everything below is open but unranked:
 - **ENGAGEMENT MONITORING — PHASES 1, 2 AND 3 ALL LIVE ON PROD (phase 2 shipped and prod-verified
   2026-08-21 — see "Previously" above and the journal for the full story).** §12 remains the build
@@ -606,7 +620,12 @@ in the sections below.
   script that appeared to start fine. **`corepack enable` needs admin** (`EPERM … 'C:\Program
   Files\nodejs\pnpx'`). Non-admin fix: `corepack enable --install-directory <writable dir>` then
   prepend that dir to `$env:PATH` in EVERY command (shell state does not persist between tool
-  calls). Appeared in the same session as the Docker mode flip, so suspect a common cause if both
+  calls). **Two details that cost time on 2026-09-04: the directory must ALREADY EXIST** (`mkdir -p`
+  it first, or corepack dies with a misleading `Internal Error: ENOENT ... lstat '<dir>'` that reads
+  like a corepack bug), **and put the shim OUTSIDE the repo** (the session scratchpad is ideal) —
+  created inside it, it shows up as an untracked directory that a careless `git add` would commit.
+  From bash, reference it by POSIX path (`/c/Users/...`), not the `C:/Users/YARMIS~1.AEI` 8.3 short
+  form, which bash will not resolve on `PATH`. Appeared in the same session as the Docker mode flip, so suspect a common cause if both
   show up together. **TURBO'S SYMPTOM FOR THIS IS UNRECOGNISABLE — `x Unable to find package
   manager binary: cannot find binary path` (2026-08-29).** It names neither `pnpm` nor PATH, and
   it fails the whole `turbo run` before any task starts, so it reads as a broken turbo install.
@@ -828,7 +847,17 @@ in the sections below.
   move:** it needs a fresh `pnpm install`, manual copying of the gitignored `.env*` files, and a
   `supabase stop`/`start` + `db reset` + seed from the new path (the CLI derives its container
   names from the project directory, e.g. `supabase_db_Solutions_Platform`, so a moved directory
-  can read as a new project). Until then, **verify UI via CI's e2e, which does work** — proven
+  can read as a new project).
+  **Do it as a fresh `git clone` to C:, NOT as a copy/move of this tree** — `du -sh .` on this
+  repo TIMED OUT after 5 minutes on exFAT, so copying `node_modules` across is far slower than
+  just reinstalling it. **And git will not bring the gitignored files, so hand-copy exactly
+  these** (measured 2026-09-04 via `git status --porcelain --ignored`; the worker one is the easy
+  one to forget and its absence breaks the worker silently):
+  `.env`, `.env.accounts`, `.env.deploy`, `apps/web/.env.local`, **`apps/worker/.env`**,
+  `.claude/settings.local.json`, plus `.vercel/` + `apps/web/.vercel/` if you want the existing
+  Vercel link, and `backups/` if you want the local backup history. **Keep the D: copy until a
+  real `pnpm --filter web build` AND a local e2e run both pass from C:** — that pair is the whole
+  point of the move and the only proof it worked. Until then, **verify UI via CI's e2e, which does work** — proven
   this session by an e2e that failed in CI, was diagnosed from the CI log, and passed on re-land.
 
 ## Founder profile & working style (canonical — mirror of any session memory)

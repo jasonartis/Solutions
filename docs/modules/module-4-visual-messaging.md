@@ -549,6 +549,27 @@ would close it if ever wanted.
   test for"* the tenancy-core slice.
 - **Anonymous public view-links** — still deferred post-v1, unchanged.
 
+### What this must SHIP WITH — the RLS assertions, each pinning a named failure
+
+Not optional garnish: under docs/03 #12 the tests are the quality gate, and each
+of these exists because a specific way of getting this wrong was identified
+during the design. Whoever builds it should be able to point at one test per row.
+
+| Assertion | The failure it pins |
+|---|---|
+| A pending invitee reads NOTHING until they accept | consent is real, not cosmetic — the whole point of accept-first |
+| An EXPIRED invite (>30 days) resolves to nothing | the TTL has teeth; without this the recycled-address case is still open |
+| A SECOND resolution of the same invite is a no-op | the resolver fires per signup and must not double-grant or error-loop |
+| A client-supplied `org_id` is OVERRIDDEN by the scope-sync trigger | the cross-org membership injection (docs/03 #10); assert the stored value, not the submitted one |
+| A BANNED member re-invited by email is NOT un-banned | `status='banned'` must survive the invite path; `on conflict do update` here would silently unban |
+| A roster row stops conferring authority once org membership ends | docs/19's class — no test asserted this for ANY module before 2026-09-04 |
+
+Each negative needs a non-emptiness CONTROL (docs/03's vacuity rule): prove a
+legitimate member DOES read the thing first, or the assertion passes on an empty
+universe. Plus prod-ACL verification for every new function per docs/03 #1,
+using `scripts/prod-verify-superadmin-log.mts` as the template — the
+function-only `prod-verify-migration.ts` is VACUOUS for table/policy work.
+
 ### Found in passing: a live cross-org hole (fixed separately, see the dated entry below)
 
 `addMember` inserts a `vm_conversation_members` seat without checking the target

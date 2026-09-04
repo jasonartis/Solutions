@@ -25,6 +25,16 @@ with the risks already mapped.
 >   opportunity to have a module completely public and independent of a real
 >   org is a good thing to have") and is now its own workstream.
 >
+> One naming note for whoever builds Public Square, considered 2026-09-04 and
+> then made moot by the per-pair choice: **do not name a user-visible container
+> "Public" in module 4.** Its conversations stay gated by
+> `vm_conversation_members`, so a member seeing their private thread inside
+> something labelled "Public" will reasonably conclude strangers can read it —
+> the worst available misreading in a private-messaging module. It also collides
+> with that module's own explicitly-deferred *public links* feature, which is
+> about genuinely anonymous visibility. "Public Square" is fine as this doc's
+> internal name for the pattern; it is not fine as a label on a page.
+>
 > The lesson worth keeping: **a design's prior adversarial review is only
 > useful if the next designer finds it.** This doc is reachable from docs/15
 > §10 and from the module-4 spec's own ad-hoc section, and was still missed
