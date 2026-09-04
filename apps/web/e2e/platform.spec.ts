@@ -169,6 +169,71 @@ test('org settings: org admin edits module settings; non-admins are locked out',
   await expect(page.getByText('404')).toBeVisible()
 })
 
+test('org settings: visual-messaging image-stamp guards are per-org tunable', async ({ page }) => {
+  // The spec's image-stamp guards ("default max stamp size relative to canvas
+  // (admin/org-tunable)" + "default slight transparency") were fixed constants
+  // until 2026-09-04; they now live in org_modules.settings, edited here. No
+  // migration was needed — 20260712030000's org-admin settings policy already
+  // covers every module's settings.
+  //
+  // EVERY ASSERTION IS AFTER A RELOAD, ON PURPOSE, and the first version of
+  // this test failed in CI for want of it. Two reasons, both worth keeping:
+  //   1. These inputs are UNCONTROLLED (`defaultValue`), and waitForResponse()
+  //      only waits for the server action's POST response — not for the
+  //      revalidatePath re-render that follows. So a save's late re-render can
+  //      land AFTER the next fill() and reset the field from server state,
+  //      clobbering what was just typed. That is what broke v1: the restore
+  //      step read 45 for 5s straight. Same family as docs/03's `<details
+  //      open>` lesson — DOM state React does not control.
+  //   2. Asserting the field right after typing into it is VACUOUS: it echoes
+  //      the keystrokes whether or not the write ever reached Postgres. A
+  //      reload is what makes this a persistence test rather than a DOM test.
+  const guards = 'Visual Messaging — image-stamp guards'
+  const sizeLabel = 'Max image-stamp size'
+  const opacityLabel = 'Image-stamp opacity'
+  const section = () => page.locator('section', { hasText: guards })
+  const save = async () => {
+    const posted = page.waitForResponse((r) => r.request().method() === 'POST')
+    await section().getByRole('button', { name: 'Save guards' }).click()
+    await posted
+    await page.reload()
+  }
+
+  await signIn(page, 'alice@demo.local')
+  await page.goto('/o/demo-visual/settings')
+  await expect(section().getByRole('heading', { name: guards })).toBeVisible()
+
+  // Unset settings fall back to the shipped defaults (0.3 / 0.85) — this is
+  // resolveVisualMessagingSettings()'s fallback, shown as percent.
+  await expect(section().getByLabel(sizeLabel)).toHaveValue('30')
+  await expect(section().getByLabel(opacityLabel)).toHaveValue('85')
+
+  // Change BOTH to distinct values and prove they SURVIVE A RELOAD, i.e. that
+  // they actually reached the database.
+  await section().getByLabel(sizeLabel).fill('45')
+  await section().getByLabel(opacityLabel).fill('60')
+  await save()
+  await expect(section().getByLabel(sizeLabel)).toHaveValue('45')
+  await expect(section().getByLabel(opacityLabel)).toHaveValue('60')
+
+  // Restore the defaults so a re-run starts where a fresh seed would (this
+  // suite is documented as assuming fresh seed state).
+  await section().getByLabel(sizeLabel).fill('30')
+  await section().getByLabel(opacityLabel).fill('85')
+  await save()
+  await expect(section().getByLabel(sizeLabel)).toHaveValue('30')
+  await expect(section().getByLabel(opacityLabel)).toHaveValue('85')
+
+  // The section is per-ENTITLEMENT, not global: demo-shul has no
+  // visual-messaging, so it must not appear there — paired with a positive
+  // assertion that the synagogue section DOES, so this negative cannot pass
+  // merely because the page failed to render (docs/03's vacuity rule, which
+  // warns that a lone not.toBeVisible() passes forever once the string moves).
+  await page.goto('/o/demo-shul/settings')
+  await expect(page.getByRole('heading', { name: 'Synagogue Schedules — location' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: guards })).not.toBeVisible()
+})
+
 test('alice sees a generated week in the synagogue schedules module', async ({ page }) => {
   await signIn(page, 'alice@demo.local')
   await expect(page.getByText('Demo Synagogue')).toBeVisible()
