@@ -1,6 +1,8 @@
 import Link from 'next/link'
 import { requireOrgAdmin } from '@/lib/platform'
 import SynagogueLocationFields, { type SynagogueSettings } from '@/components/synagogue-location-fields'
+import VisualMessagingGuardFields from '@/components/visual-messaging-guard-fields'
+import type { VisualMessagingSettings } from '@/lib/visual-messaging-settings'
 import { updateModuleSettings } from './actions'
 
 // Org self-serve module settings (founder item 2, 2026-07-12): the org's own
@@ -19,7 +21,8 @@ export default async function OrgSettingsPage(props: { params: Promise<{ orgSlug
     .eq('enabled', true)
 
   const synagogue = (entitlements ?? []).find((e) => e.module_key === 'synagogue-schedules')
-  const hasEditableSettings = Boolean(synagogue)
+  const visualMessaging = (entitlements ?? []).find((e) => e.module_key === 'visual-messaging')
+  const hasEditableSettings = Boolean(synagogue) || Boolean(visualMessaging)
 
   return (
     <div>
@@ -54,6 +57,26 @@ export default async function OrgSettingsPage(props: { params: Promise<{ orgSlug
             <SynagogueLocationFields settings={synagogue.settings as SynagogueSettings | undefined} />
             <button className="rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700">
               Save location
+            </button>
+          </form>
+        </section>
+      )}
+
+      {visualMessaging && (
+        <section className="mt-6 rounded-lg border border-gray-200 bg-white p-5">
+          <h2 className="mb-1 text-lg font-medium">Visual Messaging — image-stamp guards</h2>
+          <p className="mb-4 max-w-2xl text-sm text-gray-500">
+            Default limits applied when a member places an uploaded photo onto a layer — a
+            smaller/more-transparent default nudges toward responding <em>to</em> the picture
+            rather than covering it.
+          </p>
+          <form
+            action={updateModuleSettings.bind(null, orgSlug, 'visual-messaging')}
+            className="flex flex-wrap items-end gap-2"
+          >
+            <VisualMessagingGuardFields settings={visualMessaging.settings as VisualMessagingSettings | undefined} />
+            <button className="rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700">
+              Save guards
             </button>
           </form>
         </section>

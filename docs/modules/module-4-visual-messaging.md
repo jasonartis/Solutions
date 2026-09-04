@@ -317,7 +317,15 @@ while fixing an unrelated matchmaking bug report:
 
 e2e 27/27, RLS 7/7.
 
-## Ad-hoc groups — discussion expanded (2026-07-16, still OPEN, don't build)
+## Ad-hoc groups — discussion expanded (2026-07-16) — SUPERSEDED 2026-09-04
+
+**Status: this entry is history. The question it leaves open was DECIDED
+2026-09-04 in favour of candidate shape 1 (per-pair lightweight orgs) — see
+"Ad-hoc groups — SHAPE DECIDED" below, and read
+[docs/16-network-features-review.md](../16-network-features-review.md) before
+revisiting. Its closing claim that this stays "blocking for ad-hoc groups
+specifically until resolved (ideally alongside the Redt-It planning session)"
+is no longer true: per-pair orgs need none of docs/16's blocking items.**
 
 Founder asked to discuss the ad-hoc-group question further after the earlier
 sketch ("auto-created lightweight orgs"). Talked through a concrete example
@@ -362,6 +370,193 @@ deliberate per-user action?) — this needs explicit design, not a default.
 Still fully open — nothing here is a decision, and this stays blocking for
 ad-hoc groups specifically until resolved (ideally alongside the Redt-It
 planning session, given the overlap).
+
+## Per-org tunable image-stamp guards (2026-09-03) — BUILT, Sonnet, no migration
+
+Closes the first of the two go-live-checklist items for this module. The
+fixed v1 defaults (0.3 canvas-width fraction, 0.85 opacity) are now the
+**fallback**, not the only value: `org_modules.settings` for
+`visual-messaging` can carry `{ imageStampMaxFraction, imageStampOpacity }`
+(fractions 0-1), self-serve via `/o/[orgSlug]/settings` alongside
+synagogue-schedules' existing location fields — same mechanism
+(`20260712030000_org_settings_self_serve.sql`'s org-admin update policy +
+pin trigger already covers every module's settings, so **no migration was
+needed**). `requireOrgModule()` already returns `org_modules.settings`; the
+conversation page resolves it (`resolveVisualMessagingSettings()`, falls
+back to the defaults on anything missing/out-of-range — the docs/03 #7
+"Zod-validated JSON... skip-on-invalid" discipline, done with plain
+validation since `apps/web` carries no zod dependency, matching
+`synagogue-settings.ts`'s own precedent) and passes both values into
+`LayerCanvas` as props — the two module-level constants are gone. Settings
+UI is percent-based (5-100% / 10-100%) for a founder-facing org admin; stored
+as fractions. **Scope note:** this makes the *default* placement size/opacity
+tunable, matching the spec's literal wording ("default max stamp size...
+default slight transparency... admin/org-tunable") — it does not add a new
+hard ceiling on resizing an already-placed stamp via the Transformer (which
+today only floors at 16px, no cap), since that resize-clamp behavior wasn't
+part of the existing guard and adding one wasn't asked for.
+
+## Ad-hoc groups — SHAPE DECIDED 2026-09-04 (per-pair orgs), not yet built
+
+The 2026-07-16 open question is resolved. **The answer is candidate shape 1,
+per-pair lightweight orgs — NOT shape 2, the one shared "everyone" org.**
+
+The founder first chose shape 2 (its Owner-Console clutter cost looked smaller
+than shape 1's), then **reversed it the same session** once an adversarial
+review surfaced a document this module's planning had never read:
+**[docs/16-network-features-review.md](../16-network-features-review.md)** —
+an independent Fable-tier tenancy review, produced 2026-07-20, of exactly the
+shared-org design. Its §D names the pattern ("make the public space an org")
+and its P1 section is titled *"Public Square findings."* **Read docs/16 before
+touching this again.**
+
+### Why shape 2 was rejected
+
+docs/16 endorses the architecture — *"'make the public space an org' is the
+right instinct and should be kept"* — but finds the platform-core policies were
+all written under an unstated assumption, *an org is a small, vetted,
+mutually-acquainted group*, and several **fail OPEN** when it isn't. Three bind
+directly on a universal org, and were re-verified live during this session's
+review:
+
+- **P1-1 (CRITICAL) — a platform-wide email directory.** `shares_org_with()`
+  (`20260727010000`) joins `org_members` to `org_members` on `org_id` with no
+  clause excluding any org, and `profiles_select_shared_org`
+  (`20260708020000:21-22`) is `for select using (shares_org_with(user_id))`.
+  Everyone sharing one org ⇒ every authenticated user reads every other user's
+  whole `profiles` row, **email and the `settings` jsonb included**. The sharp
+  second-order cost, in docs/16's words: matchmaking's `mm_mutual_matches()`,
+  speed-dating's `sd_reveal_matches()` and Redt-It's entire premise all exist
+  to gate contact-info reveal — *"all three become theater."* Ten existing
+  pages already issue unfiltered `profiles` reads relying on this policy to
+  narrow them.
+- **P1-4 (HIGH) — roster enumeration.** `org_members_select_member` lets any
+  member read the full roster: in a universal org, the platform census.
+  *"Standing in a public square does not entitle you to its census."*
+- **P1-5 (HIGH) — §7 defaults assume trusted orgs.** This module's own default
+  ("global `member` = can create chats and invite") becomes, unvetted, *"an
+  unsolicited-contact engine where the spammer moderates their own
+  conversation."*
+
+And docs/16's checklist item 2 — choosing the `profiles_select_shared_org` fix
+shape — is marked **"Blocking for Public Square and Redt-It Shape B,"** with
+*"The founder has decided none of the open items below."* So shape 2 was not
+merely risky, it was **formally blocked** on an undecided founder call.
+
+The diagnosis worth keeping: **the original plan used a PUBLIC mechanism to
+solve a PRIVATE problem.** Dana messaging her sister is not a public act, yet
+routing it through a platform-wide org dragged all three findings into a
+feature that needed none of them. docs/16 P3 makes the identical argument for
+Redt-It: Shape B must be *"its own org, NOT Public Square — the platform-wide
+org must not become a junk drawer where every network module's data commingles
+under one membership predicate."*
+
+### Why shape 1 is safe
+
+In a 2-person org `shares_org_with` is **correct by construction**: the only
+person who can read your profile is the person you deliberately chose to talk
+to. P1-1/P1-4/P1-5 do not arise. `orgs.kind` (below) therefore carries **UX
+weight only, never security weight** — which is what makes this buildable
+without deciding docs/16's blocking item.
+
+**Accepted residual cost** (founder, explicit): accepting an ad-hoc chat invite
+does disclose your email to that one person, since you now share a tiny org.
+Symmetric, and only after mutual consent — but not zero. The same P1-1 fix
+would close it if ever wanted.
+
+### The decided design
+
+1. **`orgs.kind`** (`client` | `personal`, default `client`) — used ONLY to hide
+   personal orgs from the Owner Console org list and the dashboard's org cards,
+   surfacing ad-hoc chats under a single "Personal" entry instead. This adopts
+   docs/16 §D's trust-class **column** for a cosmetic purpose without adopting
+   its security semantics; it is also docs/16 checklist item 1, which *"gates
+   everything below"* — so this work moves the platform TOWARD Public Square
+   rather than away from it.
+2. **`create_personal_org(title)`, SECURITY DEFINER.** Verified necessary:
+   `orgs_write_superadmin` (`20260706120000_core.sql:164-166`) makes `orgs`
+   superadmin-write-only, so an ordinary user cannot mint one. It creates the
+   org `kind='personal'`, adds the caller as active owner, enables
+   `visual-messaging`, and grants the caller the `module_roles` row that
+   conversation-creation requires (verified chain:
+   `vm_conversations_insert_creator` → `vm_is_module_member` →
+   `has_module_role`). **This is the rate-limit / abuse choke point** — cap
+   per-user creations here, not elsewhere.
+3. **Consent: accept-first, and it needs NO new mechanism.** Inviting an
+   existing user to an ad-hoc org uses the already-built, already-Fable-reviewed
+   org-invite flow (`org_accept_invite()` + the dashboard invite card): a
+   pending seat the invitee accepts or declines. This satisfies docs/16 P1-2/P1-7
+   for free.
+4. **Inviting an email with NO account — the one genuinely new mechanism.**
+   Founder's instruction: don't hard-fail; tell the inviter it's fine, hand
+   them the **plain standard signup link** (no token — *"just the standard
+   instructions on how to sign up like anyone else"*), and resolve the invite
+   when that email signs up. Design:
+   - **`vm_pending_invites`, module-prefixed, NOT a generic
+     `public.pending_invites`.** Two reasons: extract-don't-speculate (one
+     consumer today), and `packages/db/src/view-as-coverage.test.ts` derives
+     each module's tables from `pg_catalog` **by prefix**, so a `vm_`-named
+     table is caught and forced into a view-as declaration while a
+     `public.`-named one would silently escape that ratchet forever.
+   - Typed FK `conversation_id → vm_conversations on delete cascade`. (A
+     polymorphic `target_id` can carry no FK, so rows would outlive their
+     targets and retry resolution forever.)
+   - **`org_id` is never client-supplied** — derived by a BEFORE INSERT
+     scope-sync trigger modelled on this module's own
+     `vm_sync_from_conversation` (docs/03 #10). Without it a conversation admin
+     can name a *different* org on the row, which under a signup-time trigger
+     (`auth.uid()` null ⇒ the documented rank-ladder bypass at
+     `20260727010000:543`) would be a cross-org membership injection.
+   - **30-day expiry** (founder's call), resolver ignores expired rows, pg-boss
+     pruner deletes them (precedent: `login_events`' pruner + daily job). The
+     reason expiry is not optional: an email-keyed invite with no TTL is a
+     standing grant to whoever controls that mailbox *at any future time* —
+     Gmail never recycles addresses but corporate/university/ISP domains do, so
+     a years-old unresolved invite would auto-admit a stranger who inherits the
+     mailbox. Same mechanism covers a typo'd address.
+   - Resolved at **signup**, by an `auth.users` AFTER INSERT trigger,
+     **fail-OPEN** (a missed auto-join is recoverable; a signup outage is not):
+     inner `begin…exception when others → raise warning end` around only the
+     risky inserts, plus a function-scoped `lock_timeout`, copying
+     `capture_login`'s exact shape. **Deliberately NOT from `(app)/layout.tsx`**
+     — verified against this Next version's own docs
+     (`node_modules/next/dist/docs/…/layout.md:180`): *"Layouts do not rerender
+     on navigation,"* so a layout call would miss invites for an already-open
+     session; and a mutating write during render would be the first on this
+     platform (every `recordActivity` call site is in a server action).
+   - Resolution creates a **pending** org seat, so accept-first holds
+     identically for new and existing invitees.
+   - `invited_by` (FK → `auth.users`) must be declared in
+     `data-browser-modules.ts` or `data-browser-coverage.test.ts` TIER 1 fails.
+5. **Self-block.** Permit a self-UPDATE of `vm_conversation_members.status` to
+   `'banned'` only. Today `vm_pin_member`'s self-service branch pins
+   `new.status := old.status`, so a member **cannot** opt out of being
+   re-added: they may leave (`vm_members_delete_self`) and the admin re-inserts
+   immediately. Cheapest real abuse mitigation available, and there is no
+   user-level ban or rate limit anywhere on the platform (docs/16 P1-6).
+
+### Deliberately NOT part of this
+
+- **Public Square itself** — a genuinely public, org-independent space. The
+  founder confirmed it is *worth having* and wants the capability; it is now
+  its own workstream, needing docs/16 checklist items 1-3 decided (the P1-1 fix
+  shape, roster-read restriction, module whitelist — **never the
+  matchmaking family**, whose staff-tier `for all` policies would hand one
+  org's admins the dating data of everyone opted in — plus named owner seats,
+  an abuse path, and docs/16's asked-for *"written acknowledgment that Public
+  Square means operating a public community, with the ongoing cost that
+  implies"*). docs/16 notes it *"is not a new workstream; it is the acceptance
+  test for"* the tenancy-core slice.
+- **Anonymous public view-links** — still deferred post-v1, unchanged.
+
+### Found in passing: a live cross-org hole (fixed separately, see the dated entry below)
+
+`addMember` inserts a `vm_conversation_members` seat without checking the target
+belongs to the conversation's org, and `vm_is_conv_member` / `vm_can_post` /
+`vm_is_conv_admin` gate purely on the seat row. Bounded today only by
+`profiles_select_shared_org` — i.e. by the very policy shape 2 would have
+widened. Classroom already defends this exact class and documents it
+(`modules/classroom/ui/manage/actions.ts:66-80`).
 
 ## Future enhancement: conversation-admin transfer (2026-07-16, not built)
 

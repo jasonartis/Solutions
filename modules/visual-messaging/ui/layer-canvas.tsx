@@ -64,11 +64,6 @@ export type LayerNav = {
 const COLORS = ['#e11d48', '#2563eb', '#16a34a', '#f59e0b', '#111111', '#ffffff']
 const EMOJIS = ['😀', '😍', '😂', '😢', '😡', '👍', '👎', '❤️', '🔥', '🎉', '⭐', '✅', '❌', '🤔']
 const SWIPE_MIN = 60 // px of drag before a gesture counts as a swipe
-// Spec's image-stamp guards: "default max stamp size relative to canvas
-// (admin/org-tunable)" and "default slight transparency" — the tunable-per-
-// org part is deferred (no settings UI yet); these are the fixed v1 defaults.
-const IMAGE_STAMP_DEFAULT_FRACTION = 0.3 // of the root image's natural width
-const IMAGE_STAMP_DEFAULT_OPACITY = 0.85
 
 function strokeToPolygon(stroke: Stroke): number[] {
   const outline = getStroke(stroke.points, { size: stroke.size, thinning: 0.6, smoothing: 0.5 })
@@ -111,6 +106,12 @@ export default function LayerCanvas(props: {
   nav: LayerNav
   onSend?: (payloadJson: string) => Promise<string>
   onUploadImage?: (file: File) => Promise<string>
+  // Spec's image-stamp guards: "default max stamp size relative to canvas
+  // (admin/org-tunable)" and "default slight transparency" — resolved by the
+  // page from org_modules.settings (resolveVisualMessagingSettings), which
+  // falls back to the v1 defaults (0.3 / 0.85) when unset.
+  imageStampMaxFraction: number
+  imageStampOpacity: number
 }) {
   const router = useRouter()
   const pathname = usePathname()
@@ -364,7 +365,7 @@ export default function LayerCanvas(props: {
       }
       if (tool === 'image') {
         if (!stagedImage) return // nothing uploaded yet — a tap does nothing
-        const baseW = natural.w * IMAGE_STAMP_DEFAULT_FRACTION * imageScale
+        const baseW = natural.w * props.imageStampMaxFraction * imageScale
         const baseH = baseW * (stagedImage.naturalH / stagedImage.naturalW)
         setImageDraft((d) => [
           ...d,
@@ -376,7 +377,7 @@ export default function LayerCanvas(props: {
             width: baseW,
             height: baseH,
             rotation: imageRotation,
-            opacity: IMAGE_STAMP_DEFAULT_OPACITY,
+            opacity: props.imageStampOpacity,
           },
         ])
         return

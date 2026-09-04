@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { parseSynagogueSettingsForm } from '@/lib/synagogue-settings'
+import { parseVisualMessagingSettingsForm } from '@/lib/visual-messaging-settings'
 
 // Org-admin module-settings actions (founder item 2, 2026-07-12: "whoever
 // fills in the synagogue info should enter it" — module CONFIG is org
@@ -22,10 +23,16 @@ async function requireOrgAdminBySlug(orgSlug: string) {
 export async function updateModuleSettings(orgSlug: string, moduleKey: string, formData: FormData) {
   const { supabase, orgId } = await requireOrgAdminBySlug(orgSlug)
 
-  // Per-module form parsing — only synagogue-schedules has editable settings
-  // so far; add a case here when another module grows a settings form.
-  if (moduleKey !== 'synagogue-schedules') throw new Error('This module has no editable settings')
-  const settings = parseSynagogueSettingsForm(formData)
+  // Per-module form parsing — add a case here when another module grows a
+  // settings form.
+  let settings: Record<string, unknown>
+  if (moduleKey === 'synagogue-schedules') {
+    settings = parseSynagogueSettingsForm(formData)
+  } else if (moduleKey === 'visual-messaging') {
+    settings = parseVisualMessagingSettingsForm(formData)
+  } else {
+    throw new Error('This module has no editable settings')
+  }
 
   const { error } = await supabase
     .from('org_modules')

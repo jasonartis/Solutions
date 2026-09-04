@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { requireOrgModule } from '@/lib/module-gate'
+import { resolveVisualMessagingSettings, type VisualMessagingSettings } from '@/lib/visual-messaging-settings'
 import LayerCanvas, { type Stroke, type Stamp, type TextStamp, type ImageStamp } from '../../layer-canvas'
 import LayerGrid from '../../layer-grid'
 import {
@@ -47,7 +48,10 @@ export default async function ConversationPage(props: {
   const { orgSlug, conversationId } = await props.params
   const { layer: layerParam, view } = await props.searchParams
   const treeView = view === 'tree'
-  const { supabase, org } = await requireOrgModule(orgSlug, 'visual-messaging')
+  const { supabase, org, settings } = await requireOrgModule(orgSlug, 'visual-messaging')
+  const { imageStampMaxFraction, imageStampOpacity } = resolveVisualMessagingSettings(
+    settings as VisualMessagingSettings | undefined,
+  )
 
   const { data: conversation } = await supabase
     .from('vm_conversations')
@@ -286,6 +290,8 @@ export default async function ConversationPage(props: {
           nav={nav}
           onSend={sendReply}
           onUploadImage={uploadImageStamp.bind(null, orgSlug, conversationId)}
+          imageStampMaxFraction={imageStampMaxFraction}
+          imageStampOpacity={imageStampOpacity}
         />
       )}
 
