@@ -797,6 +797,19 @@ in the sections below.
   red with the blame pointing at the wrong session. → `git add <path>` for what you actually
   touched, and read the commit's file count: if it exceeds what you edited, stop before pushing.
   → Corollary: once you tell the founder a session is finished, treat the repo as handed over.
+  **AND `git add <path>` IS NOT ENOUGH — IT HAPPENED AGAIN 2026-09-04, THIS TIME WITH EXPLICIT
+  PATHS.** `git commit` commits the whole INDEX, not just what you staged, so if the other session
+  has already run `git add` on its own files, your explicit-path staging is irrelevant and their
+  work rides along. Commit `33d5f20` is a 2-file docs change that shipped a concurrent session's
+  230-line in-progress `video-room.tsx` plus two more of its files, under a message describing
+  none of them. **The check that catches it was RUN and IGNORED:** `git diff --cached --name-only`
+  printed five paths when two were expected, one command before the commit. → **Use a pathspec on
+  the commit itself — `git commit -- <paths>` — which ignores everything else in the index**; or if
+  you print `git diff --cached`, actually read the count and stop when it exceeds what you touched.
+  → And do not "fix" a sweep like this by reverting the other session's files: they may already
+  have built on them, and a revert can destroy live work. Leave the code, correct the record, and
+  TELL the founder, because that session's own git view now shows its work committed by someone
+  else.
   **A THIRD variant, hit live 2026-09-04 despite staging explicit paths correctly: the shared
   `.git/index` itself races.** `git add <my files>` … (other work in between, widening the
   window) … `git add docs/foo.md` … `git commit` landed a commit containing ONLY `docs/foo.md`
