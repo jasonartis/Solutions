@@ -629,7 +629,8 @@ in the sections below.
   workaround** — the repo's own scripts shell out to bare `pnpm` (`pnpm --filter @platform/db
   seed`), so it fails one level down with a confusing "'pnpm' is not recognized" from inside a
   script that appeared to start fine. **`corepack enable` needs admin** (`EPERM … 'C:\Program
-  Files\nodejs\pnpx'`). Non-admin fix: `corepack enable --install-directory <writable dir>` then
+  Files\nodejs\pnpx'`). **DEFERRED FOUNDER ACTION (agreed 2026-09-04, not urgent): run `corepack enable` ONCE AS ADMINISTRATOR** and this whole bullet stops applying — `pnpm` lands on PATH permanently instead of every session rebuilding a throwaway shim. Needs elevation, which Claude cannot grant itself. Until then, the workaround below is the standing procedure, not a bug.
+  Non-admin fix: `corepack enable --install-directory <writable dir>` then
   prepend that dir to `$env:PATH` in EVERY command (shell state does not persist between tool
   calls). **Two details that cost time on 2026-09-04: the directory must ALREADY EXIST** (`mkdir -p`
   it first, or corepack dies with a misleading `Internal Error: ENOENT ... lstat '<dir>'` that reads
