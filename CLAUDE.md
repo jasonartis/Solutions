@@ -797,6 +797,15 @@ in the sections below.
   red with the blame pointing at the wrong session. → `git add <path>` for what you actually
   touched, and read the commit's file count: if it exceeds what you edited, stop before pushing.
   → Corollary: once you tell the founder a session is finished, treat the repo as handed over.
+  **A THIRD variant, hit live 2026-09-04 despite staging explicit paths correctly: the shared
+  `.git/index` itself races.** `git add <my files>` … (other work in between, widening the
+  window) … `git add docs/foo.md` … `git commit` landed a commit containing ONLY `docs/foo.md`
+  — the other session's own `git commit`, run in the gap, had consumed the shared index and
+  committed MY three already-staged files under ITS unrelated message. Nothing was lost (the
+  files are correctly in the tree, just mis-attributed to the wrong commit message), but it is
+  a real race, not a hypothetical one. → Run `git add <paths> && git commit -m "..."` as ONE
+  shell invocation immediately back-to-back, not as two separate tool calls with any other work
+  between them — shrink the window instead of trying to eliminate it.
 - **A one-off script run with `tsx` must live INSIDE the repo** — Node resolves
   dependencies from the script's own location, not the cwd, so a scratchpad script
   importing `@supabase/supabase-js` fails with ERR_MODULE_NOT_FOUND however you invoke it.
