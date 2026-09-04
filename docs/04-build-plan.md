@@ -71,7 +71,17 @@ Forces: canvas stack (Konva), vector layer storage, tree navigation, thumbnails,
 
 Last on purpose: leans on module 1's primitives (questions, matches, orgs) plus the two heaviest new pieces — Jitsi video (provider interface, VPS) and the Socket.IO orchestration engine. **Acceptance:** a seeded 7v7 test event runs end-to-end locally against docker-jitsi with simulated clients; organizer console controls a live event; mutual-interest reveal honors privacy rules.
 
-**Status (2026-07-09): event-runnable minus video.** Full UI (events, registration, lifecycle controls) plus the **real rotation engine + automatic round-clock worker** (two-sided/single-pool rotation, byes, block avoidance, no-repeat enforcement — 7 unit tests, 7 live clock assertions) replaced the manual organizer stand-in. Mutual-interest reveal honors privacy end-to-end (proven by e2e). Notes/reports/blocks UI shipped 2026-07-11. **Lobby/live-round UI shipped 2026-07-16** (live "who you're paired with now" + countdown, computed from `ends_at` since the schema's `'break'` state is never actually written — see module spec for a real bug caught and fixed in the manual round-advance action along the way). **Two-sided capacity + waitlist shipped 2026-07-16** (also revealed pool sides were never actually used anywhere in the app until this pass; capacity/labels + side selection + roster/promotion UI + the capacity-count enforcement via the `sd_side_registered_count` definer RPC — the count had an RLS-invisible-read bug caught by e2e, fixed in an Opus session `20260716020000`, see module spec). **Remaining:** Jitsi video (needs the VPS decision), resume-review profiles beyond the profile card.
+**Status (2026-07-09): event-runnable minus video.** Full UI (events, registration, lifecycle controls) plus the **real rotation engine + automatic round-clock worker** (two-sided/single-pool rotation, byes, block avoidance, no-repeat enforcement — 7 unit tests, 7 live clock assertions) replaced the manual organizer stand-in. Mutual-interest reveal honors privacy end-to-end (proven by e2e). Notes/reports/blocks UI shipped 2026-07-11. **Lobby/live-round UI shipped 2026-07-16** (live "who you're paired with now" + countdown, computed from `ends_at` since the schema's `'break'` state is never actually written — see module spec for a real bug caught and fixed in the manual round-advance action along the way). **Two-sided capacity + waitlist shipped 2026-07-16** (also revealed pool sides were never actually used anywhere in the app until this pass; capacity/labels + side selection + roster/promotion UI + the capacity-count enforcement via the `sd_side_registered_count` definer RPC — the count had an RLS-invisible-read bug caught by e2e, fixed in an Opus session `20260716020000`, see module spec). Remaining **(updated 2026-09-04)**: ~~Jitsi video (needs the VPS decision)~~ **the
+provider interface, JWT join-token issuance, and the click-to-join UI are all
+SHIPPED and CI-verified** — what's left is standing up a real Jitsi server
+(local `docker-jitsi-meet` or the deployed VPS) to prove the `lib-jitsi-meet`
+connection sequence itself, which is infrastructure, not code; ~~resume-review
+profiles beyond the profile card~~ **DONE** (the card now shows live, while
+paired, not only after the encounter — a true pre-round "up next" preview
+remains unbuilt, a real structural gap in the rotation engine, not this
+line's concern); contact-share population on reveal **DONE**, no migration.
+Full detail + the two real bugs CI caught along the way: the module spec's
+2026-09-04 entries.
 
 ## Cross-cutting, throughout
 
