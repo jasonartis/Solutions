@@ -916,16 +916,18 @@ test('speed-dating module: register → round → mutual interest → reveal', a
   await expect(page.getByRole('heading', { name: 'Right now' })).toBeVisible()
   await expect(page.getByText(/Round 1 — you're with Dana D\. Ends in/)).toBeVisible()
 
-  // Video (module 6 remaining item 1, 2026-09-04): proves the WIRING —
-  // button -> getVideoJoinToken server action -> the video-provider factory
-  // -> a clear error surfaced in the UI. This is genuinely everything that
-  // CAN be proven without a real Jitsi server: JITSI_DOMAIN/APP_ID/APP_SECRET
-  // are unset everywhere (local, CI, prod alike — the self-hosted VPS is a
-  // paused go-live item), so getVideoProvider() throws by design and the
-  // client's catch block renders that message rather than attempting a
-  // WebRTC connection lib-jitsi-meet has nowhere real to make.
+  // Video (module 6 remaining item 1, 2026-09-04): proves the WIRING — button
+  // -> getVideoJoinToken server action -> authorizeVideoJoin -> a clear error
+  // surfaced in the UI. CORRECTED after a first CI run (JITSI_* unset
+  // everywhere — local, CI, prod alike, the self-hosted VPS is a paused
+  // go-live item): the expected message is NOT the provider factory's throw.
+  // tryCreateVideoRoom (called when runPairingRound created this pairing)
+  // silently returns null for unconfigured video, so room_ref stays null —
+  // and authorizeVideoJoin's "room not ready" check fires BEFORE the code
+  // path ever reaches getVideoProvider(). Proves the same wiring, one step
+  // earlier than originally assumed; still no WebRTC connection attempted.
   await page.getByRole('button', { name: 'Join video' }).click()
-  await expect(page.getByText('Jitsi video is not configured', { exact: false })).toBeVisible()
+  await expect(page.getByText('The room is not ready yet', { exact: false })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Try again' })).toBeVisible()
 
   const metSection = page.locator('section').filter({ hasText: 'People you met' })

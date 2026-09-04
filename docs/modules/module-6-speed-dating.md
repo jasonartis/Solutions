@@ -364,20 +364,28 @@ pairing id so the next round's fresh pairing mounts a new instance instead
 of reusing a stale connection.
 
 **e2e extended, not new** (`platform.spec.ts`'s existing speed-dating flow):
-clicks "Join video" and asserts the "Jitsi video is not configured" message
-— genuinely the most that can be proven anywhere right now, since
-`JITSI_DOMAIN`/`JITSI_APP_ID`/`JITSI_APP_SECRET` are unset on this machine,
-in CI, and on prod alike (the VPS is still a paused go-live item). This
-proves the full wiring — button → server action → `authorizeVideoJoin` →
-the provider factory → the error surfacing correctly in the UI — without
-attempting a WebRTC connection `lib-jitsi-meet` has nowhere real to make.
-**What remains genuinely unverified by anything in this repo:** whether the
-`lib-jitsi-meet` call sequence itself (connection → conference → track
-attach) is correct against a REAL Jitsi server — that needs either a local
-`docker-jitsi-meet` (Docker is available on this machine; not stood up this
-pass) or the deployed VPS, neither of which exists yet.
+clicks "Join video" and asserts an error surfaces. **CI caught a real bug in
+the test itself, not the code, on the first real run — exactly why "verify
+via CI" is the standing rule, not a formality.** The first version asserted
+"Jitsi video is not configured" (the provider factory's throw), which never
+fires in this environment: `tryCreateVideoRoom` (called when
+`runPairingRound` created the pairing) silently returns `null` for
+unconfigured video, so `room_ref` stays `null`, and `authorizeVideoJoin`'s
+"room not ready" check refuses the join a step EARLIER than the test
+assumed. Fixed to assert "The room is not ready yet" — genuinely the most
+that can be proven anywhere right now, since `JITSI_DOMAIN`/`JITSI_APP_ID`/
+`JITSI_APP_SECRET` are unset on this machine, in CI, and on prod alike (the
+VPS is still a paused go-live item). Still proves the real wiring — button →
+server action → `authorizeVideoJoin` → the error surfacing correctly in the
+UI — without attempting a WebRTC connection `lib-jitsi-meet` has nowhere
+real to make. **What remains genuinely unverified by anything in this
+repo:** whether the `lib-jitsi-meet` call sequence itself (connection →
+conference → track attach) is correct against a REAL Jitsi server — that
+needs either a local `docker-jitsi-meet` (Docker is available on this
+machine; not stood up this pass) or the deployed VPS, neither of which
+exists yet.
 
 Typecheck verified (`pnpm --filter web exec tsc --noEmit` clean, then the
-full `turbo run typecheck --force` 9/9); the new e2e assertion itself has
-**not** been observed passing anywhere — pushed for CI to be the first real
-run, per this session's own established "verify via CI" path.
+full `turbo run typecheck --force` 9/9). The corrected e2e assertion has
+**not yet** been observed passing — pushed for the next CI run to be the
+first real proof, per this session's own established "verify via CI" path.
