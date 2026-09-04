@@ -226,6 +226,11 @@ matchmaking (HIGH), speed-dating (HIGH), nail-salon (MEDIUM) and classroom (MEDI
 Storage so real submission FILES are downloadable). Full verified inventory + remediation
 shape: [docs/19-seat-authority-audit.md](docs/19-seat-authority-audit.md).** Today's
 `20260904010000` fixed the visual-messaging instance; this is the same class everywhere else.
+**Prod check RUN 2026-09-04 (read-only, `scripts/prod-verify-seat-authority-orphans.mts`):
+ZERO orphaned rows found today across all 8 rosters** (3 of the 8 currently hold zero rows
+on prod, so that part of the result is vacuous, not reassuring — the other 5 hold real rows
+and genuinely check out clean). Class confirmed real and unfixed; not yet triggered on prod.
+Detail + per-table counts in docs/19's "Two things this audit did NOT establish" section.
 **The trigger is ordinary revocation, not an insider insert:** `removeOrgMember` deletes one
 row and NOTHING in the schema FKs `org_members` (verified, zero matches), so revoking a seat
 — or re-inviting, which leaves `status='pending'` — leaves every module roster row intact and

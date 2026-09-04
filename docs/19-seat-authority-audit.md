@@ -238,17 +238,58 @@ conjunct, add the missing tests, and leave the redesign to that slice.
 
 ## Two things this audit did NOT establish
 
-- **Whether any of it is live on prod.** That needs read-only row counts: are
-  there `sd_participants` / `mm_matchmaker_assignments` / `sal_appointments.worker_id`
-  rows whose holder has no active `org_members` row? Cheap; the
-  `scripts/prod-verify-*.mts` pooler template fits. **Not run.** A local exploit
-  probe was not run either — it would mutate shared local state (revoking a
-  seeded user's org membership) mid-session, and the catalog evidence above is
-  already conclusive as to the missing conjunct. *(An earlier revision of this
-  line claimed the probe was skipped because a second session was using the
-  local database. That was an assumption stated as fact — no second session
-  existed. Corrected 2026-09-04; the docs/03 tally rule applies to a doc's own
-  stated reasons, not just its numbers.)*
+- ~~**Whether any of it is live on prod.**~~ **MEASURED 2026-09-04 (Sonnet),
+  read-only, `scripts/prod-verify-seat-authority-orphans.mts`
+  (`pooler + SUPABASE_DB_PASSWORD`, no app credentials, no writes, local DB
+  untouched).** Counted, for each roster, rows whose holder has no `org_members`
+  row for that row's org with `status = 'active'` — the exact predicate
+  `is_org_member()` uses. **Result: ZERO orphaned rows found, across all 8
+  tables, on prod as of 2026-09-04.**
+
+  | table | total rows | orphaned |
+  |---|---|---|
+  | `sd_participants` | 0 | 0 |
+  | `mm_matchmaker_assignments` | 2 | 0 |
+  | `mm_group_members` | 0 | 0 |
+  | `sal_worker_profiles` | 1 | 0 |
+  | `sal_appointments` (worker_id not null) | 2 | 0 |
+  | `cls_review_assignments` | 2 | 0 |
+  | `cls_class_members` | 3 | 0 |
+  | `vm_conversation_members` | 0 | 0 |
+
+  **Control (docs/03 vacuity rule): `org_members` has 30 rows, all `status =
+  'active'`, 0 pending** — proves the query engine and the join condition both
+  work against real data, so the zero-orphan result is not an artifact of a
+  broken read.
+
+  **But read the per-table total, not just the headline zero — three of the
+  eight tables (`sd_participants`, `mm_group_members`,
+  `vm_conversation_members`) currently hold ZERO rows on prod at all**, so
+  their "0 orphaned" is vacuous by the same rule: there is nothing there that
+  *could* be orphaned yet, not evidence the class can't occur. The other five
+  tables (`mm_matchmaker_assignments`, `sal_worker_profiles`,
+  `sal_appointments`, `cls_review_assignments`, `cls_class_members`) hold real
+  rows and their zero-orphan result is a genuine, non-vacuous negative.
+
+  **Conclusion: the class is confirmed real (the missing-conjunct finding
+  above is unchanged), but as of this measurement it has NOT yet been
+  triggered on prod** — no org membership revocation has yet left a roster row
+  behind on any table with live data. This is exposure-by-construction, not a
+  currently-exploited hole; it will trigger the moment a real `removeOrgMember`
+  happens against any of these five populated tables, or once the three
+  currently-empty tables gain rows. Re-run the script periodically or before
+  the remediation slice ships, since prod data changes underneath this
+  snapshot. Script kept in `scripts/` as the durable before/after regression
+  check for that remediation.
+
+- A local exploit probe was not run — it would mutate shared local state
+  (revoking a seeded user's org membership) mid-session, and the catalog
+  evidence above plus the prod measurement are already conclusive as to the
+  missing conjunct and its current (non-)exposure. *(An earlier revision of
+  this line claimed the probe was skipped because a second session was using
+  the local database. That was an assumption stated as fact — no second
+  session existed. Corrected 2026-09-04; the docs/03 tally rule applies to a
+  doc's own stated reasons, not just its numbers.)*
 - **Test coverage.** A targeted grep of `packages/db/src/rls.test.ts` found the
   13 `org_members ... .delete()` call sites are all fixture teardown, not
   assertions — i.e. **no test asserts that a module roster row stops conferring
