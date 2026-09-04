@@ -763,6 +763,79 @@ mechanism is proven in the managed environment, but it carries rules that are no
   UPDATE (so first-ever logins are captured). Had that last one been false — the timestamp set in
   the same INSERT that creates the row — every user's first login would have been silently missing.
 
+
+## A per-entity SEAT is not authority — it must also require org membership (2026-09-04)
+
+20. **Any predicate that derives authority from a row in a module-owned
+    membership/participation table must ALSO require `is_org_member()` of that
+    row's org.** A "seat" row (`vm_conversation_members`, and any
+    `*_participants` / `*_assignments` / `*_registrations` shaped like it) is a
+    statement about one ENTITY, not about the tenant. Gating on the seat alone
+    makes the seat a complete, transferable capability: whoever can insert one
+    can hand a person outside the org full RLS read of that entity's content.
+    Found live in visual messaging (`20260904010000`), where four predicates —
+    `vm_is_conv_member` / `vm_can_post` / `vm_can_moderate` / `vm_is_conv_admin`
+    — each checked only `user_id = auth.uid() and status = 'active'`.
+    - **The org tails are usually already safe and the seat arm usually is not.**
+      Anything routed through `has_module_role`, `is_org_admin` or the
+      `module_caller_covers_*` family has required ACTIVE org membership since
+      `20260727010000`. So in a two-arm predicate (`seat OR org-tier`) the bug
+      lives specifically in the arm that looks the most obviously correct.
+    - **Derive the org from the row, not from an argument.** Child tables carry
+      their own `org_id`, stamped by the scope-sync trigger (#10) from the
+      parent and unspoofable — so `is_org_member(m.org_id)` is both the cheapest
+      form and the authoritative one. No join to the parent is needed.
+    - **The app-side check is not the fix, it is the error message.** Add it
+      anyway (so the UI says "not a member of this organization" instead of
+      surfacing an opaque RLS failure), but the migration is the gate: RLS is
+      the only layer a crafted PostgREST request cannot skip (hard rule 6).
+    - **A bound nobody designed is not a bound.** VM's exposure was limited
+      only because the email→user lookup runs under `profiles_select_shared_org`,
+      so a caller could only NAME someone already sharing SOME org. That
+      constrains who can be *targeted*, never what the seat then *exposes* —
+      and it silently evaporates the moment anything widens org co-membership.
+      When you catch yourself explaining why a hole is "bounded in practice,"
+      check whether anything actually enforces the bound.
+    - **Prove the test has teeth before trusting it.** Run the new assertion
+      against the UN-migrated database first: it must FAIL, and the CONTROLS
+      must PASS. VM's did (3 real failures — layers read, all four predicates
+      true, roster enumerated — with both controls green), which is what
+      distinguishes a test that pins the bug from one that merely passes.
+      Assert the fixture's own existence too: "she reads nothing" is trivially
+      true if the seat was never created.
+    - **Pick the fixture user who makes the scenario REAL.** The outsider must
+      be someone the production write path could actually reach — VM's test uses
+      a user who shares three other orgs with the inviter (so a genuine
+      `addMember` lookup resolves her) while being no member of the target org.
+      An outsider who shares nothing with anyone proves a weaker claim.
+
+## Before designing a mechanism, search docs/ for a prior REVIEW of it (2026-09-04)
+
+21. **A design's prior adversarial review is worthless if the next designer
+    doesn't find it — so search by MECHANISM, not by module.** A session
+    planning visual messaging's ad-hoc groups designed a
+    platform-wide-shared-org shape in full, and independently re-derived two
+    CRITICAL findings, before discovering
+    [docs/16-network-features-review.md](16-network-features-review.md) — an
+    independent Fable-tier review of *exactly that shape*, which had already
+    mapped them and recorded the decision as **blocking and undecided**. The
+    work was not wasted (the findings matched), but the review had cost real
+    tokens once already and the blocker would have been discovered only after
+    a migration was written.
+    - The doc WAS reachable — linked from docs/15 §10 and named in the module
+      spec's own ad-hoc section. It was missed because both were read for their
+      *module* content. Reading the right files is not the same as searching
+      them for the thing you are about to build.
+    - → When a design touches a platform-core predicate (`is_org_member`,
+      `shares_org_with`, `org_caller_rank`, `is_org_admin`, `profiles` policies)
+      or introduces a new *kind* of org/tenant/pool, grep `docs/` for the
+      MECHANISM's vocabulary ("shared org", "public", "network", "pool",
+      "platform-wide") before writing any of it — and read the hits rather than
+      counting them (the search-vacuity rule above).
+    - → Corollary for the reverse direction: **a review whose findings are
+      undecided should say so where the BUILDER will look**, not only in its own
+      decision checklist. docs/16 now carries an update block at the top for
+      exactly this reason.
 ## Hard rules
 
 1. **Never fork a platform primitive.** If the notifications/files/workflow primitive almost fits, extend it in `packages/platform` (benefiting every module) — don't copy it into the module.

@@ -5,6 +5,90 @@ section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every 
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
 
+- **2026-09-03/04 (VISUAL MESSAGING: ITEM 1 SHIPPED, ITEM 2's SHAPE DECIDED AND REVERSED,
+  AND A LIVE CROSS-ORG HOLE FOUND AND CLOSED. Sonnet → Opus mid-session, correctly.)**
+  - **Item 1 — per-org tunable image-stamp guards — SHIPPED** (`1bb84f1`, no migration).
+    The spec's guards ("default max stamp size relative to canvas (admin/org-tunable)" +
+    "default slight transparency") were fixed constants with the org-tunable half deferred
+    since 2026-07-11. `org_modules.settings` now carries
+    `{imageStampMaxFraction, imageStampOpacity}`, edited self-serve at `/o/[orgSlug]/settings`
+    beside synagogue-schedules' location fields; the old constants are the fallback.
+    **No migration needed** — `20260712030000`'s org-admin settings policy + the
+    `org_modules_pin_enablement` trigger already cover every module's settings, and
+    `requireOrgModule()` already returned them. `resolveVisualMessagingSettings()` parses at
+    the read site with fallback-on-invalid (docs/03 #7's discipline, plain validation since
+    `apps/web` carries no zod dep — matching `synagogue-settings.ts`'s own precedent).
+    Scope note recorded in the spec: this makes the *default* placement size/opacity tunable,
+    which is what the spec asks; it does NOT add a resize-time ceiling on an already-placed
+    stamp (still only a 16px floor), which was never part of the guard.
+  - **Item 2 — ad-hoc groups — the shape was decided, then REVERSED the same session, and the
+    reversal is the whole story.** The founder first picked the 2026-07-16 sketch's shape 2
+    (one shared "everyone" org) over shape 1 (per-pair lightweight orgs), on the stated
+    ground that per-pair would clutter the Owner Console. A design was written on that basis.
+    An adversarial review of it then surfaced **[docs/16-network-features-review.md](../16-network-features-review.md)**
+    — an independent Fable-tier tenancy review from **2026-07-20, of exactly that shape**,
+    titled "Public Square." It had already mapped the two findings this session
+    re-derived from scratch (P1-1 CRITICAL, the platform-wide email directory; P1-2 CRITICAL,
+    auto-invite = auto-join), and its checklist item 2 is marked **"Blocking for Public
+    Square,"** with *"The founder has decided none of the open items below."* So the chosen
+    shape was not merely risky, it was **formally blocked on an undecided founder call**.
+    Founder reversed to per-pair on the corrected cost comparison. **Full decided design +
+    the rejected shape's reasoning: the module-4 spec's "SHAPE DECIDED 2026-09-04" entry.
+    NOT BUILT — that is Slice B, and it is the next body of work.**
+  - **The asymmetry that decided it, worth keeping:** both shapes want docs/16 §D's
+    `orgs.kind` trust-class column, but the shared org needs it as a **security** boundary
+    (surgery on `shares_org_with`, the predicate `20260727010000` itself calls "the predicate
+    the entire platform's RLS leans on") while per-pair needs it for **UX only** (hiding tiny
+    orgs from lists). In a 2-person org `shares_org_with` is correct by construction — the
+    only person who can read your profile is the one you chose to talk to — so P1-1/P1-4/P1-5
+    never arise. **And accept-first consent, which the founder chose explicitly over his own
+    original "auto join" instruction once the group-add abuse case was named, comes FREE under
+    per-pair**: the already-built, already-Fable-reviewed `org_accept_invite()` + dashboard
+    invite card IS that mechanism. The diagnosis in one line: *the original plan used a PUBLIC
+    mechanism to solve a PRIVATE problem* — Dana messaging her sister is not a public act.
+  - **Public Square itself is still wanted** (founder: "having the design and opportunity to
+    have a module completely public and independent of a real org is a good thing to have")
+    and is now its own workstream behind docs/16 items 1–3. Its real cost is not the four
+    fixable policies but the tail of P1-6: docs/16 asks for "a written acknowledgment that
+    Public Square means *operating a public community*, with the ongoing cost that implies."
+  - **A LIVE CROSS-ORG HOLE, FOUND IN PASSING AND CLOSED** (`35587d4`,
+    `20260904010000_vm_seat_requires_org_membership.sql`). Pre-existing, unrelated to ad-hoc
+    groups. All four vm_ access predicates gated on a `vm_conversation_members` row ALONE and
+    never on membership of the conversation's org; `addMember` inserted a seat without
+    checking the target was in that org. **So a bare seat granted API reads of every layer,
+    reaction and roster row in the conversation — plus its `vm-images` storage prefix, whose
+    policy calls `vm_is_conv_member` — to someone outside the org.** `requireOrgModule()`
+    404s them in the UI, but the UI is not the gate. Exposure was bounded only by accident
+    (the email lookup runs under `profiles_select_shared_org`, so the caller could only NAME
+    someone already sharing SOME org) — a bound on who can be *targeted*, never on what the
+    seat *exposes*, and precisely the bound the shared-org shape would have removed.
+    **Classroom already defends this exact class and says so in a comment**
+    (`modules/classroom/ui/manage/actions.ts`); visual messaging never got the guard. Fixed
+    with `is_org_member(m.org_id)` on each seat arm — `m.org_id` is authoritative because
+    `vm_sync_from_conversation` derives it from the parent (docs/03 #10), so the cheap form
+    is also the correct one. Rule → **docs/03 #20**.
+  - **PROVED THE TEST HAD TEETH BEFORE TRUSTING IT** — the beat worth copying. Run against
+    the un-migrated database, the new block failed exactly 3 assertions (eve read layers,
+    passed all four predicates, enumerated the roster) while **both CONTROLS passed**, so the
+    negatives were demonstrably non-vacuous. The fixture user was chosen to make the scenario
+    real, not arbitrary: eve shares demo-salon/match/dating with alice (so a genuine
+    `addMember` lookup resolves her) while being no member of demo-visual. Her seat's own
+    existence is asserted too, since "reads nothing" is trivially true if the fixture never
+    ran. **Verified in the documented order**: `supabase db reset` (all migrations) → Kong
+    restart → seed → `pnpm --filter @platform/db test` **146/146**, a real 23s run rather
+    than a `FULL TURBO` replay; typecheck 9/9.
+  - **Two durable rules → docs/03 #20 and #21.** #21 is the meta-lesson: **a design's prior
+    adversarial review is worthless if the next designer doesn't find it — search docs/ by
+    MECHANISM, not by module.** docs/16 was linked from docs/15 §10 and named in the module-4
+    spec's own ad-hoc section, and was still missed because both were read for their module
+    content. docs/16 now carries an update block at the top so the next builder hits it first,
+    and its P1-3 is marked RESOLVED (the member self-DELETE carve-out shipped in
+    `20260727010000:515-521`).
+  - **Model tier worked as the two-way say-so rule intends:** Sonnet did item 1 and the design
+    research, said so when the work crossed into migration/RLS/trigger territory, and the
+    founder switched to Opus — which is the session that found docs/16, ran the adversarial
+    pass, and wrote the migration.
+
 - **2026-09-02 (GO-LIVE CHECKLIST ITEM 8 — ONBOARDING REHEARSAL, PLUS A REAL DEPLOY-BLOCKING
   BUG FOUND AND FIXED ALONG THE WAY. Sonnet.)**
   - **Item 3's draft** (privacy + terms, `/privacy`, not linked in nav) written and pushed for

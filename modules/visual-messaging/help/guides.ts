@@ -66,6 +66,12 @@ you a drawing seat). Invite-only conversations can't be joined this way.
 7b. Placing something isn't final: **tap it again** to select it — drag it
    to move, use the corner handles to resize, and the top handle to rotate.
    With something selected, **Delete selected** removes just that one item.
+7c. A placed photo deliberately starts out **smaller than the picture and
+   slightly see-through**, so a reply answers the picture instead of covering
+   it. You can resize it freely from there. Those two starting values are set
+   per organization — an owner/admin changes them under **Settings → Visual
+   Messaging — image-stamp guards**, so they may differ between the
+   organizations you belong to.
 8. **Clear draft** starts over — nothing is saved until you send.
 9. Click **Send reply**. Your drawing becomes a new layer under the one you
    were viewing, and you're taken straight to it. Once someone replies on

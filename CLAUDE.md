@@ -19,21 +19,48 @@ A multi-tenant modular platform: each client engagement produces a **module** bu
      and update only the compact "Now / Next / Standing rules" below. A fresh chat must never
      pay for the full journal. See "Session hygiene". -->
 
-**NEXT SESSION STARTS HERE (handoff written 2026-09-03): THE GO-LIVE CHECKLIST IS DONE FOR
+**THE GO-LIVE CHECKLIST IS DONE FOR
 NOW — 1, 2, 3, AND 8 ALL SHIPPED; 4, 5, 6, 7 ARE ALL DELIBERATELY PAUSED** (founder's call,
 extract-don't-speculate: each adds real cost or a new dependency for a problem that only
 exists once a real client generates real volume — **do not start any of them unprompted,
 revisit together when the first real client is signed**, per docs/18's status note).
-**FOUNDER HAS CHOSEN THE NEXT BODY OF WORK: complete the Visual Messaging module** — the two
-concrete items are (1) per-org tunable size/opacity guards (fixed defaults today, make them
-configurable), and (2) org-per-group auto-creation for ad-hoc groups (**confirm exact scope
-with the founder before building — flagged as awaiting his confirmation, not yet a settled
-design**). A third known gap, anonymous public view-links, is explicitly deferred as
-post-v1 — do not build it as part of "completing" this module. Read
-docs/modules/module-4-visual-messaging.md before starting. **Sonnet is the right tier** to
-start; say so and switch to Opus only if either item turns out to need real RLS/migration
-work (neither obviously should). Read [docs/18-go-live-checklist.md](docs/18-go-live-checklist.md)
-for the full go-live story; full dated detail in the 2026-08-31 → 2026-09-03 journal entries.
+**NEXT SESSION STARTS HERE (handoff rewritten 2026-09-04). VISUAL MESSAGING: item 1 SHIPPED,
+item 2's SHAPE IS DECIDED BUT NOT BUILT — building it is the next body of work.**
+- **(1) Per-org tunable size/opacity guards: DONE** (`1bb84f1`, no migration —
+  `org_modules.settings` + `/o/[orgSlug]/settings`).
+- **(2) Ad-hoc person-to-person groups: the shape is SETTLED — per-pair lightweight orgs,
+  NOT one shared "everyone" org.** The founder picked the shared org, then **reversed it the
+  same session** after an adversarial pass surfaced
+  [docs/16-network-features-review.md](docs/16-network-features-review.md) — a 2026-07-20
+  Fable-tier review of exactly that shape, which had already found the same two CRITICAL
+  problems and records the fix as **blocking and still undecided**. Accept-first consent
+  (founder's explicit choice over his own earlier "auto join") and a 30-day invite expiry
+  are decided too. **READ THE MODULE-4 SPEC'S "SHAPE DECIDED 2026-09-04" ENTRY AND docs/16
+  BEFORE STARTING — the full design, the five pieces to build, and why the other shape was
+  rejected are all there.** This is a new table + RLS + an `auth.users` trigger, so **Opus,
+  full docs/03 #12 rhythm** — not Sonnet.
+- **Also shipped this session, unrelated to either item: a live cross-org hole is CLOSED**
+  (`35587d4`, `20260904010000`). A `vm_conversation_members` seat alone granted API reads of
+  a conversation's layers/reactions/roster/images to someone outside the org — the four vm_
+  predicates never checked org membership. Rule → **docs/03 #20** (a per-entity SEAT is not
+  authority). docs/03 #21 is the meta-lesson: **search docs/ by MECHANISM before designing
+  one**, which is how docs/16 got missed for most of a session.
+- **QUEUED, NOT STARTED — accept-first for conversation seats in REAL orgs.** The founder
+  confirmed he expects "invited to a chat → accept or decline, never auto-joined" everywhere,
+  but today `addMember` inserts an ACTIVE seat directly in every org. Needs a `pending` value
+  on `vm_conversation_members.status` (cheap: all four vm_ predicates already filter
+  positively on `= 'active'`, so they honour it with no changes) plus accept UI. **It changes
+  shipped behaviour across every org, so it gets its own migration/review/e2e** — do not ride
+  it along with the ad-hoc build.
+- **Anonymous public view-links stay deferred post-v1** — not part of "completing" this module.
+- **PUBLIC SQUARE is now its own workstream and the founder still wants it** ("a module
+  completely public and independent of a real org is a good thing to have"). It is blocked on
+  docs/16 checklist items 1–3, none decided. Note ad-hoc groups will build `orgs.kind` for a
+  **cosmetic** use only, so expect the column to exist and still need its security semantics
+  decided. Its real cost is docs/16 P1-6's tail: *operating a public community*, ongoing.
+
+Read [docs/18-go-live-checklist.md](docs/18-go-live-checklist.md) for the full go-live story;
+full dated detail in the 2026-08-31 → 2026-09-04 journal entries.
 
 **Two real production incidents this session, both resolved, full detail in docs/12 items 2a
 and 3 — read those before touching repo visibility or the deploy pipeline again:**
@@ -579,6 +606,19 @@ in the sections below.
   run `pnpm --filter @platform/db test` directly** (or `turbo run test --force`), and treat
   `FULL TURBO` on a DB-backed suite as "did not run". Same family as the tally rule in docs/03:
   before reporting a number, produce it.
+- **`turbo run typecheck` DOES NOT SEE EDITS TO `modules/nail-salon` OR `modules/visual-messaging`
+  — it reports `FULL TURBO` 9/9 having typechecked none of your change (2026-09-04).** Those are
+  the only two modules with **no `package.json`** (the other five have one), so they are not turbo
+  workspace packages; they are compiled only through `apps/web`'s `tsc` via the `@modules/*` path
+  alias. `turbo.json`'s `typecheck` task declares no `inputs`, so turbo keys the cache on each
+  package's OWN directory — and those two directories are outside every package, so editing them
+  invalidates nothing. **After touching either module, run `pnpm exec turbo run typecheck
+  --concurrency=1 --force`** (a real run is ~35s vs `151ms >>> FULL TURBO`, which is the tell).
+  Same "cache cannot see the thing that changed" family as the DB-suite bullet above, different
+  cause — and note the DB rule is about database state while this one is about files, so the
+  usual `--force` habit for migrations does not cover it. Fixing it properly means either giving
+  those two modules a `package.json` like the other five, or declaring `inputs` on the typecheck
+  task; neither is done.
 - **`pnpm test` OOM-crashes on this host under turbo's 5-way parallelism** (`FATAL ERROR:
   Committing semi space failed`, at absurdly small heaps with ~7GB free). It is NOT the
   `node-compile-cache` corruption below — clearing that does not help. **Use `pnpm exec turbo

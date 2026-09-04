@@ -8,6 +8,29 @@ the live policies before this doc was written. **The founder has decided none of
 open items below** — this doc exists so that when he does, the decisions are made
 with the risks already mapped.
 
+> **UPDATE 2026-09-04 — this doc was nearly repeated from scratch, and two of its
+> items have moved.** A session planning visual messaging's ad-hoc
+> person-to-person groups designed the shared-"everyone"-org shape from
+> scratch and independently re-derived P1-1 and P1-2 as CRITICAL findings,
+> without knowing this review existed. What changed as a result:
+> - **Ad-hoc VM groups NO LONGER DEPEND ON THIS CHECKLIST.** The founder chose
+>   **per-pair lightweight orgs** instead (docs/modules/module-4-visual-messaging.md,
+>   "SHAPE DECIDED 2026-09-04"). In a 2-person org `shares_org_with` is correct
+>   by construction, so P1-1/P1-4/P1-5 do not arise, and `orgs.kind` is needed
+>   there for UX only (hiding tiny orgs from lists) — NOT as a security
+>   boundary. That is a cosmetic adoption of §D's column, not of its semantics.
+> - **P1-3 is RESOLVED** — see its own section below.
+> - **Everything else here stands, and items 1-3 remain undecided.** Public
+>   Square itself is still wanted (founder, 2026-09-04: "having the design and
+>   opportunity to have a module completely public and independent of a real
+>   org is a good thing to have") and is now its own workstream.
+>
+> The lesson worth keeping: **a design's prior adversarial review is only
+> useful if the next designer finds it.** This doc is reachable from docs/15
+> §10 and from the module-4 spec's own ad-hoc section, and was still missed
+> because both were read for their *module* content rather than searched for the
+> *mechanism*. → docs/03 now carries the rule.
+
 The one-sentence summary: **"make the public space an org" is the right instinct and
 should be kept — but "it's just an org, RLS unchanged" is only true for module
 tables.** The platform-core policies were all written under an unstated assumption:
@@ -51,12 +74,26 @@ consenting, and P1-1 becomes universal *and non-optional*. Already folded into
 predicates, with an RLS test proving a pending invitee reads nothing; the invite
 card's org-name read gets a narrow definer path.
 
-### P1-3 [HIGH] Opting out is currently impossible
+### ~~P1-3 [HIGH] Opting out is currently impossible~~ — RESOLVED (verified 2026-09-04)
 
 Verified: the shipped hierarchy guard's "nobody touches their own seat" blocks a
 plain member from deleting their own row — fine for admin self-lockout, a trap for a
 10k-member public org. Folded into docs/15 §6: member self-DELETE carve-out (never
 modify), full #12 rhythm since it edits a freshly audited trigger.
+
+**DONE.** `20260727010000_org_invite_accept.sql:515-521` shipped exactly that
+carve-out: a DELETE of your OWN seat is permitted when it is a pending invite
+(decline) or a plain member seat (leave), while active owner/admin self-removal
+still falls through to the rank ladder. Paired with
+`org_members_delete_self` (`:475-476`). Opting out of an org is possible today.
+
+**Still open in the same area, and NOT covered by that carve-out** (found
+2026-09-04): there is no equivalent for a per-conversation seat in visual
+messaging. `vm_members_delete_self` lets you leave a conversation, but
+`vm_pin_member`'s self-service branch pins `new.status := old.status`, so you
+cannot self-ban — meaning a conversation admin can re-add you immediately and
+indefinitely. Permitting a self-UPDATE to `status='banned'` only is the cheapest
+real mitigation and is queued with the ad-hoc-groups build.
 
 ### P1-4 [HIGH] Roster enumeration
 
@@ -190,3 +227,10 @@ in a network-class org?"*
 items 1–3, which are tenancy-core migrations touching `profiles` / `org_members` /
 `is_org_member()` — exactly the work docs/15 §11 slice 3 already schedules. **Public
 Square is not a new workstream; it is the acceptance test for that slice.**
+
+**Amendment 2026-09-04:** visual messaging's ad-hoc person-to-person groups were
+briefly a *fourth* consumer of this checklist and are no longer — they took the
+per-pair-org route, which needs none of items 1–3 (see the update block at the
+top of this doc). Item 1 (`orgs.kind`) will nonetheless get built by that work,
+for its cosmetic/UX use only, so whoever takes Public Square should expect the
+column to already exist and to still need its security semantics decided.
