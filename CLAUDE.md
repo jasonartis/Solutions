@@ -882,6 +882,44 @@ in the sections below.
      `require-in-the-middle` arrives transitively and is on Next's DEFAULT `serverExternalPackages`
      list, which is what makes Turbopack want the junction; `next.config.ts` has no Sentry wrapper,
      so removing a wrapper is not available either.
+  **FURTHER INVESTIGATED 2026-09-06 (Sonnet) — four more angles tried live, all also dead. Do
+  not re-derive these either:**
+  5. **Pre-populating the junction's target folder with real (copied) files instead of linking
+     — DEAD.** Turbopack creates an empty placeholder dir first (`apps/web/.next/node_modules/
+     import-in-the-middle-<hash>`), then tries to attach the junction to it — confirmed by
+     inspecting it mid-failure. Copying the real package's files into that folder BEFORE
+     rebuilding looked like it worked (the next run failed on a *different* package,
+     `require-in-the-middle`, instead) — but that was a coincidence, not progress: re-running
+     with BOTH folders pre-populated proved Turbopack wipes and recreates them from scratch
+     every single build, unconditionally, before attempting the (always-failing) link. Content
+     already being there changes nothing.
+  6. **`output: 'standalone'` in `next.config.ts` — DEAD.** Standalone mode's own docs describe
+     copying (not linking) traced files into `.next/standalone` — promising on paper, since a
+     copy-based mechanism wouldn't need NTFS at all. Tested directly: identical crash, same
+     package, same point. The junction Turbopack needs for the CORE `.next` bundle is created
+     before standalone's own copy-step would ever run, so the two are unrelated pipelines.
+  7. **`serverExternalPackages: []` override in `next.config.ts` — DEAD.** The docs only show
+     ADDING packages to Next's default externalize list, never removing from it. Tested
+     directly by explicitly clearing the array: identical crash, same two packages. The default
+     list is compiled into Turbopack's own Rust binary, not the JS-level config Next exposes —
+     our override is silently ignored for entries already on that built-in list.
+  8. **Sentry's own `registerEsmLoaderHooks: false` option (real, documented in
+     `@sentry/node`'s types, meant for exactly this class of problem) — CANNOT WORK, reasoned
+     through rather than tested, and the reasoning is the reusable lesson.** The crash happens
+     during Turbopack's static build-time trace of `import * as Sentry from '@sentry/nextjs'`
+     — before ANY application code runs (`Sentry.init()` never executes locally; there's no
+     DSN configured). A runtime option can only change behavior AFTER code executes, so it is
+     structurally incapable of changing what gets bundled at build time. There's also no
+     equivalent flag at all for `require-in-the-middle` (the CommonJS half) — only the ESM side
+     has a documented opt-out. **General rule worth keeping: a RUNTIME config flag can never
+     fix a BUILD-TIME bundling failure, whatever the flag claims to control.**
+  **Confirmed NOT currently contributing, so no need to re-check unless this changes:** `pg`,
+  `sharp`, and `playwright` all sit in `node_modules` (transitively, via other tooling) and are
+  each independently on Next's same default-externalize list — but none is actually reachable
+  from the `apps/web` server bundle today, since only `import-in-the-middle`/
+  `require-in-the-middle` (Sentry's auto-instrumentation) have ever shown up across every build
+  attempt. If any of those three ever becomes a real server-side import, expect this exact
+  class of failure to reappear under a new package name.
   **THE FIX IS MOVING THE REPO TO NTFS, AND IT WAS ATTEMPTED AND VERIFIED 2026-09-04 (Sonnet,
   same day, no code changes).** Fresh `git clone` to `C:\Solutions Platform` (not a copy — `du
   -sh .` on the D: tree timed out after 5 minutes, so copying `node_modules` is far slower than
