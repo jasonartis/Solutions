@@ -532,8 +532,9 @@ Everything below is open but unranked:
   address of a person who has NO account, a data subject with no export, no data-browser presence
   and no deletion route (detail: docs/modules/module-4's "TWO PRIVACY OBLIGATIONS" section).
   Full detail: docs/12 item 6.
-- Pre-launch before real customers (docs/12 checklist): automated+tested backups, monitoring,
-  2FA, privacy/terms, custom SMTP.
+- Pre-launch before real customers (docs/12 checklist, docs/18 full detail): backups and
+  monitoring are DONE; 2FA is a deliberate founder deferral until a real client signs; privacy/
+  terms wording and custom SMTP remain genuinely open.
 
 **Standing rules:** never start a slice/module build without the founder initiating; every
 migration/RLS/trigger change runs the docs/03 #12 rhythm (draft → adversarial review →

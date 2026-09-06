@@ -197,16 +197,15 @@ Found in a deliberate "what haven't we thought of" pass; ordered by urgency.
    either enforce it (uncheck "allow bypass" / include administrators) or drop the
    rule so it stops implying a guarantee it does not give.
 
-1. **Supabase free-tier auto-pause (availability landmine).** Free projects
-   PAUSE after ~7 days without activity — the production site would break
-   until manually restored. Mitigations: an UptimeRobot monitor pinging
-   `/s/demo-shul` every 5 min (touches the DB → counts as activity, and
-   doubles as downtime alerting), or the Hetzner worker's minute heartbeat
-   once deployed. **Until one exists, a quiet week can take prod down.**
-2. **No monitoring at all.** Errors and downtime are invisible until a user
-   complains. 10-minute founder setup when ready: UptimeRobot (free) on the
-   site URL + `/healthz` of the worker; Sentry (free tier) DSN into the web
-   app. Both were deferred from M0.
+1. **Supabase free-tier auto-pause (availability landmine) — MITIGATED, UptimeRobot has been
+   live since 2026-08-31** (predates this note being updated; docs/18 item 1 has the detail).
+   Free projects PAUSE after ~7 days without activity; a real UptimeRobot monitor pings the
+   site every 5 min (touches the DB → counts as activity, and doubles as downtime alerting),
+   confirmed 100% uptime. The Hetzner worker's own heartbeat is still a later-phase addition,
+   not required for this mitigation to hold today.
+2. **No monitoring at all — DONE 2026-09-06 (docs/18 item 1).** Both UptimeRobot (since
+   2026-08-31) and Sentry (account created, DSN live in Vercel, delivery verified via a real
+   accepted test event) are live. Errors and downtime are no longer invisible.
 2a. **VERCEL SILENTLY BLOCKED EVERY DEPLOYMENT FROM 2026-09-01 17:35 THROUGH 2026-09-02
    11:49 — found and fixed 2026-09-02.** Cause: the git commit author email
    (`jasonartisenergy@gmail.com`, this machine's global git config) didn't match the Vercel
