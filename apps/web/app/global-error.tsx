@@ -1,9 +1,11 @@
 'use client'
 
-import * as Sentry from '@sentry/nextjs'
+import * as Sentry from '@sentry/browser'
 import NextError from 'next/error'
 import { useEffect } from 'react'
 
+// @sentry/browser, not @sentry/nextjs — see instrumentation-client.ts.
+//
 // Replaces the root layout when it (or anything above a route's own
 // error.tsx) throws, so it needs its own <html>/<body> — same reason
 // app/layout.tsx has them. Reports to Sentry only if instrumentation-client

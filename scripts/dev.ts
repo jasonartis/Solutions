@@ -36,6 +36,17 @@ function platformIdentityEnv(): Record<string, string> {
   return out
 }
 
+// Optional local Sentry DSN pass-through (docs/18 item 1) — same idea as
+// myzmanimEnv() above. Blank/absent keeps Sentry inert locally, same as it
+// stays inert anywhere else without a DSN.
+function sentryEnv(): Record<string, string> {
+  const deployPath = resolve(repoRoot, '.env.deploy')
+  if (!existsSync(deployPath)) return {}
+  const content = readFileSync(deployPath, 'utf8')
+  const dsn = /^NEXT_PUBLIC_SENTRY_DSN=(.*)$/m.exec(content)?.[1]?.trim() ?? ''
+  return dsn ? { NEXT_PUBLIC_SENTRY_DSN: dsn } : {}
+}
+
 const dryRun = process.argv.includes('--dry-run')
 
 let status = supabaseStatus()
@@ -85,6 +96,7 @@ if (status) {
       NEXT_PUBLIC_SUPABASE_ANON_KEY: anonKey,
       ...myzmanim,
       ...platformIdentityEnv(),
+      ...sentryEnv(),
     })
     writeEnvFile(resolve(repoRoot, 'apps/worker/.env'), {
       DATABASE_URL: dbUrl,

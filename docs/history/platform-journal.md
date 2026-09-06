@@ -5,6 +5,80 @@ section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every 
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
 
+- **2026-09-06 (THE exFAT/TURBOPACK LOCAL-BUILD BLOCKER IS FIXED, Sonnet, no migration).**
+  Closes the saga that ran 2026-08-31 → 2026-09-06. Founder asked, across several turns,
+  whether the drive limitation could be worked around rather than lived with — it could.
+  **Investigation, in order, all tested live (not theorized) before the actual fix:**
+  1. Pre-populating the junction's target folder with real copied files instead of letting
+     Turbopack link it — looked promising for one package, but proved to be a coincidence
+     (Turbopack wipes and recreates the placeholder folder every build, unconditionally,
+     before attempting the always-failing link; re-testing with BOTH target packages
+     pre-populated reproduced the identical crash).
+  2. `output: 'standalone'` in `next.config.ts` — standalone mode's own docs describe
+     copying, not linking, traced files, which looked like it could sidestep NTFS entirely.
+     Dead: identical crash, same point — the junction for the CORE `.next` bundle is created
+     before standalone's own copy-step would ever run.
+  3. `serverExternalPackages: []` override — Next's docs only show ADDING to the default
+     externalize list, never removing from it. Confirmed by testing: the default list
+     (including `import-in-the-middle`/`require-in-the-middle`) is compiled into Turbopack's
+     Rust binary, not the JS-level config Next exposes; our override was silently ignored.
+  4. Sentry's own `registerEsmLoaderHooks: false` (a real, documented option for exactly this
+     class of problem) — reasoned through rather than tested, and correctly: the crash
+     happens during Turbopack's STATIC build-time trace of the `import` statement, before any
+     application code runs (`Sentry.init()` never executes locally — no DSN). A runtime
+     option cannot change what gets bundled at build time. Also: no equivalent flag exists for
+     `require-in-the-middle` (the CommonJS half) at all.
+  5. Converting EVERY Sentry import site (`instrumentation.ts`, `instrumentation-client.ts`,
+     `global-error.tsx`) to a fully conditional/dynamic `import()`, gated on the DSN env var
+     — tested live, identical crash. Proved the trigger isn't reachability of a particular
+     import statement at all: Next resolves `@sentry/nextjs`'s Node entry points and applies
+     the default-externalize classification based on the package simply being a declared
+     dependency, regardless of whether any import of it is static, dynamic, or provably
+     unreachable at runtime.
+  **The actual fix, found by asking a sharper question — "must the problem packages be a
+  dependency AT ALL, or only if we use a specific part of Sentry?"** Checked each Sentry
+  package's own `package.json` directly rather than assuming: `@sentry/core` (the real
+  foundation everything else builds on) declares ONE dependency (`@sentry/conventions`) and
+  NONE of the problem packages. `@sentry/browser` (client-only) is equally clean. Only
+  `@sentry/node` (pulled in because `@sentry/nextjs` unconditionally bundles server+client as
+  one package) declares `import-in-the-middle` and the OpenTelemetry auto-instrumentation
+  stack. So: **removed `@sentry/nextjs` from `apps/web/package.json` entirely, replaced with
+  `@sentry/core` + `@sentry/browser`.**
+  - `instrumentation.ts` (server): a ~15-line custom transport using `@sentry/core`'s own
+    exported building blocks for exactly this (`ServerRuntimeClient`, `createTransport`,
+    `initAndBind`) — not reverse-engineered, the officially-supported pattern Sentry's own
+    edge/workers SDKs use. Confirmed live (reading the compiled `client.js`, not assumed) that
+    the base `Client` class computes the DSN→ingest URL internally and hands it to the
+    transport factory, so the custom transport only needs to POST `request.body` to
+    `options.url` via `fetch`. `captureRequestError` (a Next.js-specific helper) has no
+    equivalent in `@sentry/core`, so it's a ~10-line hand-written replacement pulling the
+    same fields (path/method/error) into `captureException`'s context.
+  - `instrumentation-client.ts` / `global-error.tsx` (browser): near drop-in — same
+    `init()`/`captureException()` calls, just importing from `@sentry/browser` instead.
+    `captureRouterTransitionStart` (automatic Next.js route-change spans) has no equivalent;
+    dropped — it's an optional hook, Next.js simply doesn't call it if absent.
+  **Traded away, honestly:** automatic instrumentation of arbitrary third-party library calls
+  and automatic route-change spans. This app's actual usage was already narrow and manual
+  (three targeted call sites, `tracesSampleRate: 0.1`, never yet activated in prod — no DSN
+  configured anywhere), so this is a small, deliberate loss for a large, concrete gain.
+  **Verification, the same standard as every other test this saga ran:** `pnpm install`
+  (`-281` packages — the whole `@opentelemetry`/instrumentation tree gone; confirmed
+  `import-in-the-middle`/`require-in-the-middle` absent from `node_modules` entirely, only
+  `@opentelemetry/api`, a dependency-free types package, remains as an unrelated leftover).
+  Then the real tests, ALL passing on D: (exFAT), zero CI, zero C: copy needed: `pnpm --filter
+  web build` clean (the exact command dead since 2026-08-31), `turbo run typecheck` 9/9 real
+  run, and a full local e2e run **52/52** (CI-style, prebuilt app, fresh `db reset`+seed) —
+  including the speed-dating video test that failed in the NTFS-clone verification two days
+  earlier, now fixed by the concurrent session's own unrelated work.
+  **One founder action remains, unchanged by any of this:** create the free Sentry account and
+  paste the DSN into Vercel as `NEXT_PUBLIC_SENTRY_DSN` — the code has been ready and
+  completely inert (by design) both before and after this fix.
+  **Reusable lesson:** when a bundler treats a whole npm package specially because of ONE of
+  its transitive dependencies, check whether a lighter sibling package in the same family
+  (`@sentry/core` under `@sentry/nextjs`, here) actually needs that dependency at all — don't
+  assume the feature and the problem dependency are inseparable just because the convenience
+  wrapper ships them together.
+
 - **2026-09-04, later the same day (THE NTFS MIGRATION WAS ATTEMPTED AND VERIFIED, Sonnet,
   no code changes — a fresh clone only).** Ran concurrently with the module-6 speed-dating
   session below; the two sessions' knowledge diverged until now (this entry reconciles

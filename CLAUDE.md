@@ -855,95 +855,29 @@ in the sections below.
 - **Security invariant:** every module table has `org_id` + RLS policy; web app queries as the user (RLS enforced); service-role key only in the worker.
 - **Code style:** explicit over clever — the founder codes alongside AI (Apps Script/JS background; Copilot may be used too). Fewer abstractions, standard patterns, inline docs where intent isn't obvious.
 - Module tables are prefixed (`mm_`, `cls_`, `syn_`, `vm_`, `sal_`, `sd_`); modules never import other modules; shared behavior goes through `packages/platform`.
-- **exFAT constraint:** the repo drive (D:) can't do symlinks. NO `workspace:*` dependencies — internal packages are imported via `@platform/*` tsconfig path aliases, and `.npmrc` pins `node-linker=hoisted`. Details + deferred NTFS revert: docs/01. **Same constraint, new manifestation (2026-08-31, confirmed 2026-09-03 to hit `next dev` too, not just `next build`):** any dependency on Next's `serverExternalPackages` default list (`require-in-the-middle`/`import-in-the-middle` via `@sentry/nextjs`, also `pg`/`sharp`/`playwright`/`bcrypt`/etc.) breaks BOTH LOCALLY with a Turbopack junction-point error — Next needs a real symlink into `.next/node_modules` (`.next/dev/node_modules` for the dev server) for anything it externalizes rather than bundles. **Practical consequence: local e2e (`pnpm dev`-backed) is now fully blocked on this machine** as long as `@sentry/nextjs` is a dependency — verify UI changes via CI's e2e run instead (Linux, unaffected) rather than locally. Not a code bug: verified `pnpm build` passes clean on GitHub Actions' Ubuntu runner. Full story + the verify-via-throwaway-PR technique: docs/18 item 1.
-  **INVESTIGATED PROPERLY 2026-09-04 (Opus) — IT CANNOT BE FIXED IN PLACE. Four workarounds
-  tried, all dead; do not spend a session re-deriving them:**
-  1. **The root cause, proved in two commands rather than assumed.** `mklink /J` on **C: (NTFS)**
-     → *"Junction created"*, and the target reads through it. The same command on **D: (exFAT)** →
-     ***"Local NTFS volumes are required to complete the operation."*** Turbopack's actual failure
-     is creating a junction at `apps/web/.next/node_modules/require-in-the-middle-<hash>` pointing
-     at the hoisted root `node_modules` — i.e. the junction lives INSIDE the build output dir.
-  2. **`distDir` onto NTFS — IMPOSSIBLE, don't try.** Next's own bundled docs
-     (`node_modules/next/dist/docs/.../distDir.md`) state it *"should not leave your project
-     directory. For example, `../build` is an invalid directory."* So the output cannot be moved
-     to a filesystem that supports junctions.
-  3. **`next build --webpack` (Next 16 DOES have the flag) — gets FURTHER but still fails.** First
-     error is exFAT's, and is fixable: `EISDIR: illegal operation on a directory, readlink
-     '.../route.ts'` (exFAT answers a readlink on a regular file with EISDIR, not EINVAL), cured by
-     a `webpack: (c) => { c.resolve.symlinks = false; return c }` config. Past that it dies in
-     Next's OWN plugin — `FlightClientEntryPlugin.createActionAssets: Cannot read properties of
-     undefined (reading 'server')` — i.e. Next 16's webpack path is not viable for an app built on
-     server actions. **Also note the trap if anyone retries: Next 16 fails a TURBOPACK build that
-     merely FINDS a webpack config**, so such a key must be attached conditionally (e.g. behind an
-     env var) or CI breaks.
-  4. **Dropping `@sentry/nextjs` — NOT an option.** It is genuinely wired in at three call sites
-     (`apps/web/instrumentation.ts`, `instrumentation-client.ts`, `app/global-error.tsx`), i.e.
-     real error monitoring and a pre-launch-checklist item — not an unused dependency.
-     `require-in-the-middle` arrives transitively and is on Next's DEFAULT `serverExternalPackages`
-     list, which is what makes Turbopack want the junction; `next.config.ts` has no Sentry wrapper,
-     so removing a wrapper is not available either.
-  **FURTHER INVESTIGATED 2026-09-06 (Sonnet) — four more angles tried live, all also dead. Do
-  not re-derive these either:**
-  5. **Pre-populating the junction's target folder with real (copied) files instead of linking
-     — DEAD.** Turbopack creates an empty placeholder dir first (`apps/web/.next/node_modules/
-     import-in-the-middle-<hash>`), then tries to attach the junction to it — confirmed by
-     inspecting it mid-failure. Copying the real package's files into that folder BEFORE
-     rebuilding looked like it worked (the next run failed on a *different* package,
-     `require-in-the-middle`, instead) — but that was a coincidence, not progress: re-running
-     with BOTH folders pre-populated proved Turbopack wipes and recreates them from scratch
-     every single build, unconditionally, before attempting the (always-failing) link. Content
-     already being there changes nothing.
-  6. **`output: 'standalone'` in `next.config.ts` — DEAD.** Standalone mode's own docs describe
-     copying (not linking) traced files into `.next/standalone` — promising on paper, since a
-     copy-based mechanism wouldn't need NTFS at all. Tested directly: identical crash, same
-     package, same point. The junction Turbopack needs for the CORE `.next` bundle is created
-     before standalone's own copy-step would ever run, so the two are unrelated pipelines.
-  7. **`serverExternalPackages: []` override in `next.config.ts` — DEAD.** The docs only show
-     ADDING packages to Next's default externalize list, never removing from it. Tested
-     directly by explicitly clearing the array: identical crash, same two packages. The default
-     list is compiled into Turbopack's own Rust binary, not the JS-level config Next exposes —
-     our override is silently ignored for entries already on that built-in list.
-  8. **Sentry's own `registerEsmLoaderHooks: false` option (real, documented in
-     `@sentry/node`'s types, meant for exactly this class of problem) — CANNOT WORK, reasoned
-     through rather than tested, and the reasoning is the reusable lesson.** The crash happens
-     during Turbopack's static build-time trace of `import * as Sentry from '@sentry/nextjs'`
-     — before ANY application code runs (`Sentry.init()` never executes locally; there's no
-     DSN configured). A runtime option can only change behavior AFTER code executes, so it is
-     structurally incapable of changing what gets bundled at build time. There's also no
-     equivalent flag at all for `require-in-the-middle` (the CommonJS half) — only the ESM side
-     has a documented opt-out. **General rule worth keeping: a RUNTIME config flag can never
-     fix a BUILD-TIME bundling failure, whatever the flag claims to control.**
-  **Confirmed NOT currently contributing, so no need to re-check unless this changes:** `pg`,
-  `sharp`, and `playwright` all sit in `node_modules` (transitively, via other tooling) and are
-  each independently on Next's same default-externalize list — but none is actually reachable
-  from the `apps/web` server bundle today, since only `import-in-the-middle`/
-  `require-in-the-middle` (Sentry's auto-instrumentation) have ever shown up across every build
-  attempt. If any of those three ever becomes a real server-side import, expect this exact
-  class of failure to reappear under a new package name.
-  **THE FIX IS MOVING THE REPO TO NTFS, AND IT WAS ATTEMPTED AND VERIFIED 2026-09-04 (Sonnet,
-  same day, no code changes).** Fresh `git clone` to `C:\Solutions Platform` (not a copy — `du
-  -sh .` on the D: tree timed out after 5 minutes, so copying `node_modules` is far slower than
-  reinstalling), every gitignored file hand-copied and verified byte-identical (`git status
-  --porcelain --ignored` found a few beyond the obvious `.env*` set — `client-materials/`,
-  `env-backups/`, `founder-feedback.md`, `founder-todo.md`, four root `verify-*.mjs` scripts),
-  `pnpm install`. **Payoff test PASSED, both halves:** `pnpm --filter web build` succeeded clean
-  on Turbopack (the exact command dead on D: since 2026-08-31), and a full local e2e run (CI-
-  style, prebuilt app) passed **51/52** — the one failure was module 6's own in-flight video-join
-  fix, unrelated to the move. Full narrative, incl. waiting out a concurrent session before
-  touching shared Docker state and the auto-mode-classifier permission wrinkle:
-  docs/history/platform-journal.md's 2026-09-04 "NTFS MIGRATION" entry.
-  **One correction to the assumption below:** Compose project identity is keyed on directory
-  **basename only** — `C:\Solutions Platform` and `D:\Solutions Platform` share the SAME
-  containers/volume, not separate projects as originally guessed.
-  **FOUNDER DECISION 2026-09-06: STAYING ON D:, not switching.** The check itself is now a
-  **repeatable script — `scripts/verify-ntfs-build.ts`** (`pnpm exec tsx
-  scripts/verify-ntfs-build.ts`) — fresh-clones to `C:\Solutions Platform`, copies every
-  git-ignored file it finds live (not a hardcoded list), installs, and runs the actual build,
-  reporting PASS/FAIL. Re-run it any time you want to re-check whether the local build still
-  works on NTFS, with zero setup. It deliberately does NOT touch Docker/Supabase (that half
-  needs a human judgment call about concurrent sessions — see the script's own header for the
-  manual commands). The workspace:*/node-linker follow-up stays undone — propose it, don't just
-  do it, if this decision is ever revisited.
+- **exFAT constraint:** the repo drive (D:) can't do symlinks. NO `workspace:*` dependencies — internal packages are imported via `@platform/*` tsconfig path aliases, and `.npmrc` pins `node-linker=hoisted`. Details + deferred NTFS revert: docs/01.
+  **The Sentry/Turbopack local-build blocker (2026-08-31 → 2026-09-06) IS RESOLVED — local
+  `pnpm dev`/`build`/e2e all work again on D:, confirmed 2026-09-06 (Sonnet): build clean,
+  typecheck 9/9, e2e 52/52.** Root cause: `@sentry/nextjs` declares `@sentry/node` as a
+  dependency, which declares `import-in-the-middle`/`require-in-the-middle` (Next's
+  `serverExternalPackages` default list) — Next/Turbopack needs a real filesystem
+  junction/symlink to wire those up, which exFAT cannot create, full stop, for ANY package on
+  that list, regardless of how it's imported (eight workarounds were tried and died on this
+  exact wall before the actual fix was found — full list in the journal, not repeated here).
+  **The fix: replaced `@sentry/nextjs` with a minimal hand-built client on `@sentry/core` +
+  `@sentry/browser`** (`apps/web/instrumentation.ts`/`instrumentation-client.ts`/
+  `app/global-error.tsx`) — neither has ANY dependency on the problem packages (verified via
+  their own `package.json`). Real error capture and delivery survive on the same
+  `NEXT_PUBLIC_SENTRY_DSN`; traded away is `@sentry/node`'s automatic third-party
+  instrumentation and automatic route-change spans (this app's usage was already narrow/manual,
+  so this is a minor loss). **Caveat, unchanged and still real:** if `pg`/`sharp`/`playwright`/
+  etc. (Next's OTHER default-externalized packages) ever become genuine server-side imports,
+  the identical class of crash reappears under a new package name — that's exFAT's structural
+  limit, not a gap in this fix. Full investigation narrative (all 8 dead ends, the NTFS-clone
+  side-investigation and its own repeatable script `scripts/verify-ntfs-build.ts`, and the
+  actual fix): docs/history/platform-journal.md's 2026-09-04 → 09-06 entries. **One founder
+  action still open, unrelated to any of this: create the free Sentry account and paste the
+  DSN into Vercel** (docs/14, docs/18 item 1) — the code has been ready and inert either way.
 
 ## Founder profile & working style (canonical — mirror of any session memory)
 

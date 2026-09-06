@@ -85,25 +85,26 @@ exact same local-build wall; verify the same way (a PR triggers `check`
 on Linux with zero deploy risk, since `deploy` only runs on a master
 push) rather than assuming the dependency is broken.
 
-**UPDATE 2026-09-04 — this was investigated to a conclusion, and the conclusion
-is that IT CANNOT BE FIXED IN PLACE. Do not re-attempt the workarounds; four
-were tried and all are dead, recorded with their exact error signatures in
-CLAUDE.md's exFAT bullet under "Key standing decisions":** `distDir` onto an
-NTFS path (Next's own docs forbid leaving the project directory), `next build
---webpack` (the flag exists in Next 16 and gets past exFAT's `readlink` error
-with `resolve.symlinks = false`, then dies inside Next's own
-`FlightClientEntryPlugin`), dropping `@sentry/nextjs` (it is genuinely wired in
-at three call sites — real error monitoring, and item 2 of this very checklist),
-and any in-place filesystem trick (exFAT hosts neither junctions nor volume
-mount points). The root cause was proved rather than inferred: `mklink /J`
-succeeds on C: (NTFS) and fails on D: (exFAT) with *"Local NTFS volumes are
-required to complete the operation."* **The only real fix is moving the repo to
-NTFS** — which would also retire docs/01's `workspace:*` ban and the
-`node-linker=hoisted` pin, since both exist for this same reason. Founder's
-call; CLAUDE.md carries the step-by-step including which gitignored files git
-will not bring. **Until then the verify-via-CI advice above remains correct and
-is proven to work** — an e2e failed in CI on 2026-09-04, was diagnosed from the
-CI log, and passed on re-land, with no local run at any point.
+**UPDATE 2026-09-04 → 09-06 — this was investigated to a conclusion, and then FIXED. Eight
+workarounds were tried and died first (full list in CLAUDE.md's exFAT bullet history and
+docs/history/platform-journal.md) — moving the repo to NTFS was verified to work as a
+side-investigation but the founder chose to stay on D: rather than switch. The actual fix,
+found 2026-09-06: `@sentry/nextjs` unconditionally bundles `@sentry/node` (which declares
+`import-in-the-middle` — the package needing the junction) even though `@sentry/core`, the
+real foundation underneath it, has NONE of that dependency. Replaced `@sentry/nextjs` with a
+minimal hand-built client on `@sentry/core` + `@sentry/browser` (`apps/web/instrumentation.ts`
+/ `instrumentation-client.ts` / `app/global-error.tsx`) — real error capture and delivery on
+the same DSN, at the cost of automatic third-party instrumentation and automatic route-change
+spans (this app's usage was already narrow/manual, so a small loss). Verified: `pnpm --filter
+web build` clean, `turbo run typecheck` 9/9, full local e2e **52/52**, all on D:, zero CI
+needed. **Local `pnpm dev` and `pnpm build` both work again — the CI-only workaround above is
+no longer necessary for this reason** (still occasionally useful for other reasons, e.g.
+Linux-only issues). Full narrative: docs/history/platform-journal.md's 2026-09-06 entry.
+**IMPORTANT for whoever sets up the Sentry account: do NOT run Sentry's own Next.js setup
+wizard or follow its "connect your Next.js app" auto-instructions** — that reintroduces
+`@sentry/nextjs`/`@sentry/node` and undoes this fix. Just create a project (platform choice
+doesn't matter — we don't use Sentry's Next.js integration) and copy the DSN from Project
+Settings → Client Keys (DSN) into Vercel as `NEXT_PUBLIC_SENTRY_DSN`. Nothing else needed.
 
 
 
