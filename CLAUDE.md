@@ -544,6 +544,18 @@ in the sections below.
 - Node module compile cache corruption makes pnpm OOM-crash at tiny heaps → delete `%TEMP%\node-compile-cache`.
 - PowerShell 5.1 `-Encoding utf8` writes a BOM; the Supabase CLI refuses BOM'd `.env` files. Write env files from Node (scripts/dev.ts) or with BOM-less UTF8.
 - After `supabase db reset`, Kong can hold a stale route to the recreated auth container (502 on `/auth/v1/*` while `rest` works) → `docker restart supabase_kong_Solutions_Platform`.
+- **AUTO MODE'S CLASSIFIER CAN BLOCK `supabase stop`/`start`/`db reset` EVEN WITH AN EXISTING
+  BROAD `Bash(pnpm exec *)` ALLOW RULE ALREADY MATCHING IT (2026-09-06).** The denial names
+  "the auto mode classifier," not a permission-prefix mismatch — and adding a MORE SPECIFIC
+  `permissions.allow` entry (e.g. `Bash(pnpm exec supabase stop)`) does NOT clear it either,
+  because the classifier is a SEPARATE mechanism from prefix-matched Bash permissions. **The
+  actual fix is a different settings key: `autoMode.allow`** (an array of natural-language
+  strings describing the allowed action, evaluated by the classifier itself — include
+  `"$defaults"` as the first entry to keep the built-in rules). Even after adding the right
+  `autoMode.allow` entry, editing `.claude/settings.local.json` ITSELF got blocked by the same
+  classifier on the first attempt — self-modifying permission grants is treated as sensitive
+  too — but succeeded on retry after the founder explicitly said so in chat. This is
+  session/machine-local settings, not something the repo carries.
 - **Resolving a path from `import.meta.url` — TWO traps on this host, same family.**
   `import.meta.dirname` is `undefined` under tsx; and **`new URL('...', import.meta.url).pathname`
   leaves the space in `D:\Solutions Platform` PERCENT-ENCODED**, so anything written through it

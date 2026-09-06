@@ -79,6 +79,39 @@ decision log, docs/03 conventions, docs/12 safeguards) — this is the chronolog
   assume the feature and the problem dependency are inseparable just because the convenience
   wrapper ships them together.
 
+- **2026-09-04 (THE exFAT/TURBOPACK LOCAL-BUILD BLOCKER WAS INVESTIGATED, Opus — cannot be
+  fixed in place, at the time). Superseded 2026-09-06 by the entry above, kept here verbatim
+  as the original evidence** (CLAUDE.md's own summary of this pointed here after being
+  trimmed, but the detail had never actually been copied over until now — recovered from git
+  history, commit `81d4840`, rather than left a dangling pointer):
+  1. **The root cause, proved in two commands rather than assumed.** `mklink /J` on **C: (NTFS)**
+     → *"Junction created"*, and the target reads through it. The same command on **D: (exFAT)** →
+     ***"Local NTFS volumes are required to complete the operation."*** Turbopack's actual failure
+     is creating a junction at `apps/web/.next/node_modules/require-in-the-middle-<hash>` pointing
+     at the hoisted root `node_modules` — i.e. the junction lives INSIDE the build output dir.
+  2. **`distDir` onto NTFS — IMPOSSIBLE, don't try.** Next's own bundled docs
+     (`node_modules/next/dist/docs/.../distDir.md`) state it *"should not leave your project
+     directory. For example, `../build` is an invalid directory."* So the output cannot be moved
+     to a filesystem that supports junctions.
+  3. **`next build --webpack` (Next 16 DOES have the flag) — gets FURTHER but still fails.** First
+     error is exFAT's, and is fixable: `EISDIR: illegal operation on a directory, readlink
+     '.../route.ts'` (exFAT answers a readlink on a regular file with EISDIR, not EINVAL), cured by
+     a `webpack: (c) => { c.resolve.symlinks = false; return c }` config. Past that it dies in
+     Next's OWN plugin — `FlightClientEntryPlugin.createActionAssets: Cannot read properties of
+     undefined (reading 'server')` — i.e. Next 16's webpack path is not viable for an app built on
+     server actions. **Also note the trap if anyone retries: Next 16 fails a TURBOPACK build that
+     merely FINDS a webpack config**, so such a key must be attached conditionally (e.g. behind an
+     env var) or CI breaks.
+  4. **Dropping `@sentry/nextjs` — was thought NOT to be an option at the time.** It is genuinely
+     wired in at three call sites (`apps/web/instrumentation.ts`, `instrumentation-client.ts`,
+     `app/global-error.tsx`), i.e. real error monitoring and a pre-launch-checklist item — not an
+     unused dependency. `require-in-the-middle` arrives transitively and is on Next's DEFAULT
+     `serverExternalPackages` list, which is what makes Turbopack want the junction; `next.config.ts`
+     has no Sentry wrapper, so removing a wrapper is not available either. **This assumption is
+     what the 2026-09-06 fix (entry above) corrected: dropping `@sentry/nextjs` specifically was
+     right, but dropping SENTRY was never necessary — `@sentry/core` underneath it has none of
+     this dependency.**
+
 - **2026-09-04, later the same day (THE NTFS MIGRATION WAS ATTEMPTED AND VERIFIED, Sonnet,
   no code changes — a fresh clone only).** Ran concurrently with the module-6 speed-dating
   session below; the two sessions' knowledge diverged until now (this entry reconciles
@@ -109,6 +142,15 @@ decision log, docs/03 conventions, docs/12 safeguards) — this is the chronolog
   retiring D: or switching primary dev to C:.** The deferred follow-up (dropping
   `node-linker=hoisted` + restoring `workspace:*`) was deliberately NOT done — proposed
   only, per the task's own instruction not to bundle it.
+  **FOUNDER DECISION, same session, shortly after: STAYING ON D:, not switching primary dev
+  to C:.** Asked directly whether there was any advantage to switching — yes, one (local
+  build/e2e would just work) — but decided the CI-verification workflow already in place was
+  working fine, so not worth the switch cost. Instead asked for the check ITSELF to become
+  repeatable rather than redoing the manual recipe each time — that request is
+  `scripts/verify-ntfs-build.ts` above. **This decision was later superseded in substance (not
+  reversed) by the 2026-09-06 fix entry**: since the actual local-build bug got fixed instead,
+  the D:-vs-C: choice this decision settled no longer has a live consequence either way — D:
+  now builds fine on its own. The C: copy remains purely a disposable verification tool.
 - **2026-09-04 (MODULE 6, SPEED DATING: the video-provider interface, the click-to-join
   video UI, contact-share population on reveal, and resume-review's live-panel gap — all
   shipped, no migration, Sonnet, final commit CI-GREEN.)** Full detail: the module-6 spec's
