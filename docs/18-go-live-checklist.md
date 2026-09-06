@@ -21,7 +21,7 @@ minutes, not sessions, and several can happen in parallel with build work.
 
 | # | Item | Whose job | Size | Blocks what |
 |---|------|-----------|------|-------------|
-| 1 | Monitoring + keep-alive | **CODE DONE.** Founder: 1 free Sentry account (UptimeRobot already existed) | ~1 session | Silent outages; **prod pausing itself** |
+| 1 | Monitoring + keep-alive | **DONE 2026-09-06.** Sentry account created, DSN live in Vercel, delivery verified | ~1 session | Silent outages; **prod pausing itself** |
 | 2 | Automated + tested backups | **DONE 2026-09-01/02.** | ~1–2 sessions | Unrecoverable data loss |
 | 3 | Privacy + terms page | Claude drafts, **founder owns wording** | ~1 session | Legal exposure the moment a real person signs in |
 | 4 | Worker on a real host | Claude (runbook exists) | ~30 min | Retention never runs in prod |
@@ -42,16 +42,19 @@ items 4/5/6/7 together when the first real client is signed, not before.**
 
 ---
 
-## 1. Monitoring + keep-alive — *do this first* — **CODE DONE 2026-08-31/09-01, verified live on prod**
+## 1. Monitoring + keep-alive — *do this first* — **FULLY DONE 2026-09-06, verified live on prod**
 
-**Status: the app-side half is shipped and prod-verified.** `/healthz`
+**Status: both halves done — code AND the founder action.** `/healthz`
 (`apps/web/app/healthz/route.ts`) and Sentry's guarded wiring
 (`apps/web/instrumentation.ts` + `instrumentation-client.ts` +
-`app/global-error.tsx`) are on master and deployed. **One founder action
-remains: create the free Sentry account and paste the DSN into Vercel as
-`NEXT_PUBLIC_SENTRY_DSN`** — until then Sentry stays inert by design (no
-crash, no code path taken, just never initialized). See docs/14 for the
-account row.
+`app/global-error.tsx`) are on master and deployed. **The founder action
+(create the Sentry account, paste the DSN into Vercel as
+`NEXT_PUBLIC_SENTRY_DSN`) is also done** — project slug `solutions-platform`,
+DSN confirmed matching in Vercel, and delivery verified two ways: a direct
+API smoke test (`scripts/verify-sentry-transport.mts` — HTTP 200, event id
+echoed back) and the founder confirming the test event visible in the
+Sentry dashboard's Issues list. Sentry is no longer inert — it is live.
+See docs/14 for the account row.
 
 **UptimeRobot is NOT a founder action — it already exists and is live**
 (confirmed 2026-08-31: a real monitor on `https://solutions-platform.vercel.app/s/pozne`,

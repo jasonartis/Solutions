@@ -875,9 +875,10 @@ in the sections below.
   the identical class of crash reappears under a new package name — that's exFAT's structural
   limit, not a gap in this fix. Full investigation narrative (all 8 dead ends, the NTFS-clone
   side-investigation and its own repeatable script `scripts/verify-ntfs-build.ts`, and the
-  actual fix): docs/history/platform-journal.md's 2026-09-04 → 09-06 entries. **One founder
-  action still open, unrelated to any of this: create the free Sentry account and paste the
-  DSN into Vercel** (docs/14, docs/18 item 1) — the code has been ready and inert either way.
+  actual fix): docs/history/platform-journal.md's 2026-09-04 → 09-06 entries. **The founder
+  action (Sentry account + DSN into Vercel) is ALSO done now, same session** (docs/14, docs/18
+  item 1) — Sentry is live in production, delivery verified via a real accepted test event, not
+  just wired-and-inert.
 
 ## Founder profile & working style (canonical — mirror of any session memory)
 

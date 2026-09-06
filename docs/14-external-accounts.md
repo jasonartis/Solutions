@@ -35,7 +35,7 @@ the active section and add a row above.
 |---|---|---|
 | **Hetzner / DigitalOcean (VPS)** | When the background worker moves to the cloud (live synagogue exports, speed-dating orchestration) | Runs the pg-boss worker 24/7. ~$5–20/mo. Today the worker runs on your PC via `pnpm worker:prod`. |
 | **Backblaze B2** | Same time as the VPS | Off-site database/file backups (free tier). |
-| **Sentry** | Go-live checklist item 1 (docs/18) | Error monitoring for the web app (free tier; sign in with GitHub). Paste the DSN into Vercel as `NEXT_PUBLIC_SENTRY_DSN` — code is wired and guarded on that var (inert until it's set). |
+| **Sentry** | **DONE 2026-09-06** (go-live checklist item 1, docs/18) | Error monitoring for the web app (free tier). Account created (project slug `solutions-platform`), DSN live in Vercel as `NEXT_PUBLIC_SENTRY_DSN`, delivery verified (real test event confirmed in the dashboard). |
 | **Resend** | When modules need to send real email (classroom/synagogue notifications) | Transactional email from our own domain (free 3k/month). |
 | **Domain registrar** | When branding is decided | A real domain for public pages + email sending (~$15/yr). |
 | **Twilio / Stripe** | Only if SMS / payments features get built | Documented future upgrades. |
