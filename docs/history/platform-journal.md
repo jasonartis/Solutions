@@ -5,6 +5,36 @@ section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every 
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
 
+- **2026-09-04, later the same day (THE NTFS MIGRATION WAS ATTEMPTED AND VERIFIED, Sonnet,
+  no code changes — a fresh clone only).** Ran concurrently with the module-6 speed-dating
+  session below; the two sessions' knowledge diverged until now (this entry reconciles
+  them). Followed the exFAT bullet's own recipe exactly: fresh `git clone` to
+  `C:\Solutions Platform` (not a copy — `du -sh` on the D: tree times out), hand-copied all
+  16 gitignored files/dirs found via `git status --porcelain --ignored` (a few —
+  `client-materials/`, `env-backups/`, `founder-feedback.md`, `founder-todo.md`, four
+  root `verify-*.mjs` scripts — weren't even in the recipe's own list; verified
+  byte-identical after copying), `pnpm install` (21s, all reused). **Payoff test: BOTH
+  halves passed.** `pnpm --filter web build` succeeded clean on Turbopack, all 14 pages —
+  the exact command that was fully blocked on D: since 2026-08-31. Then, after a real wait
+  for the concurrent module-6 session to go quiet (background git-HEAD watcher, then an
+  independent re-check — no dev server, no `node.exe` process — before touching anything
+  shared) and an explicit founder approval for the one-off permission-rule edit the
+  auto-mode classifier itself required: `supabase stop` (D:) → `start` (C:) → `db reset` →
+  seed → **local e2e, CI-style, from C: — 51/52 passed.** The one failure was module 6's
+  own video-join assertion, already being fixed by the concurrent session in real time (see
+  entry below) — not caused by the move, and the first time that test had ever run locally
+  at all, since local e2e was fully blocked before this fix. **One correction to the exFAT
+  bullet's own stated assumption:** Docker Compose project identity turned out to be keyed
+  on directory **basename only**, not full path — `C:\Solutions Platform` and
+  `D:\Solutions Platform` resolved to the IDENTICAL containers/volume
+  (`supabase_..._Solutions_Platform`), not a separate "new project" as the bullet
+  speculated. Good for continuity (nothing orphaned) but means the `db reset` from C: reset
+  the one shared local database — harmless (routine, reseedable, not prod), but the
+  concurrent session would see a freshly-seeded DB if it touched local data again the same
+  day. **Status: BOTH copies still exist, D: is unchanged/still primary, no decision yet on
+  retiring D: or switching primary dev to C:.** The deferred follow-up (dropping
+  `node-linker=hoisted` + restoring `workspace:*`) was deliberately NOT done — proposed
+  only, per the task's own instruction not to bundle it.
 - **2026-09-04 (MODULE 6, SPEED DATING: the video-provider interface, the click-to-join
   video UI, contact-share population on reveal, and resume-review's live-panel gap — all
   shipped, no migration, Sonnet, final commit CI-GREEN.)** Full detail: the module-6 spec's

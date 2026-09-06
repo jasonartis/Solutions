@@ -882,25 +882,24 @@ in the sections below.
      `require-in-the-middle` arrives transitively and is on Next's DEFAULT `serverExternalPackages`
      list, which is what makes Turbopack want the junction; `next.config.ts` has no Sentry wrapper,
      so removing a wrapper is not available either.
-  **THE ONLY REAL FIX IS MOVING THE REPO TO NTFS** (C: measured 2026-09-04 at 154GB free), which
-  would also let docs/01's `workspace:*` ban and `node-linker=hoisted` pin be dropped — they exist
-  for this same no-symlinks reason. That is docs/01's already-deferred "NTFS revert", now with the
-  evidence attached. **FOUNDER'S CALL, and treat it as a deliberate maintenance task, not a quick
-  move:** it needs a fresh `pnpm install`, manual copying of the gitignored `.env*` files, and a
-  `supabase stop`/`start` + `db reset` + seed from the new path (the CLI derives its container
-  names from the project directory, e.g. `supabase_db_Solutions_Platform`, so a moved directory
-  can read as a new project).
-  **Do it as a fresh `git clone` to C:, NOT as a copy/move of this tree** — `du -sh .` on this
-  repo TIMED OUT after 5 minutes on exFAT, so copying `node_modules` across is far slower than
-  just reinstalling it. **And git will not bring the gitignored files, so hand-copy exactly
-  these** (measured 2026-09-04 via `git status --porcelain --ignored`; the worker one is the easy
-  one to forget and its absence breaks the worker silently):
-  `.env`, `.env.accounts`, `.env.deploy`, `apps/web/.env.local`, **`apps/worker/.env`**,
-  `.claude/settings.local.json`, plus `.vercel/` + `apps/web/.vercel/` if you want the existing
-  Vercel link, and `backups/` if you want the local backup history. **Keep the D: copy until a
-  real `pnpm --filter web build` AND a local e2e run both pass from C:** — that pair is the whole
-  point of the move and the only proof it worked. Until then, **verify UI via CI's e2e, which does work** — proven
-  this session by an e2e that failed in CI, was diagnosed from the CI log, and passed on re-land.
+  **THE FIX IS MOVING THE REPO TO NTFS, AND IT WAS ATTEMPTED AND VERIFIED 2026-09-04 (Sonnet,
+  same day, no code changes).** Fresh `git clone` to `C:\Solutions Platform` (not a copy — `du
+  -sh .` on the D: tree timed out after 5 minutes, so copying `node_modules` is far slower than
+  reinstalling), every gitignored file hand-copied and verified byte-identical (`git status
+  --porcelain --ignored` found a few beyond the obvious `.env*` set — `client-materials/`,
+  `env-backups/`, `founder-feedback.md`, `founder-todo.md`, four root `verify-*.mjs` scripts),
+  `pnpm install`. **Payoff test PASSED, both halves:** `pnpm --filter web build` succeeded clean
+  on Turbopack (the exact command dead on D: since 2026-08-31), and a full local e2e run (CI-
+  style, prebuilt app) passed **51/52** — the one failure was module 6's own in-flight video-join
+  fix, unrelated to the move. Full narrative, incl. waiting out a concurrent session before
+  touching shared Docker state and the auto-mode-classifier permission wrinkle:
+  docs/history/platform-journal.md's 2026-09-04 "NTFS MIGRATION" entry.
+  **One correction to the assumption below:** Compose project identity is keyed on directory
+  **basename only** — `C:\Solutions Platform` and `D:\Solutions Platform` share the SAME
+  containers/volume, not separate projects as originally guessed.
+  **STATUS: both copies exist, D: is still primary/unchanged, no decision yet on retiring D: or
+  switching primary dev to C:.** The workspace:*/node-linker follow-up below was deliberately
+  NOT done this pass — propose it, don't just do it, when that's picked up.
 
 ## Founder profile & working style (canonical — mirror of any session memory)
 
