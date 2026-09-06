@@ -30,8 +30,9 @@ item 2's SHAPE IS DECIDED BUT NOT BUILT — building it is the next body of work
   the click-to-join video UI, contact-share population on reveal, and resume-review's
   live-panel gap are all SHIPPED and CI-GREEN.** Full detail: the module-6 spec's own
   dated entry + docs/history/platform-journal.md. **Two real bugs found and fixed by CI,
-  not locally** (local UI is unverifiable — the exFAT/Turbopack/`@sentry/nextjs` bug
-  below): a wrong e2e assertion, and a genuine production bug where THROWING from a
+  not locally** (local UI was unverifiable AT THE TIME — the exFAT/Turbopack/`@sentry/nextjs`
+  bug, fixed 2026-09-06, see the exFAT bullet below): a wrong e2e assertion, and a genuine
+  production bug where THROWING from a
   Server Action for an expected refusal gets its message REDACTED — fixed by returning
   `{ok, reason}` instead of throwing (new convention, docs/03 #22, applies platform-wide
   to any future direct-await-a-server-action UI). Final commit (`61551ab`) confirmed
@@ -88,9 +89,12 @@ designing the CI-usage discipline docs/12 item 3 lists as candidates, none decid
 (`jasonartisenergy@gmail.com` vs the Vercel team owner's `jasonartisenergy1@gmail.com`) —
 GitHub's own UI never said why, only Vercel's `/v6/deployments` API showed `state: BLOCKED`.
 Fixed via `git config --global user.email` (already applied on this machine) and verified
-end-to-end. **A related, separate finding: local `next build` AND `next dev` are both fully
-blocked on this machine** by the exFAT/Turbopack/`@sentry/nextjs` junction-point issue (see
-the exFAT bullet below) — verify any UI change via CI, not locally, until that's resolved.
+end-to-end. **A related, separate finding, TRUE AT THE TIME (2026-09-02) ONLY — FIXED
+2026-09-06, do not act on this as current: local `next build` AND `next dev` were both fully
+blocked on this machine** by the exFAT/Turbopack/`@sentry/nextjs` junction-point issue. **This
+is resolved — see the exFAT bullet below for the actual fix.** Local UI verification works
+again; the CI-only workaround this line originally advised is no longer necessary for this
+reason (may still be useful for genuinely Linux-only issues).
 
 Also shipped this session, smaller: the classroom grading console now shows a submission's
 attached files (real RLS access existed, no page ever queried it — `git log` commit

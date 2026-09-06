@@ -340,6 +340,11 @@ fixed in place** (`81d4840`, investigated same-day — four workarounds tried,
 all dead ends; the only real fix is an NTFS repo move, a founder call, not
 attempted here). Proceeded anyway, verifying via CI per that commit's own
 established pattern ("verify UI via CI's e2e, which does work").
+**SINCE FIXED, 2026-09-06 (CLAUDE.md's exFAT bullet) — local `pnpm dev`/`build` both work
+again on D:.** Practical consequence for whoever picks up "the actual call unverified" next:
+that verification is no longer blocked by this for the app side — `docker-jitsi-meet` running
+locally is still needed to test a real call (a separate, still-open prerequisite, unrelated to
+the exFAT issue), but the app itself can now be run and clicked through locally again.
 
 `modules/speed-dating/ui/events/[eventId]/video-room.tsx` — a client
 component wrapping `getVideoJoinToken`, `lib-jitsi-meet` loaded at join time
