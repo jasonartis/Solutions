@@ -897,9 +897,15 @@ in the sections below.
   **One correction to the assumption below:** Compose project identity is keyed on directory
   **basename only** — `C:\Solutions Platform` and `D:\Solutions Platform` share the SAME
   containers/volume, not separate projects as originally guessed.
-  **STATUS: both copies exist, D: is still primary/unchanged, no decision yet on retiring D: or
-  switching primary dev to C:.** The workspace:*/node-linker follow-up below was deliberately
-  NOT done this pass — propose it, don't just do it, when that's picked up.
+  **FOUNDER DECISION 2026-09-06: STAYING ON D:, not switching.** The check itself is now a
+  **repeatable script — `scripts/verify-ntfs-build.ts`** (`pnpm exec tsx
+  scripts/verify-ntfs-build.ts`) — fresh-clones to `C:\Solutions Platform`, copies every
+  git-ignored file it finds live (not a hardcoded list), installs, and runs the actual build,
+  reporting PASS/FAIL. Re-run it any time you want to re-check whether the local build still
+  works on NTFS, with zero setup. It deliberately does NOT touch Docker/Supabase (that half
+  needs a human judgment call about concurrent sessions — see the script's own header for the
+  manual commands). The workspace:*/node-linker follow-up stays undone — propose it, don't just
+  do it, if this decision is ever revisited.
 
 ## Founder profile & working style (canonical — mirror of any session memory)
 
