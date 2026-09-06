@@ -21,6 +21,10 @@ import type { BaseTransportOptions, Transport } from '@sentry/core'
 // Traded away vs @sentry/nextjs: automatic instrumentation of third-party
 // libraries (auto-traced DB/HTTP calls) and automatic breadcrumbs. Kept:
 // real error capture and delivery to Sentry, on the exact same DSN.
+// `options.url` here is NOT something we compute — @sentry/core's own Client
+// base class parses the DSN and calls getEnvelopeEndpointWithUrlEncodedAuth()
+// internally before invoking this factory (confirmed by reading the compiled
+// client.js, not assumed). This transport only has to move bytes.
 function makeFetchTransport(options: BaseTransportOptions): Transport {
   return createTransport(options, async (request) => {
     const response = await fetch(options.url, {
