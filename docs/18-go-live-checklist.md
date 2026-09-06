@@ -111,11 +111,14 @@ Settings → Client Keys (DSN) into Vercel as `NEXT_PUBLIC_SENTRY_DSN`. Nothing 
 
 
 
-**Why it is first, and why it is not merely prudent.** docs/12 item 1: Supabase free-tier
-projects **pause themselves after ~7 days without activity**, and docs/12 item 2: there is
-no monitoring of any kind, so "errors and downtime are invisible until a user complains."
-Those two compound. A quiet week takes production down and nothing tells anyone — that is
-true of the platform *today*, before any client exists.
+**Why it was first, and why it wasn't merely prudent (historical rationale — both risks below
+are now MITIGATED, see the item status above; kept for why this was prioritized).** docs/12
+item 1: Supabase free-tier projects **pause themselves after ~7 days without activity**, and
+docs/12 item 2 (at the time): there was no monitoring of any kind, so "errors and downtime are
+invisible until a user complains." Those two would have compounded — a quiet week taking
+production down with nothing telling anyone. **That was true of the platform before this item
+shipped; it is not true today** — UptimeRobot has been live since 2026-08-31, and Sentry since
+2026-09-06.
 
 A 5-minute uptime ping fixes both at once: it is the alert, and the traffic it generates
 is itself the activity that prevents the pause.
