@@ -462,3 +462,61 @@ The shared principle is worth stating once: **authority follows current standing
 never past standing.** The two fixes compose — docs/21 §7.4 records that
 revoking memberships is only *sufficient* for a silhouette because this audit's
 fix made seats inert when membership ends.
+
+## ADJACENT, FOUND 2026-09-10, DESCOPED AND NOT FIXED — `module_roles` reads are ORG-WIDE
+
+Found while planning the seat-authority fix, raised with the founder, then
+**descoped mid-session because its fix is blocked on unrelated work.** Recorded
+here because it existed only in conversation, and open state that lives only in
+a chat is how it gets lost.
+
+**The leak, verified live:**
+
+```
+module_roles_select_member :: SELECT :: (is_org_member(org_id) OR is_superadmin())
+```
+
+No module filter, no role filter, no self filter — **any active member of an org
+reads every `module_roles` row for that org**: `user_id`, `module_key`, `role`,
+`scope_ref`. Measured in `demo-match`: 6 active members, 4 of whom hold `single`.
+So an org member can enumerate **who is in the dating pool**. It is the same
+census shape docs/16 P1-4 names, on a table nothing else guards.
+
+**Why it was NOT fixed, and this is the part worth keeping — the obvious fix
+breaks a working page:**
+
+1. Narrowing `module_roles_select_member` to `user_id = auth.uid() OR
+   is_superadmin()` **does nothing on its own**, because
+   `module_roles_write_org_admin` is `ALL USING is_org_admin(org_id)` and a
+   `for all` policy's USING also governs SELECT. So an org admin keeps reading
+   the whole table through the other door. Both policies must change together.
+2. The natural replacement read path for people who legitimately administer
+   grants is `module_has_manager_grant(org_id, module_key)` — which requires
+   `module_position_rank(...) >= 2`. **Verified:**
+
+   ```
+   matchmaking admin      -> 0
+   matchmaking matchmaker -> 0
+   visual-messaging admin -> 0
+   classroom professor    -> 2
+   ```
+
+   Matchmaking, visual messaging and synagogue-schedules were **never
+   rank-mapped** — every position is rank 0 — so that predicate is FALSE for a
+   matchmaking admin, and narrowing the policy would break
+   `modules/matchmaking/ui/manage/page.tsx:48-49` for anyone who administers
+   that module without also being an org admin (`mm_can_manage` admits both).
+
+3. The clean fix is therefore **rank-map those three modules first** — which
+   CLAUDE.md already records as OPTIONAL, a real behaviour change, and something
+   that **will FAIL THE BUILD until every newly-implied view-as pair is
+   explicitly answered**. That is its own slice, not a side quest inside a
+   security fix.
+
+**Severity, stated honestly rather than inflated:** everyone in `demo-match` is
+there *for* matchmaking, so the practical exposure today is low. It is real,
+worth fixing, and not urgent — and it is entangled with the Public Square roster
+question (docs/20), which is being designed separately.
+
+**Do not attempt this as a one-line policy narrowing.** Either rank-map first, or
+design a per-module manage predicate deliberately.
