@@ -1030,6 +1030,15 @@ in the sections below.
   (self-do is cheaper there); in a LARGE context their fresh-start saving can
   outweigh it for heavy tasks. The reliable wins are parallelism + context-leanness,
   not budget.
+  **A BROAD REVIEW AGENT CAN DIE ON THE SESSION LIMIT REPEATEDLY AND PRODUCE NOTHING —
+  SPLIT IT (2026-09-10, after FOUR failed runs of the same task).** A single
+  "review everything about X" agent hit *You've hit your session limit* four separate
+  times, each time burning its whole run and returning one useless line. The same work
+  as **two narrow agents, each with one question and an explicit word cap** ("answer only
+  this; keep the report under 500 words") both finished first try. The tell is an agent
+  that dies late with a partial trailing sentence rather than erroring early. → When a
+  review agent fails on limits, do NOT simply retry it — **narrow the question and cap the
+  output**, and prefer two focused agents over one exhaustive one.
 - **Proactively recommend a fresh chat when THIS context grows large.** Per-turn
   cost scales with accumulated context, so a long session gets progressively more
   expensive. When the chat has grown big AND you're at a clean, committed, shipped
