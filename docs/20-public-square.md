@@ -2340,3 +2340,92 @@ case *today* — where a rank-0 customer reads a rank-3 admin's email. That is
 live, accepted, and unwritten. **Writing an honest general sentence may be the
 thing that forces the client-org exposure to be fixed sooner than §19's ordering
 assumes.** Worth knowing before the copy is drafted, not after.
+
+---
+
+## 22. MEASURED 2026-09-11 — is the client-org email exposure cheap to close? NO. But the decision already made shrinks it from 15 sites to 3.
+
+§19.5 speculated that because modules mostly render `display_name`, co-member
+email reads might be cheap to remove from client orgs — which would have
+dissolved §21's privacy-copy dilemma. **The measurement was instructed to
+falsify that, and it did.** Tally across `apps/web` and `modules`:
+
+**RENDERED 9 · USED 4 · SELECTED-UNUSED 2 · OWN-EMAIL 3 · ADMIN-DEFINER 8**
+
+### 22.1 Why the cheap fix does not exist as stated
+
+1. **Nine member-facing sites render a co-member's email today.** Seven are
+   `display_name || email || …` fallback chains: classroom's roster, grading and
+   exam consoles; matchmaking's manage page; speed-dating's block list and live
+   event `seatName()`; visual messaging's layer authors.
+2. **Matchmaking's `<datalist>` is not a fallback at all.**
+   `manage/page.tsx:72-74` → `assign-matchmaker-form.tsx:36,63` ships **every
+   matchmaker's and every single's raw email** to the browser unconditionally, as
+   `<option value={email}/>`. It would break outright.
+3. **Speed-dating's contact share is the hard blocker.**
+   `ui/actions.ts:350-368` — the organizer's **ordinary RLS client** reads both
+   participants' `profiles.email` and writes them into `sd_matches.contact_shared`
+   on reveal, and the code comment at `:330` records that a definer was
+   deliberately *not* used. Remove co-member email reads and the reveal silently
+   writes `{email: null}` — and per §11.3 that snapshot is written **once and
+   never retried**. A real product promise, broken quietly and irreversibly.
+
+### 22.2 THE FINDING THAT MATTERS — §16.1 is not cosmetic, it is the unlock
+
+The seven fallback chains only render email **because `display_name` is NULL**.
+Re-verified: `handle_new_user()` reads
+`new.raw_user_meta_data ->> 'display_name'`; the product's only signup path
+(`apps/web/app/login/page.tsx:37`) sends no metadata; and **there is no UI
+anywhere to set a display name** (grep across `apps/web/app` + `components`
+returns nothing). So **every real self-signed-up user has `display_name = NULL`
+permanently, and renders their email address as their name to every co-member.**
+
+**The 11 local profiles all have names only because `seed.ts` writes them
+(0 NULLs measured). That fixture is exactly what made this look safe** — the
+same class of trap as the seeded-exam and grace-login incidents this repo
+records.
+
+**Consequence: the founder's §16.1 decision — collect a display name at signup —
+is load-bearing for far more than "Someone" rendering.** It needs no migration
+(`handle_new_user` already reads the field). And once names are reliably
+non-null, **seven of the nine RENDERED sites stop rendering email at all**,
+because the fallback never fires.
+
+### 22.3 The real blocking set is THREE sites, not fifteen
+
+| bucket | count | disposition |
+|---|---|---|
+| Seven fallback chains | 7 | **dissolved by §16.1** — ship display-name-at-signup and they render names |
+| `SELECTED-UNUSED` (matchmaking `ui/page.tsx:45,117`) | 2 | **free** — drop `email` from the select; deliberate non-use is already commented |
+| `USED` as a lookup key (classroom `:52`, matchmaking `:94`, vm `:169`) | 3 | **mechanically re-routable** to `org_find_user_by_email` — which §17.2 is bounding anyway, so this rides along |
+| **Matchmaking `<datalist>`** | 2 sites, 1 decision | **REAL.** Needs a product answer: does assigning a matchmaker require an email autocomplete, or will a name-based picker do? |
+| **Speed-dating `contact_shared` write** | 1 | **REAL and the hardest.** The feature's whole point is exchanging contact details. Needs a per-module definer that returns email exactly where the product intends it |
+
+**So v2's "15 breaking sites" figure was right as a raw count and wrong as a cost
+estimate.** With §16.1 shipped and the lookup sites re-routed, the genuinely
+unresolved set is **matchmaking's autocomplete and speed-dating's contact
+share** — two product questions, not fifteen ports.
+
+### 22.4 What this does to §21's privacy-copy dilemma
+
+It does not dissolve it, but it bounds it. **The honest sentence today remains
+"other members of an organization can see your name and email address"** — and
+§22.2 makes it worse than §21 assumed, because for a self-signed-up user the
+email *is* the displayed name. **That is a live exposure right now, not a
+hypothetical one.**
+
+**But there is now a short path to being able to write a better sentence**, and
+its first step is a decision already made and needing no migration.
+
+### 22.5 A live question nobody has answered — OFFERED, not run
+
+**How many PROD users have a NULL `display_name`?** Every one of them is
+currently rendering their email address as their name to every co-member of every
+org they belong to. Locally it is 0 of 11, which proves nothing — `seed.ts`
+writes names. CLAUDE.md records ~12 prod users, 7 of whom have never signed in.
+
+This is a **read-only single-column count**, the same shape as the existing
+`scripts/prod-verify-*` reads (pooler + `SUPABASE_DB_PASSWORD`). **Not run: it
+touches the founder's production database and was not asked for.** It would turn
+§22.2 from a code-path argument into a measured fact, and it is the difference
+between "this could be exposing real people's emails" and "it is."
