@@ -300,8 +300,11 @@ org membership** — so revoking someone's module role while keeping them in the
 seat fully working (their event, revealed matches, contact details). Arguably the MORE common
 revocation. **Fix shape + the measurement that must come first** (does every seat holder actually
 hold the matching role? if not, the conjunct revokes LIVE access) → docs/19's 2026-09-10 section.
-Note the zero-orphan evidence that cleared the org half is **structurally forced, not
-independent** — all 28 `org_members` rows are `active`, so it could not have come back otherwise.
+Note the zero-orphan evidence is **forced for the RE-INVITE path and genuine for the REMOVAL
+path** — see docs/19's 2026-09-11 post-migration measurement for the precise reading; the
+blunt version ("all memberships are active, so the zero proves nothing") is wrong in one
+direction and "zero orphans, so it never fired" is wrong in the other. Local and prod both
+carry the same shape: **structurally forced, not independent** — all 28 `org_members` rows are `active`, so it could not have come back otherwise.
 **Four more items in the same class that the original audit never listed** are recorded there
 too; the sharpest is a live **WRITE** — `cls_review_assignments_update_reviewer` lets an
 offboarded peer reviewer still grade a current student's work.

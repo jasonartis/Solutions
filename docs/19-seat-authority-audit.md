@@ -535,3 +535,38 @@ question (docs/20), which is being designed separately.
 
 **Do not attempt this as a one-line policy narrowing.** Either rank-map first, or
 design a per-module manage predicate deliberately.
+
+## POST-MIGRATION PROD MEASUREMENT, 2026-09-11 — nobody lost access
+
+Run AFTER `migrate:prod` applied `20260910040000` (it should have been run
+BEFORE — see docs/03 #1b, added because of this).
+
+```
+sd_participants            total=0   orphaned=0      cls_review_assignments   total=2  orphaned=0
+mm_matchmaker_assignments  total=2   orphaned=0      cls_class_members        total=3  orphaned=0
+mm_group_members           total=0   orphaned=0      vm_conversation_members  total=0  orphaned=0
+sal_worker_profiles        total=1   orphaned=0      sal_appointments         total=2  orphaned=0
+```
+
+**Zero orphaned rows across all 8 rosters, with 5 of the 8 holding real rows.**
+So the narrowing revoked nothing from anyone on production.
+
+### How much that zero actually proves — the precise reading
+
+Prod's `org_members` is **30 rows, ALL `active`** (measured the same day). An
+orphan can arise two ways, and the evidence differs for each:
+
+- **Re-invite (status flips to `pending`)** — **impossible on prod today**, since
+  no non-active row exists. The zero is STRUCTURALLY FORCED for this path and
+  proves nothing about it.
+- **Removal (the `org_members` row is DELETED)** — a deleted row leaves no trace
+  in that status breakdown, so it does NOT force the result. The orphan probe
+  would have caught any seat left behind, and found none. **For this path the
+  zero IS genuine evidence: nobody has been removed from an org while holding a
+  module seat on production.**
+
+Stated this way because the blunt version ("all active, so the zero is forced")
+is wrong in one direction and the flattering version ("zero orphans, so the class
+never fired") is wrong in the other. The honest summary: **the removal path is
+genuinely clean; the re-invite path is untested on prod and will stay untested
+until someone is actually re-invited.**
