@@ -250,6 +250,19 @@ Deletion becomes:
 5. Everything else keeps pointing at a real, now-anonymous row. **Zero FK
    changes, zero nullable-column migrations.**
 
+**⚠ CORRECTION 2026-09-11 — STEP 3 IS NOT SUFFICIENT YET, AND THE PARAGRAPH BELOW
+OVERSTATED IT.** Revoking memberships makes inert only the seats whose predicates
+were actually fixed. **Four known predicates are still bare** (docs/19's
+2026-09-11 section): `cls_review_assignments_update_reviewer`,
+`mm_assignments_select`'s `matchmaker_id` arm, `cls_review_assignments_select`,
+and `sd_participants_update_self` / `cls_set_preferred_name`. **So a silhouette
+built on step 3 alone would still be able to WRITE a peer grade onto a live
+student's work** — the worst of the four, because it is a write. Step 3 becomes
+genuinely sufficient only once docs/19's module-role slice lands, which includes
+those four. **Do not build the silhouette before it, or sequence it so that step
+3 is verified against the four as well.** The original claim, kept below because
+its *direction* is right:
+
 **THE SEAT-AUTHORITY FIX SHIPPED 2026-09-10 IS WHAT MAKES STEP 3 SUFFICIENT.**
 Before `20260910040000`, revoking memberships left every module seat still
 granting access, so a silhouette would have retained full module access forever.
