@@ -26,14 +26,14 @@ exists once a real client generates real volume — **do not start any of them u
 revisit together when the first real client is signed**, per docs/18's status note).
 **NEXT SESSION STARTS HERE (handoff rewritten 2026-09-10).** Two tracks ran in parallel and
 both are live state you must not re-derive:
-**(A) SEAT AUTHORITY IS FIXED AND MERGED — BUT `20260910040000` HAS *NOT* BEEN APPLIED TO
-PRODUCTION. `pnpm migrate:prod` WAS NEVER RUN. THE VULNERABILITY IS STILL LIVE ON PROD.**
-Committed, CI-green and verified locally — which is NOT deployed. This is the platform's own
-recorded failure mode repeating (journal 2026-08-21: *"the migration itself had never actually
-been applied to production"* — 'schema built' ≠ deployed, and it sat committed-but-undeployed
-for ten days). **Run `pnpm migrate:prod`, then the prod-ACL verification docs/03 #1 requires
-(`scripts/prod-verify-seat-authority-orphans.mts` is the existing read-only checker for this
-exact class), before treating this as done.** Details below —
+**(A) SEAT AUTHORITY IS FIXED, MERGED, **APPLIED TO PRODUCTION AND PROD-VERIFIED** (2026-09-11).
+`pnpm migrate:prod` pushed THREE pending migrations — `20260904010000`, `20260910030000`,
+`20260910040000`. **The first had sat undeployed for a week while this file called it CLOSED**
+(see the correction below). Prod verification: `prod-verify-migration.ts` 0 failures on all
+three, plus the new **`scripts/prod-verify-seat-authority.mts` at 25/25** — which covers the
+half the function-only script is blind to: the five inline POLICIES, the trigger being BOUND
+and ENABLED (not merely defined), its alphabetical ordering before the scope trigger, and the
+self-block carve-out being one-directional in the DEPLOYED body. Each with a control.
 **(A, cont.)** (`cf63e77`; db 183/183 → e2e 52/52) — the remaining
 open half, which the founder found, is the MODULE-ROLE gap; see the security block below and
 docs/19's 2026-09-10 section. **(B) AD-HOC GROUPS / PUBLIC SQUARE was reopened and is being

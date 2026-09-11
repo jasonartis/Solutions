@@ -1,9 +1,9 @@
 # Seat authority audit — a module roster row outlives the org membership that justified it
 
-**Status: THE ORG-MEMBERSHIP HALF IS FIXED, MERGED AND CI-GREEN — BUT NOT YET ON
-PRODUCTION. `pnpm migrate:prod` has NOT been run for `20260910040000`, so the
-class is still LIVE on prod. Applying it, and then the prod-ACL verification
-docs/03 #1 requires, is the first outstanding task. (2026-09-10, `cf63e77`,
+**Status: THE ORG-MEMBERSHIP HALF IS FIXED, MERGED, ON PRODUCTION AND
+PROD-VERIFIED (2026-09-11 — `migrate:prod` + `prod-verify-migration.ts` 0
+failures + `scripts/prod-verify-seat-authority.mts` 25/25, covering the policies
+and the trigger binding the function-only script cannot see). (2026-09-10, `cf63e77`,
 `20260910040000`) — all 8 functions and all 5 inline policy arms, verified
 db 183/183 then e2e 52/52 in CI's exact order. THREE THINGS BELOW ARE STILL
 OPEN; read the dated sections at the END of this doc, not just this one.**
