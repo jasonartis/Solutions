@@ -266,10 +266,13 @@ independent** — all 28 `org_members` rows are `active`, so it could not have c
 too; the sharpest is a live **WRITE** — `cls_review_assignments_update_reviewer` lets an
 offboarded peer reviewer still grade a current student's work.
 
-**TWO FOUNDER DECISIONS QUEUED, neither blocking:** (1) **safety reports** — after this fix an
-ejected speed-dating participant can neither file a report nor read one they already filed
-(`sd_owns_participant` is their only route to both); carve `sd_reports` out? (2) docs/19 §5's
-ejection-semantics question, deliberately not bundled.
+**DECIDED 2026-09-11 — CARVE `sd_reports` OUT, and build it WITH the module-role fix.** After
+`20260910040000` an ejected speed-dating participant can neither file a safety report nor read
+one they already filed (`sd_owns_participant` gates `sd_reports_insert_own` AND is the only
+non-staff arm of `sd_reports_select`) — which removes abuse reporting at exactly the moment it
+matters. Triage itself is fine and already built (states `open`/`reviewed`/`actioned`/
+`dismissed`, organizer UI, server-stamped `reviewed_by`). **Still open and deliberately NOT
+bundled:** docs/19 §5's ejection-semantics question, which changes what ejection *means*.
 
 **NEW — [docs/21-account-deletion-and-departed-users.md](docs/21-account-deletion-and-departed-users.md)
 (PLAN, not built).** 42 cascading FKs to `auth.users`: deleting one user erases their

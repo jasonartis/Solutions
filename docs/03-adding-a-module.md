@@ -598,6 +598,27 @@ others:
   something by watching a log, confirm the failure mode actually prints.** A component whose
   success case is silence cannot be verified by observing silence.
 
+- **AN ASSERTION CAN BE WRONG ABOUT THE MECHANISM, NOT JUST ABOUT THE VALUE (2026-09-11).**
+  A boolean SQL predicate can legitimately return **NULL**, and Postgres RLS treats NULL as
+  DENY — so `false` and `null` are the *same answer* to "does this grant access?". Two new
+  seat-authority tests failed asserting `.toBe(false)` and receiving `null`:
+  `mm_assignment_covers_me` takes a `check_target_user_id` that is genuinely null for a
+  group-targeted assignment (that is the real column value the policy passes), so
+  `NULL = auth.uid()` makes the whole expression `NULL or false` = NULL. The migration was
+  correct; **the test was wrong about how RLS decides.** → Assert **`.not.toBe(true)`**, not
+  `.toBe(false)`, unless every argument on that path is known non-null. Same three-valued
+  logic bites when WRITING the fix: appending `and <conjunct>` to a body whose top level is
+  `or` must parenthesise the disjunction first, or one arm is left ungated (caught in
+  `sd_paired_with`; `20260910040000`).
+
+- **A SERVICE-ROLE WRITE CAN BE SILENTLY DISCARDED BY A PIN TRIGGER, WITH NO ERROR
+  (2026-09-11).** `sd_pin_participant` and `sal_pin_appointment` both `return old` when
+  `auth.uid()` is null — which is every service-role/seed/worker write. So a fixture that
+  "resets" state between assertions via the admin client succeeds, changes nothing, and the
+  next assertion passes while testing nothing. → When a fixture must reset a pinned column,
+  set it at INSERT time or use a second row; and assert the reset actually took effect before
+  relying on it.
+
 - **ASSERTING A FORM FIELD RIGHT AFTER TYPING INTO IT IS VACUOUS — RELOAD FIRST (2026-09-04).**
   A settings-form e2e that fills a value, submits, and asserts the field now holds that value is
   asserting its own keystrokes: the input reads back what was typed whether or not the write ever

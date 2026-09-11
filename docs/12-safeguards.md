@@ -312,6 +312,21 @@ Found in a deliberate "what haven't we thought of" pass; ordered by urgency.
    that a deletion request can empty is not an audit log** — the FKs are
    `on delete set null` precisely so the record survives the account, which is
    the shape the answer should probably build on.
+   **AND THAT TENSION NOW HAS A DECIDED ANSWER TO BUILD ON (2026-09-11) — see
+   [docs/21](21-account-deletion-and-departed-users.md) §7.** Founder decision:
+   deletion **detaches the person but leaves a silhouette**; anything a HUMAN did
+   that touched someone else is kept (drawings others replied to, safety notes in
+   both directions, peer-review comments, human-made assignments), while anything
+   an AUTOMATED process derived is deleted. Two states — *departed* (reversible,
+   grace period) and *deleted* (irreversible). **This makes a FOURTH owed line
+   here, and it is the one a real user is most likely to ask about: "what do you
+   keep after I delete my account, and why."** It is also the honest answer to the
+   audit-log tension above — the record survives because it is *someone else's*
+   record, not because the platform declined to erase. Not urgent (there is no
+   account-deletion feature yet), but it must ship WITH that feature, not after:
+   docs/21 §7.4 notes the mechanism keeps the `auth.users` row rather than
+   deleting it, which is exactly the kind of thing a privacy policy must not
+   misdescribe.
    **A THIRD IS NOW LIVE AND ITS WORDING IS AN OUTSTANDING OBLIGATION, NOT A
    FUTURE ONE: engagement monitoring phase 1 SHIPPED 2026-08-09**
    ([docs/17](17-engagement-monitoring.md), `20260809010000_login_events.sql`,
