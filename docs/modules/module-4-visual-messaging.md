@@ -397,7 +397,21 @@ hard ceiling on resizing an already-placed stamp via the Transformer (which
 today only floors at 16px, no cap), since that resize-clamp behavior wasn't
 part of the existing guard and adding one wasn't asked for.
 
-## Ad-hoc groups — SHAPE DECIDED 2026-09-04 (per-pair orgs), not yet built
+## Ad-hoc groups — SHAPE DECIDED 2026-09-04 (per-pair orgs), not yet built — ⚠ SUPERSEDED 2026-09-06/11
+
+> **STOP. THIS SECTION IS HISTORY, NOT THE CURRENT PLAN.** The founder reopened
+> this on 2026-09-06 and rejected per-pair orgs as a category error (*"Dana
+> messaging her sister is not being done as members of an organization"*). The
+> live design is **[docs/20-public-square.md](../20-public-square.md)** — Public
+> Square as an ORDINARY org, with every fix made platform-wide rather than as a
+> special rule for one org. Three mechanisms have since been designed and killed
+> by review; docs/20 §9 records each so a fourth is not re-derived.
+> **Read docs/20 before acting on anything below.** This section is kept because
+> its per-piece traps (the `auth.users` trigger's missing JWT, the `invited_by`
+> requirement, the scope-sync injection, `on conflict do nothing` for a banned
+> re-invite, and the two privacy obligations) are still accurate and still owed —
+> and because docs/20 §10 schedules its proper superseding rewrite, which has not
+> happened yet.
 
 The 2026-07-16 open question is resolved. **The answer is candidate shape 1,
 per-pair lightweight orgs — NOT shape 2, the one shared "everyone" org.**
