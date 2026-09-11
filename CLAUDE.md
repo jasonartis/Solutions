@@ -268,7 +268,16 @@ remaining modules: 8 functions + 5 inline policy arms gained the `is_org_member(
 conjunct, so ordinary revocation now actually revokes. Shipped alongside: **self-block**
 (`20260910030000`, `vm_pin_member` — a member may set their own active seat to `banned`, no
 self-unban, sole-admin still caught by the last-admin guard; it is **the only user-level block
-on the platform** and three ad-hoc-group designs had dropped it). **rls.test.ts gains 34 tests**
+on the platform** and three ad-hoc-group designs had dropped it).
+**⚠ SELF-BLOCK SHIPPED WITHOUT A TEST — it did NOT get the full docs/03 #12 rhythm.** It was
+drafted, parse-checked and documented, but had **no adversarial review and NO test of its
+actual behaviour** (verified: zero assertions in `rls.test.ts` or the e2e suite touch it; the
+one grep hit is a passing comment). The db suite going green says nothing about it. **Three
+behaviours are reasoned-but-unverified: that a self-ban actually takes effect; that self-UNBAN
+is still pinned; and that the last-admin guard still catches a sole conversation admin who
+self-bans** (that path runs through an EARLIER branch of the same trigger). It is a
+security-relevant trigger on a shipped module — write those assertions before trusting it, and
+note it ships to prod with the same `migrate:prod` run as `20260910040000`. **rls.test.ts gains 34 tests**
 — the first anywhere asserting a roster row stops conferring authority once membership ends.
 Verified in CI's exact order: **db 183/183 → e2e 52/52**, same database, no reset.
 
