@@ -87,6 +87,15 @@ doc.
   expiry. **Four founder decisions are OPEN and listed in docs/20 §6/§7** — the biggest is that
   self-signup creates NO display name, so everyone would render as "Someone". Opus, full
   docs/03 #12 rhythm.
+- **⚠ CORRECTED 2026-09-11: "CLOSED" MEANT CLOSED IN THE REPO, NOT ON PRODUCTION.**
+  `pnpm migrate:prod --dry-run` on 2026-09-11 listed `20260904010000` as still PENDING — so the
+  cross-org hole below has been **live on prod for a week while this file called it closed**,
+  and the app-side guard shipped in the same commit has been the only thing standing in front of
+  it (the app layer is not a gate — docs/03 hard rule 6, which that very migration's header
+  says). Three migrations are pending prod as of 2026-09-11: `20260904010000`,
+  `20260910030000`, `20260910040000`. **`pnpm migrate:prod` is a SEPARATE step from `git push`
+  and nothing in CI does it.** Do not write "CLOSED"/"SHIPPED" for a migration until
+  `migrate:prod` has run AND its prod verification has passed.
 - **Also shipped this session, unrelated to either item: a live cross-org hole is CLOSED**
   (`35587d4`, `20260904010000`). A `vm_conversation_members` seat alone granted API reads of
   a conversation's layers/reactions/roster/images to someone outside the org — the four vm_
