@@ -1,11 +1,23 @@
 # Seat authority audit — a module roster row outlives the org membership that justified it
 
-**Status: FINDINGS, VERIFIED, NOT FIXED. Produced 2026-09-04 (Opus) as a
-follow-on to `20260904010000`, which fixed one instance of this class in
-visual messaging. Eight SQL functions and five inline policy arms across FOUR
-modules are still affected. Nothing here is a founder decision except one
-flagged item (§5); the rest is straightforward remediation awaiting a
-session.**
+**Status: THE ORG-MEMBERSHIP HALF IS FIXED AND SHIPPED (2026-09-10, `cf63e77`,
+`20260910040000`) — all 8 functions and all 5 inline policy arms, verified
+db 183/183 then e2e 52/52 in CI's exact order. THREE THINGS BELOW ARE STILL
+OPEN; read the dated sections at the END of this doc, not just this one.**
+
+1. **The MODULE-ROLE half** — none of the 8 predicates consults the module role,
+   so revoking a module role while keeping org membership leaves the seat
+   working. Decided in shape, not built.
+2. **Four more items in the same class** the original audit never listed — one
+   is a live WRITE (an offboarded peer reviewer can still grade a current
+   student's work).
+3. **`module_roles` reads are org-wide** (the adjacent census leak) — descoped,
+   blocked on rank-mapping three modules.
+
+*Original 2026-09-04 header, kept for context: findings, verified, not fixed;
+produced as a follow-on to `20260904010000`, which fixed one instance of this
+class in visual messaging. Nothing here is a founder decision except one flagged
+item (§5).*
 
 ## The class of bug
 

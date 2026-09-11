@@ -439,6 +439,16 @@ Everything below is open but unranked:
   vocabularies are entirely rank 0, so they imply no view-as pairs today; rank-mapping any of
   them will FAIL THE BUILD until every newly-implied pair is explicitly answered. That is the
   2026-07-30 amendment working as designed, not an obstacle — but budget for it.
+  **NO LONGER PURELY OPTIONAL AS OF 2026-09-10 — it now BLOCKS a real fix.** `module_roles`
+  reads are org-wide (`module_roles_select_member` is `is_org_member OR is_superadmin`, no
+  module/role/self filter), so any org member can enumerate who holds which module role — in
+  `demo-match`, that is the dating pool's membership. Narrowing it needs a replacement read
+  path for the people who legitimately administer grants, and the natural one
+  (`module_has_manager_grant`) requires rank ≥ 2 — which is FALSE for a matchmaking admin,
+  because these three modules sit entirely at rank 0. So the census leak cannot be closed
+  until they are rank-mapped. Full detail, including why narrowing the select policy ALONE
+  does nothing (`module_roles_write_org_admin` is `for all`, and its USING also governs
+  SELECT): docs/19's "ADJACENT, FOUND 2026-09-10, DESCOPED" section.
 - ~~**The e2e flake family** (2026-07-30 speed-dating; 2026-08-05 "loses ONE test per full run,
   a different one each time").~~ **BOTH FIXED; closed at the 2026-08-09 docs beat — see item 3.**
   The diagnosis is the part worth keeping: **a MOVING failure is environmental, not a set of test
