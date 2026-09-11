@@ -290,3 +290,58 @@ The founder's own wording points at **(b)** for the *visible* match ("a temporar
 message that the user left... after which the match disappears"), but (a) is
 arguable for the underlying `sd_interest` row, which is a record of what a person
 actually did. **Unresolved.**
+
+## 7.7 §7.6 IS CLOSED (founder, 2026-09-11) — and it opens one new product item
+
+**DECISION: KEEP the interest and the match. Move them to an archive section,
+with a reason. For a departed person the reason is "the user left / was
+removed".**
+
+Founder's reasoning, and it is the honesty argument this platform already applies
+elsewhere: *"If they can never reconnect their profile then it should disappear —
+but it's a problem, since the person saying yes who is still around might wonder
+what happened to her prince charming."* A match that silently vanishes is worse
+than one that is labelled. Same family as the module-4 spec's four-state invite
+rendering and the view-as `emptyReason` work: **an absence with no explanation is
+the one answer a surface must never give.**
+
+It is also consistent with §7.1 without needing an exception — a mutual match
+exists because **two humans each said yes**, so it is a human act and the rule
+already says keep it.
+
+**Consequence for §7.1's automated-match wording:** the "temporary message, then
+the match disappears" phrasing is refined rather than reversed. The match does not
+disappear — it *moves*, and the grace-period message is what carries it there.
+
+### THE NEW ITEM, and a collision it must not walk into
+
+The founder also sketched a larger surface: *"perhaps there is a section
+displayed of those matches that were tried but didn't work, and maybe that
+includes the feedback of the user as to why they turned it down. Such a section
+needs to be hashed out."*
+
+**Recorded as a NEW, unspecified product item — not part of the deletion work.**
+The departed-user case needs only a single archive row with the reason "left the
+platform"; the broader feature is its own design.
+
+**AND IT COLLIDES HEAD-ON WITH A DELIBERATE, SECURITY-REVIEWED PROPERTY.**
+docs/modules/module-6-speed-dating.md:71 records, as one of nine hand-reviewed
+guards: *"RLS hides unrevealed matches from both parties; **a rejected side is
+indistinguishable from an undecided one**."* Matchmaking's `mm_mutual_matches()`
+and Redt-It's entire premise rest on the same gating.
+
+So:
+
+- **"This person left the platform"** is NOT a rejection signal and creates no
+  conflict. It can ship with the deletion work.
+- **"Here is why they turned you down"** REVERSES that guard. It would tell a
+  participant both that they were rejected *and* why — precisely the disclosure
+  three modules were built to prevent. That is a founder decision with real
+  product consequences (it changes what people risk by saying no), not an
+  implementation detail, and it must not be absorbed into the archive section by
+  accident.
+
+**If the archive is built, the safe default is: show the OUTCOME, never the
+counterparty's reason** — unless the founder decides deliberately, in writing,
+to reverse the reveal guard. Belongs as a dated entry in the module-6 and
+module-1 specs when it is hashed out.
