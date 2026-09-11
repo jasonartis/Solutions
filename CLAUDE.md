@@ -34,6 +34,15 @@ redesigned in a SEPARATE SESSION — its live doc is
 designed and killed by review, and the module-4 spec's "SHAPE DECIDED 2026-09-04" entry is
 SUPERSEDED.** If both sessions are still running, stage explicit paths and use
 `git commit -- <paths>`; docs/20 belongs to that other session.
+**CROSS-TRACK STALENESS TRACK A CREATED, 2026-09-11 — tell whoever holds docs/20.** Its §4
+measurement reads *"12 of 14 module predicate functions using `is_org_member` conjoin it with
+a module-role check"*, measured BEFORE `20260910040000` landed. **The live count is now 22**,
+because Track A added the conjunct to 8 more functions. The two named exceptions
+(`sal_worker_has_time_off`, `sd_side_registered_count`) are still exceptions, but the *meaning*
+of the number moved: those 8 new ones are org-gated and NOT role-gated, which is precisely the
+module-role gap docs/19 now records. So the two docs converge on the same finding from opposite
+directions. Re-run the measurement before citing §4's figure; do not assume drift or a wrong
+doc.
 - **2026-09-04, module 6 (speed dating), Sonnet, no migration: video-provider interface,
   the click-to-join video UI, contact-share population on reveal, and resume-review's
   live-panel gap are all SHIPPED and CI-GREEN.** Full detail: the module-6 spec's own
