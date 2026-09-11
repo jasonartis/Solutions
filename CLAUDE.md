@@ -26,7 +26,15 @@ exists once a real client generates real volume — **do not start any of them u
 revisit together when the first real client is signed**, per docs/18's status note).
 **NEXT SESSION STARTS HERE (handoff rewritten 2026-09-10).** Two tracks ran in parallel and
 both are live state you must not re-derive:
-**(A) SEAT AUTHORITY IS FIXED AND SHIPPED** (`cf63e77`; db 183/183 → e2e 52/52) — the remaining
+**(A) SEAT AUTHORITY IS FIXED AND MERGED — BUT `20260910040000` HAS *NOT* BEEN APPLIED TO
+PRODUCTION. `pnpm migrate:prod` WAS NEVER RUN. THE VULNERABILITY IS STILL LIVE ON PROD.**
+Committed, CI-green and verified locally — which is NOT deployed. This is the platform's own
+recorded failure mode repeating (journal 2026-08-21: *"the migration itself had never actually
+been applied to production"* — 'schema built' ≠ deployed, and it sat committed-but-undeployed
+for ten days). **Run `pnpm migrate:prod`, then the prod-ACL verification docs/03 #1 requires
+(`scripts/prod-verify-seat-authority-orphans.mts` is the existing read-only checker for this
+exact class), before treating this as done.** Details below —
+**(A, cont.)** (`cf63e77`; db 183/183 → e2e 52/52) — the remaining
 open half, which the founder found, is the MODULE-ROLE gap; see the security block below and
 docs/19's 2026-09-10 section. **(B) AD-HOC GROUPS / PUBLIC SQUARE was reopened and is being
 redesigned in a SEPARATE SESSION — its live doc is
