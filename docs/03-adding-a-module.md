@@ -45,21 +45,21 @@ hard-won specifics every new module must follow:
    - **Verify security-sensitive ACLs against PROD, not only local** — the RLS suite runs
      against local, where default privileges differ, so it cannot catch this class of
      gap. A privilege/ACL assertion belongs in a prod-verification step.
-1b. **A NARROWING migration can REVOKE LIVE ACCESS, and only PROD DATA tells you
-    whether it will — measure the blast radius on prod BEFORE applying, not after
-    (2026-09-11).** `20260910040000` added an `is_org_member()` conjunct to 13
-    predicates: correct, reviewed, and locally proven to orphan nobody (0 seat
-    holders lacking active membership across all six rosters). **That local zero
-    said nothing about production, which is a different database with different
-    people in it.** It was applied to prod first and the prod orphan count run
-    afterwards — it came back 0/0 across all 8 tables with five of them holding
-    real rows, so no one was locked out, but that was luck rather than method.
-    → For any migration that NARROWS a predicate, run the row-count probe
-    against **prod** as a pre-flight (`scripts/prod-verify-seat-authority-orphans.mts`
-    is the worked shape), and state for each table whether a zero is REAL or
-    VACUOUS — a zero from an empty table is not reassurance. The ACL rule in #1
-    is about whether the gate is *shaped* right; this is about whom it *shuts
-    out*, and they are different questions.
+   - **NARROWING vs. SHAPE — a second, different prod check. A NARROWING migration can REVOKE LIVE ACCESS, and only PROD DATA tells you
+     whether it will — measure the blast radius on prod BEFORE applying, not after
+     (2026-09-11).** `20260910040000` added an `is_org_member()` conjunct to 13
+     predicates: correct, reviewed, and locally proven to orphan nobody (0 seat
+     holders lacking active membership across all six rosters). **That local zero
+     said nothing about production, which is a different database with different
+     people in it.** It was applied to prod first and the prod orphan count run
+     afterwards — it came back 0/0 across all 8 tables with five of them holding
+     real rows, so no one was locked out, but that was luck rather than method.
+     → For any migration that NARROWS a predicate, run the row-count probe
+     against **prod** as a pre-flight (`scripts/prod-verify-seat-authority-orphans.mts`
+     is the worked shape), and state for each table whether a zero is REAL or
+     VACUOUS — a zero from an empty table is not reassurance. The ACL rule in #1
+     is about whether the gate is *shaped* right; this is about whom it *shuts
+     out*, and they are different questions.
 2. **Module pages gate with `requireOrgModule(orgSlug, moduleKey)`**
    (`apps/web/lib/module-gate.ts`) — org by slug → entitlement → 404. Never hand-roll.
 3. **Org-level module config lives in `org_modules.settings`** (jsonb), typed via a cast

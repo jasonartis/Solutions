@@ -539,7 +539,7 @@ design a per-module manage predicate deliberately.
 ## POST-MIGRATION PROD MEASUREMENT, 2026-09-11 — nobody lost access
 
 Run AFTER `migrate:prod` applied `20260910040000` (it should have been run
-BEFORE — see docs/03 #1b, added because of this).
+BEFORE — see docs/03 #1's NARROWING-vs-SHAPE bullet, added because of this).
 
 ```
 sd_participants            total=0   orphaned=0      cls_review_assignments   total=2  orphaned=0
