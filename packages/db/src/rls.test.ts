@@ -3953,3 +3953,1750 @@ describe('visual messaging: a seat requires ACTIVE org membership (2026090401000
     expect(others, 'a non-member of the org read OTHER peoples roster rows').toEqual([])
   })
 })
+
+// ===========================================================================
+// DROP-IN BLOCK for packages/db/src/rls.test.ts — append at the END of the
+// file (after the `visual messaging: a seat requires ACTIVE org membership
+// (20260904010000)` describe, which is the exemplar this block copies).
+//
+// It reuses the file's existing module-level helpers and needs NO new imports:
+//   `url`                (rls.test.ts:18)  — Supabase REST URL
+//   `anonKey`            (rls.test.ts:19)  — anon key, for signIn
+//   `signIn(email)`      (rls.test.ts:21)  — password sign-in -> SupabaseClient
+//   `acceptInviteAs(...)`(rls.test.ts:33)  — pending -> active as the invitee
+//   `createClient`, `type SupabaseClient` (rls.test.ts:5)
+//   `postgres`           (rls.test.ts:6)   — raw owner connection, catalog only
+//   `describe/expect/it/beforeAll/afterAll` (rls.test.ts:4)
+// Every identifier it DEFINES is prefixed `seat*` so appending it cannot
+// collide with anything already in that file.
+// ===========================================================================
+
+// ===========================================================================
+// SEAT AUTHORITY — a module ROSTER row stops conferring authority once the
+// holder's ORG MEMBERSHIP ends (20260910040000_seat_requires_org_membership)
+// ===========================================================================
+//
+// THE GAP THIS CLOSES. docs/19-seat-authority-audit.md's closing finding:
+// **no test anywhere asserts that a roster row stops conferring authority
+// once org membership ends, for ANY module.** The 13 `org_members ...
+// .delete()` sites already in this file are all fixture teardown. The only
+// such assertion in the repo is the vm one 20260904010000 added, directly
+// above. These are the first for matchmaking, speed dating, nail salon and
+// classroom.
+//
+// WHY IT IS REACHABLE WITH NO MALICIOUS INSERT. `removeOrgMember`
+// (apps/web/lib/org-members.ts:89-92) deletes exactly one `org_members` row,
+// and NOTHING in the schema has a foreign key to `org_members` — so ordinary
+// offboarding, or a re-invite (which leaves `status = 'pending'`), revokes org
+// membership while every module roster row survives intact and keeps granting
+// access, permanently. `requireOrgModule()` 404s the ex-member in the UI, but
+// the UI is not the gate (docs/03 hard rule 6): each read below is issued
+// straight at PostgREST with an ordinary session, which is exactly what these
+// tests do.
+//
+// -- THE FOUR DISCIPLINES, AND WHERE EACH IS DISCHARGED ---------------------
+//
+// 1. THE VACUITY RULE (docs/03 "Test discipline"). "She reads nothing" is
+//    trivially true of an empty table, a failed fixture insert, or a fixture
+//    block that never ran. So EVERY negative below is bracketed by two
+//    controls: (a) a SERVICE-ROLE count proving the target rows exist past RLS
+//    — asserted again AFTER the revocation, so a negative can never be
+//    satisfied by the data having vanished; and (b) the SAME read succeeding
+//    for the SAME user while their membership is active.
+//
+// 2. THE FIXTURE'S OWN EXISTENCE. `seatRevoke()` refuses to proceed unless it
+//    first reads a real `org_members` row whose status is `active`, and then
+//    re-reads to confirm the orphan condition actually took. And after each
+//    revocation the roster row itself is re-asserted present via service role
+//    — that is the MECHANISM of the bug and, if it were absent, the denial
+//    would prove nothing about the conjunct.
+//
+// 3. TEETH — WHAT EACH NEGATIVE DOES ON THE UN-MIGRATED DATABASE. Run this
+//    block BEFORE applying 20260910040000 and every row of this table FAILS;
+//    after applying it, every row passes. Nothing else in the block changes.
+//
+//      test                                    pre-migration (un-migrated)
+//      --------------------------------------  ---------------------------
+//      mm_matchmaker_can_see (delete)          mel still reads 6 mm_answers
+//                                              + 3 mm_pair_scores; rpc TRUE
+//      mm_matchmaker_can_see (pending)         identical — `pending` is not
+//                                              `active`, and nothing checked
+//      mm_groups/_group_members inline arms    mel still reads the group row
+//                                              and its whole roster
+//      mm_assignment_covers_me (group branch)  eve still reads the assignment
+//      sd_owns_participant                     dana still reads sd_interest
+//                                              and the REVEALED sd_matches
+//                                              row incl. contact_shared
+//      sd_in_event                             dana still reads the event and
+//                                              the live round clock; rpc TRUE
+//      sd_paired_with                          dana still reads charlie's
+//                                              participant row
+//      sd_mentors                              eve still reads her mentee's
+//                                              participant row
+//      sal_worker_sees_customer                dana still reads charlie's
+//                                              name/phone/email/notes
+//      sal_appointments_select (inline arm)    dana still reads her whole
+//                                              appointment history
+//      sal_appointments_update_worker (WRITE)  dana still ADVANCES a
+//                                              checked_in appointment and
+//                                              writes notes on it
+//      sal_worker_time_off_select (inline)     dana still reads her time off
+//      cls_reviews_submission                  dana still reads charlie's
+//                                              submission row + file row
+//      cls_submissions_storage_read (STORAGE)  dana still DOWNLOADS the
+//                                              actual submission file
+//      the class-level loop (8 rpcs)           all 8 return TRUE
+//
+//    Three tests in this block are PINS, not teeth — they pass both before and
+//    after the migration, and exist so that a later "tidy-up" which gates them
+//    is caught. Each says so in its own comment:
+//      * `mm_assignment_covers_me`'s own-target branch stays ungated
+//        (docs/19 "Adjacent but NOT this bug"; no org is in scope there).
+//      * `sd_in_event` still admits a participant whose `status = 'removed'`
+//        while they remain an org member — docs/19 §5, a FOUNDER DECISION
+//        deliberately excluded from this migration.
+//      * an ex-member still reads their OWN rows (`user_id = auth.uid()` /
+//        `student_id = auth.uid()` arms) — docs/19 §6, own-data, LOW.
+//
+// 4. THE CI-ORDER HAZARD, which has broken CI before.
+//    `.github/workflows/ci.yml` runs `pnpm --filter @platform/db test`
+//    immediately before `pnpm test:e2e` on the SAME database with NO reset in
+//    between — the same mechanism as the grace/`login_events` failure fixed
+//    2026-08-20, which was 100% deterministic in CI and looked like a flake
+//    locally. A fixture here that revokes a SEEDED user's membership and does
+//    not put it back would break e2e every single run. Four layers guard it:
+//      (a) `seatWithMembershipRevoked()` restores in a `finally`, so a failing
+//          assertion still restores;
+//      (b) every revocation is recorded in `seatTouched` BEFORE the mutation,
+//          and the outer `afterAll` re-restores every recorded row;
+//      (c) the restore is a SERVICE-ROLE write with an explicit
+//          `status: 'active'`. This matters: since slice 3 (20260727010000) a
+//          re-added member lands `pending` and satisfies no membership
+//          predicate. `org_members_guard_hierarchy` forces `pending` only when
+//          `auth.uid() is not null`, and the service role has no JWT — its own
+//          comment says "Service role (auth.uid() null — seed/worker) is
+//          untouched and sets status itself" — so an explicit `active` is
+//          honoured here. (The other correct route is
+//          `acceptInviteAs(email, orgId)`, rls.test.ts:33, as the invitee.)
+//      (d) a final CI-ORDER GUARD test asserts the FULL `org_members` table is
+//          byte-identical to the snapshot taken before this block ran. If any
+//          fixture leaked, THIS suite fails and names it, instead of e2e
+//          failing later somewhere unrelated.
+//
+// WHY THESE FIXTURE USERS. Every one is a person the real write path actually
+// reaches (discipline 6 of the brief) — none is an outsider who shares nothing
+// with anyone:
+//   * mel@demo.local — the seed's real matchmaker in demo-match, holding the
+//     two seeded `mm_matchmaker_assignments` rows over charlie and dana
+//     (seed.ts:668). Offboarding a matchmaker is the exact scenario docs/19
+//     names ("an ex-matchmaker keeps each assigned single's full intimate
+//     questionnaire").
+//   * dana@demo.local — the seed's nail-salon WORKER (the only one with a
+//     `sal_worker_profiles` row and appointments), a speed-dating participant,
+//     and a real peer REVIEWER of charlie's submission (seed.ts:432). She is
+//     the ex-stylist / ex-reviewer of docs/19's narrative.
+//   * eve@demo.local — an active demo-match and demo-dating member; used as
+//     the group member and as the mentor seat.
+//   * charlie@demo.local — the assigned single, the salon customer, the
+//     reviewed student, the paired participant. Used as a DATA SUBJECT
+//     throughout, and once as an actor to pin the own-data exception.
+//   * frank@demo.local — an active demo-dating member, seated `removed`, to
+//     pin docs/19 §5.
+//
+// WHAT IS BUILT vs REUSED. Where the seed already has the real row, it is
+// reused and asserted (mm assignments, dana's worker profile + appointments +
+// time off, charlie's customer row, the dana->charlie review assignment).
+// Where it does not, the fixture builds it, exactly as the vm exemplar builds
+// its own conversation: the matchmaking GROUP + group-target assignment
+// (the seed has no group-target assignment at all, so the two inline policy
+// arms are unreachable from seed data), a dedicated speed-dating EVENT with
+// participants/round/pairing/interest/match (the seed's sd_interest and
+// sd_matches rows are e2e artifacts, not seeded — verified: no seed.ts hit),
+// two `checked_in` salon appointments (the seed has none, and `checked_in` is
+// the only state the worker WRITE arm accepts), and a
+// `cls_submission_files` row + a real STORAGE OBJECT (also absent from
+// seed.ts — the one that exists locally is an e2e artifact).
+//
+// TWO THINGS DISCOVERED WHILE WRITING THIS, both worked around rather than
+// fought, because both would have produced a SILENTLY vacuous fixture:
+//   * `sd_pin_participant` and `sal_pin_appointment` are BEFORE UPDATE
+//     triggers that `return old` when `auth.uid()` is NULL — i.e. a
+//     SERVICE-ROLE update to `sd_participants` or `sal_appointments` is
+//     silently DISCARDED, no error. So frank's `removed` seat is set at INSERT
+//     time, and the salon WRITE test uses TWO appointments (one for the
+//     control, one for the negative) instead of resetting one between them.
+//   * a service-role re-add of an `org_members` row without an explicit
+//     `status` lands `pending` (column default), which would leave a seeded
+//     user a non-member for the whole e2e run. Hence (c) above.
+// ===========================================================================
+
+type SeatMembership = {
+  org_id: string
+  user_id: string
+  role: string
+  status: string
+  invited_by: string | null
+  accepted_at: string | null
+}
+
+describe('seat authority: a module roster row requires ACTIVE org membership (20260910040000)', () => {
+  const seatServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
+  const seatDbUrl = process.env.DATABASE_URL ?? 'postgresql://postgres:postgres@127.0.0.1:54322/postgres'
+
+  // Service role — fixtures only, and the non-emptiness controls. Never used
+  // to ASSERT access; every access assertion below goes through a real
+  // signed-in user's ordinary RLS client.
+  let seatAdmin: SupabaseClient
+
+  // Real sessions.
+  let seatMel: SupabaseClient // matchmaker (demo-match)
+  let seatDana: SupabaseClient // salon worker / sd participant / peer reviewer
+  let seatEve: SupabaseClient // group member (demo-match) / mentor (demo-dating)
+  let seatCharlie: SupabaseClient // assigned single / customer / student
+  let seatFrank: SupabaseClient // demo-dating member, seated `removed`
+
+  // Orgs.
+  let seatOrgA = '' // demo-a       (classroom)
+  let seatOrgMatch = '' // demo-match   (matchmaking)
+  let seatOrgDating = '' // demo-dating  (speed dating)
+  let seatOrgSalon = '' // demo-salon   (nail salon)
+
+  // Users.
+  let seatMelId = ''
+  let seatDanaId = ''
+  let seatEveId = ''
+  let seatCharlieId = ''
+  let seatFrankId = ''
+  let seatAliceId = ''
+
+  // Matchmaking fixture.
+  let seatMmGroupId = ''
+  let seatMmGroupAssignmentId = ''
+  let seatMmCharlieAssignmentId = '' // SEEDED (mel -> charlie, individual)
+
+  // Speed-dating fixture.
+  let seatSdEventId = ''
+  let seatSdRoundId = ''
+  let seatSdPartCharlie = ''
+  let seatSdPartDana = ''
+  let seatSdPartEveMentor = ''
+  let seatSdPartFrankRemoved = ''
+  let seatSdInterestDanaId = ''
+  let seatSdMatchId = ''
+
+  // Nail-salon fixture.
+  let seatSalLocationId = '' // SEEDED (Downtown)
+  let seatSalCustomerId = '' // SEEDED (charlie)
+  let seatSalWorkerProfileId = '' // SEEDED (dana)
+  let seatSalTimeOffId = '' // SEEDED
+  let seatSalApptControlId = '' // fixture, checked_in -> used by the CONTROL update
+  let seatSalApptNegativeId = '' // fixture, checked_in -> used by the NEGATIVE update
+
+  // Classroom fixture.
+  let seatClsClassId = ''
+  let seatClsSubmissionId = '' // SEEDED (charlie's Homework 0 submission)
+  let seatClsReviewAssignmentId = '' // SEEDED (dana reviews it)
+  let seatClsFileRowId = ''
+  let seatClsStoragePath = ''
+  const seatClsFileName = 'rls-fixture-seat-authority.txt'
+  const seatClsFileBody = 'seat-authority RLS fixture — deleted in afterAll'
+
+  // Every membership this block touches, snapshotted BEFORE it is mutated.
+  const seatTouched = new Map<string, SeatMembership>()
+  // The whole org_members table as it stood before this block ran. The
+  // CI-ORDER GUARD at the end compares against it exactly.
+  let seatMembersBaseline: string[] = []
+
+  const seatKey = (orgId: string, userId: string) => `${orgId}|${userId}`
+
+  async function seatReadMembership(orgId: string, userId: string): Promise<SeatMembership | null> {
+    const r = await seatAdmin
+      .from('org_members')
+      .select('org_id, user_id, role, status, invited_by, accepted_at')
+      .eq('org_id', orgId)
+      .eq('user_id', userId)
+      .maybeSingle()
+    expect(r.error, `service-role read of org_members failed: ${JSON.stringify(r.error)}`).toBeNull()
+    return (r.data as SeatMembership | null) ?? null
+  }
+
+  async function seatSnapshotMembers(): Promise<string[]> {
+    const r = await seatAdmin.from('org_members').select('org_id, user_id, role, status')
+    expect(r.error, `service-role snapshot of org_members failed: ${JSON.stringify(r.error)}`).toBeNull()
+    return (r.data ?? [])
+      .map((m) => `${m.org_id}|${m.user_id}|${m.role}|${m.status}`)
+      .sort()
+  }
+
+  // DISCIPLINE 2: refuses to create the orphan condition unless a real ACTIVE
+  // membership is there to revoke, and re-reads to prove the revocation took.
+  // Seed state is `all active` with zero orphaned seats, so the orphan
+  // condition has to be manufactured here — it is never lying around.
+  async function seatRevoke(
+    orgId: string,
+    userId: string,
+    mode: 'delete' | 'pending',
+    label: string,
+  ): Promise<SeatMembership> {
+    const before = await seatReadMembership(orgId, userId)
+    expect(
+      before,
+      `CONTROL: ${label} has no org_members row to revoke — the negatives below would be vacuous`,
+    ).not.toBeNull()
+    expect(before!.status, `CONTROL: ${label}'s membership is not 'active' before revocation`).toBe('active')
+
+    seatTouched.set(seatKey(orgId, userId), before!)
+
+    if (mode === 'delete') {
+      // Ordinary offboarding: exactly what removeOrgMember() does — one row,
+      // cascading to nothing.
+      const del = await seatAdmin.from('org_members').delete().eq('org_id', orgId).eq('user_id', userId)
+      expect(del.error, `fixture could not delete ${label}'s membership: ${JSON.stringify(del.error)}`).toBeNull()
+      expect(
+        await seatReadMembership(orgId, userId),
+        `${label}'s org_members row survived the fixture delete — the orphan condition was never created`,
+      ).toBeNull()
+    } else {
+      // Re-invite: the row stays, status drops to 'pending'. is_org_member()
+      // requires status = 'active', so this must deny exactly like a delete —
+      // and a delete-only test would miss it entirely.
+      const up = await seatAdmin
+        .from('org_members')
+        .update({ status: 'pending', accepted_at: null })
+        .eq('org_id', orgId)
+        .eq('user_id', userId)
+      expect(up.error, `fixture could not downgrade ${label} to pending: ${JSON.stringify(up.error)}`).toBeNull()
+      const after = await seatReadMembership(orgId, userId)
+      expect(
+        after?.status,
+        `${label}'s membership is not 'pending' after the fixture downgrade — the orphan condition was never created`,
+      ).toBe('pending')
+    }
+    return before!
+  }
+
+  async function seatRestore(snap: SeatMembership) {
+    // Explicit status:'active' — see discipline 4(c). Without it the row lands
+    // 'pending' (column default) and the user stays a non-member for the whole
+    // downstream e2e run.
+    const res = await seatAdmin.from('org_members').upsert(
+      {
+        org_id: snap.org_id,
+        user_id: snap.user_id,
+        role: snap.role,
+        status: 'active',
+        invited_by: snap.invited_by,
+        accepted_at: snap.accepted_at ?? new Date().toISOString(),
+      },
+      { onConflict: 'org_id,user_id' },
+    )
+    expect(
+      res.error,
+      `RESTORE FAILED for ${snap.user_id} in ${snap.org_id} — CI runs e2e on this same database with no reset: ${JSON.stringify(res.error)}`,
+    ).toBeNull()
+    const back = await seatReadMembership(snap.org_id, snap.user_id)
+    expect(back?.status, `RESTORE left ${snap.user_id} non-active in ${snap.org_id}`).toBe('active')
+    seatTouched.delete(seatKey(snap.org_id, snap.user_id))
+  }
+
+  async function seatWithMembershipRevoked(
+    orgId: string,
+    userId: string,
+    mode: 'delete' | 'pending',
+    label: string,
+    body: () => Promise<void>,
+  ) {
+    const snap = await seatRevoke(orgId, userId, mode, label)
+    try {
+      await body()
+    } finally {
+      await seatRestore(snap)
+    }
+  }
+
+  const seatOrgId = async (slug: string) => {
+    const r = await seatAdmin.from('orgs').select('id').eq('slug', slug).single()
+    if (r.error) throw new Error(`fixture could not resolve org ${slug}: ${r.error.message}`)
+    return r.data!.id as string
+  }
+  const seatUserId = async (email: string) => {
+    const r = await seatAdmin.from('profiles').select('user_id').eq('email', email).single()
+    if (r.error) throw new Error(`fixture could not resolve user ${email}: ${r.error.message}`)
+    return r.data!.user_id as string
+  }
+  const seatInsert = async (table: string, row: Record<string, unknown>, what: string) => {
+    const r = await seatAdmin.from(table).insert(row).select('id').single()
+    if (r.error) throw new Error(`fixture ${what} failed: ${r.error.message}`)
+    return r.data!.id as string
+  }
+
+  beforeAll(async () => {
+    if (!seatServiceKey) throw new Error('SUPABASE_SERVICE_ROLE_KEY not set — run `pnpm dev` once')
+    seatAdmin = createClient(url, seatServiceKey, { auth: { persistSession: false } })
+
+    seatMel = await signIn('mel@demo.local')
+    seatDana = await signIn('dana@demo.local')
+    seatEve = await signIn('eve@demo.local')
+    seatCharlie = await signIn('charlie@demo.local')
+    seatFrank = await signIn('frank@demo.local')
+
+    seatMembersBaseline = await seatSnapshotMembers()
+
+    seatOrgA = await seatOrgId('demo-a')
+    seatOrgMatch = await seatOrgId('demo-match')
+    seatOrgDating = await seatOrgId('demo-dating')
+    seatOrgSalon = await seatOrgId('demo-salon')
+
+    seatMelId = await seatUserId('mel@demo.local')
+    seatDanaId = await seatUserId('dana@demo.local')
+    seatEveId = await seatUserId('eve@demo.local')
+    seatCharlieId = await seatUserId('charlie@demo.local')
+    seatFrankId = await seatUserId('frank@demo.local')
+    seatAliceId = await seatUserId('alice@demo.local')
+
+    // ---- MATCHMAKING ------------------------------------------------------
+    // The seeded individual assignment (mel -> charlie) is REUSED, not
+    // rebuilt: it is the production row, minted by assignMatchmaker().
+    {
+      const a = await seatAdmin
+        .from('mm_matchmaker_assignments')
+        .select('id')
+        .eq('org_id', seatOrgMatch)
+        .eq('matchmaker_id', seatMelId)
+        .eq('target_user_id', seatCharlieId)
+        .maybeSingle()
+      if (a.error || !a.data) {
+        throw new Error(`fixture could not find the seeded mel->charlie assignment: ${a.error?.message ?? 'no row'}`)
+      }
+      seatMmCharlieAssignmentId = a.data.id as string
+    }
+
+    // The seed has NO group-target assignment, so mm_groups_select_assigned
+    // and mm_group_members_select_assigned — the two INLINE arms, which no
+    // function change can reach — are unreachable from seed data. Build one.
+    // org_id on mm_group_members is overwritten by mm_sync_from_group (and on
+    // the assignment by mm_sync_assignment_org), so what is passed here is a
+    // placeholder the trigger replaces with the group's own org.
+    seatMmGroupId = await seatInsert(
+      'mm_groups',
+      { org_id: seatOrgMatch, name: 'RLS fixture — seat/org gate' },
+      'matchmaking group',
+    )
+    await seatInsert(
+      'mm_group_members',
+      { org_id: seatOrgMatch, group_id: seatMmGroupId, user_id: seatEveId },
+      'matchmaking group member (eve)',
+    )
+    seatMmGroupAssignmentId = await seatInsert(
+      'mm_matchmaker_assignments',
+      {
+        org_id: seatOrgMatch,
+        matchmaker_id: seatMelId,
+        target_type: 'group',
+        target_group_id: seatMmGroupId,
+      },
+      'matchmaking group-target assignment',
+    )
+
+    // ---- SPEED DATING -----------------------------------------------------
+    // A DEDICATED event, for two reasons. (1) The seed creates no sd_interest
+    // or sd_matches rows at all (verified against seed.ts), so the
+    // sd_owns_participant surface does not exist without one. (2) state is
+    // deliberately 'draft': sd_events_select's third arm is
+    // `sd_is_participant(org_id) AND state in ('open','running','complete',
+    // 'cancelled')`, so a 'draft' event makes sd_events readable through
+    // sd_in_event and NOTHING ELSE. That matters for the CONTROL, not the
+    // negative — sd_is_participant resolves through has_module_role, which has
+    // required active membership since 20260727010000, so it would collapse
+    // alongside sd_in_event and a passing control could not be attributed to
+    // the predicate under test.
+    seatSdEventId = await seatInsert(
+      'sd_events',
+      {
+        org_id: seatOrgDating,
+        name: 'RLS fixture — seat/org gate',
+        state: 'draft',
+        created_by: seatAliceId,
+      },
+      'speed-dating event',
+    )
+    seatSdPartCharlie = await seatInsert(
+      'sd_participants',
+      { org_id: seatOrgDating, event_id: seatSdEventId, user_id: seatCharlieId, seat_type: 'participant', status: 'registered' },
+      'sd participant (charlie)',
+    )
+    seatSdPartDana = await seatInsert(
+      'sd_participants',
+      { org_id: seatOrgDating, event_id: seatSdEventId, user_id: seatDanaId, seat_type: 'participant', status: 'registered' },
+      'sd participant (dana)',
+    )
+    seatSdPartEveMentor = await seatInsert(
+      'sd_participants',
+      {
+        org_id: seatOrgDating,
+        event_id: seatSdEventId,
+        user_id: seatEveId,
+        seat_type: 'mentor',
+        status: 'registered',
+        mentee_participant_id: seatSdPartCharlie,
+      },
+      'sd mentor seat (eve, mentoring charlie)',
+    )
+    // status is set at INSERT because sd_pin_participant is a BEFORE UPDATE
+    // trigger that returns OLD when auth.uid() is null — a service-role UPDATE
+    // of this column is silently discarded with no error.
+    seatSdPartFrankRemoved = await seatInsert(
+      'sd_participants',
+      { org_id: seatOrgDating, event_id: seatSdEventId, user_id: seatFrankId, seat_type: 'participant', status: 'removed' },
+      'sd participant (frank, seated removed for the docs/19 §5 pin)',
+    )
+    seatSdRoundId = await seatInsert(
+      'sd_rounds',
+      { org_id: seatOrgDating, event_id: seatSdEventId, round_number: 1 },
+      'sd round',
+    )
+    await seatInsert(
+      'sd_pairings',
+      {
+        org_id: seatOrgDating,
+        event_id: seatSdEventId,
+        round_id: seatSdRoundId,
+        participant_a_id: seatSdPartDana,
+        participant_b_id: seatSdPartCharlie,
+      },
+      'sd pairing (dana <-> charlie)',
+    )
+    // Two one-way interests, inserted separately so sd_sync_mutual_match sees
+    // the first when the second lands and mints the sd_matches row itself —
+    // the real path, not a hand-built match row.
+    seatSdInterestDanaId = await seatInsert(
+      'sd_interest',
+      {
+        org_id: seatOrgDating,
+        event_id: seatSdEventId,
+        rater_participant_id: seatSdPartDana,
+        target_participant_id: seatSdPartCharlie,
+        verdict: 'interested',
+      },
+      'sd interest (dana -> charlie)',
+    )
+    await seatInsert(
+      'sd_interest',
+      {
+        org_id: seatOrgDating,
+        event_id: seatSdEventId,
+        rater_participant_id: seatSdPartCharlie,
+        target_participant_id: seatSdPartDana,
+        verdict: 'interested',
+      },
+      'sd interest (charlie -> dana)',
+    )
+    {
+      const m = await seatAdmin.from('sd_matches').select('id').eq('event_id', seatSdEventId).maybeSingle()
+      if (m.error || !m.data) {
+        throw new Error(`fixture: sd_sync_mutual_match did not mint a match: ${m.error?.message ?? 'no row'}`)
+      }
+      seatSdMatchId = m.data.id as string
+      // sd_matches_select only exposes a match to its participants once
+      // `revealed`; contact_shared is the payload docs/19 calls out as the
+      // real exposure ("their revealed matches and the contact details
+      // attached to them").
+      const rev = await seatAdmin
+        .from('sd_matches')
+        .update({
+          revealed: true,
+          matched_at: new Date().toISOString(),
+          contact_shared: { email: 'charlie@demo.local', phone: '555-0101' },
+        })
+        .eq('id', seatSdMatchId)
+      if (rev.error) throw new Error(`fixture could not reveal the match: ${rev.error.message}`)
+    }
+
+    // ---- NAIL SALON -------------------------------------------------------
+    // All three seeded rows are REUSED (charlie's customer record, dana's
+    // worker profile, her time off). Only the two `checked_in` appointments
+    // are new: the seed has none, and `checked_in` is the only state
+    // sal_appointments_update_worker's USING clause accepts.
+    {
+      const loc = await seatAdmin
+        .from('sal_locations')
+        .select('id')
+        .eq('org_id', seatOrgSalon)
+        .eq('name', 'Downtown')
+        .single()
+      if (loc.error) throw new Error(`fixture could not resolve the Downtown location: ${loc.error.message}`)
+      seatSalLocationId = loc.data!.id as string
+      const locationId = seatSalLocationId
+
+      const svc = await seatAdmin
+        .from('sal_services')
+        .select('id')
+        .eq('location_id', locationId)
+        .eq('name', 'Manicure')
+        .single()
+      if (svc.error) throw new Error(`fixture could not resolve the Manicure service: ${svc.error.message}`)
+
+      const cust = await seatAdmin
+        .from('sal_customers')
+        .select('id')
+        .eq('org_id', seatOrgSalon)
+        .eq('user_id', seatCharlieId)
+        .single()
+      if (cust.error) throw new Error(`fixture could not resolve charlie's customer row: ${cust.error.message}`)
+      seatSalCustomerId = cust.data!.id as string
+
+      const wp = await seatAdmin
+        .from('sal_worker_profiles')
+        .select('id')
+        .eq('org_id', seatOrgSalon)
+        .eq('user_id', seatDanaId)
+        .single()
+      if (wp.error) throw new Error(`fixture could not resolve dana's worker profile: ${wp.error.message}`)
+      seatSalWorkerProfileId = wp.data!.id as string
+
+      const to = await seatAdmin
+        .from('sal_worker_time_off')
+        .select('id')
+        .eq('worker_profile_id', seatSalWorkerProfileId)
+        .limit(1)
+        .maybeSingle()
+      if (to.error || !to.data) {
+        throw new Error(`fixture could not find dana's seeded time-off row: ${to.error?.message ?? 'no row'}`)
+      }
+      seatSalTimeOffId = to.data.id as string
+
+      // org_id is overwritten by sal_appointments_before_write from the
+      // location; that trigger also validates service/customer/worker against
+      // the location, so a bad fixture RAISES rather than inserting garbage.
+      const mkAppt = (offsetHours: number) => ({
+        org_id: seatOrgSalon,
+        location_id: locationId,
+        service_id: svc.data!.id as string,
+        customer_id: seatSalCustomerId,
+        worker_id: seatDanaId,
+        scheduled_start: new Date(Date.now() + offsetHours * 3600_000).toISOString(),
+        scheduled_end: new Date(Date.now() + (offsetHours + 1) * 3600_000).toISOString(),
+        state: 'checked_in',
+      })
+      seatSalApptControlId = await seatInsert('sal_appointments', mkAppt(48), 'salon appointment (control)')
+      seatSalApptNegativeId = await seatInsert('sal_appointments', mkAppt(52), 'salon appointment (negative)')
+    }
+
+    // ---- CLASSROOM --------------------------------------------------------
+    // The review assignment is the SEEDED one (seed.ts:432, "dana reviews
+    // charlie's"). What the seed does NOT create is a submission FILE or a
+    // storage object — so the storage arm, which is the worst of this item's
+    // exposure, has to be built here.
+    {
+      const klass = await seatAdmin
+        .from('cls_classes')
+        .select('id')
+        .eq('org_id', seatOrgA)
+        .eq('name', 'Statistics 101 — Fall')
+        .single()
+      if (klass.error) throw new Error(`fixture could not resolve the Statistics 101 class: ${klass.error.message}`)
+      seatClsClassId = klass.data!.id as string
+
+      const ra = await seatAdmin
+        .from('cls_review_assignments')
+        .select('id, submission_id')
+        .eq('org_id', seatOrgA)
+        .eq('class_id', seatClsClassId)
+        .eq('reviewer_id', seatDanaId)
+        .limit(1)
+        .maybeSingle()
+      if (ra.error || !ra.data) {
+        throw new Error(`fixture could not find the seeded dana review assignment: ${ra.error?.message ?? 'no row'}`)
+      }
+      seatClsReviewAssignmentId = ra.data.id as string
+      seatClsSubmissionId = ra.data.submission_id as string
+
+      // The submission under review must belong to SOMEONE ELSE, or the whole
+      // test measures the ungated `student_id = auth.uid()` arm instead of
+      // cls_reviews_submission.
+      const sub = await seatAdmin
+        .from('cls_submissions')
+        .select('student_id')
+        .eq('id', seatClsSubmissionId)
+        .single()
+      if (sub.error) throw new Error(`fixture could not read the reviewed submission: ${sub.error.message}`)
+      if (sub.data!.student_id === seatDanaId) {
+        throw new Error('fixture: the seeded review assignment points at dana OWN submission — pick another')
+      }
+
+      // cls_submissions_storage_read keys on foldername(name)[3] = submission
+      // id and [1] = org id, so the path shape is load-bearing.
+      seatClsStoragePath = `${seatOrgA}/${seatClsClassId}/${seatClsSubmissionId}/${seatClsFileName}`
+      const up = await seatAdmin.storage
+        .from('cls-submissions')
+        .upload(seatClsStoragePath, seatClsFileBody, { contentType: 'text/plain', upsert: true })
+      if (up.error) throw new Error(`fixture storage upload failed: ${up.error.message}`)
+
+      // org_id/class_id are overwritten by cls_sync_from_submission.
+      seatClsFileRowId = await seatInsert(
+        'cls_submission_files',
+        {
+          org_id: seatOrgA,
+          submission_id: seatClsSubmissionId,
+          class_id: seatClsClassId,
+          file_name: seatClsFileName,
+          storage_path: seatClsStoragePath,
+          size_bytes: seatClsFileBody.length,
+        },
+        'classroom submission file row',
+      )
+    }
+  })
+
+  afterAll(async () => {
+    // Layer (b) of discipline 4: whatever a failed test left revoked, put back
+    // FIRST — before anything that could itself throw.
+    for (const snap of [...seatTouched.values()]) {
+      try {
+        await seatRestore(snap)
+      } catch {
+        // seatRestore already asserted; the CI-ORDER GUARD test reports it.
+      }
+    }
+
+    if (seatClsFileRowId) await seatAdmin.from('cls_submission_files').delete().eq('id', seatClsFileRowId)
+    if (seatClsStoragePath) await seatAdmin.storage.from('cls-submissions').remove([seatClsStoragePath])
+
+    for (const id of [seatSalApptControlId, seatSalApptNegativeId]) {
+      if (id) await seatAdmin.from('sal_appointments').delete().eq('id', id)
+    }
+
+    if (seatSdEventId) {
+      // Cascades participants / rounds / pairings / interest / matches (same
+      // teardown the existing slice-5 block uses, rls.test.ts:1156). The
+      // module_scope_nodes row sd_create_event_node minted is removed after
+      // the event, since sd_events.scope_node_id references it.
+      const node = await seatAdmin.from('sd_events').select('scope_node_id').eq('id', seatSdEventId).maybeSingle()
+      await seatAdmin.from('sd_events').delete().eq('id', seatSdEventId)
+      const nodeId = node.data?.scope_node_id as string | null | undefined
+      if (nodeId) await seatAdmin.from('module_scope_nodes').delete().eq('id', nodeId)
+    }
+
+    if (seatMmGroupAssignmentId) {
+      await seatAdmin.from('mm_matchmaker_assignments').delete().eq('id', seatMmGroupAssignmentId)
+    }
+    // Cascades mm_group_members.
+    if (seatMmGroupId) await seatAdmin.from('mm_groups').delete().eq('id', seatMmGroupId)
+  })
+
+  // =========================================================================
+  // CONTROL BLOCK — the migration, and every fixture, before anything is read
+  // =========================================================================
+  describe('CONTROL: the premise', () => {
+    it('the migration under test is actually applied (and names itself if not)', async () => {
+      // Read from the LIVE CATALOG, never from the migration file: docs/19's
+      // own method note — a function can be silently cured (or, here, left
+      // uncured) independently of any single file, and cls_is_class_member is
+      // the worked example of a single-migration grep producing a false
+      // positive.
+      //
+      // PRE-MIGRATION this test FAILS and lists the un-gated predicates by
+      // name, which is the fastest possible explanation of why every negative
+      // below also failed. It is the block's teeth, made legible.
+      const sql = postgres(seatDbUrl, { prepare: false, max: 1 })
+      try {
+        const targets = [
+          'mm_matchmaker_can_see',
+          'mm_assignment_covers_me',
+          'sd_owns_participant',
+          'sd_in_event',
+          'sd_paired_with',
+          'sd_mentors',
+          'sal_worker_sees_customer',
+          'cls_reviews_submission',
+        ]
+        const fns = await sql<{ proname: string; gated: boolean }[]>`
+          select p.proname::text as proname,
+                 pg_get_functiondef(p.oid) ilike '%is_org_member%' as gated
+          from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+          where n.nspname = 'public' and p.proname::text = any(${targets})
+        `
+        // Non-emptiness control for the catalog read itself: a query that
+        // returned nothing would make the `gated` check vacuously true.
+        expect(fns.map((f) => f.proname).sort(), 'the catalog read found the wrong set of functions').toEqual(
+          [...targets].sort(),
+        )
+        expect(
+          fns.filter((f) => !f.gated).map((f) => f.proname),
+          'these predicates do NOT call is_org_member — 20260910040000 is not applied, so every negative in this block will fail',
+        ).toEqual([])
+
+        const arms = [
+          'mm_groups_select_assigned',
+          'mm_group_members_select_assigned',
+          'sal_appointments_select',
+          'sal_appointments_update_worker',
+          'sal_worker_time_off_select',
+        ]
+        const policies = await sql<{ policyname: string; gated: boolean }[]>`
+          select policyname::text as policyname,
+                 (coalesce(qual, '') || ' ' || coalesce(with_check, '')) ilike '%is_org_member%' as gated
+          from pg_policies
+          where schemaname = 'public' and policyname::text = any(${arms})
+        `
+        expect(policies.length, 'the five inline policy arms were not all found').toBe(5)
+        expect(
+          policies.filter((p) => !p.gated).map((p) => p.policyname),
+          'these policy arms do NOT call is_org_member — no function change reaches them, so they need their own fix',
+        ).toEqual([])
+      } finally {
+        await sql.end()
+      }
+    })
+
+    it('CONTROL: every roster seat this block relies on really exists, and every holder is an active org member', async () => {
+      // DISCIPLINE 2, in one place. If any of this is false, every negative
+      // below is measuring nothing.
+      const seats: [string, string, Record<string, string>][] = [
+        ['mm_matchmaker_assignments', 'mel -> charlie (seeded)', { id: seatMmCharlieAssignmentId }],
+        ['mm_matchmaker_assignments', 'mel -> fixture group', { id: seatMmGroupAssignmentId }],
+        ['mm_group_members', 'eve in the fixture group', { group_id: seatMmGroupId, user_id: seatEveId }],
+        ['sd_participants', 'dana in the fixture event', { id: seatSdPartDana }],
+        ['sd_participants', 'eve mentor seat', { id: seatSdPartEveMentor }],
+        ['sd_participants', 'frank removed seat', { id: seatSdPartFrankRemoved }],
+        ['sal_appointments', 'dana worker seat (negative)', { id: seatSalApptNegativeId }],
+        ['sal_worker_profiles', 'dana worker profile (seeded)', { id: seatSalWorkerProfileId }],
+        ['cls_review_assignments', 'dana reviews charlie (seeded)', { id: seatClsReviewAssignmentId }],
+      ]
+      for (const [table, label, filter] of seats) {
+        let q = seatAdmin.from(table).select('org_id')
+        for (const [col, val] of Object.entries(filter)) q = q.eq(col, val)
+        const r = await q
+        expect(r.error, `service-role read of ${table} failed: ${JSON.stringify(r.error)}`).toBeNull()
+        expect(r.data?.length, `fixture seat missing: ${table} / ${label}`).toBe(1)
+      }
+
+      // And the org_id each seat carries is trigger-stamped from its parent
+      // (docs/03 #10), which is why the migration can test <roster>.org_id
+      // without joining the parent. Proving it here means the conjunct is
+      // reading the org we think it is.
+      const stamped: [string, string, string][] = [
+        ['mm_matchmaker_assignments', seatMmGroupAssignmentId, seatOrgMatch],
+        ['mm_group_members', seatMmGroupId, seatOrgMatch], // filtered by group below
+        ['sd_participants', seatSdPartDana, seatOrgDating],
+        ['sal_appointments', seatSalApptNegativeId, seatOrgSalon],
+        ['cls_review_assignments', seatClsReviewAssignmentId, seatOrgA],
+      ]
+      for (const [table, id, expectedOrg] of stamped) {
+        const col = table === 'mm_group_members' ? 'group_id' : 'id'
+        const r = await seatAdmin.from(table).select('org_id').eq(col, id).limit(1).single()
+        expect(r.error, `service-role read of ${table} failed: ${JSON.stringify(r.error)}`).toBeNull()
+        expect(r.data!.org_id, `${table}.org_id is not the org the scope-sync trigger should have stamped`).toBe(
+          expectedOrg,
+        )
+      }
+
+      for (const [orgId, userId, who] of [
+        [seatOrgMatch, seatMelId, 'mel in demo-match'],
+        [seatOrgMatch, seatEveId, 'eve in demo-match'],
+        [seatOrgDating, seatDanaId, 'dana in demo-dating'],
+        [seatOrgDating, seatEveId, 'eve in demo-dating'],
+        [seatOrgDating, seatFrankId, 'frank in demo-dating'],
+        [seatOrgSalon, seatDanaId, 'dana in demo-salon'],
+        [seatOrgA, seatDanaId, 'dana in demo-a'],
+      ] as const) {
+        const m = await seatReadMembership(orgId, userId)
+        expect(m?.status, `${who} is not an ACTIVE org member — the fixture premise is wrong`).toBe('active')
+      }
+    })
+
+    it('CONTROL: there are no PRE-EXISTING orphaned seats, so each negative below is created by its own fixture', async () => {
+      // Seed state is `all active`. If a prior run leaked a revoked
+      // membership, a negative could pass for that reason instead of the
+      // conjunct — so state it, rather than assume it.
+      const rows = await seatAdmin
+        .from('org_members')
+        .select('org_id, user_id, status')
+        .in('org_id', [seatOrgA, seatOrgMatch, seatOrgDating, seatOrgSalon])
+      expect(rows.error).toBeNull()
+      expect(rows.data!.length, 'the four fixture orgs have no members — the seed did not run').toBeGreaterThan(0)
+      expect(
+        rows.data!.filter((r) => r.status !== 'active'),
+        'a membership in one of the fixture orgs is already non-active before this block ran — investigate before trusting the negatives',
+      ).toEqual([])
+    })
+  })
+
+  // =========================================================================
+  // 1. MATCHMAKING — HIGH
+  // =========================================================================
+  describe('matchmaking: an ex-matchmaker keeps nothing (mm_matchmaker_can_see + 2 inline arms)', () => {
+    it('CONTROL: the questionnaires and pair scores exist, and mel reads them while she is an active member', async () => {
+      const answers = await seatAdmin.from('mm_answers').select('id').eq('user_id', seatCharlieId)
+      expect(answers.error).toBeNull()
+      expect(answers.data!.length, "charlie has no mm_answers rows past RLS — 'mel sees nothing' would be vacuous")
+        .toBeGreaterThan(0)
+
+      // mel is not a party to any pair score and mm_can_manage(demo-match) is
+      // false for her (she is 'matchmaker', not 'admin'), so an UNFILTERED
+      // read of either table reaches her only through mm_matchmaker_can_see —
+      // measured live before writing this: 6 answers, 3 pair scores.
+      const melAnswers = await seatMel.from('mm_answers').select('id')
+      expect(melAnswers.error).toBeNull()
+      expect(melAnswers.data!.length, 'mel reads no mm_answers while assigned — the seed or her assignment is broken')
+        .toBeGreaterThan(0)
+
+      const melScores = await seatMel.from('mm_pair_scores').select('id')
+      expect(melScores.error).toBeNull()
+      expect(melScores.data!.length, 'mel reads no mm_pair_scores while assigned').toBeGreaterThan(0)
+
+      const rpc = await seatMel.rpc('mm_matchmaker_can_see', {
+        check_org_id: seatOrgMatch,
+        check_single_id: seatCharlieId,
+      })
+      expect(rpc.error, `mm_matchmaker_can_see errored: ${JSON.stringify(rpc.error)}`).toBeNull()
+      expect(rpc.data, 'mm_matchmaker_can_see is false for a real assigned matchmaker').toBe(true)
+    })
+
+    it('her org seat DELETED: mel reads no questionnaires and no pair scores, while her assignment row survives', async () => {
+      // PRE-MIGRATION: mel still reads 6 mm_answers and 3 mm_pair_scores and
+      // the rpc returns true — all three assertions below FAIL.
+      await seatWithMembershipRevoked(seatOrgMatch, seatMelId, 'delete', 'mel in demo-match', async () => {
+        const answers = await seatMel.from('mm_answers').select('id')
+        expect(answers.error).toBeNull()
+        expect(answers.data, "an ex-member matchmaker read her singles' QUESTIONNAIRES through a bare seat").toEqual([])
+
+        const scores = await seatMel.from('mm_pair_scores').select('id')
+        expect(scores.error).toBeNull()
+        expect(scores.data, 'an ex-member matchmaker read PAIR SCORES through a bare seat').toEqual([])
+
+        const rpc = await seatMel.rpc('mm_matchmaker_can_see', {
+          check_org_id: seatOrgMatch,
+          check_single_id: seatCharlieId,
+        })
+        expect(rpc.error).toBeNull()
+        expect(rpc.data, 'mm_matchmaker_can_see returned TRUE for a bare seat held by a non-member').toBe(false)
+
+        // THE MECHANISM. Nothing FKs org_members, so the seat is untouched —
+        // the denial therefore comes from the new conjunct, not from the
+        // roster row having disappeared with the membership.
+        const seat = await seatAdmin
+          .from('mm_matchmaker_assignments')
+          .select('id')
+          .eq('id', seatMmCharlieAssignmentId)
+        expect(seat.data?.length, 'the assignment row vanished — this test is then proving the wrong thing').toBe(1)
+
+        // And the data is still there to be read, so the empty results above
+        // are a denial and not an empty table.
+        const still = await seatAdmin.from('mm_answers').select('id').eq('user_id', seatCharlieId)
+        expect(still.data!.length, 'charlie mm_answers disappeared mid-test').toBeGreaterThan(0)
+      })
+    })
+
+    it('her org seat downgraded to PENDING (a re-invite): the same denial — is_org_member requires ACTIVE', async () => {
+      // The case a delete-only test misses entirely. removeOrgMember is one
+      // way in; re-inviting is the other, and it leaves status = 'pending'.
+      // PRE-MIGRATION: identical failure to the delete case.
+      await seatWithMembershipRevoked(seatOrgMatch, seatMelId, 'pending', 'mel in demo-match', async () => {
+        const answers = await seatMel.from('mm_answers').select('id')
+        expect(answers.data, "a PENDING member read her singles' questionnaires through a bare seat").toEqual([])
+        const rpc = await seatMel.rpc('mm_matchmaker_can_see', {
+          check_org_id: seatOrgMatch,
+          check_single_id: seatCharlieId,
+        })
+        expect(rpc.data, 'mm_matchmaker_can_see returned TRUE for a PENDING member').toBe(false)
+        // The membership ROW is still there — only its status changed. So this
+        // is not the delete case wearing a different hat.
+        const m = await seatReadMembership(seatOrgMatch, seatMelId)
+        expect(m?.status, 'the fixture did not actually leave mel pending').toBe('pending')
+      })
+    })
+
+    it('CONTROL: mel reads the assigned GROUP and its full roster while she is an active member', async () => {
+      const group = await seatMel.from('mm_groups').select('id, name').eq('id', seatMmGroupId)
+      expect(group.error).toBeNull()
+      expect(group.data?.length, 'mel reads no group row while assigned to it — the fixture assignment is broken').toBe(1)
+
+      const roster = await seatMel.from('mm_group_members').select('user_id').eq('group_id', seatMmGroupId)
+      expect(roster.error).toBeNull()
+      expect(roster.data?.map((r) => r.user_id), "mel does not read the group's roster while assigned").toEqual([
+        seatEveId,
+      ])
+    })
+
+    it('her org seat DELETED: mel reads neither the group nor its roster (the two INLINE arms, asserted separately)', async () => {
+      // These MUST be asserted separately from mm_matchmaker_can_see: they are
+      // inline `exists (...)` arms on mm_groups / mm_group_members, so NO
+      // function change reaches them. A block that only exercised the function
+      // would go green with both policies still broken — which is exactly how
+      // this class of item survives a fix.
+      //
+      // PRE-MIGRATION: mel still reads the group row and the whole roster of
+      // user_ids; both assertions FAIL.
+      await seatWithMembershipRevoked(seatOrgMatch, seatMelId, 'delete', 'mel in demo-match', async () => {
+        const group = await seatMel.from('mm_groups').select('id').eq('id', seatMmGroupId)
+        expect(group.error).toBeNull()
+        expect(group.data, 'an ex-member matchmaker read the GROUP row through a bare assignment').toEqual([])
+
+        const roster = await seatMel.from('mm_group_members').select('user_id').eq('group_id', seatMmGroupId)
+        expect(roster.error).toBeNull()
+        expect(roster.data, "an ex-member matchmaker read the group's ENTIRE ROSTER through a bare assignment").toEqual(
+          [],
+        )
+
+        // Non-emptiness: both rows are still there for a legitimate reader.
+        const g = await seatAdmin.from('mm_groups').select('id').eq('id', seatMmGroupId)
+        expect(g.data?.length, 'the fixture group vanished').toBe(1)
+        const r = await seatAdmin.from('mm_group_members').select('id').eq('group_id', seatMmGroupId)
+        expect(r.data?.length, 'the fixture group membership vanished').toBe(1)
+      })
+    })
+
+    it('CONTROL: eve, in the assigned group, reads who is assigned to her group', async () => {
+      const seen = await seatEve.from('mm_matchmaker_assignments').select('id').eq('id', seatMmGroupAssignmentId)
+      expect(seen.error).toBeNull()
+      expect(seen.data?.length, 'eve does not read her group’s assignment while an active member').toBe(1)
+
+      const rpc = await seatEve.rpc('mm_assignment_covers_me', {
+        check_matchmaker_id: seatMelId,
+        check_target_group_id: seatMmGroupId,
+        check_target_user_id: null,
+      })
+      expect(rpc.error, `mm_assignment_covers_me errored: ${JSON.stringify(rpc.error)}`).toBeNull()
+      expect(rpc.data, 'mm_assignment_covers_me is false for a real group member').toBe(true)
+    })
+
+    it('her org seat DELETED: eve no longer reads the assignment covering her group (mm_assignment_covers_me)', async () => {
+      // PRE-MIGRATION: eve still reads the assignment row and the rpc returns
+      // true — both assertions FAIL.
+      await seatWithMembershipRevoked(seatOrgMatch, seatEveId, 'delete', 'eve in demo-match', async () => {
+        const seen = await seatEve.from('mm_matchmaker_assignments').select('id').eq('id', seatMmGroupAssignmentId)
+        expect(seen.error).toBeNull()
+        expect(seen.data, 'an ex-member read the assignment over her old group through a bare group seat').toEqual([])
+
+        const rpc = await seatEve.rpc('mm_assignment_covers_me', {
+          check_matchmaker_id: seatMelId,
+          check_target_group_id: seatMmGroupId,
+          check_target_user_id: null,
+        })
+        // NOT `.toBe(false)`. For a GROUP-targeted assignment `target_user_id`
+        // is genuinely NULL — that is the real column value the policy passes —
+        // so the first disjunct `NULL = auth.uid()` is NULL and the whole
+        // expression is `NULL or false` = NULL. Postgres RLS treats NULL as
+        // DENY, so null and false are the same answer; the only result that
+        // would mean the fix failed is TRUE. (Pre-migration this is
+        // `NULL or true` = TRUE, so the assertion still has teeth.)
+        expect(
+          rpc.data,
+          'mm_assignment_covers_me returned TRUE for a group seat held by a non-member',
+        ).not.toBe(true)
+
+        const seat = await seatAdmin
+          .from('mm_group_members')
+          .select('id')
+          .eq('group_id', seatMmGroupId)
+          .eq('user_id', seatEveId)
+        expect(seat.data?.length, 'eve’s group membership row vanished — wrong thing proved').toBe(1)
+      })
+    })
+
+    it('PIN (not teeth): the own-target branch stays UNGATED — charlie still reads who is assigned to HIM', async () => {
+      // Passes both before and after the migration, deliberately.
+      // mm_assignment_covers_me's first branch is `check_target_user_id =
+      // auth.uid()` — the caller reading their own coverage, with no org in
+      // scope without adding a parameter (docs/19 "Adjacent but NOT this
+      // bug"; the migration header says so explicitly). This test exists so a
+      // later tidy-up that gates it FAILS here rather than silently changing
+      // what an ex-member can see about themselves.
+      await seatWithMembershipRevoked(seatOrgMatch, seatCharlieId, 'delete', 'charlie in demo-match', async () => {
+        const seen = await seatCharlie
+          .from('mm_matchmaker_assignments')
+          .select('id')
+          .eq('id', seatMmCharlieAssignmentId)
+        expect(seen.error).toBeNull()
+        expect(
+          seen.data?.length,
+          'the own-target branch of mm_assignment_covers_me is no longer ungated — that is a deliberate exception (docs/19 §6); if it was changed on purpose, update this pin',
+        ).toBe(1)
+      })
+    })
+  })
+
+  // =========================================================================
+  // 2. SPEED DATING — HIGH
+  // =========================================================================
+  describe('speed dating: an ejected participant keeps nothing (sd_owns_participant / sd_in_event / sd_paired_with / sd_mentors)', () => {
+    it('CONTROL: dana reads her interest and her REVEALED match (with contact details) while an active member', async () => {
+      const interestExists = await seatAdmin.from('sd_interest').select('id').eq('id', seatSdInterestDanaId)
+      expect(interestExists.data?.length, 'the fixture interest row does not exist past RLS').toBe(1)
+      const matchExists = await seatAdmin
+        .from('sd_matches')
+        .select('id, revealed, contact_shared')
+        .eq('id', seatSdMatchId)
+        .single()
+      expect(matchExists.data?.revealed, 'the fixture match is not revealed — sd_matches_select would deny it anyway').toBe(
+        true,
+      )
+
+      const interest = await seatDana.from('sd_interest').select('id').eq('event_id', seatSdEventId)
+      expect(interest.error).toBeNull()
+      expect(interest.data?.map((r) => r.id), 'dana reads none of her own interest rows while registered').toEqual([
+        seatSdInterestDanaId,
+      ])
+
+      const matches = await seatDana.from('sd_matches').select('id, contact_shared').eq('event_id', seatSdEventId)
+      expect(matches.error).toBeNull()
+      expect(matches.data?.length, 'dana reads no revealed match while registered').toBe(1)
+      expect(
+        matches.data![0]!.contact_shared,
+        'the match carries no contact_shared payload — the exposure under test is not present',
+      ).not.toEqual({})
+
+      const rpc = await seatDana.rpc('sd_owns_participant', { check_participant_id: seatSdPartDana })
+      expect(rpc.error).toBeNull()
+      expect(rpc.data, 'sd_owns_participant is false for a participant on her own row').toBe(true)
+    })
+
+    it('her org seat DELETED: dana reads no interest and no matches, while her participant row survives', async () => {
+      // PRE-MIGRATION: dana still reads her interest row and the revealed
+      // match INCLUDING contact_shared — the two `toEqual([])` assertions and
+      // the rpc assertion all FAIL.
+      await seatWithMembershipRevoked(seatOrgDating, seatDanaId, 'delete', 'dana in demo-dating', async () => {
+        const interest = await seatDana.from('sd_interest').select('id').eq('event_id', seatSdEventId)
+        expect(interest.error).toBeNull()
+        expect(interest.data, 'an ex-member read sd_interest through a bare participant seat').toEqual([])
+
+        const matches = await seatDana.from('sd_matches').select('id').eq('event_id', seatSdEventId)
+        expect(matches.error).toBeNull()
+        expect(matches.data, 'an ex-member read a REVEALED MATCH (and its contact details) through a bare seat').toEqual(
+          [],
+        )
+
+        const rpc = await seatDana.rpc('sd_owns_participant', { check_participant_id: seatSdPartDana })
+        expect(rpc.data, 'sd_owns_participant returned TRUE for a bare seat held by a non-member').toBe(false)
+
+        const seat = await seatAdmin.from('sd_participants').select('id').eq('id', seatSdPartDana)
+        expect(seat.data?.length, 'dana’s participant row vanished — wrong thing proved').toBe(1)
+        const still = await seatAdmin.from('sd_matches').select('id').eq('id', seatSdMatchId)
+        expect(still.data?.length, 'the fixture match vanished mid-test').toBe(1)
+      })
+    })
+
+    it('PIN (not teeth): an ex-member still reads her OWN participant row — sd_participants_select has an ungated user_id arm', async () => {
+      // Recorded so the block does not over-claim. sd_participants_select is
+      // `sd_can_staff_event_of(...) OR user_id = auth.uid() OR
+      // sd_paired_with(id) OR sd_mentors(id)` — the second arm is own-data
+      // (docs/19 §6, LOW) and is deliberately untouched by this migration.
+      // NOTE: docs/history/20260910040000-seat-authority-notes.md §5 item 5
+      // says to assert dana's own participant row is denied after revocation.
+      // That is wrong — sd_owns_participant does not gate that table at all.
+      // The real surfaces it gates are sd_interest / sd_matches / sd_reports,
+      // which the test above covers.
+      await seatWithMembershipRevoked(seatOrgDating, seatDanaId, 'delete', 'dana in demo-dating', async () => {
+        const own = await seatDana.from('sd_participants').select('id').eq('id', seatSdPartDana)
+        expect(own.error).toBeNull()
+        expect(
+          own.data?.length,
+          'sd_participants_select’s `user_id = auth.uid()` arm is no longer ungated — if that was deliberate, update this pin',
+        ).toBe(1)
+      })
+    })
+
+    it('CONTROL: dana reads the event and the live round clock while an active member', async () => {
+      // The fixture event is state 'draft' ON PURPOSE, so sd_events_select's
+      // `sd_is_participant AND state in (...)` arm cannot fire and this read
+      // is attributable to sd_in_event alone. sd_rounds_select has only two
+      // arms (staff, or sd_in_event) and dana is not staff, so it isolates the
+      // predicate outright.
+      const ev = await seatDana.from('sd_events').select('id, state').eq('id', seatSdEventId)
+      expect(ev.error).toBeNull()
+      expect(ev.data?.length, 'dana reads no event while registered in it').toBe(1)
+      expect(ev.data![0]!.state, 'the fixture event is not draft — the isolation argument above no longer holds').toBe(
+        'draft',
+      )
+
+      const rounds = await seatDana.from('sd_rounds').select('id').eq('event_id', seatSdEventId)
+      expect(rounds.error).toBeNull()
+      expect(rounds.data?.map((r) => r.id), 'dana reads no round while registered').toEqual([seatSdRoundId])
+
+      const rpc = await seatDana.rpc('sd_in_event', { check_event_id: seatSdEventId })
+      expect(rpc.error).toBeNull()
+      expect(rpc.data, 'sd_in_event is false for a registered participant').toBe(true)
+    })
+
+    it('her org seat DELETED: dana reads neither the event nor the round (sd_in_event)', async () => {
+      // PRE-MIGRATION: dana still reads the draft event and the live round
+      // clock and the rpc returns true — all three FAIL.
+      await seatWithMembershipRevoked(seatOrgDating, seatDanaId, 'delete', 'dana in demo-dating', async () => {
+        const ev = await seatDana.from('sd_events').select('id').eq('id', seatSdEventId)
+        expect(ev.error).toBeNull()
+        expect(ev.data, 'an ex-member read the EVENT through a bare participant seat').toEqual([])
+
+        const rounds = await seatDana.from('sd_rounds').select('id').eq('event_id', seatSdEventId)
+        expect(rounds.error).toBeNull()
+        expect(rounds.data, 'an ex-member read the LIVE ROUND CLOCK through a bare participant seat').toEqual([])
+
+        const rpc = await seatDana.rpc('sd_in_event', { check_event_id: seatSdEventId })
+        expect(rpc.data, 'sd_in_event returned TRUE for a bare seat held by a non-member').toBe(false)
+
+        const still = await seatAdmin.from('sd_rounds').select('id').eq('id', seatSdRoundId)
+        expect(still.data?.length, 'the fixture round vanished mid-test').toBe(1)
+      })
+    })
+
+    it("PIN (not teeth): host EJECTION still does not revoke event reads — docs/19 §5, a FOUNDER DECISION left out of this migration", async () => {
+      // frank's participant row is status = 'removed' (what sd_pin_participant
+      // exists to let a host do, 20260709050000:1103-1145) and he IS still an
+      // active demo-dating member. sd_in_event has NO status filter of any
+      // kind, so he keeps reading the event and its rounds. The migration adds
+      // the org conjunct AND NOTHING ELSE, precisely so this behaviour does
+      // not change by accident.
+      //
+      // Passes before and after the migration. It is here so that if anyone
+      // adds `and p.status in ('registered','waitlisted')` without the founder
+      // deciding, THIS test fails and names §5.
+      const seat = await seatAdmin.from('sd_participants').select('status').eq('id', seatSdPartFrankRemoved).single()
+      expect(seat.data?.status, 'frank is not seated `removed` — the pin is measuring nothing').toBe('removed')
+      const m = await seatReadMembership(seatOrgDating, seatFrankId)
+      expect(m?.status, 'frank is not an active demo-dating member — the pin needs him to be').toBe('active')
+
+      const rounds = await seatFrank.from('sd_rounds').select('id').eq('event_id', seatSdEventId)
+      expect(rounds.error).toBeNull()
+      expect(
+        rounds.data?.length,
+        'a REMOVED participant no longer reads the event’s rounds. If that is intended, docs/19 §5 was decided — update this pin and the migration header',
+      ).toBe(1)
+
+      const rpc = await seatFrank.rpc('sd_in_event', { check_event_id: seatSdEventId })
+      expect(rpc.data, 'sd_in_event no longer admits a removed participant (docs/19 §5)').toBe(true)
+    })
+
+    it('CONTROL: dana reads her counterparty’s participant row while an active member (sd_paired_with)', async () => {
+      // Isolating: of sd_participants_select's four arms, dana is not staff,
+      // charlie's row is not hers, and she holds no mentor seat — so only
+      // sd_paired_with can grant this.
+      const other = await seatDana.from('sd_participants').select('id').eq('id', seatSdPartCharlie)
+      expect(other.error).toBeNull()
+      expect(other.data?.length, 'dana does not read her paired counterparty while registered').toBe(1)
+
+      const rpc = await seatDana.rpc('sd_paired_with', { check_participant_id: seatSdPartCharlie })
+      expect(rpc.error).toBeNull()
+      expect(rpc.data, 'sd_paired_with is false for a real pairing').toBe(true)
+    })
+
+    it('her org seat DELETED: dana no longer reads her counterparty’s participant row (sd_paired_with)', async () => {
+      // PRE-MIGRATION: dana still reads charlie's row and the rpc returns
+      // true — both FAIL.
+      await seatWithMembershipRevoked(seatOrgDating, seatDanaId, 'delete', 'dana in demo-dating', async () => {
+        const other = await seatDana.from('sd_participants').select('id').eq('id', seatSdPartCharlie)
+        expect(other.error).toBeNull()
+        expect(other.data, 'an ex-member read another participant’s row through a bare pairing').toEqual([])
+
+        const rpc = await seatDana.rpc('sd_paired_with', { check_participant_id: seatSdPartCharlie })
+        expect(rpc.data, 'sd_paired_with returned TRUE for a bare seat held by a non-member').toBe(false)
+
+        const still = await seatAdmin.from('sd_participants').select('id').eq('id', seatSdPartCharlie)
+        expect(still.data?.length, 'charlie’s participant row vanished mid-test').toBe(1)
+      })
+    })
+
+    it('CONTROL: eve, holding a MENTOR seat, reads her mentee while an active member (sd_mentors)', async () => {
+      // eve is in no pairing, so sd_paired_with cannot be what grants this.
+      const rpcPaired = await seatEve.rpc('sd_paired_with', { check_participant_id: seatSdPartCharlie })
+      expect(rpcPaired.data, 'eve is paired with charlie — sd_mentors is then not what this test measures').toBe(false)
+
+      const mentee = await seatEve.from('sd_participants').select('id').eq('id', seatSdPartCharlie)
+      expect(mentee.error).toBeNull()
+      expect(mentee.data?.length, 'a mentor does not read her mentee while an active member').toBe(1)
+
+      const rpc = await seatEve.rpc('sd_mentors', { check_participant_id: seatSdPartCharlie })
+      expect(rpc.error).toBeNull()
+      expect(rpc.data, 'sd_mentors is false for a real mentor seat').toBe(true)
+    })
+
+    it('her org seat DELETED: eve no longer reads her mentee (sd_mentors)', async () => {
+      // PRE-MIGRATION: eve still reads charlie's participant row and the rpc
+      // returns true — both FAIL.
+      await seatWithMembershipRevoked(seatOrgDating, seatEveId, 'delete', 'eve in demo-dating', async () => {
+        const mentee = await seatEve.from('sd_participants').select('id').eq('id', seatSdPartCharlie)
+        expect(mentee.error).toBeNull()
+        expect(mentee.data, 'an ex-member read her mentee’s participant row through a bare mentor seat').toEqual([])
+
+        const rpc = await seatEve.rpc('sd_mentors', { check_participant_id: seatSdPartCharlie })
+        expect(rpc.data, 'sd_mentors returned TRUE for a bare mentor seat held by a non-member').toBe(false)
+
+        const seat = await seatAdmin
+          .from('sd_participants')
+          .select('id, seat_type, mentee_participant_id')
+          .eq('id', seatSdPartEveMentor)
+          .maybeSingle()
+        expect(seat.data?.seat_type, 'eve’s mentor seat vanished — wrong thing proved').toBe('mentor')
+        expect(seat.data?.mentee_participant_id, 'eve’s mentor seat lost its mentee').toBe(seatSdPartCharlie)
+      })
+    })
+  })
+
+  // =========================================================================
+  // 3. NAIL SALON — MEDIUM (customer PII, and the only WRITE in the set)
+  // =========================================================================
+  describe('nail salon: an ex-stylist keeps nothing (sal_worker_sees_customer + 3 inline arms)', () => {
+    it("CONTROL: the customer's PII exists, and dana reads it while an active member — and NOT via an operate grant", async () => {
+      // Measured live before writing this: dana cannot operate Downtown
+      // (sal_can_operate_location = false), so her whole salon reach comes
+      // through seat arms. Asserting it here matters because
+      // sal_can_operate_location resolves through module_caller_covers_role,
+      // which has ALSO required active membership since 20260727010000 — if
+      // dana could operate, the negatives below would pass through that arm
+      // collapsing rather than through the conjunct under test.
+      const canOperate = await seatDana.rpc('sal_can_operate_location', {
+        check_org_id: seatOrgSalon,
+        check_location_id: seatSalLocationId,
+      })
+      expect(canOperate.error).toBeNull()
+      expect(canOperate.data, 'dana CAN operate the location — she is the wrong fixture user for these negatives').toBe(
+        false,
+      )
+
+      const pii = await seatAdmin
+        .from('sal_customers')
+        .select('id, full_name, phone, email')
+        .eq('id', seatSalCustomerId)
+        .single()
+      expect(pii.error).toBeNull()
+      expect(pii.data!.phone, 'the seeded customer has no phone — the PII exposure under test is not present').toBeTruthy()
+
+      const seen = await seatDana.from('sal_customers').select('id, full_name, phone').eq('id', seatSalCustomerId)
+      expect(seen.error).toBeNull()
+      expect(seen.data?.length, 'dana reads no customer while she is the assigned worker').toBe(1)
+      expect(seen.data![0]!.phone, 'dana reads the customer row but not the phone column').toBeTruthy()
+
+      const rpc = await seatDana.rpc('sal_worker_sees_customer', { check_customer_id: seatSalCustomerId })
+      expect(rpc.error).toBeNull()
+      expect(rpc.data, 'sal_worker_sees_customer is false for a real assigned worker').toBe(true)
+    })
+
+    it("her org seat DELETED: dana reads no customer PII, while her appointment and worker profile both survive", async () => {
+      // PRE-MIGRATION: dana still reads full_name/phone/email/notes and the
+      // rpc returns true — both FAIL.
+      await seatWithMembershipRevoked(seatOrgSalon, seatDanaId, 'delete', 'dana in demo-salon', async () => {
+        const seen = await seatDana.from('sal_customers').select('id').eq('id', seatSalCustomerId)
+        expect(seen.error).toBeNull()
+        expect(seen.data, "an ex-stylist read a customer's name/phone/email/notes through a bare appointment").toEqual([])
+
+        const rpc = await seatDana.rpc('sal_worker_sees_customer', { check_customer_id: seatSalCustomerId })
+        expect(rpc.data, 'sal_worker_sees_customer returned TRUE for a bare seat held by a non-member').toBe(false)
+
+        // THE MECHANISM, spelled out for this module because it is the
+        // clearest case: revoking the org seat leaves both the appointment
+        // (with its worker_id) and the worker profile completely intact.
+        const appts = await seatAdmin.from('sal_appointments').select('id').eq('worker_id', seatDanaId)
+        expect(appts.data?.length, 'dana’s worker_id appointments vanished with her membership').toBeGreaterThan(0)
+        const wp = await seatAdmin.from('sal_worker_profiles').select('id').eq('id', seatSalWorkerProfileId)
+        expect(wp.data?.length, 'dana’s worker profile vanished with her membership').toBe(1)
+        const cust = await seatAdmin.from('sal_customers').select('id').eq('id', seatSalCustomerId)
+        expect(cust.data?.length, 'the customer row vanished mid-test').toBe(1)
+      })
+    })
+
+    it('CONTROL: dana reads her own appointment history while an active member (sal_appointments_select inline arm)', async () => {
+      // Unfiltered: sal_can_operate_location is false (asserted above) and she
+      // is not the customer, so every row reaches her through
+      // `worker_id = auth.uid()`.
+      const appts = await seatDana.from('sal_appointments').select('id')
+      expect(appts.error).toBeNull()
+      expect(appts.data?.length, 'dana reads no appointments while an active worker').toBeGreaterThan(0)
+    })
+
+    it('her org seat DELETED: dana reads no appointment history (sal_appointments_select inline arm, asserted separately)', async () => {
+      // Its own test: this is an inline `worker_id = auth.uid()` disjunct, so
+      // no function change reaches it.
+      // PRE-MIGRATION: dana still reads her whole appointment history — FAILS.
+      await seatWithMembershipRevoked(seatOrgSalon, seatDanaId, 'delete', 'dana in demo-salon', async () => {
+        const appts = await seatDana.from('sal_appointments').select('id')
+        expect(appts.error).toBeNull()
+        expect(appts.data, 'an ex-stylist read her whole appointment history through a bare worker_id').toEqual([])
+      })
+    })
+
+    it('CONTROL: dana ADVANCES a checked_in appointment while an active member (sal_appointments_update_worker)', async () => {
+      // The only WRITE in the whole set. checked_in -> in_progress exercises
+      // USING (`state in ('checked_in','in_progress')`) and WITH CHECK
+      // (`... 'in_progress' ...`) together, and passes sal_pin_appointment's
+      // own transition ladder.
+      const before = await seatAdmin.from('sal_appointments').select('state').eq('id', seatSalApptControlId).single()
+      expect(before.data?.state, 'the control appointment is not checked_in — the write test cannot run').toBe(
+        'checked_in',
+      )
+
+      const upd = await seatDana
+        .from('sal_appointments')
+        .update({ state: 'in_progress', notes: 'seat-authority CONTROL' })
+        .eq('id', seatSalApptControlId)
+        .select('id, state')
+      expect(upd.error, `dana’s worker update failed: ${JSON.stringify(upd.error)}`).toBeNull()
+      expect(upd.data?.length, 'dana’s update matched no row while she is the active assigned worker').toBe(1)
+
+      const after = await seatAdmin
+        .from('sal_appointments')
+        .select('state, notes')
+        .eq('id', seatSalApptControlId)
+        .single()
+      expect(after.data?.state, 'the appointment did not actually advance').toBe('in_progress')
+      expect(after.data?.notes, 'the worker’s note was not written').toBe('seat-authority CONTROL')
+    })
+
+    it('her org seat DELETED: dana can no longer advance or annotate an appointment (the only WRITE in the set)', async () => {
+      // A SECOND appointment is used, not the control one reset: resetting
+      // would need a service-role UPDATE, and sal_pin_appointment returns OLD
+      // when auth.uid() is null — the reset would be silently discarded and
+      // this test would run against an `in_progress` row, failing its USING
+      // clause for the wrong reason and passing vacuously.
+      //
+      // PRE-MIGRATION: the update SUCCEEDS — the row flips to in_progress and
+      // carries the ex-stylist's note. Both assertions FAIL.
+      await seatWithMembershipRevoked(seatOrgSalon, seatDanaId, 'delete', 'dana in demo-salon', async () => {
+        const upd = await seatDana
+          .from('sal_appointments')
+          .update({ state: 'in_progress', notes: 'seat-authority NEGATIVE — must never land' })
+          .eq('id', seatSalApptNegativeId)
+          .select('id, state')
+        // An RLS-filtered UPDATE is not an error; it simply matches nothing.
+        expect(upd.error).toBeNull()
+        expect(upd.data, 'an ex-stylist’s UPDATE matched a row through a bare worker_id').toEqual([])
+
+        // The load-bearing assertion: the row is unchanged on disk.
+        const after = await seatAdmin
+          .from('sal_appointments')
+          .select('state, notes')
+          .eq('id', seatSalApptNegativeId)
+          .single()
+        expect(after.data?.state, 'an ex-stylist ADVANCED an appointment after losing her org membership').toBe(
+          'checked_in',
+        )
+        expect(after.data?.notes, 'an ex-stylist WROTE NOTES on an appointment after losing her org membership').not.toBe(
+          'seat-authority NEGATIVE — must never land',
+        )
+      })
+    })
+
+    it('CONTROL: dana reads her own time off while an active member (sal_worker_time_off_select inline arm)', async () => {
+      const exists = await seatAdmin.from('sal_worker_time_off').select('id').eq('id', seatSalTimeOffId)
+      expect(exists.data?.length, 'the seeded time-off row does not exist past RLS').toBe(1)
+
+      const seen = await seatDana.from('sal_worker_time_off').select('id').eq('id', seatSalTimeOffId)
+      expect(seen.error).toBeNull()
+      expect(seen.data?.length, 'dana reads no time off while an active worker').toBe(1)
+    })
+
+    it('her org seat DELETED: dana reads no time off (sal_worker_time_off_select inline arm, asserted separately)', async () => {
+      // PRE-MIGRATION: dana still reads her time-off row — FAILS.
+      await seatWithMembershipRevoked(seatOrgSalon, seatDanaId, 'delete', 'dana in demo-salon', async () => {
+        const seen = await seatDana.from('sal_worker_time_off').select('id').eq('id', seatSalTimeOffId)
+        expect(seen.error).toBeNull()
+        expect(seen.data, 'an ex-stylist read her time off through a bare worker profile').toEqual([])
+
+        const still = await seatAdmin.from('sal_worker_time_off').select('id').eq('id', seatSalTimeOffId)
+        expect(still.data?.length, 'the time-off row vanished mid-test').toBe(1)
+      })
+    })
+  })
+
+  // =========================================================================
+  // 4. CLASSROOM — MEDIUM, and the only item that reaches STORAGE
+  // =========================================================================
+  describe('classroom: an ex-student peer reviewer keeps nothing, files included (cls_reviews_submission)', () => {
+    it("CONTROL: the submission, its file row and the real storage object all exist, and dana reads all three while an active member", async () => {
+      // Non-emptiness for all three surfaces, past RLS.
+      const sub = await seatAdmin.from('cls_submissions').select('id, student_id').eq('id', seatClsSubmissionId).single()
+      expect(sub.error).toBeNull()
+      expect(sub.data!.student_id, 'the reviewed submission is dana’s own — wrong fixture').not.toBe(seatDanaId)
+
+      const fileRow = await seatAdmin.from('cls_submission_files').select('id').eq('id', seatClsFileRowId)
+      expect(fileRow.data?.length, 'the fixture submission-file row does not exist').toBe(1)
+
+      const asAdmin = await seatAdmin.storage.from('cls-submissions').download(seatClsStoragePath)
+      expect(asAdmin.error, `the fixture storage object is not there: ${JSON.stringify(asAdmin.error)}`).toBeNull()
+
+      // And dana is not staff/GA on this class — measured live: both false —
+      // so all three reads below come through cls_reviews_submission alone.
+      const notStaff = await seatDana.rpc('cls_can_manage_class', {
+        check_org_id: seatOrgA,
+        check_class_id: seatClsClassId,
+      })
+      expect(notStaff.data, 'dana can manage the class — she is the wrong fixture reviewer').toBe(false)
+      const notGa = await seatDana.rpc('cls_is_ga_class', { check_org_id: seatOrgA, check_class_id: seatClsClassId })
+      expect(notGa.data, 'dana is a GA on the class — she is the wrong fixture reviewer').toBe(false)
+
+      // The STORAGE policy uses the ORG-wide helpers, not the class-scoped
+      // ones above, so they have to be ruled out separately or the storage
+      // control could be granted by an arm this block is not testing.
+      // (cls_submissions_storage_read = cls_can_manage([1]) OR ((cls_is_ga([1])
+      // OR cls_owns_submission([3]) OR cls_reviews_submission([3])) AND NOT
+      // cls_submission_hidden([3])).)
+      for (const [fn, arg] of [
+        ['cls_can_manage', { check_org_id: seatOrgA }],
+        ['cls_is_ga', { check_org_id: seatOrgA }],
+        ['cls_owns_submission', { check_submission_id: seatClsSubmissionId }],
+      ] as const) {
+        const r = await seatDana.rpc(fn, arg)
+        expect(r.error, `${fn} errored: ${JSON.stringify(r.error)}`).toBeNull()
+        expect(r.data, `${fn} is TRUE for dana — the storage read below is not attributable to her reviewer seat`).toBe(
+          false,
+        )
+      }
+
+      const rowSeen = await seatDana.from('cls_submissions').select('id').eq('id', seatClsSubmissionId)
+      expect(rowSeen.error).toBeNull()
+      expect(rowSeen.data?.length, 'the assigned reviewer reads no submission row').toBe(1)
+
+      const filesSeen = await seatDana.from('cls_submission_files').select('id').eq('id', seatClsFileRowId)
+      expect(filesSeen.error).toBeNull()
+      expect(filesSeen.data?.length, 'the assigned reviewer reads no submission FILE row').toBe(1)
+
+      // THE STORAGE ARM. cls_submissions_storage_read is a different policy on
+      // a different table (storage.objects) and no row-level test touches it —
+      // which is why docs/19 calls this item the worst of the set: the ACTUAL
+      // SOURCE FILE is downloadable by path.
+      const dl = await seatDana.storage.from('cls-submissions').download(seatClsStoragePath)
+      expect(dl.error, `the assigned reviewer cannot download the file: ${JSON.stringify(dl.error)}`).toBeNull()
+      expect(await dl.data?.text(), 'the downloaded object is not the fixture content').toBe(seatClsFileBody)
+
+      const rpc = await seatDana.rpc('cls_reviews_submission', { check_submission_id: seatClsSubmissionId })
+      expect(rpc.error).toBeNull()
+      expect(rpc.data, 'cls_reviews_submission is false for a real assigned reviewer').toBe(true)
+    })
+
+    it('her org seat DELETED: dana reads no submission row, no file row, and CANNOT DOWNLOAD THE FILE', async () => {
+      // PRE-MIGRATION: all four assertions FAIL — dana still reads the
+      // submission and file rows, the rpc still returns true, and the
+      // download still SUCCEEDS, handing an ex-org-member another student's
+      // actual submitted file.
+      await seatWithMembershipRevoked(seatOrgA, seatDanaId, 'delete', 'dana in demo-a', async () => {
+        const rowSeen = await seatDana.from('cls_submissions').select('id').eq('id', seatClsSubmissionId)
+        expect(rowSeen.error).toBeNull()
+        expect(rowSeen.data, "an ex-member read another student's SUBMISSION through a bare review assignment").toEqual(
+          [],
+        )
+
+        const filesSeen = await seatDana.from('cls_submission_files').select('id').eq('id', seatClsFileRowId)
+        expect(filesSeen.error).toBeNull()
+        expect(filesSeen.data, "an ex-member read another student's submission FILE ROW through a bare seat").toEqual([])
+
+        const rpc = await seatDana.rpc('cls_reviews_submission', { check_submission_id: seatClsSubmissionId })
+        expect(rpc.data, 'cls_reviews_submission returned TRUE for a bare seat held by a non-member').toBe(false)
+
+        // Storage. A denial surfaces as an error (storage-api reports an
+        // RLS-invisible object as not found), so assert BOTH that it errored
+        // and that no bytes came back.
+        const dl = await seatDana.storage.from('cls-submissions').download(seatClsStoragePath)
+        expect(dl.error, "an ex-member DOWNLOADED another student's submission file through a bare seat").not.toBeNull()
+        expect(dl.data, 'the denied download still returned a body').toBeNull()
+
+        // Non-emptiness after the fact: the object is still there, so the
+        // failed download is a denial and not a missing file. This is the
+        // control that makes the storage negative non-vacuous.
+        const stillThere = await seatAdmin.storage.from('cls-submissions').download(seatClsStoragePath)
+        expect(stillThere.error, 'the fixture object disappeared mid-test — the storage negative proves nothing').toBeNull()
+
+        // THE MECHANISM: the review assignment row is untouched.
+        const seat = await seatAdmin.from('cls_review_assignments').select('id').eq('id', seatClsReviewAssignmentId)
+        expect(seat.data?.length, 'the review assignment vanished — wrong thing proved').toBe(1)
+      })
+    })
+
+    it('PIN (not teeth): an ex-member still reads her OWN submissions — the `student_id = auth.uid()` arm is own-data', async () => {
+      // docs/19 §6, LOW: the actor is the data subject, so no cross-tenant
+      // escalation and the migration deliberately leaves it alone. Bounds the
+      // claim the tests above make.
+      await seatWithMembershipRevoked(seatOrgA, seatDanaId, 'delete', 'dana in demo-a', async () => {
+        const own = await seatDana.from('cls_submissions').select('id').eq('student_id', seatDanaId)
+        expect(own.error).toBeNull()
+        expect(
+          own.data?.length,
+          'cls_submissions_select’s own-data arm is no longer ungated — if deliberate, update this pin and docs/19 §6',
+        ).toBeGreaterThan(0)
+      })
+    })
+  })
+
+  // =========================================================================
+  // 5. THE CLASS-LEVEL ASSERTION docs/19 ASKS FOR
+  // =========================================================================
+  describe('the class, in one loop: a roster row confers NOTHING once org membership ends', () => {
+    // Eight predicates, four modules, one shape. This is the assertion docs/19
+    // says is missing platform-wide, stated as a single property rather than
+    // eight separate stories — so a NINTH roster predicate added later has an
+    // obvious place to be registered.
+    type SeatCase = {
+      rpc: string
+      args: Record<string, unknown>
+      client: () => SupabaseClient
+      orgId: () => string
+      userId: () => string
+      who: string
+      roster: () => Promise<number> // surviving roster rows, via service role
+    }
+
+    const seatCases = (): SeatCase[] => [
+      {
+        rpc: 'mm_matchmaker_can_see',
+        args: { check_org_id: seatOrgMatch, check_single_id: seatCharlieId },
+        client: () => seatMel,
+        orgId: () => seatOrgMatch,
+        userId: () => seatMelId,
+        who: 'mel, matchmaker in demo-match',
+        roster: async () =>
+          (await seatAdmin.from('mm_matchmaker_assignments').select('id').eq('matchmaker_id', seatMelId)).data?.length ?? 0,
+      },
+      {
+        rpc: 'mm_assignment_covers_me',
+        args: {
+          check_matchmaker_id: seatMelId,
+          check_target_group_id: seatMmGroupId,
+          check_target_user_id: null,
+        },
+        client: () => seatEve,
+        orgId: () => seatOrgMatch,
+        userId: () => seatEveId,
+        who: 'eve, group member in demo-match',
+        roster: async () =>
+          (await seatAdmin.from('mm_group_members').select('id').eq('user_id', seatEveId)).data?.length ?? 0,
+      },
+      {
+        rpc: 'sd_owns_participant',
+        args: { check_participant_id: seatSdPartDana },
+        client: () => seatDana,
+        orgId: () => seatOrgDating,
+        userId: () => seatDanaId,
+        who: 'dana, participant in demo-dating',
+        roster: async () =>
+          (await seatAdmin.from('sd_participants').select('id').eq('id', seatSdPartDana)).data?.length ?? 0,
+      },
+      {
+        rpc: 'sd_in_event',
+        args: { check_event_id: seatSdEventId },
+        client: () => seatDana,
+        orgId: () => seatOrgDating,
+        userId: () => seatDanaId,
+        who: 'dana, participant in demo-dating',
+        roster: async () =>
+          (await seatAdmin.from('sd_participants').select('id').eq('id', seatSdPartDana)).data?.length ?? 0,
+      },
+      {
+        rpc: 'sd_paired_with',
+        args: { check_participant_id: seatSdPartCharlie },
+        client: () => seatDana,
+        orgId: () => seatOrgDating,
+        userId: () => seatDanaId,
+        who: 'dana, paired in demo-dating',
+        roster: async () =>
+          (await seatAdmin.from('sd_participants').select('id').eq('id', seatSdPartDana)).data?.length ?? 0,
+      },
+      {
+        rpc: 'sd_mentors',
+        args: { check_participant_id: seatSdPartCharlie },
+        client: () => seatEve,
+        orgId: () => seatOrgDating,
+        userId: () => seatEveId,
+        who: 'eve, mentor in demo-dating',
+        roster: async () =>
+          (await seatAdmin.from('sd_participants').select('id').eq('id', seatSdPartEveMentor)).data?.length ?? 0,
+      },
+      {
+        rpc: 'sal_worker_sees_customer',
+        args: { check_customer_id: seatSalCustomerId },
+        client: () => seatDana,
+        orgId: () => seatOrgSalon,
+        userId: () => seatDanaId,
+        who: 'dana, worker in demo-salon',
+        roster: async () =>
+          (await seatAdmin.from('sal_appointments').select('id').eq('worker_id', seatDanaId)).data?.length ?? 0,
+      },
+      {
+        rpc: 'cls_reviews_submission',
+        args: { check_submission_id: seatClsSubmissionId },
+        client: () => seatDana,
+        orgId: () => seatOrgA,
+        userId: () => seatDanaId,
+        who: 'dana, peer reviewer in demo-a',
+        roster: async () =>
+          (await seatAdmin.from('cls_review_assignments').select('id').eq('id', seatClsReviewAssignmentId)).data
+            ?.length ?? 0,
+      },
+    ]
+
+    it('CONTROL: all 8 seat predicates return TRUE for their holders while they are active org members', async () => {
+      // Without this, the negative loop below is satisfied by eight
+      // misconfigured fixtures just as happily as by eight working conjuncts.
+      for (const c of seatCases()) {
+        const r = await c.client().rpc(c.rpc, c.args)
+        expect(r.error, `${c.rpc} errored for ${c.who}: ${JSON.stringify(r.error)}`).toBeNull()
+        expect(r.data, `${c.rpc} is FALSE for ${c.who} while she holds an active membership — fixture is wrong`).toBe(
+          true,
+        )
+        expect(await c.roster(), `${c.rpc}: ${c.who} holds no roster row at all`).toBeGreaterThan(0)
+      }
+    })
+
+    it('all 8 fail once the holder’s org membership ends — while every roster row survives untouched', async () => {
+      // THE CLASS-LEVEL ASSERTION. docs/03 #20: a per-entity SEAT is not
+      // authority.
+      // PRE-MIGRATION: all eight return TRUE and this test fails eight times
+      // over. Each iteration revokes and restores independently, so a failure
+      // in one does not leave another module's fixture orphaned.
+      for (const c of seatCases()) {
+        await seatWithMembershipRevoked(c.orgId(), c.userId(), 'delete', c.who, async () => {
+          const r = await c.client().rpc(c.rpc, c.args)
+          expect(r.error, `${c.rpc} errored for ${c.who}: ${JSON.stringify(r.error)}`).toBeNull()
+          // `.not.toBe(true)`, not `.toBe(false)`: seven of the eight return a
+          // plain false, but `mm_assignment_covers_me` returns NULL for a
+          // group-targeted assignment (its `target_user_id` argument is really
+          // null, so `NULL = auth.uid()` makes the whole expression NULL).
+          // Postgres RLS denies on NULL, so both answers mean "grants nothing";
+          // TRUE is the only failure. Pre-migration all eight return TRUE.
+          expect(
+            r.data,
+            `${c.rpc} returned TRUE for ${c.who} after her org membership ended — a roster row is still standalone authority`,
+          ).not.toBe(true)
+          expect(
+            await c.roster(),
+            `${c.rpc}: ${c.who}'s roster row disappeared with her membership, so the denial proves nothing about the conjunct`,
+          ).toBeGreaterThan(0)
+        })
+      }
+    })
+
+    it('and all 8 pass again once membership is restored — the fix narrows nothing permanently', async () => {
+      // docs/history/20260910040000-seat-authority-notes.md §5 item 14: cheap
+      // insurance that eight `create or replace`s did not accidentally break a
+      // working path, and simultaneously proof that every restore above
+      // actually took effect.
+      for (const c of seatCases()) {
+        const r = await c.client().rpc(c.rpc, c.args)
+        expect(r.error).toBeNull()
+        expect(r.data, `${c.rpc} is still FALSE for ${c.who} after her membership was restored`).toBe(true)
+      }
+    })
+  })
+
+  // =========================================================================
+  // 6. CI-ORDER GUARD — must be the LAST describe in this block
+  // =========================================================================
+  describe('CI-ORDER GUARD: this block leaves org_members exactly as it found it', () => {
+    it('every membership row is byte-identical to the pre-block snapshot', async () => {
+      // .github/workflows/ci.yml runs `pnpm --filter @platform/db test`
+      // immediately before `pnpm test:e2e` on the SAME database with NO reset
+      // in between. A leaked revocation here breaks e2e DETERMINISTICALLY and
+      // looks like an unrelated failure three steps later — the exact shape of
+      // the grace/login_events failure fixed 2026-08-20. So the leak is caught
+      // HERE, by name, in the suite that caused it.
+      //
+      // Also note re-adding a member leaves them `pending` since 2026-07-27,
+      // which is why the snapshot compares ROLE AND STATUS, not just presence:
+      // a restore that silently landed 'pending' would be just as broken as a
+      // missing row, and a presence-only check would miss it.
+      expect(
+        [...seatTouched.keys()],
+        'a membership revoked by this block was never restored (org|user keys listed)',
+      ).toEqual([])
+
+      const now = await seatSnapshotMembers()
+      expect(now, 'org_members differs from the snapshot taken before this block ran').toEqual(seatMembersBaseline)
+    })
+  })
+})

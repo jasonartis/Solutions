@@ -296,3 +296,116 @@ conjunct, add the missing tests, and leave the redesign to that slice.
   authority once org membership ends**, outside the one `20260904010000` adds.
   Stated as a negative result from a targeted search, not a proof of absence.
   Whatever fixes the above should add that assertion per module.
+
+---
+
+# FIXED 2026-09-10 — and a SECOND, NARROWER GAP THE FIX DOES NOT CLOSE
+
+## What shipped
+
+`20260910040000_seat_requires_org_membership.sql` applied the one-line
+`public.is_org_member(<roster>.org_id)` conjunct to all 8 functions and all 5
+inline policy arms listed above. Verified live: none of the 8 was already cured
+(the control — the four `vm_` predicates from `20260904010000` plus
+`cls_is_class_member` — came back correctly ORG-GATED, so the method
+discriminates). Parse-checked server-side in a rolled-back transaction before
+applying. **`packages/db/src/rls.test.ts` now carries 34 tests** covering every
+one of the 13 items across all four modules, including the classroom case that
+reaches Storage, plus the class-level assertion this audit asked for and a
+CI-order guard that fails by name if the block leaves `org_members` dirty.
+
+Two things worth keeping from the build:
+
+- **A boolean predicate can legitimately return NULL, and RLS denies on NULL.**
+  Two tests initially failed asserting `.toBe(false)` and receiving `null`:
+  `mm_assignment_covers_me` takes a `check_target_user_id` that is *genuinely
+  null* for a group-targeted assignment, so `NULL = auth.uid()` makes the whole
+  expression `NULL or false` = NULL. That is a correct denial. The assertions are
+  now `.not.toBe(true)` with the reasoning inline — a test demanding `false`
+  there would have been wrong about how RLS decides.
+- **`sd_pin_participant` and `sal_pin_appointment` silently discard
+  service-role updates** — both `return old` when `auth.uid()` is null, with no
+  error. A fixture that tried to reset state between assertions would have
+  passed while testing nothing. The tests are structured around this.
+
+## THE SECOND GAP — revoking a MODULE ROLE does not revoke the seat
+
+**Founder-raised, 2026-09-10, and verified:** *"What if [he] is still part of the
+org but no longer part of the module within the org? Is that the same or similar
+issue?"*
+
+It is the same class, one level down. Measured against the live catalog after the
+fix:
+
+```
+mm_matchmaker_can_see    :: is_org_member=1 :: module_role_check=0
+mm_assignment_covers_me  :: is_org_member=1 :: module_role_check=0
+sd_owns_participant      :: is_org_member=1 :: module_role_check=0
+sd_in_event              :: is_org_member=1 :: module_role_check=0
+sd_paired_with           :: is_org_member=1 :: module_role_check=0
+sd_mentors               :: is_org_member=1 :: module_role_check=0
+sal_worker_sees_customer :: is_org_member=1 :: module_role_check=0
+cls_reviews_submission   :: is_org_member=1 :: module_role_check=0
+```
+
+**Zero of the eight consult the module role.** So an org admin who revokes
+someone's speed-dating role — while keeping them in the org — leaves their
+`sd_participants` seat fully functional: the live event, their revealed matches
+and the shared contact details all still read.
+
+**This is arguably the MORE common revocation.** Removing one module's access is
+a smaller, more routine administrative act than removing someone from the
+organisation entirely, and it is the one an admin reaches for first.
+
+### The shape of the fix, and why it is NOT a sweep
+
+Every module already has the right predicate, and each one **subsumes**
+`is_org_member` (because `has_module_role` requires active org membership since
+`20260727010000`), so the conjunct added in `20260910040000` would become
+redundant-but-harmless rather than needing removal:
+
+| Module | Predicate to conjoin | Note |
+|---|---|---|
+| matchmaking | `mm_is_single` / `mm_is_matchmaker` | two different seats, two different roles |
+| speed dating | `sd_is_participant` | |
+| nail salon | `sal_is_worker` | but `sal_worker_sees_customer` gates the WORKER reading a CUSTOMER — check which side the role belongs to |
+| classroom | `cls_is_class_member` | already scope-aware; there is no generic `cls_is_student` |
+
+**The blocking measurement, which must come first:** does every current seat
+holder actually hold the corresponding module role? If any seat exists whose
+holder has no `module_roles` row, adding this conjunct revokes LIVE access. That
+is exactly the check that made `20260910040000` safe (0 orphans across all six
+rosters, none vacuous) and it must be repeated for the role dimension before a
+line of SQL is written.
+
+**Second thing to decide, not assume:** some seats may legitimately outlive a
+role. A salon customer, for instance, is a person with appointments rather than
+a role-holder. Do not assume symmetry with the org-membership case.
+
+### Honest caveat on the org-membership fix's own evidence
+
+The zero-orphan result that cleared `20260910040000` is **structurally forced,
+not independent**: every one of the 28 `org_members` rows on the local database
+is `status = 'active'`, so the orphan count could not have been anything else.
+The class is real and simply not yet triggered — consistent with the 2026-09-04
+production measurement. The same caveat will apply to the module-role check
+unless the data has changed by then.
+
+### Also still open, from the correctness review of `20260910040000`
+
+Four items in the same class, found by the adversarial review, in **neither**
+this audit's remediation list nor its "adjacent but NOT this bug" list — so
+genuinely unaccounted for rather than consciously deferred:
+
+- **`cls_review_assignments_update_reviewer`** (`reviewer_id = auth.uid() AND
+  locked = false`) — the worst of the four, because it is a **WRITE**: an
+  offboarded reviewer can no longer *read* the submission but can still write a
+  peer grade onto a current student's work. Same shape this audit already
+  accepted as in-scope for nail salon's "lingering write".
+- **`mm_assignments_select`** — its `matchmaker_id = auth.uid()` arm is bare
+  while `20260910040000` gated its sibling arm, so one policy is now half-fixed.
+- **`cls_review_assignments_select`** — bare `reviewer_id = auth.uid()` arm.
+- **`sd_participants_update_self`** and **`cls_set_preferred_name`** — LOW; the
+  pin triggers block the dangerous fields, but an ex-member can still flip
+  `checked_in`, edit a profile card paired participants read, or rename
+  themselves on a live class roster.
