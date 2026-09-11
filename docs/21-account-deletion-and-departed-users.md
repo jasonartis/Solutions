@@ -345,3 +345,46 @@ So:
 counterparty's reason** — unless the founder decides deliberately, in writing,
 to reverse the reveal guard. Belongs as a dated entry in the module-6 and
 module-1 specs when it is hashed out.
+
+## 7.8 REFINEMENT (founder, 2026-09-11) — departure is disclosed ONLY when it is the ACTUAL blocking cause
+
+§7.7's safe default is tightened. The founder: *"The person leaving is not a
+rejection. And if they were turned down by the current user then that is the
+stated reason, and their leaving the platform should not be disclosed. It's only
+in the scenario where they might wonder why is there no next step, and the
+natural next step is prevented by their leaving the platform, that this info is
+shown to the current user."*
+
+**The rule:**
+
+| The viewer's own state | What the archive row says |
+|---|---|
+| **I declined them** | "You declined." **Nothing about their account.** The outcome is already explained by the viewer's own action. |
+| **I said yes and was waiting** | "This person left the platform." The departure IS the reason the next step never came. |
+
+**Why this is right on two counts, not one:**
+
+1. **Information minimisation.** A viewer who declined someone has their answer.
+   Telling them that person later left the platform discloses that person's
+   account status for no reason the viewer needs — and, aggregated over many
+   declines, leaks who is leaving.
+2. **It preserves the reveal guard exactly** (module-6:71, "a rejected side is
+   indistinguishable from an undecided one"). A viewer who said yes was awaiting
+   a reveal either way, so "they left" explains the silence **without revealing
+   whether the other person had said yes or no.** The guard survives untouched.
+
+### THE IMPLEMENTATION TRAP — do not let "departed" become a FALSE explanation
+
+Departure must only be given as the cause **when it actually is the cause.** If
+the outcome was already determined before the person left — the viewer declined,
+or the counterparty declined and no match row was ever created — then the state
+is already settled and departure is not what blocked it.
+
+Attributing it to departure in that case is wrong twice: it **misstates the
+cause**, and it **discloses an account status** that nothing required. The same
+"an absence needs the RIGHT explanation, not just an explanation" discipline the
+platform already applies to its four-state invite rendering and the view-as
+`emptyReason` work.
+
+→ The archive's reason column must be derived from **what actually blocked the
+next step**, never from "is this person departed?" as a standalone test.
