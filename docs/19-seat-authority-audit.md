@@ -409,3 +409,56 @@ genuinely unaccounted for rather than consciously deferred:
   pin triggers block the dangerous fields, but an ex-member can still flip
   `checked_in`, edit a profile card paired participants read, or rename
   themselves on a live class roster.
+
+## FOUNDER DECISIONS on the module-role gap, 2026-09-11
+
+**1. FULL SYMMETRY. A seat requires the module role that justifies it — no
+per-module exceptions.** Founder: *"Let's try to make as much symmetry as
+possible."*
+
+**The salon customer is NOT the counter-example this audit feared.** Verified
+live: a customer holds a `module_roles` row like everyone else —
+
+```
+frank :: admin    eve   :: cashier    charlie :: customer
+alice :: manager  grace :: manager    dana    :: worker
+```
+
+So the uniform rule applies to them too. The thing that looked like an exception
+is a **different kind of record**: `sal_customers.user_id` is NULLABLE, and a
+walk-in with no account has no `user_id` at all — so no predicate keyed on
+`auth.uid()` ever touches them. A walk-in is *a record about a person*, not *a
+seat held by a user*. Those two were never required to be symmetric.
+
+**2. Related, and the founder's framing is the fix for a gap already on the
+books** (the "walk-in salon customers are not findable" item): the schema already
+does half of the supermarket-loyalty model — link to a user when we can, else
+hold name/phone/email. **What is missing is the moment of matching**: when a
+walk-in later signs up, nothing connects their existing history to the new
+account. Founder: *"As much as possible, they want to connect me to a user in
+their system, existing or new. Shouldn't we match that model?"* → match on email
+or phone at signup, offer to link, history follows the person. **Separate work
+from this security fix; do not bundle.**
+
+**3. The live WRITE is folded INTO this fix, not deferred.**
+`cls_review_assignments_update_reviewer` is `reviewer_id = auth.uid() AND locked
+= false`, with no membership or role conjunct, and it gates `submitPeerGrade`.
+The pin trigger protects `homework_id` / `reviewer_id` / `submission_id` /
+`locked` but leaves `grade` and `grade_submitted_at` writable. So after
+`20260910040000` an offboarded student can no longer READ the submission but can
+still WRITE a grade onto a current student's work. Founder: *"this obviously
+needs to be fixed."* Same migration, same review, same tests.
+
+**4. NOTE THE DISTINCTION the founder raised** — an ex-member and a deleted user
+are both "a different type of user", but they are NOT the same mechanism and must
+not be merged:
+
+| | Removed from an org / module | Deleted (docs/21) |
+|---|---|---|
+| Account | still live, still a full user elsewhere | scrubbed to a silhouette |
+| Fix | authority must track CURRENT standing (this audit) | identity detached, human-made content kept (docs/21 §7) |
+
+The shared principle is worth stating once: **authority follows current standing,
+never past standing.** The two fixes compose — docs/21 §7.4 records that
+revoking memberships is only *sufficient* for a silhouette because this audit's
+fix made seats inert when membership ends.

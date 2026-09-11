@@ -1,6 +1,7 @@
 # Account deletion and departed users — what survives a person leaving
 
-**Status: PLAN, 2026-09-10. NOT BUILT. One founder decision is made (§2); the
+**Status: PLAN, updated 2026-09-11. NOT BUILT. READ §7 FIRST — the founder's SILHOUETTE
+model supersedes §3's mechanism and most of §4's classification. Older text: the
 per-column classification in §4 is proposed and needs sign-off.**
 
 Found while fixing the seat-authority class (docs/19). Not urgent — **there is no
@@ -164,3 +165,128 @@ module tables. Suggested order:
 
 Opus tier, full docs/03 #12 rhythm — schema change + FK actions + trigger
 interaction.
+
+---
+
+# 7. FOUNDER DECISIONS, 2026-09-11 — the SILHOUETTE model supersedes §3 and §4
+
+The founder replaced the mechanism in §3 and most of the classification in §4 with
+a cleaner organising rule. **Where this section and §3/§4 disagree, this section
+wins;** §4's table survives only as the worked mapping in §7.3.
+
+## 7.1 The rule
+
+> **Deletion detaches the person but leaves a silhouette. The silhouette keeps
+> anything a HUMAN did that touched someone else. Anything an AUTOMATED process
+> derived is deleted.**
+
+Founder's words: *"if an automated process created a match then delete it but if a
+human did a pairing or any other human action impacting their profile (like
+writing a layer on top of theirs) then we keep that attached to their detached
+profile silhouette."*
+
+**This is a better line than §4's "affects others / derived" split**, because it is
+decidable without a judgement call: *did a person do this, or did code infer it?*
+It also resolves two of §4's three "needs a decision" rows outright (§7.3).
+
+Named consequences the founder specified:
+
+- Keep **content other users relied on** — e.g. a `vm_layers` row somebody
+  replied underneath.
+- Keep **safety notes about them OR from them** (both directions).
+- Keep **assignments made by humans**.
+- **Automated matches are deleted** — but where a live counterparty can currently
+  see one, it does not vanish silently: it shows a **temporary "this person left"
+  state for the length of the grace period**, then disappears.
+
+## 7.2 TWO STATES, NOT ONE — grace period (founder: "Grace period sounds right")
+
+Every comparable platform separates a reversible state from an irreversible one,
+and most real cases are the reversible one:
+
+| | Reversible | Irreversible |
+|---|---|---|
+| Facebook / Instagram | 30 days, full restore | permanent |
+| Google | ~20 days, full restore | permanent |
+| Slack | deactivate — history intact | a separate operation |
+| Reddit / GitHub | — | permanent; content orphaned to `[deleted]` / `ghost` |
+
+**Nobody reconnects an identity after true deletion** — the link is destroyed by
+design, and restoring it would break the promise deletion made. Someone returning
+later is a new person; their old content stays with the silhouette.
+
+So the platform needs **departed (reversible, identity intact, grace period
+running)** and **deleted (irreversible, silhouette only)**.
+
+## 7.3 What the rule decides, applied to §4's open rows
+
+| §4 row | Human or automated? | Verdict |
+|---|---|---|
+| `sd_notes.about_user_id` | a human wrote a safety note | **KEEP** — founder said both directions. §4's open question is CLOSED. |
+| `mm_matchmaker_assignments` | a human matchmaker was assigned | **KEEP.** §4's open question is CLOSED. |
+| `sd_participants` → `sd_pairings` | the orchestrator pairs automatically | **pairing: DELETE.** But `sd_interest` is a human "yes" and `sd_matches` derives from two of them — see the one remaining question in §7.6. |
+
+Everything else in §4 maps cleanly: `vm_layers`, `cls_review_comments`,
+`vm_flags`, `sd_notes.author_user_id`, `cls_submissions`, `cls_grades`,
+`cls_exam_papers`, `cls_review_assignments` are all human acts → KEEP;
+`mm_pair_scores`, `login_events`, `login_rollup`, `activity_events`,
+`activity_rollup` are machine-derived → DELETE.
+
+## 7.4 THE MECHANISM CHANGES — §3's FK surgery is mostly unnecessary
+
+§3 proposed flipping ~10 FKs to `ON DELETE SET NULL` and making each column
+nullable. **The silhouette model removes nearly all of that work**, because the
+cascade only fires if the `auth.users` row is deleted — and under this model it
+never is.
+
+Deletion becomes:
+
+1. **Scrub the identity, keep the row.** Blank `profiles.display_name`; replace
+   `profiles.email` and the GoTrue `auth.users.email` with a tombstone value; set
+   a `departed_at` / `deleted_at` marker.
+2. **Ban the auth account** so it can never be signed into.
+3. **Revoke every membership** — `org_members`, `module_roles`.
+4. **Delete the machine-derived rows** (§7.3's DELETE column).
+5. Everything else keeps pointing at a real, now-anonymous row. **Zero FK
+   changes, zero nullable-column migrations.**
+
+**THE SEAT-AUTHORITY FIX SHIPPED 2026-09-10 IS WHAT MAKES STEP 3 SUFFICIENT.**
+Before `20260910040000`, revoking memberships left every module seat still
+granting access, so a silhouette would have retained full module access forever.
+Now, removing the memberships makes every seat inert automatically. The two pieces
+of work compose — worth knowing, because it is not obvious from either alone.
+
+**This is also the standard anonymisation posture** for the right to erasure:
+personal data is destroyed, the record that other people rely on survives without
+identifying anyone.
+
+## 7.5 What the silhouette must render
+
+A silhouette is **a different kind of user, deliberately visible as such.** Today
+the visual-messaging fallback chain is `display_name || email || 'Someone'`
+(`modules/visual-messaging/ui/conversations/[conversationId]/page.tsx:163`), so a
+blanked profile renders as **"Someone"** — indistinguishable from a live user who
+simply never set a name. That is the honesty failure this platform's specs already
+forbid elsewhere, and it must be a distinct label ("Former member", greyed, no
+profile link).
+
+The grace-period state needs its own rendering too: an automated match whose
+counterparty has departed shows *"this person left the platform"* until the grace
+period expires, then the row goes.
+
+## 7.6 THE ONE QUESTION LEFT
+
+**`sd_interest` and `sd_matches` when a participant is deleted.** The pairing that
+put them in a room was automated (delete it). But the *interest* was a human "yes",
+and the *match* exists because two humans both said yes. Options:
+
+- **(a)** Treat the match as human (both people chose) → keep it, attached to the
+  silhouette, with the departed rendering. The other person keeps the record that
+  they matched with someone.
+- **(b)** Treat it as automated (the trigger created the row) → delete after the
+  grace period, per §7.1's automated-match rule.
+
+The founder's own wording points at **(b)** for the *visible* match ("a temporary
+message that the user left... after which the match disappears"), but (a) is
+arguable for the underlying `sd_interest` row, which is a record of what a person
+actually did. **Unresolved.**
