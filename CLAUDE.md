@@ -24,8 +24,16 @@ NOW — 1, 2, 3, AND 8 ALL SHIPPED; 4, 5, 6, 7 ARE ALL DELIBERATELY PAUSED** (fo
 extract-don't-speculate: each adds real cost or a new dependency for a problem that only
 exists once a real client generates real volume — **do not start any of them unprompted,
 revisit together when the first real client is signed**, per docs/18's status note).
-**NEXT SESSION STARTS HERE (handoff rewritten 2026-09-04). VISUAL MESSAGING: item 1 SHIPPED,
-item 2's SHAPE IS DECIDED BUT NOT BUILT — building it is the next body of work.**
+**NEXT SESSION STARTS HERE (handoff rewritten 2026-09-10).** Two tracks ran in parallel and
+both are live state you must not re-derive:
+**(A) SEAT AUTHORITY IS FIXED AND SHIPPED** (`cf63e77`; db 183/183 → e2e 52/52) — the remaining
+open half, which the founder found, is the MODULE-ROLE gap; see the security block below and
+docs/19's 2026-09-10 section. **(B) AD-HOC GROUPS / PUBLIC SQUARE was reopened and is being
+redesigned in a SEPARATE SESSION — its live doc is
+[docs/20-public-square.md](docs/20-public-square.md), three mechanisms have already been
+designed and killed by review, and the module-4 spec's "SHAPE DECIDED 2026-09-04" entry is
+SUPERSEDED.** If both sessions are still running, stage explicit paths and use
+`git commit -- <paths>`; docs/20 belongs to that other session.
 - **2026-09-04, module 6 (speed dating), Sonnet, no migration: video-provider interface,
   the click-to-join video UI, contact-share population on reveal, and resume-review's
   live-panel gap are all SHIPPED and CI-GREEN.** Full detail: the module-6 spec's own
@@ -44,17 +52,24 @@ item 2's SHAPE IS DECIDED BUT NOT BUILT — building it is the next body of work
   structural change, not started).
 - **(1) Per-org tunable size/opacity guards: DONE** (`1bb84f1`, no migration —
   `org_modules.settings` + `/o/[orgSlug]/settings`).
-- **(2) Ad-hoc person-to-person groups: the shape is SETTLED — per-pair lightweight orgs,
-  NOT one shared "everyone" org.** The founder picked the shared org, then **reversed it the
-  same session** after an adversarial pass surfaced
-  [docs/16-network-features-review.md](docs/16-network-features-review.md) — a 2026-07-20
-  Fable-tier review of exactly that shape, which had already found the same two CRITICAL
-  problems and records the fix as **blocking and still undecided**. Accept-first consent
-  (founder's explicit choice over his own earlier "auto join") and a 30-day invite expiry
-  are decided too. **READ THE MODULE-4 SPEC'S "SHAPE DECIDED 2026-09-04" ENTRY AND docs/16
-  BEFORE STARTING — the full design, the five pieces to build, and why the other shape was
-  rejected are all there.** This is a new table + RLS + an `auth.users` trigger, so **Opus,
-  full docs/03 #12 rhythm** — not Sonnet.
+- **(2) Ad-hoc person-to-person groups: REOPENED 2026-09-06/10 AND BEING REDESIGNED IN A
+  PARALLEL SESSION. THE LIVE DOC IS
+  [docs/20-public-square.md](docs/20-public-square.md) — read that, NOT the module-4 spec's
+  "SHAPE DECIDED 2026-09-04" entry, which is superseded.** The founder rejected per-pair orgs
+  as a category error (*"Dana messaging her sister is not being done as members of an
+  organization"*) and supplied the governing principle instead: **Public Square is an ORDINARY
+  org, and every fix is made platform-wide rather than as a special rule for one org.** Three
+  mechanisms have now been designed and taken apart by review — v1 (per-org carve-out:
+  circular, its own guard broke the invite lookup), v2 (per-membership sharing preferences:
+  disproportionate, and the flags would have been admin-writable), v3 (column-level revoke on
+  `profiles.email`: **a no-op as written** — `authenticated` holds a TABLE-level grant, so a
+  column revoke cannot subtract from it, and docs/17:163-167 had already rejected column grants
+  a month earlier). **docs/20 §9 records each failure so a fourth is not re-derived.** Decided
+  and unchanged throughout: auto-invite pending-until-accepted, two consents (join the space,
+  then join each module), superadmin access with privacy-policy-only disclosure, 30-day invite
+  expiry. **Four founder decisions are OPEN and listed in docs/20 §6/§7** — the biggest is that
+  self-signup creates NO display name, so everyone would render as "Someone". Opus, full
+  docs/03 #12 rhythm.
 - **Also shipped this session, unrelated to either item: a live cross-org hole is CLOSED**
   (`35587d4`, `20260904010000`). A `vm_conversation_members` seat alone granted API reads of
   a conversation's layers/reactions/roster/images to someone outside the org — the four vm_
@@ -230,31 +245,43 @@ open:**
   `owner@demo.local`/`password123` is silent, and that account is not a superadmin on prod.
   Tidy-up, founder's call because it touches credential files: add them to `.env.accounts.example`
   + `.env.deploy`, or just document the export line. Full story → journal.
-**TOP OPEN SECURITY ITEM (found + verified 2026-09-04, NOT fixed): A MODULE ROSTER ROW
-OUTLIVES THE ORG MEMBERSHIP THAT JUSTIFIED IT — 8 functions + 5 inline policy arms across
-matchmaking (HIGH), speed-dating (HIGH), nail-salon (MEDIUM) and classroom (MEDIUM, reaches
-Storage so real submission FILES are downloadable). Full verified inventory + remediation
-shape: [docs/19-seat-authority-audit.md](docs/19-seat-authority-audit.md).** Today's
-`20260904010000` fixed the visual-messaging instance; this is the same class everywhere else.
-**Prod check RUN 2026-09-04 (read-only, `scripts/prod-verify-seat-authority-orphans.mts`):
-ZERO orphaned rows found today across all 8 rosters** (3 of the 8 currently hold zero rows
-on prod, so that part of the result is vacuous, not reassuring — the other 5 hold real rows
-and genuinely check out clean). Class confirmed real and unfixed; not yet triggered on prod.
-Detail + per-table counts in docs/19's "Two things this audit did NOT establish" section.
-**The trigger is ordinary revocation, not an insider insert:** `removeOrgMember` deletes one
-row and NOTHING in the schema FKs `org_members` (verified, zero matches), so revoking a seat
-— or re-inviting, which leaves `status='pending'` — leaves every module roster row intact and
-still granting access, permanently. An ex-stylist keeps every customer's phone/email/notes; an
-ex-matchmaker keeps assigned singles' full questionnaires; an ejected speed-dating participant
-keeps the live event, their revealed matches and contact details. `20260727010000` closed
-exactly this for `module_roles` authority (seventeen predicates) and could not touch
-module-owned rosters. Rule → docs/03 #20. **Opus + full docs/03 #12 rhythm; four modules, so
-it is its own slice, not a follow-up commit.** One item inside it (`sd_in_event` has no
-`status` filter, so host-ejection doesn't revoke event reads) is a FOUNDER DECISION — §5 of
-docs/19 — because it changes what ejection means; do not bundle it. Two things the audit
-deliberately did NOT establish: whether it is live on prod (needs a read-only row count, script
-template named in docs/19) and test coverage (a targeted grep found NO test asserts a roster
-row stops conferring authority after membership ends — add one per module when fixing).
+**SEAT AUTHORITY — THE ORG-MEMBERSHIP HALF IS FIXED (2026-09-10, `cf63e77`,
+`20260910040000`). A SECOND, NARROWER HALF IS OPEN.** docs/19's class is closed for all four
+remaining modules: 8 functions + 5 inline policy arms gained the `is_org_member(<roster>.org_id)`
+conjunct, so ordinary revocation now actually revokes. Shipped alongside: **self-block**
+(`20260910030000`, `vm_pin_member` — a member may set their own active seat to `banned`, no
+self-unban, sole-admin still caught by the last-admin guard; it is **the only user-level block
+on the platform** and three ad-hoc-group designs had dropped it). **rls.test.ts gains 34 tests**
+— the first anywhere asserting a roster row stops conferring authority once membership ends.
+Verified in CI's exact order: **db 183/183 → e2e 52/52**, same database, no reset.
+
+**STILL OPEN, and the founder found it: NONE of the 8 predicates consults the MODULE ROLE, only
+org membership** — so revoking someone's module role while keeping them in the org leaves their
+seat fully working (their event, revealed matches, contact details). Arguably the MORE common
+revocation. **Fix shape + the measurement that must come first** (does every seat holder actually
+hold the matching role? if not, the conjunct revokes LIVE access) → docs/19's 2026-09-10 section.
+Note the zero-orphan evidence that cleared the org half is **structurally forced, not
+independent** — all 28 `org_members` rows are `active`, so it could not have come back otherwise.
+**Four more items in the same class that the original audit never listed** are recorded there
+too; the sharpest is a live **WRITE** — `cls_review_assignments_update_reviewer` lets an
+offboarded peer reviewer still grade a current student's work.
+
+**TWO FOUNDER DECISIONS QUEUED, neither blocking:** (1) **safety reports** — after this fix an
+ejected speed-dating participant can neither file a report nor read one they already filed
+(`sd_owns_participant` is their only route to both); carve `sd_reports` out? (2) docs/19 §5's
+ejection-semantics question, deliberately not bundled.
+
+**NEW — [docs/21-account-deletion-and-departed-users.md](docs/21-account-deletion-and-departed-users.md)
+(PLAN, not built).** 42 cascading FKs to `auth.users`: deleting one user erases their
+peer-review comments on OTHER students' work, their abuse flags, safety notes they wrote about
+other people, and every drawing anyone replied to underneath theirs (`vm_layers` cascades on
+BOTH `author_id` and `parent_layer_id`, so a deleted conversation-creator takes the whole
+thread and leaves the other party a bare 404). **Founder decision recorded: keep what affects
+others, mark the person departed** — which is what Reddit/GitHub/Slack/WhatsApp all do.
+Per-column classification proposed, 3 genuinely ambiguous columns flagged for sign-off. Not
+urgent — **there is no account-deletion feature at all** (`deleteUser` appears only in tests) —
+but `/privacy` already promises deletion on request. Trap named in the doc: `ON DELETE SET NULL`
+fires BEFORE UPDATE triggers, which has already bitten this repo once.
 
 - **LATENT BUG, found in passing 2026-09-04, NOT fixed: `profiles.email` IS NEVER SYNCED after a
   user changes their auth email.** `handle_new_user()` sets it once at signup and **no trigger on

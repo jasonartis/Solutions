@@ -5,6 +5,55 @@ section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every 
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
 
+- **2026-09-10 (SEAT AUTHORITY FIXED — docs/19's class closed for the four remaining modules;
+  Opus, two migrations, `cf63e77`).** Ran as TRACK A while a parallel session took Track B
+  (Public Square redesign, docs/20). **Shipped:** `20260910040000` — the one-line
+  `is_org_member(<roster>.org_id)` conjunct on 8 functions + 5 inline policy arms across
+  matchmaking, speed-dating, nail-salon and classroom, the same shape `20260904010000` used
+  for visual messaging; and `20260910030000` — **self-block** in `vm_pin_member`, the only
+  user-level block on the platform, owed since 2026-09-04 and dropped by three successive
+  ad-hoc-group designs before being taken out of that queue precisely because it depends on
+  none of it. **rls.test.ts +34 tests**, the first anywhere asserting a roster row stops
+  conferring authority once org membership ends. Verified in CI's exact order: **db 183/183 →
+  e2e 52/52**, same database, no reset.
+  **Method, because the shortcut would have produced a false clean:** every function body was
+  read from the LIVE CATALOG, never from its original migration — one function in this class
+  was silently cured months later, so a file-only grep reports a false positive — with the
+  four already-fixed `vm_` predicates plus `cls_is_class_member` carried as a CONTROL, so a
+  clean result proves the method discriminates rather than that the query is broken. The whole
+  migration was then parse-checked server-side inside a rolled-back transaction (13/13 objects)
+  before being applied, closing the one gap the correctness review listed as unverifiable.
+  **Three findings worth keeping:**
+  1. **A boolean predicate can legitimately return NULL, and RLS denies on NULL.** Two new
+     tests failed asserting `.toBe(false)` and receiving `null`: `mm_assignment_covers_me`
+     takes a `check_target_user_id` that is *genuinely* null for a group-targeted assignment,
+     so `NULL = auth.uid()` makes the whole expression `NULL or false` = NULL. That is a
+     correct denial. Assertions are now `.not.toBe(true)` — **a test demanding `false` there
+     would have been wrong about how RLS decides.**
+  2. **`sd_pin_participant` and `sal_pin_appointment` silently discard service-role updates**
+     — both `return old` when `auth.uid()` is null, with no error. A fixture resetting state
+     between assertions would have passed while testing nothing.
+  3. **The zero-orphan evidence is structurally forced, not independent.** All 28
+     `org_members` rows are `active`, so the orphan count could not have been anything but
+     zero. Recorded as consistent-with rather than proof-of safety — the same honest reading
+     the 2026-09-04 prod measurement needed.
+  **Two follow-ups opened, both recorded rather than bundled.** The founder, reviewing the
+  fix, asked *"what if he is still part of the org but no longer part of the module?"* —
+  measured, and **none of the 8 predicates consults the module role**, so revoking a module
+  role while keeping org membership leaves the seat fully working. Arguably the MORE common
+  revocation. Fix shape + the measurement that must precede it → docs/19's 2026-09-10 section,
+  along with **four more items in the same class the original audit never listed**, the
+  sharpest being a live WRITE (`cls_review_assignments_update_reviewer` — an offboarded peer
+  reviewer can still grade a current student's work). And **[docs/21](21-account-deletion-and-departed-users.md)
+  is new**: 42 cascading FKs to `auth.users` mean deleting one user erases their peer-review
+  comments on OTHER students' work, their abuse flags, safety notes they wrote about other
+  people, and every drawing anyone replied to underneath theirs. Founder decision recorded
+  (keep what affects others, mark the person departed — which is what Reddit/GitHub/Slack/
+  WhatsApp all do), per-column classification proposed, 3 ambiguous columns flagged.
+  **Deliberately NOT bundled:** docs/19 §5's ejection-semantics question, and a safety-report
+  carve-out — after this fix an ejected speed-dating participant can neither file a report nor
+  read one they already filed, since `sd_owns_participant` is their only route to both.
+
 - **2026-09-06 (THE exFAT/TURBOPACK LOCAL-BUILD BLOCKER IS FIXED, Sonnet, no migration).**
   Closes the saga that ran 2026-08-31 → 2026-09-06. Founder asked, across several turns,
   whether the drive limitation could be worked around rather than lived with — it could.
