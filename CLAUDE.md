@@ -269,15 +269,20 @@ conjunct, so ordinary revocation now actually revokes. Shipped alongside: **self
 (`20260910030000`, `vm_pin_member` — a member may set their own active seat to `banned`, no
 self-unban, sole-admin still caught by the last-admin guard; it is **the only user-level block
 on the platform** and three ad-hoc-group designs had dropped it).
-**⚠ SELF-BLOCK SHIPPED WITHOUT A TEST — it did NOT get the full docs/03 #12 rhythm.** It was
-drafted, parse-checked and documented, but had **no adversarial review and NO test of its
-actual behaviour** (verified: zero assertions in `rls.test.ts` or the e2e suite touch it; the
-one grep hit is a passing comment). The db suite going green says nothing about it. **Three
-behaviours are reasoned-but-unverified: that a self-ban actually takes effect; that self-UNBAN
-is still pinned; and that the last-admin guard still catches a sole conversation admin who
-self-bans** (that path runs through an EARLIER branch of the same trigger). It is a
-security-relevant trigger on a shipped module — write those assertions before trusting it, and
-note it ships to prod with the same `migrate:prod` run as `20260910040000`. **rls.test.ts gains 34 tests**
+**SELF-BLOCK NOW HAS 6 TESTS (added 2026-09-11 after a handoff audit found it had shipped with
+none — db suite 189/189).** And writing them found that **the migration's own header describes
+the wrong mechanism.** It says self-UNBAN is prevented by the status pin. It is not: a banned
+member never reaches `vm_pin_member` at all, because `vm_members_scope`
+(`vm_sync_from_conversation`, BEFORE INSERT **OR UPDATE**) re-derives `org_id` by SELECTing the
+parent conversation, is **NOT `security definer`**, and `vm_conversations_select` stops matching
+them once `vm_is_conv_member` is false — so it raises `Unknown conversation` and the UPDATE
+never lands. The OUTCOME is what was wanted and is in fact **stronger** (a banned member cannot
+touch their own row at all) — but **the guarantee rests on the scope trigger, not the pin.**
+**The exception that makes this matter:** `vm_conversations_select` also has a
+`created_by = auth.uid()` arm, so a banned member who CREATED the conversation *does* resolve
+it, reaches the pin, and is stopped there instead. **Two different mechanisms depending on who
+you are, and only the second is the one the migration documents.** Generalisable: a
+non-`security definer` scope-sync trigger silently becomes an access check. **rls.test.ts gains 34 tests**
 — the first anywhere asserting a roster row stops conferring authority once membership ends.
 Verified in CI's exact order: **db 183/183 → e2e 52/52**, same database, no reset.
 

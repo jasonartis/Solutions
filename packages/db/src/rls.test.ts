@@ -5700,3 +5700,206 @@ describe('seat authority: a module roster row requires ACTIVE org membership (20
     })
   })
 })
+
+// ---------------------------------------------------------------------------
+// SELF-BLOCK (20260910030000) — a member may ban THEMSELVES, and nobody can
+// undo it by re-adding them.
+//
+// WHY THIS BLOCK EXISTS: the migration shipped 2026-09-10 with a parse-check
+// and documentation but NO test — found by a handoff audit 2026-09-11. The db
+// suite going green said nothing about it, which is exactly the vacuity trap
+// docs/03 warns about. Three behaviours were reasoned and never verified:
+// that a self-ban takes effect at all, that self-UNBAN stays pinned, and that
+// the last-admin guard still catches a sole conversation admin who self-bans.
+//
+// PRE-MIGRATION each negative behaves differently, so these have teeth:
+//   * "the self-ban takes effect"      -> FAILS (old trigger pinned status, so
+//                                        the row stays 'active')
+//   * "self-unban stays pinned"        -> PASSES (it was pinned before too) —
+//                                        this one is a PIN, not a teeth test,
+//                                        and is labelled as such.
+//   * "sole admin cannot self-ban"     -> PASSES before and after; it guards a
+//                                        branch the new carve-out must not have
+//                                        opened. Also a PIN.
+//
+// FIXTURE NOTE, load-bearing: `vm_pin_member`'s FIRST branch returns early for
+// anyone with `vm_can_manage` (org admin / vm module admin), bypassing every
+// pin. alice is demo-visual's owner, so she can NEVER demonstrate any of this.
+// The conversation admin here is charlie, who holds only the vm `member` module
+// role — so he is a CONVERSATION admin without being an ORG admin, which is the
+// only configuration where the last-admin branch is reachable.
+//
+// Touches no seeded state: the fixture conversation is created here and
+// deleted in afterAll (cascading its seats), leaving demo-visual with no
+// conversations exactly as the seed intends.
+// ---------------------------------------------------------------------------
+describe('visual messaging: a member can BLOCK THEMSELVES, and it sticks (20260910030000)', () => {
+  const sbServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
+
+  let sbAdmin: SupabaseClient
+  let sbCharlie: SupabaseClient
+  let sbDana: SupabaseClient
+  let sbOrg: string
+  let sbConvId: string
+  let sbCharlieId: string
+  let sbDanaId: string
+
+  const sbSeat = async (userId: string) =>
+    (
+      await sbAdmin
+        .from('vm_conversation_members')
+        .select('status, role')
+        .eq('conversation_id', sbConvId)
+        .eq('user_id', userId)
+        .single()
+    ).data as { status: string; role: string } | null
+
+  beforeAll(async () => {
+    if (!sbServiceKey) throw new Error('SUPABASE_SERVICE_ROLE_KEY not set — run `pnpm dev` once')
+    sbAdmin = createClient(url, sbServiceKey, { auth: { persistSession: false } })
+    sbCharlie = await signIn('charlie@demo.local')
+    sbDana = await signIn('dana@demo.local')
+
+    sbOrg = (await sbAdmin.from('orgs').select('id').eq('slug', 'demo-visual').single()).data!.id as string
+    sbCharlieId = (await sbAdmin.from('profiles').select('user_id').eq('email', 'charlie@demo.local').single())
+      .data!.user_id as string
+    sbDanaId = (await sbAdmin.from('profiles').select('user_id').eq('email', 'dana@demo.local').single()).data!
+      .user_id as string
+
+    const conv = await sbAdmin
+      .from('vm_conversations')
+      .insert({ org_id: sbOrg, title: 'RLS fixture — self-block', created_by: sbCharlieId })
+      .select('id')
+      .single()
+    if (conv.error) throw new Error(`self-block fixture conversation failed: ${conv.error.message}`)
+    sbConvId = conv.data!.id as string
+
+    const layer = await sbAdmin.from('vm_layers').insert({
+      org_id: sbOrg,
+      conversation_id: sbConvId,
+      author_id: sbCharlieId,
+      path: 'server-assigned',
+      content: { image: { path: `${sbOrg}/${sbConvId}/fixture.png` } },
+    })
+    if (layer.error) throw new Error(`self-block fixture layer failed: ${layer.error.message}`)
+
+    // charlie = the conversation's ONLY admin, and NOT an org admin (see the
+    // header). dana = an ordinary participant, the one who self-bans.
+    const seats = await sbAdmin.from('vm_conversation_members').insert([
+      { org_id: sbOrg, conversation_id: sbConvId, user_id: sbCharlieId, role: 'admin' },
+      { org_id: sbOrg, conversation_id: sbConvId, user_id: sbDanaId, role: 'participant' },
+    ])
+    if (seats.error) throw new Error(`self-block fixture seats failed: ${seats.error.message}`)
+  })
+
+  afterAll(async () => {
+    if (sbConvId) await sbAdmin.from('vm_conversations').delete().eq('id', sbConvId)
+  })
+
+  it('CONTROL: the fixture is real — dana holds an ACTIVE participant seat and reads the conversation', async () => {
+    const seat = await sbSeat(sbDanaId)
+    expect(seat?.status, 'dana has no seat — every negative below would be vacuous').toBe('active')
+    expect(seat?.role).toBe('participant')
+
+    // Non-emptiness: the layer exists past RLS, and dana can actually read it.
+    const raw = await sbAdmin.from('vm_layers').select('id').eq('conversation_id', sbConvId)
+    expect(raw.data?.length, 'the fixture layer is missing — a later "reads nothing" proves nothing').toBeGreaterThan(0)
+
+    const seen = await sbDana.from('vm_layers').select('id').eq('conversation_id', sbConvId)
+    expect(seen.error).toBeNull()
+    expect(seen.data?.length, 'dana cannot read the conversation while ACTIVE — fixture is wrong').toBeGreaterThan(0)
+  })
+
+  it('PIN: while ACTIVE, self-promotion is blocked — role stays participant', async () => {
+    const res = await sbDana
+      .from('vm_conversation_members')
+      .update({ role: 'admin' })
+      .eq('conversation_id', sbConvId)
+      .eq('user_id', sbDanaId)
+    expect(res.error).toBeNull()
+
+    const seat = await sbSeat(sbDanaId)
+    expect(seat?.role, 'a member promoted themselves — the role pin regressed').toBe('participant')
+  })
+
+  it('TEETH: dana bans HERSELF, and the seat really flips to banned', async () => {
+    // PRE-MIGRATION this FAILS: the old self-service branch pinned
+    // `new.status := old.status` unconditionally, so the row stayed 'active'.
+    const res = await sbDana
+      .from('vm_conversation_members')
+      .update({ status: 'banned' })
+      .eq('conversation_id', sbConvId)
+      .eq('user_id', sbDanaId)
+    expect(res.error, `self-ban was rejected outright: ${JSON.stringify(res.error)}`).toBeNull()
+
+    const seat = await sbSeat(sbDanaId)
+    expect(seat?.status, 'the self-ban did not stick — vm_pin_member pinned it back').toBe('banned')
+    expect(seat?.role, 'the self-ban changed her role as a side effect').toBe('participant')
+  })
+
+  it('TEETH: once self-banned she reads NOTHING, while the seat row SURVIVES', async () => {
+    const seen = await sbDana.from('vm_layers').select('id').eq('conversation_id', sbConvId)
+    expect(seen.error).toBeNull()
+    expect(seen.data ?? [], 'a self-banned member still reads the conversation').toEqual([])
+
+    // The row surviving is the POINT: deleting it (leaving) is what lets an
+    // admin re-add you. Banned keeps the block on the record.
+    const seat = await sbSeat(sbDanaId)
+    expect(seat?.status, 'her seat row vanished — that is "leave", not "block"').toBe('banned')
+
+    // And the control still holds: the layer is there, someone else sees it.
+    const stillThere = await sbCharlie.from('vm_layers').select('id').eq('conversation_id', sbConvId)
+    expect(stillThere.data?.length, 'nobody can read the layer — she proves nothing by not reading it').toBeGreaterThan(0)
+  })
+
+  it('PIN: she cannot LIFT her own ban — and it fails EARLIER than the status pin', async () => {
+    // FOUND BY THIS TEST, 2026-09-11, and worth knowing because the migration's
+    // own comment describes a different mechanism. A banned member does not
+    // reach `vm_pin_member`'s status pin at all: `vm_members_scope`
+    // (`vm_sync_from_conversation`, BEFORE INSERT OR UPDATE) re-derives org_id
+    // by SELECTing the parent conversation, it is NOT `security definer`, and
+    // `vm_conversations_select` no longer matches her once
+    // `vm_is_conv_member` is false. So the trigger raises `Unknown conversation`
+    // and the UPDATE never lands.
+    //
+    // The OUTCOME is what the migration wanted, and is in fact stronger — a
+    // banned member cannot touch their own row at all. But the guarantee rests
+    // on the scope trigger, not on the status pin.
+    //
+    // THE EXCEPTION THAT MAKES THIS WORTH DOCUMENTING: `vm_conversations_select`
+    // also has a `created_by = auth.uid()` arm, so a banned member who CREATED
+    // the conversation still resolves it, reaches `vm_pin_member`, and is
+    // stopped by the status pin instead. Two different mechanisms depending on
+    // who you are — and only the second is the one the migration describes.
+    const res = await sbDana
+      .from('vm_conversation_members')
+      .update({ status: 'active' })
+      .eq('conversation_id', sbConvId)
+      .eq('user_id', sbDanaId)
+    expect(res.error, 'a self-banned member updated her own seat — she should not reach it').not.toBeNull()
+
+    const seat = await sbSeat(sbDanaId)
+    expect(seat?.status, 'a member lifted their OWN ban').toBe('banned')
+  })
+
+  it('PIN: the SOLE conversation admin cannot self-ban away and orphan the conversation', async () => {
+    // charlie is the only admin AND is not an org admin, so he reaches the
+    // vm_is_conv_admin branch — where the pre-existing last-admin guard fires.
+    // This is the branch the new carve-out must NOT have bypassed.
+    const before = await sbSeat(sbCharlieId)
+    expect(before?.role, 'fixture: charlie is not the conversation admin').toBe('admin')
+
+    const res = await sbCharlie
+      .from('vm_conversation_members')
+      .update({ status: 'banned' })
+      .eq('conversation_id', sbConvId)
+      .eq('user_id', sbCharlieId)
+    expect(
+      res.error,
+      'the sole conversation admin self-banned — the conversation is now unadministrable',
+    ).not.toBeNull()
+
+    const after = await sbSeat(sbCharlieId)
+    expect(after?.status, 'the sole admin is banned despite the guard').toBe('active')
+  })
+})
