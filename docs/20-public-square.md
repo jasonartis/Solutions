@@ -2855,3 +2855,78 @@ Speed-dating's nine are **not** resolved above. `sd_can_staff_event_of` vs
 `sd_can_organize_event` was not derived, and three of the nine have shapes that
 do not fit the pattern at all. **They are recorded as unresolved rather than
 assumed safe** — which is the whole point of this section.
+
+---
+
+## 28. THE LIVE BUGS — ONE NUMBERING, ALL EIGHT, STATUS MEASURED 2026-09-14
+
+**A numbering collision, and it is mine.** §8 has listed **seven** live bugs
+since this document was written. §17.8/§23.3 then introduced a *second*
+numbering for a *subset* of three ("bug 1 / bug 2 / bug 3"), which do not line
+up with §8's:
+
+| my §23.3 label | is actually |
+|---|---|
+| "bug 1" | not in §8 at all — found by the 2026-09-11 adversarial review |
+| "bug 2" | **§8.3** |
+| "bug 3" | **§8.4** |
+
+**§23.3's numbering is retired.** §8's numbers are canonical; the review's
+finding joins as **§8.8**. Everything below uses §8's numbering.
+
+### 28.1 Status of all eight, each re-measured today
+
+| # | bug | status |
+|---|---|---|
+| **8.1** | `vm_layers.author_id` **and** `parent_layer_id` are both `ON DELETE CASCADE` — deleting a user destroys other people's drawings and can take a whole thread | **LIVE.** Verified: both FKs unchanged. docs/21 is a PLAN; the founder's silhouette decision is recorded but **not built**. Still no product deletion flow, while `/privacy:41` promises deletion on request |
+| **8.2** | the sole conversation admin can LEAVE and orphan the conversation | **LIVE, and verified precisely:** `vm_conversation_members` has **three triggers, all BEFORE INSERT or UPDATE** (`_updated_at`, `vm_members_scope`, `vm_members_a_pin`). **There is no DELETE trigger at all**, so `vm_members_delete_self` is unguarded. Track A's self-block covers the self-BAN path (an UPDATE, caught by `vm_pin_member`); **the self-DELETE path is still open** |
+| **8.3** | `org_find_user_by_email` has no org join — any org admin resolves any email platform-wide | **LIVE.** `prosrc` unchanged. Fix shape corrected in §25.2 — **do not add the join**, it breaks invites |
+| **8.4** | `module_roles_select_member` leaks the module-role census | **LIVE and BLOCKED.** §25.3: every visual-messaging and matchmaking role ranks 0, so `module_has_manager_grant` cannot serve as the replacement read path. Needs those modules rank-mapped first |
+| **8.5** | `addMember` does a bare INSERT, so edge cases surface as raw duplicate-key errors | **LIVE — AND TRACK A'S SELF-BLOCK MADE IT WORSE. See §28.2** |
+| **8.6** | a departed creator still reads the conversation ROW via `created_by = auth.uid()` | **LIVE.** `vm_conversations_select` unchanged. Recorded as a deliberate remainder in `20260904010000` |
+| **8.7** | self-block was owed and kept being dropped | **DONE.** Track A, `20260910030000`, applied and prod-verified, **6 tests added 2026-09-11** after a handoff audit found it shipped with none |
+| **8.8** | five `vm_*` `FOR ALL` policies carry a redundant read arm | **MIGRATION DRAFTED, UNDER REVIEW, NOT APPLIED** (`20260914010000`). Re-scored LOW as a live exposure (§26); its value is as a precondition. Sibling sweep: §27 |
+
+### 28.2 NEW FINDING — self-block leaks through `addMember`'s error message
+
+Nobody connected these two, and they landed three days apart.
+
+`modules/visual-messaging/ui/actions.ts:196-201` ends with a bare insert:
+
+```ts
+const { error } = await supabase.from('vm_conversation_members').insert({...})
+fail(error, 'Add member failed')
+```
+
+against `unique (conversation_id, user_id)`. **Self-block (`20260910030000`)
+deliberately KEEPS the seat row and flips it to `status='banned'`** — that
+persistence is the whole mechanism, and it is why an admin cannot undo the block
+by re-adding.
+
+**So an admin who tries to re-add a self-blocked person now gets a duplicate-key
+error — which tells them the person has a row, i.e. that they blocked them.**
+§8.5 already noted this shape as *"the last leaks that the person has a row"*;
+what is new is that self-block **created the population it leaks.** Before
+2026-09-10 a self-blocked user did not exist.
+
+**This matters more than an ugly error string.** Self-block is the platform's
+only user-level block (CLAUDE.md), its purpose is protection from a harassing
+conversation admin, and **the error hands that admin confirmation that the block
+exists and who set it.** A silent success — or an identical message for "already
+a member" and "blocked" — is the fix, and it belongs with whoever next touches
+`addMember`.
+
+**Not fixed here, and not bundled**: `addMember` is also the call site §25.2
+would change for §8.3, and the same function is where §11.2 found the Public
+Square break. Three separate reasons to edit one function; they should be
+sequenced deliberately rather than raced.
+
+### 28.3 What is actually unowned
+
+**8.1, 8.2, 8.5 and 8.6 have never been assigned to either track.** They were
+recorded when this document was written and have sat since. 8.7 was the one
+Track A took; 8.3 and 8.4 are this track's; 8.8 is in flight.
+
+**8.2 and 8.5 are the cheap ones** and both are in `vm_conversation_members` /
+`addMember` territory — one DELETE guard and one error-handling change. **8.1 is
+the dangerous one** and is gated on docs/21 being built, which is a real slice.
