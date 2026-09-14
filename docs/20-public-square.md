@@ -2765,3 +2765,93 @@ read arm that is already duplicated.
 **Revised priority: bug 1 is no longer the urgent one.** It is cheap, safe and
 worth doing — but as groundwork. **Bug 2 is the only one of the three with live
 impact today** (§25.2), and it is blocked on one founder decision.
+
+---
+
+## 27. THE `FOR ALL` SWEEP — 58 policies platform-wide, and MATCHMAKING'S SIX ARE LOAD-BEARING
+
+Done while drafting the bug-1 migration, because "check the siblings" is this
+document's recurring lesson and bug 1 is five policies of a much larger family.
+
+**Measured, not counted by hand** (an earlier draft of the migration header said
+59 from a hand tally; the query says 58):
+
+```
+select split_part(tablename,'_',1), count(*) from pg_policies
+ where schemaname='public' and tablename ~ '^(vm|sal|cls|mm|sd|syn)_' and cmd='ALL'
+ group by 1;
+-- cls|15   mm|6   sal|17   sd|9   syn|6   vm|5     TOTAL 58
+```
+
+### 27.1 The finding that matters: splitting matchmaking's would REVOKE real access
+
+**docs/20's original fix 3 said "split the `for all` write policies … so their
+USING stops carrying a read arm," stated as a general platform-wide fix. Applied
+as written, it would have broken matchmaking.**
+
+Verified bodies:
+
+```
+mm_can_manage(org)  = is_org_admin(org) or has_module_role(org,'matchmaking','admin')
+
+mm_matchmaker_can_see(org, single) = exists(... mm_matchmaker_assignments a
+                                       where a.matchmaker_id = auth.uid() ...)
+```
+
+**`mm_matchmaker_can_see` contains NO `mm_can_manage` disjunct.** It is purely
+about who holds an assignment. And matchmaking's SELECT policies are built on it:
+
+| table | SELECT policy | admits a matchmaking ADMIN? |
+|---|---|---|
+| `mm_answers` | `user_id = auth.uid() OR mm_matchmaker_can_see(org_id, user_id)` | **NO** |
+| `mm_pair_scores` | `... OR mm_matchmaker_can_see(org_id, user_a) OR ... user_b` | **NO** |
+| `mm_groups` | `exists(assignment where matchmaker_id = auth.uid())` | **NO** |
+| `mm_group_members` | same shape | **NO** |
+| `mm_matchmaker_assignments` | `matchmaker_id = auth.uid() OR mm_assignment_covers_me(...)` | **NO** |
+| `mm_questions` | `(mm_is_single OR mm_is_matchmaker) AND ...` | **NO** |
+
+**So a matchmaking admin who holds no assignment reads those six tables ONLY
+through the `for all` policy's read arm.** Splitting them would take the module's
+own administrator's access away — the dating pool's answers, the pair scores, the
+question bank. **Not a leak to close. A load-bearing read arm wearing a write
+policy's clothes.**
+
+This is the mirror image of §26: in visual messaging the read arm is redundant
+and safe to remove; in matchmaking it is the only path. **Same textual pattern,
+opposite meaning, and nothing but a per-table proof distinguishes them.**
+
+### 27.2 Per-module disposition, each derived from the live bodies
+
+| module | count | read arm redundant? | evidence |
+|---|---|---|---|
+| **visual-messaging** | 5 | **YES — safe to split** | `vm_can_manage` ⊂ `vm_can_moderate_org`, which `vm_is_conv_member`'s second arm admits (§26) |
+| **nail-salon** | 17 | **YES — safe** | `sal_can_operate_location` is literally defined as `sal_can_manage_location(...) or module_caller_covers_role(...,'cashier')`, so manage ⊂ operate, and the SELECT policies gate on operate |
+| **classroom** | 15 | **YES — safe** | every `cls_*_select` carries `cls_can_manage_class(org_id, class_id)` as an explicit disjunct |
+| **synagogue-schedules** | 6 | **YES — safe** | `syn_can_write` = `is_org_admin or has_module_role(...)`; both imply `is_org_member`, which `syn_*_select_member` admits |
+| **matchmaking** | 6 | **NO — LOAD-BEARING. DO NOT SPLIT** | §27.1 |
+| **speed-dating** | 9 | **MIXED — unresolved** | selects gate on `sd_can_staff_event_of` while the `for all` uses `sd_can_organize_event`; two (`sd_blocks_write_own`, `sd_notes_all_own`) are self-scoped and a third (`sd_bans_all_manage`) has no SELECT sibling listed. Needs the same per-table proof |
+
+### 27.3 What this changes
+
+1. **Bug 1 ships alone** (`20260914010000`), covering only the five proven-safe
+   visual-messaging policies. **Do not batch the other 53.**
+2. **docs/20 fix 3 is WRONG AS STATED** wherever it reads as a general
+   platform-wide split. It is safe for 43 of the 58, dangerous for 6, and
+   unresolved for 9. **Corrected here rather than left standing.**
+3. **Matchmaking needs the opposite treatment.** If its admin is meant to read
+   those tables — and it plainly is, since it administers them — that authority
+   belongs in an explicit `for select` policy naming `mm_can_manage`, with the
+   `for all` then split safely. **That is a matchmaking change, with its own
+   migration and review. Not this one, and not a drive-by.**
+4. **A general lesson worth promoting** (docs/03, per §10.1's append-don't-insert
+   constraint): *before removing a `for all` policy's read arm, prove against the
+   table's own SELECT policy that every principal it admits is admitted there
+   too. The same pattern is redundant on one table and load-bearing on the next,
+   and only the per-table proof tells them apart.*
+
+### 27.4 Honest limit
+
+Speed-dating's nine are **not** resolved above. `sd_can_staff_event_of` vs
+`sd_can_organize_event` was not derived, and three of the nine have shapes that
+do not fit the pattern at all. **They are recorded as unresolved rather than
+assumed safe** — which is the whole point of this section.
