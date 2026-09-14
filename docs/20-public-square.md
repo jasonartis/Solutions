@@ -2673,3 +2673,95 @@ looked like. Sequence it after bug 1.**
 1. **Bug 1** — the `vm_*` split. Self-contained, no dependencies, real today.
 2. **Bug 2** — decide the display-name question (§25.2), then log + narrow.
 3. **Bug 3** — needs rank-mapping three modules first; its own slice.
+
+---
+
+## 26. 2026-09-14 — BUG 1 RE-SCORED. §17.1 OVERSTATED IT, AND THE ADVERSARIAL REVIEW DID TOO.
+
+Triggered by the founder asking *"are there any questions regarding bug 1?"* —
+which prompted a check of what the split would actually remove, rather than
+assuming it removes the leak it was reported as.
+
+### 26.1 The org-wide read is INTENTIONAL and lives somewhere else entirely
+
+Verified live:
+
+```
+vm_can_manage(org)       = is_org_admin(org) OR has_module_role(org,'visual-messaging','admin')
+vm_can_moderate_org(org) = vm_can_manage(org) OR has_module_role(org,'visual-messaging','moderator')
+
+vm_is_conv_member(conv)  = <an active seat on that conversation>
+                        OR exists (select 1 from vm_conversations c
+                                    where c.id = conv
+                                      and vm_can_moderate_org(c.org_id))   ← SECOND ARM
+```
+
+**`vm_is_conv_member` has a deliberate moderation arm that is org-wide.** And the
+four dedicated SELECT policies all route through it:
+
+| table | SELECT policy |
+|---|---|
+| `vm_conversations` | `created_by = auth.uid() OR vm_is_conv_member(id)` |
+| `vm_conversation_members` | `user_id = auth.uid() OR vm_is_conv_member(conversation_id)` |
+| `vm_layers` | `vm_is_conv_member(conversation_id)` |
+| `vm_reactions` | `vm_is_conv_member(conversation_id)` |
+| `vm_flags` | `reporter_user_id = auth.uid() OR vm_can_moderate(conversation_id)` |
+
+`vm_can_manage` ⊆ `vm_can_moderate_org`, so **every principal the `FOR ALL`
+policies admit is ALREADY admitted by the SELECT policy.** The `FOR ALL` read arm
+grants nothing additional. **Splitting the five policies is a pure no-op for
+reads today.**
+
+### 26.2 What that means for the finding
+
+**§17.1 and the adversarial review both framed this as "a module admin reads the
+whole social graph through a write policy's read arm" and scored it HIGH.** That
+is *true* and *misleading*: they would read it anyway, through the front door,
+by design. **It is not a bypass. It is a redundant second path to an intentional
+grant** — the same grant §16.2 already decided is acceptable and disclosed.
+
+**Corrected severity: LOW as a live exposure.** Nobody can see anything today
+that they could not see without these policies.
+
+### 26.3 The reason to do it anyway — it is a TRAP, not a leak
+
+**If anyone ever narrows the moderation read** — §13.3 option (b), *"a moderator
+reads a conversation only while it carries an open flag"*, which is the better
+privacy answer and stays on the table — **the five `FOR ALL` policies would
+silently keep the org-wide read alive and the narrowing would be VACUOUS.**
+
+That is precisely the trap recorded in §3.3 and §9, which bit v1 and v2: *a
+`FOR ALL` policy's USING also governs SELECT, so narrowing the select policy
+alone changes nothing.* It has not bitten yet here **only because nobody has
+tried to narrow these yet.**
+
+**So the split's value is as a PRECONDITION, not a fix.** Do it before any
+moderation-scoping work, and the narrowing will mean what it says. Do it after,
+and the narrowing ships broken and tests green.
+
+### 26.4 Answer to "are there any questions regarding bug 1?"
+
+**No founder decision is required, and no product behaviour changes.** The split
+preserves every write authority exactly (`for insert` / `for update` / `for
+delete` with the same `vm_can_manage(org_id)` expressions) and removes only a
+read arm that is already duplicated.
+
+**Three things the implementation must get right**, all verified above:
+
+1. **`vm_conversation_members`, `vm_layers` and `vm_flags` each already carry
+   narrower `FOR UPDATE` / `FOR DELETE` policies** (`vm_members_update_admin`,
+   `vm_layers_update_moderate`, `vm_flags_update_moderate`, etc.). Policies are
+   OR-ed, so adding split siblings does not remove those — but the migration
+   must not accidentally replace them.
+2. **`vm_moderation_log.vm_modlog_select` also consumes `vm_can_manage`** and is
+   a genuine SELECT policy, not a `FOR ALL`. **Leave it alone** — it is the one
+   place `vm_can_manage` is legitimately a read gate.
+3. **Six functions consume `vm_can_manage`** (`vm_pin_conversation`,
+   `vm_pin_flag`, `vm_layers_before_write`, `vm_pin_member`,
+   `vm_can_moderate_org`, `vm_is_conv_admin`). The split changes none of them —
+   but the test must assert that, because `vm_pin_member` is where self-block
+   lives (`20260910030000`) and Track A's tests for it are new.
+
+**Revised priority: bug 1 is no longer the urgent one.** It is cheap, safe and
+worth doing — but as groundwork. **Bug 2 is the only one of the three with live
+impact today** (§25.2), and it is blocked on one founder decision.
