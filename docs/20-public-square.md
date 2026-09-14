@@ -2572,3 +2572,104 @@ reversed:** the mechanism is ordinary and available; the seat is empty by
 operational choice; and if it is ever filled, §23.3's fixes must already have
 shipped. Record the emptiness somewhere a future session will look — this is the
 kind of state that is invisible in the schema and easy to lose.
+
+---
+
+## 25. 2026-09-14 — the three live bugs, re-checked. TWO OF THE THREE WRITE-UPS WERE WRONG.
+
+Checked against the live catalog before starting work, and two of the three
+"fixes" recorded in §17.8 and §23.3 would have caused new problems.
+
+### 25.1 Bug 1 — the five `vm_*` `FOR ALL` policies. Confirmed, and NARROWER than feared.
+
+`vm_can_manage` is `is_org_admin(org) OR has_module_role(org,'visual-messaging','admin')`.
+**Verified in the registry: visual-messaging's roles are `['admin','moderator','member']`
+— `moderator` is a DISTINCT role and `vm_can_manage` does NOT admit it.**
+
+**So §3.5's delegation answer survives intact:** delegating the `moderator` role
+does **not** hand over the `FOR ALL` read arm. The exposure is to the module
+`admin` role and to org admins — and §24.2 has already decided Public Square's
+org-admin seat stays empty.
+
+**The bug is still real** (a vm module admin reads every conversation, membership,
+layer, reaction and flag org-wide, in Pozna today) and the fix is unchanged:
+split the five policies into `for insert` / `for update` / `for delete` so their
+USING stops carrying a read arm. **Clean, self-contained, and the one to do
+first.**
+
+### 25.2 Bug 2 — the recommended fix for `org_find_user_by_email` WOULD BREAK INVITES. Do not apply it.
+
+§17.2 and the adversarial review both recommend: *"add the `org_members` join its
+sibling `org_member_profiles` already has."* **That is wrong, and it is v1's
+circularity in a new costume.**
+
+`org_find_user_by_email` exists to resolve an email → user_id **so the caller can
+then INSERT an `org_members` row** (`apps/web/lib/org-members.ts:20` →
+`inviteOrgMember`). **The person being invited is by definition NOT YET a member
+of that org.** Requiring them to be one makes every invite fail — which is
+precisely the failure that killed v1 (§9: *"its own guard broke the invite lookup
+that depends on it"*).
+
+The sibling comparison misleads because the two functions do different jobs:
+`org_member_profiles` **lists people already in an org**; this one **finds people
+who are not.** Same table, opposite purpose.
+
+**So the honest fix is narrower than "add a join," and this needs deciding:**
+
+- **It cannot be bounded by org membership.** Any invite-by-email feature is an
+  existence oracle — §3.4 already states this as an accepted limit.
+- **It can stop being an IDENTITY oracle.** Today it returns `display_name` as
+  well as `user_id`. Dropping the name leaves "yes, that address has an account"
+  without confirming *who*. Cost: the invite UI loses its "did you mean Sarah
+  Cohen?" confirmation — the same trade §3.4 deliberately went the other way on
+  for `find_module_peer`, so the two must be decided together or they contradict.
+- **It can be LOGGED.** `superadmin_lookup_log` (`20260807010000`) is the worked
+  precedent for exactly this shape — a lookup that must stay open, made
+  accountable instead of blocked.
+- **It is already org-admin-gated**, which is a real bound; the leak is that
+  `check_org_id` is only a gate and not a filter.
+
+**Recommendation: log it and drop the display name; do not add the join.**
+FOUNDER DECISION on the name, because it trades against §3.4.
+
+### 25.3 Bug 3 — the `module_roles` census is BLOCKED on rank-mapping. Verified live.
+
+CLAUDE.md records that narrowing `module_roles_select_member` needs a replacement
+read path for people who legitimately administer grants, and that the natural one
+(`module_has_manager_grant`) requires rank ≥ 2. **Measured rather than repeated:**
+
+```
+select module_position_rank('visual-messaging', r) ...
+-- visual-messaging/admin     | 0
+-- visual-messaging/moderator | 0
+-- visual-messaging/member    | 0
+-- matchmaking/admin          | 0
+-- matchmaking/matchmaker     | 0
+-- matchmaking/single         | 0
+```
+
+`module_position_rank`'s body maps `classroom`, `nail-salon` and `speed-dating`
+explicitly and falls through to `0` for everything else — *"unmapped (all shipped
+module roles, for now)"*.
+
+**So `module_has_manager_grant` is FALSE for a visual-messaging admin and for a
+matchmaking admin.** Narrowing the census would cut off the very people who
+administer those grants, in three of the six modules.
+
+**A second consequence, not previously recorded anywhere:
+`module_roles_update_module_manager` and `module_roles_delete_module_manager`
+are already DEAD for those three modules** — their `module_has_manager_grant`
+gate can never be true there. Those two policies do nothing for
+visual-messaging, matchmaking or synagogue-schedules today. Worth knowing before
+anyone relies on them.
+
+**Bug 3 is therefore a bigger slice than §23.3 implied**: rank-mapping three
+modules first, which CLAUDE.md warns *"will FAIL THE BUILD until every
+newly-implied view-as pair is explicitly answered."* **Not the quick win it
+looked like. Sequence it after bug 1.**
+
+### 25.4 Revised order
+
+1. **Bug 1** — the `vm_*` split. Self-contained, no dependencies, real today.
+2. **Bug 2** — decide the display-name question (§25.2), then log + narrow.
+3. **Bug 3** — needs rank-mapping three modules first; its own slice.
