@@ -2448,3 +2448,127 @@ This is a **read-only single-column count**, the same shape as the existing
 touches the founder's production database and was not asked for.** It would turn
 §22.2 from a code-path argument into a measured fact, and it is the difference
 between "this could be exposing real people's emails" and "it is."
+
+---
+
+## 23. 2026-09-13 — the database is free, and Track A left one item behind
+
+### 23.1 Handoff verified, not assumed
+
+The founder said Track A is done. **Verified before acting on it**, because this
+repo has two recorded incidents of one session acting on another's state:
+
+- `supabase_migrations.schema_migrations` contains **`20260910030000`** and
+  **`20260910040000`** — Track A's two migrations are **applied**, not just
+  written.
+- `625e8b9` — *"three pending migrations applied to production and verified
+  25/25."* Track A reached prod, which is the end of the docs/03 #12 rhythm.
+- Working tree **clean**; nothing of Track A's uncommitted.
+
+**`shares_org_with`'s body is byte-identical** to the pre-Track-A measurement
+(`prosrc` md5 `d6d4c245419bc9a2d0d469b73f587fc6`, recorded in §16.5 for exactly
+this comparison). **So every measurement in §11 and §12 still holds.** The
+re-check §12.8 demanded is done, and it passed.
+
+### 23.2 BUT — Track A did NOT do the `module_roles` census fix, and it is now unowned
+
+§12.8 assigned old fixes 2 and 3 (narrow `module_roles` reads to self; split its
+`FOR ALL` write policy) to Track A. **Track A has finished without doing them.**
+Verified live, unchanged:
+
+```
+module_roles_select_member    | SELECT | (is_org_member(org_id) OR is_superadmin())
+module_roles_write_org_admin  | ALL    | is_org_admin(org_id)
+```
+
+So the census leak is **still live**: in `demo-match` today, any org member can
+enumerate which members hold the `single` role — the dating pool. And the
+`FOR ALL` write policy still carries a read arm, so narrowing the select policy
+alone would change nothing for an admin.
+
+**§12.8's scope boundary is stale and this item returns to this document.** It
+joins the two live bugs from §17 as work that is *not* Public Square work but
+blocks it.
+
+### 23.3 The live-bug queue, consolidated and now unambiguous
+
+All three are bugs in shipped modules, live today, independent of Public Square.
+All three are now this track's:
+
+| # | bug | live effect today |
+|---|---|---|
+| 1 | five `vm_*` policies are `FOR ALL` with `USING vm_can_manage(org_id)` (§17.1) | a visual-messaging module admin reads every conversation, membership, layer, reaction and flag in their org |
+| 2 | `org_find_user_by_email` has no org join (§17.2) | any admin of any org resolves any email on the platform to a name + user_id |
+| 3 | `module_roles` census + its `FOR ALL` sibling (§3.2, §3.3, §23.2) | any org member enumerates every member's module roles — the `demo-match` dating pool |
+
+---
+
+## 24. DECIDED 2026-09-13 — leaving a module, and the Public Square admin seat
+
+### 24.1 Leaving a module: symmetry with joining. Founder asked what other apps do.
+
+**The near-universal product pattern, and it resolves §16.4(b) cleanly:**
+
+> **If you can join something yourself, you can leave it yourself. If someone
+> else put you there, you ask them to remove you.**
+
+Slack channels, Discord servers, Google Groups, Meetup, Facebook groups — all
+self-join and all self-leave. The places you *cannot* leave unilaterally are the
+ones where membership was assigned for a reason someone else owns: an Okta group,
+a Workday org unit, a course you are enrolled in by a registrar. **The dividing
+line is not the product category — it is who initiated the grant.**
+
+**That maps exactly onto the founder's own design and needs no new mechanism.**
+§18.4 decided self-enrolment is declared eligible in code and switched on per
+org. So:
+
+- **Where the self-enrolment switch is ON** (Public Square), a member joined
+  themselves and may leave themselves. A self-DELETE policy on `module_roles`
+  (`user_id = auth.uid()`) is the narrowest possible form and grants nothing else.
+- **Where it is OFF** (Pozna), an admin granted the seat and an admin revokes it —
+  which is exactly today's behaviour, unchanged.
+
+**This is general, matches Track A's recorded "as much symmetry as possible"
+principle, and names no org.**
+
+**What happens to what you did there is already decided** — Track A's silhouette
+rule (docs/21 §7): what a human did that touched someone else stays; what an
+automated process derived is removed.
+
+**One check before writing the policy** (§16.4): confirm no module treats the
+absence of a role row as unrecoverable. **Speed-dating is the known hazard** —
+`contact_shared` is a write-once snapshot (§11.3, §22.1).
+
+### 24.2 The Public Square admin seat: same mechanism as every org, deliberately unassigned
+
+**FOUNDER DECISION:** *"Consistent with the other orgs, but we simply won't
+assign anyone to it for now, and we can address it should that ever come up."*
+
+**This resolves the §17.9 P1-6 conflict in the most §0-faithful way available.**
+docs/16 P1-6 wants named owner/admin seats; §16.2 forbade an org admin seat on
+Public Square. The founder refuses both horns: **no special rule, no special
+mechanism — just an empty seat.** Public Square's admin capability is identical
+to Pozna's; nobody holds it.
+
+**The consequence must be recorded honestly: this is an OPERATIONAL control, not
+a structural one.** The capability remains. The day anyone is assigned that seat,
+they read every platform user's name and email through `org_member_profiles` and
+`org_find_user_by_email` — including, via the missing `status` filter, people who
+never accepted.
+
+**So this decision does not reduce the importance of §23.3's bugs 1–3. It
+increases it.** Those fixes are precisely what would make the seat safe to fill
+later. **Restated as a build consequence:**
+
+- `org_find_user_by_email` gains its org join (§17.2) — **and then an org admin
+  of Public Square can only resolve emails of people actually in Public Square,
+  which is the whole platform. So the join is necessary and NOT sufficient there**;
+  the seat staying empty is what carries the remainder.
+- `org_member_profiles` gains `m.status = 'active'` — so a future seat-holder at
+  least cannot read non-consenting invitees.
+
+**§16.2's "never an org admin seat on Public Square" is therefore SOFTENED, not
+reversed:** the mechanism is ordinary and available; the seat is empty by
+operational choice; and if it is ever filled, §23.3's fixes must already have
+shipped. Record the emptiness somewhere a future session will look — this is the
+kind of state that is invisible in the schema and easy to lose.
