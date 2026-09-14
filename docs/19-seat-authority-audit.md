@@ -5,7 +5,7 @@ PROD-VERIFIED (2026-09-11 — `migrate:prod` + `prod-verify-migration.ts` 0
 failures + `scripts/prod-verify-seat-authority.mts` 25/25, covering the policies
 and the trigger binding the function-only script cannot see). (2026-09-10, `cf63e77`,
 `20260910040000`) — all 8 functions and all 5 inline policy arms, verified
-db 183/183 then e2e 52/52 in CI's exact order. THREE THINGS BELOW ARE STILL
+db 183/183 then e2e 52/52 in CI's exact order. FOUR THINGS BELOW ARE STILL
 OPEN; read the dated sections at the END of this doc, not just this one.**
 
 1. **The MODULE-ROLE half** — none of the 8 predicates consults the module role,
@@ -14,8 +14,15 @@ OPEN; read the dated sections at the END of this doc, not just this one.**
 2. **Four more items in the same class** the original audit never listed — one
    is a live WRITE (an offboarded peer reviewer can still grade a current
    student's work).
-3. **`module_roles` reads are org-wide** (the adjacent census leak) — descoped,
-   blocked on rank-mapping three modules.
+3. **`module_roles` reads are org-wide** (the adjacent census leak) — descoped by
+   Track A (blocked on rank-mapping three modules), and **reclaimed by the
+   Public Square session on 2026-09-13**, which re-verified it still live.
+4. **THE TWO APP WRITE PATHS ARE STILL UNGUARDED** — `assignMatchmaker` and
+   `addGroupMember` (`modules/matchmaking/ui/manage/actions.ts`). Required by
+   this audit's own "Remediation shape", **omitted from the 2026-09-10 fix and
+   from every open list until a clean-room test caught it on 2026-09-11.** The
+   SQL half of matchmaking is fixed; the write half that creates the seat in the
+   first place is not.
 
 *Original 2026-09-04 header, kept for context: findings, verified, not fixed;
 produced as a follow-on to `20260904010000`, which fixed one instance of this
