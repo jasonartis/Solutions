@@ -570,3 +570,78 @@ is wrong in one direction and the flattering version ("zero orphans, so the clas
 never fired") is wrong in the other. The honest summary: **the removal path is
 genuinely clean; the re-invite path is untested on prod and will stay untested
 until someone is actually re-invited.**
+
+## CLEAN-ROOM HANDOFF TEST, 2026-09-11 — six gaps a fresh session actually hit
+
+Rather than judging the handoff, it was **tested**: an agent with no session
+context was given only "read CLAUDE.md, then docs/19, plan the module-role half"
+and asked to report every place it had to guess. Its plan was sound — which is
+the good news — but it hit six gaps, listed worst-first. **The technique is worth
+reusing: a doc's author cannot audit their own handoff, because they cannot
+un-know what it omits.**
+
+### 1. THE TWO APP WRITE PATHS FELL OFF THE LEDGER — genuinely lost state
+
+This audit's "Remediation shape" requires copying classroom's org-membership
+check into **`assignMatchmaker`** and **`addGroupMember`**
+(`modules/matchmaking/ui/manage/actions.ts`). The 2026-09-10 FIXED header claims
+"all 8 functions and all 5 inline policy arms" and then enumerates three open
+items — **the write paths are in NEITHER list.** Verified still unguarded: the
+resolver takes an arbitrary email through `profiles` and inserts the assignment
+with no membership check. A reader of that header would conclude the remediation
+is complete but for three named items, and these would vanish. **They are open.**
+
+### 2. `mm_assignment_covers_me` CANNOT TAKE THE PRESCRIBED ONE-LINE FIX
+
+The module-role table below assigns matchmaking `mm_is_single` /
+`mm_is_matchmaker` and says "KEEP IT TO THE ONE-LINE CONJUNCT." But the live
+signature is **`(check_matchmaker_id, check_target_group_id, check_target_user_id)`
+— there is no `org_id` to pass**, and its first arm is a bare scalar comparison
+(`check_target_user_id = auth.uid()`) with nothing to join against. Either the
+signature changes (which touches `mm_assignments_select`) or the function joins
+`mm_matchmaker_assignments` internally. **Decide which before writing SQL**; the
+table as written sends a builder into a wall.
+
+### 3. THE SEAT→ROLE MAPPING IS UNDER-SPECIFIED, AND SPEED DATING IS A TRAP
+
+`sd_participants.seat_type` has **THREE** values — `participant`, `audience`,
+`mentor` (`20260709050000:57-59`: observers are rows *with* `seat_type in
+('audience','mentor')`, not `participant` rows). The module-role table says
+"speed dating → `sd_is_participant`" with a **blank Note**. Applied literally,
+that conjunct would **revoke every mentor and audience seat** unless those
+holders also carry the `participant` module role — which nothing guarantees and
+no local row exists to test against (zero mentor/audience rows seeded, so the
+measurement is VACUOUS for them).
+
+Two smaller versions of the same gap: nail salon's Note is *"check which side the
+role belongs to"* — an instruction, not an answer (it is the worker side); and
+classroom's one-liner works only because `cls_review_assignments` carries
+`class_id`, which the table never says.
+
+### 4. THE BLOCKING MEASUREMENT IS MANDATED BUT NOT SCRIPTED
+
+The module-role section says to repeat the orphan check "for the role dimension
+before a line of SQL is written" and names the org-dimension script — without
+saying whether it extends or what the role query is. The clean-room agent wrote
+it from scratch. **Extend `scripts/prod-verify-seat-authority-orphans.mts` with a
+role-dimension mode**, or paste the query here, so the next session does not
+re-derive it a third time.
+
+### 5. §5 READS AS THOUGH THE 2026-09-11 SYMMETRY DECISION SUBSUMES IT. IT DOES NOT.
+
+The founder decision opens "FULL SYMMETRY … no per-module exceptions," which sits
+close enough to §5 (`sd_in_event` has no `status` filter, so host-ejection does
+not revoke event reads) to read as having answered it. **It has not: §5 is about
+`status`, symmetry is about `role`.** Different axes, and §5 remains a founder
+decision. Stated here because the clean-room agent flagged it as something it
+would have had to re-ask.
+
+### 6. What the docs got RIGHT, recorded so it is not "improved" away
+
+The agent named these as genuinely sufficient: the class-of-bug statement; the
+verification method **with its control**; the `20260727010000` precedent; the
+honest "what the prod zero does and does not prove" section; the NULL-denial and
+service-role-discarded-by-pin-trigger lessons; and — singled out as the best
+thing it found — **`modules/speed-dating/src/video/authorize.ts` carrying an
+inline LANDMINE comment citing docs/19 §5.** That comment is the only place a doc
+reached the code *before* the code needed it. More of that.
