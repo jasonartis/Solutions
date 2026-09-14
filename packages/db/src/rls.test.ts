@@ -5903,3 +5903,197 @@ describe('visual messaging: a member can BLOCK THEMSELVES, and it sticks (202609
     expect(after?.status, 'the sole admin is banned despite the guard').toBe('active')
   })
 })
+
+// ---------------------------------------------------------------------------
+// THE `for all` SPLIT (20260914010000).
+//
+// `20260709100000` created five policies in a loop as `for all`, so each USING
+// clause was ALSO a read arm — the trap docs/15 recorded on 2026-08-06. The
+// split removes that arm. These tests exist because the whole claim is that
+// nothing observable changes, and a suite that merely stays green cannot tell
+// "the redundancy held" from "this code path was never exercised."
+//
+// So each test below is paired with a control:
+//   * the manager still READS  — controlled by proving she holds NO seat, so
+//     the read cannot be coming from conversation membership;
+//   * the manager still WRITES — controlled by a non-member failing the same
+//     write;
+//   * no `cmd = ALL` policy survives — controlled by counting policies on those
+//     tables, so an empty result is a fact and not a broken catalog read.
+//
+// FIXTURE NOTE: alice is demo-visual's ORG OWNER, so `vm_can_manage` is true
+// for her and she is the right subject. She is deliberately given NO seat on
+// the fixture conversation — that is the entire point, and the control asserts
+// it. eve is not a demo-visual member at all and is the outsider control.
+// Touches no seeded state: created here, deleted in afterAll, leaving
+// demo-visual with no conversations exactly as the seed intends.
+// ---------------------------------------------------------------------------
+describe('visual messaging: the `for all` split preserves manager reach (20260914010000)', () => {
+  const spServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
+  // Declared per describe block, matching the three other catalog-driven blocks
+  // in this file — there is no module-level dbUrl.
+  const spDbUrl = process.env.DATABASE_URL ?? 'postgresql://postgres:postgres@127.0.0.1:54322/postgres'
+  const SPLIT_TABLES = [
+    'vm_conversations',
+    'vm_layers',
+    'vm_conversation_members',
+    'vm_reactions',
+    'vm_flags',
+  ]
+
+  let spAdmin: SupabaseClient
+  let spAlice: SupabaseClient
+  let spEve: SupabaseClient
+  let spOrg: string
+  let spConvId: string
+  let spLayerId: string
+  let spCharlieId: string
+  let spAliceId: string
+
+  beforeAll(async () => {
+    if (!spServiceKey) throw new Error('SUPABASE_SERVICE_ROLE_KEY not set — run `pnpm dev` once')
+    spAdmin = createClient(url, spServiceKey, { auth: { persistSession: false } })
+    spAlice = await signIn('alice@demo.local')
+    spEve = await signIn('eve@demo.local')
+
+    spOrg = (await spAdmin.from('orgs').select('id').eq('slug', 'demo-visual').single()).data!.id as string
+    spCharlieId = (await spAdmin.from('profiles').select('user_id').eq('email', 'charlie@demo.local').single())
+      .data!.user_id as string
+    spAliceId = (await spAdmin.from('profiles').select('user_id').eq('email', 'alice@demo.local').single()).data!
+      .user_id as string
+
+    const conv = await spAdmin
+      .from('vm_conversations')
+      .insert({ org_id: spOrg, title: 'RLS fixture — for-all split', created_by: spCharlieId })
+      .select('id')
+      .single()
+    if (conv.error) throw new Error(`split fixture conversation failed: ${conv.error.message}`)
+    spConvId = conv.data!.id as string
+
+    const layer = await spAdmin
+      .from('vm_layers')
+      .insert({
+        org_id: spOrg,
+        conversation_id: spConvId,
+        author_id: spCharlieId,
+        path: 'server-assigned',
+        content: { image: { path: `${spOrg}/${spConvId}/fixture.png` } },
+      })
+      .select('id')
+      .single()
+    if (layer.error) throw new Error(`split fixture layer failed: ${layer.error.message}`)
+    spLayerId = layer.data!.id as string
+
+    // charlie holds the only seat. alice deliberately holds NONE.
+    const seat = await spAdmin
+      .from('vm_conversation_members')
+      .insert({ org_id: spOrg, conversation_id: spConvId, user_id: spCharlieId, role: 'admin' })
+    if (seat.error) throw new Error(`split fixture seat failed: ${seat.error.message}`)
+  })
+
+  afterAll(async () => {
+    if (spConvId) await spAdmin.from('vm_conversations').delete().eq('id', spConvId)
+  })
+
+  it('CONTROL: alice holds NO seat on the fixture conversation', async () => {
+    // Without this, every read assertion below would pass for the mundane
+    // reason that she is a member — proving nothing about the moderation arm.
+    const { data } = await spAdmin
+      .from('vm_conversation_members')
+      .select('user_id')
+      .eq('conversation_id', spConvId)
+      .eq('user_id', spAliceId)
+      .maybeSingle()
+    expect(data, 'alice was seated on the fixture — the read tests below are now vacuous').toBeNull()
+  })
+
+  it('a manager still READS a conversation, its layers and its roster with no seat', async () => {
+    // The claim the split rests on: vm_can_manage is a strict subset of
+    // vm_can_moderate_org, which vm_is_conv_member's second arm admits. If that
+    // were false, removing the `for all` read arm would have blinded her here.
+    const conv = await spAlice.from('vm_conversations').select('id, title').eq('id', spConvId).maybeSingle()
+    expect(conv.data?.id, 'a vm manager lost read of a conversation she does not sit on').toBe(spConvId)
+
+    const layers = await spAlice.from('vm_layers').select('id').eq('conversation_id', spConvId)
+    expect(layers.data?.map((l) => l.id), 'a vm manager lost read of the layers').toContain(spLayerId)
+
+    const roster = await spAlice.from('vm_conversation_members').select('user_id').eq('conversation_id', spConvId)
+    expect(roster.data?.map((m) => m.user_id), 'a vm manager lost read of the roster').toContain(spCharlieId)
+  })
+
+  it('CONTROL: an outsider reads nothing of the same conversation', async () => {
+    // Proves the reads above are the moderation arm and not "anyone can read".
+    // eve is a platform user who is not a demo-visual member at all.
+    const conv = await spEve.from('vm_conversations').select('id').eq('id', spConvId).maybeSingle()
+    expect(conv.data, 'a non-member of demo-visual can read the conversation').toBeNull()
+
+    const layers = await spEve.from('vm_layers').select('id').eq('conversation_id', spConvId)
+    expect(layers.data ?? [], 'a non-member of demo-visual can read the layers').toEqual([])
+  })
+
+  it('a manager still WRITES — update and delete authority survived the split verbatim', async () => {
+    const renamed = await spAlice
+      .from('vm_conversations')
+      .update({ title: 'RLS fixture — renamed by manager' })
+      .eq('id', spConvId)
+      .select('title')
+      .single()
+    expect(renamed.error, `a vm manager lost UPDATE: ${renamed.error?.message}`).toBeNull()
+    expect(renamed.data?.title).toBe('RLS fixture — renamed by manager')
+
+    // DELETE authority, exercised on a row the manager creates so the fixture
+    // conversation survives for the assertions above.
+    const reaction = await spAlice
+      .from('vm_reactions')
+      .insert({ org_id: spOrg, conversation_id: spConvId, layer_id: spLayerId, user_id: spAliceId, kind: 'heart' })
+      .select('id')
+      .single()
+    expect(reaction.error, `a vm manager lost INSERT: ${reaction.error?.message}`).toBeNull()
+
+    const gone = await spAlice.from('vm_reactions').delete().eq('id', reaction.data!.id)
+    expect(gone.error, `a vm manager lost DELETE: ${gone.error?.message}`).toBeNull()
+  })
+
+  it('CONTROL: the outsider cannot perform the same write', async () => {
+    const blocked = await spEve
+      .from('vm_conversations')
+      .update({ title: 'outsider rename' })
+      .eq('id', spConvId)
+      .select('title')
+    expect(blocked.data ?? [], 'a non-member of demo-visual updated the conversation').toEqual([])
+  })
+
+  it('RATCHET: no `for all` policy survives on the five split tables', async () => {
+    // The trap itself, machine-checked. A future migration re-introducing a
+    // `for all` on any of these silently restores a read arm that the next
+    // narrowing of moderation would then be unable to close — exactly how
+    // docs/20's v1 and v2 failed.
+    const sql = postgres(spDbUrl, { prepare: false, max: 1 })
+    try {
+      const rows = await sql<{ tablename: string; policyname: string }[]>`
+        select tablename, policyname
+        from pg_policies
+        where schemaname = 'public'
+          and tablename = any(${SPLIT_TABLES})
+          and cmd = 'ALL'
+      `
+      expect(
+        rows.map((r) => `${r.tablename}.${r.policyname}`),
+        'a `for all` policy is back on a vm table — its USING is a read arm again (20260914010000)',
+      ).toEqual([])
+
+      // CONTROL: the query really can see these tables' policies, so the empty
+      // result is a fact about `cmd = ALL` and not a broken catalog read.
+      const [row] = await sql<{ count: number }[]>`
+        select count(*)::int as count
+        from pg_policies
+        where schemaname = 'public' and tablename = any(${SPLIT_TABLES})
+      `
+      expect(row!.count, 'pg_policies returned nothing for the vm tables — the assertion above is vacuous').toBeGreaterThan(
+        15,
+      )
+    } finally {
+      await sql.end()
+    }
+  })
+})
