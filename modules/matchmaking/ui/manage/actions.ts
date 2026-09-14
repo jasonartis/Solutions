@@ -99,6 +99,35 @@ async function resolveUserId(supabase: Awaited<ReturnType<typeof createClient>>,
   return profile.user_id as string
 }
 
+// The email lookup above resolves anyone sharing ANY org with the caller
+// (profiles_select_shared_org), not just this one — so a matchmaker/group-
+// member seat minted from it would hand a non-member of THIS org full access
+// via the bare-row mm_matchmaker_can_see / mm_groups_select_assigned /
+// mm_group_members_select_assigned predicates (docs/19 §1). Verify active
+// membership before minting the seat, same check as
+// modules/classroom/ui/manage/actions.ts:71-80 and
+// modules/visual-messaging/ui/actions.ts:181-192.
+async function resolveOrgMemberUserId(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  orgId: string,
+  email: string,
+) {
+  const userId = await resolveUserId(supabase, email)
+  const { data: member } = await supabase
+    .from('org_members')
+    .select('user_id')
+    .eq('org_id', orgId)
+    .eq('user_id', userId)
+    .eq('status', 'active')
+    .maybeSingle()
+  if (!member) {
+    throw new Error(
+      `No user found with email ${email} in this organization — add them as an org member first (and they must have accepted the invite)`,
+    )
+  }
+  return userId
+}
+
 // Groups + matchmaker assignments (RLS: mm_can_manage's staff `for all`
 // policy gates every write here — admin-only, matching the page gate). A
 // matchmaker's own view relies entirely on these rows existing (RLS scopes
@@ -120,7 +149,10 @@ export async function addGroupMember(orgSlug: string, groupId: string, formData:
   if (!email) throw new Error('Email is required')
 
   const supabase = await createClient()
-  const userId = await resolveUserId(supabase, email)
+  const { data: group } = await supabase.from('mm_groups').select('org_id').eq('id', groupId).single()
+  if (!group) throw new Error('Group not found')
+
+  const userId = await resolveOrgMemberUserId(supabase, group.org_id, email)
   const { error } = await supabase.from('mm_group_members').insert({
     org_id: DERIVED_SCOPE_PLACEHOLDER, // derived from the group by mm_sync_from_group
     group_id: groupId,
@@ -150,8 +182,8 @@ export async function assignMatchmaker(orgSlug: string, formData: FormData) {
 
   const supabase = await createClient()
   const orgId = await resolveOrgId(supabase, orgSlug)
-  const matchmakerId = await resolveUserId(supabase, matchmakerEmail)
-  const targetUserId = targetType === 'individual' ? await resolveUserId(supabase, targetEmail) : null
+  const matchmakerId = await resolveOrgMemberUserId(supabase, orgId, matchmakerEmail)
+  const targetUserId = targetType === 'individual' ? await resolveOrgMemberUserId(supabase, orgId, targetEmail) : null
 
   const { error } = await supabase.from('mm_matchmaker_assignments').insert({
     org_id: orgId, // group-target rows get this overwritten by mm_sync_assignment_org

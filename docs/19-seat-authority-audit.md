@@ -17,12 +17,14 @@ OPEN; read the dated sections at the END of this doc, not just this one.**
 3. **`module_roles` reads are org-wide** (the adjacent census leak) — descoped by
    Track A (blocked on rank-mapping three modules), and **reclaimed by the
    Public Square session on 2026-09-13**, which re-verified it still live.
-4. **THE TWO APP WRITE PATHS ARE STILL UNGUARDED** — `assignMatchmaker` and
-   `addGroupMember` (`modules/matchmaking/ui/manage/actions.ts`). Required by
-   this audit's own "Remediation shape", **omitted from the 2026-09-10 fix and
-   from every open list until a clean-room test caught it on 2026-09-11.** The
-   SQL half of matchmaking is fixed; the write half that creates the seat in the
-   first place is not.
+4. **THE TWO APP WRITE PATHS ARE NOW GUARDED (2026-09-14, app-side only, no
+   migration)** — `assignMatchmaker` and `addGroupMember`
+   (`modules/matchmaking/ui/manage/actions.ts`) both now verify active org
+   membership before minting a seat, matching the pattern already used in
+   classroom's `enrollClassMember` and visual messaging's `addMember`. **Still
+   OWED: the RLS test proving a non-member cannot be assigned** — that needs the
+   database, which this session did not hold; see the dated entry at the end of
+   this doc.
 
 *Original 2026-09-04 header, kept for context: findings, verified, not fixed;
 produced as a follow-on to `20260904010000`, which fixed one instance of this
@@ -652,3 +654,41 @@ service-role-discarded-by-pin-trigger lessons; and — singled out as the best
 thing it found — **`modules/speed-dating/src/video/authorize.ts` carrying an
 inline LANDMINE comment citing docs/19 §5.** That comment is the only place a doc
 reached the code *before* the code needed it. More of that.
+
+## 2026-09-14 — open item 4 (the app write paths) fixed, no migration
+
+`assignMatchmaker` and `addGroupMember`
+(`modules/matchmaking/ui/manage/actions.ts`) now both verify the resolved
+user is an ACTIVE member of the target org before inserting the
+`mm_matchmaker_assignments` / `mm_group_members` row — copied from
+`modules/classroom/ui/manage/actions.ts:66-80` and
+`modules/visual-messaging/ui/actions.ts:181-192`, same shape and same error
+message ("add them as an org member first (and they must have accepted the
+invite)"). A shared `resolveOrgMemberUserId` helper replaced the bare
+`resolveUserId` call at both mint sites; `addGroupMember` additionally now
+looks up the target group's `org_id` first (it previously relied entirely on
+`mm_sync_from_group` to derive it, with nothing read app-side).
+
+Checked before pushing whether any existing fixture assigns a matchmaker or
+group member to a non-active-org-member: **none does.**
+`apps/web/e2e/platform.spec.ts`'s groups/assignment block
+(around line 636) adds `eve@demo.local` to a group and assigns
+`mel@demo.local` as matchmaker — both are seeded as `active` `org_members` of
+`demo-match` (`packages/db/src/seed.ts:591-597`). `packages/db/src/seed.ts`'s
+own two seeded `mm_matchmaker_assignments` rows (`:668-671`) insert directly
+via the service-role `admin` client, bypassing this action entirely, so they
+are unaffected either way. No fixture needed changing.
+
+Verified with `pnpm exec turbo run typecheck --concurrency=1 --force`: 9/9
+clean. The RLS suite and db-backed verification were NOT run — another
+session held the database per this session's instructions; CI carries its own
+database and is the verification of record for this change.
+
+**OWED, not written this session: an RLS test proving a non-member cannot be
+assigned as a matchmaker or added to a group** — i.e. the analogue of the test
+class rls.test.ts already has for visual messaging's `addMember` guard (the
+same shape docs/19's §"CLEAN-ROOM HANDOFF TEST" pointed at). This needs a real
+database session to author and run, and was out of scope for an app-only,
+no-migration change made while another session held the database. Whoever
+picks up the module-role half (open item 1) or the next matchmaking migration
+should add it then, or sooner if the database is free.
