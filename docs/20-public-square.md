@@ -756,7 +756,14 @@ new to this platform. It is simply not usable for SELECT here, for reasons 1-3.
   checklist's "none made yet" is false. Its **P3** ("a network module gets its
   own org, NOT Public Square") must be reconciled with §7.9's per-module-review
   answer. **v3 answers its formally-blocking checklist item 2** — worth stating.
-- **docs/modules/module-4-visual-messaging.md** — needs a superseding dated entry
+- **docs/modules/module-4-visual-messaging.md** — **PARTLY DONE by Track A
+  2026-09-13 (`2351f74`)**: the "SHAPE DECIDED 2026-09-04 (per-pair orgs)"
+  heading now carries a ⚠ SUPERSEDED banner. **Still owed from the list below:
+  confirm the `client | personal` enum, `create_personal_org` and the
+  "accept-first needs NO new mechanism" claims are each addressed, and — the one
+  most easily lost — that the self-block item is carried FORWARD rather than
+  dropped (§8.7).** Re-read the banner before assuming it covers them.
+  Originally: needs a superseding dated entry
   (its own precedent, not an in-place edit). The "SHAPE DECIDED 2026-09-04"
   section, the `client | personal` enum, `create_personal_org`, and "accept-first
   needs NO new mechanism" all change. **Its self-block item must be carried
@@ -794,7 +801,19 @@ Track A owns those files while both sessions run, so these are written down
 rather than applied. **None of them should land until §14's review clears v4.**
 
 **docs/03 — four convention lines, three of which are already earned regardless
-of whether v4 ships:**
+of whether v4 ships.**
+
+> **HOW to add them — CONSTRAINT FROM TRACK A, 2026-09-13 (`113c0fe`), learned
+> the hard way there.** docs/03's conventions are an ordered list and **147
+> places across docs, CLAUDE.md and migration headers cite them BY NUMBER.**
+> Inserting an item mid-list renumbers everything after it and breaks all of
+> them. Track A hit this by adding a "1b." and finding Markdown restarts the
+> list. **So: either APPEND at the end with the next free number, or attach as a
+> SUB-BULLET of an existing convention.** Items 1 and 2 below are both about
+> reading privileges correctly and belong as sub-bullets of **convention #1**
+> (the ACL/prod-verification one, which already carries sub-bullets). Item 4 goes
+> in the **"Test discipline"** prose section, which is not numbered and is
+> therefore free.
 
 1. **Read `pg_catalog`, never `information_schema`, for any privilege or policy
    claim.** `information_schema.column_privileges` expands a TABLE grant into one
