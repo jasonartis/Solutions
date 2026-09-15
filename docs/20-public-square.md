@@ -2049,7 +2049,7 @@ added to §14's list. It ran; the answer is §17.6.
 | **P1-2** CRITICAL, auto-invite = auto-join | **PARTLY CLOSED.** Predicate half shipped in `20260727010000`; §16.3's invite-only removes the trigger for v1. **But it recurs through `org_member_profiles`'s missing `status` filter** |
 | **P1-4** HIGH, roster enumeration | **OPEN**, accepted not fixed (§12.7) |
 | **P1-5** HIGH, unvetted defaults | **OPEN** — §7.9 is a process with no mechanism, and §17.5 shows the self-enrolment default walking into this shape |
-| **P1-6** MEDIUM, abuse posture | **OPEN, and now in DIRECT CONFLICT.** P1-6 asks for *"named owner/admin seats (the platform operator wearing an org hat)."* **§16.2 forbids any org admin seat on Public Square.** Both are right for their own reason. **The document must record that P1-6's owner seat is refused, and what replaces it** |
+| **P1-6** MEDIUM, abuse posture | **CONFLICT RESOLVED 2026-09-14 by the founder (§24.2); the abuse posture itself is still OPEN.** The conflict was: P1-6 asks for *"named owner/admin seats"*, §16.2 forbade any org admin seat on Public Square. The founder refused both horns — **the seat exists with the ordinary mechanism and is simply left UNASSIGNED**, so no special rule is written for one org. Recorded honestly as an OPERATIONAL control, not a structural one: the capability remains, and whoever fills that seat reads every platform user's name and email. **P1-6's remaining half — a user-level ban, rate limits, a non-per-conversation report path — is untouched and still open**, deferred by §16.3's invite-only |
 | **P1-7** | holds, under invite-only |
 | **P1-8** LOW, `shares_org_with` join performance | **OPEN and newly worse** — v4 adds a join to the exact function P1-8 named. Cost now measured (§17.7); the index question is not |
 
@@ -3152,6 +3152,19 @@ moved the schema once already.
 
 ### 31.4 The questions the design must answer
 
+0. **"PER ORG" CANNOT BE THE WHOLE ANSWER, and this is the constraint most
+   likely to be missed.** The founder's instruction was *"I do want the info
+   shared to be a choice of the user, per org"* (2026-09-14). That works for
+   **display within an org**. It cannot work for the **invite lookup**, because
+   `org_find_user_by_email` runs BEFORE any membership exists — you are looking
+   someone up precisely because they are not in the org yet, so there is no
+   per-org choice to consult.
+   **How real products resolve it: two settings, not one.** Facebook and
+   LinkedIn both carry a GLOBAL *"who can look me up by my email address"*
+   setting, entirely separate from per-group display settings. Different scope
+   because the contexts differ. **So the design almost certainly needs a global
+   findability control AND a per-org display control**, and conflating them is
+   how it goes wrong. This also bears directly on §31.5's open decision.
 1. **Where does the per-org display NAME live**, and does Discord's per-server
    nickname shape fit this schema without becoming v2 again? (v2's fatal flaw
    was the home, not the goal — §18.3.)
