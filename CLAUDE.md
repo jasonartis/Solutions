@@ -601,6 +601,19 @@ Everything below is open but unranked:
   NO reset in between; reproducing that exact order (not just "reset, then eventually run e2e
   at some point") is what actually surfaces an order-dependent failure like the grace/login-history
   one below.
+- **A RED `check` JOB WHOSE FAILING STEP IS `Run supabase/setup-cli@v1` IS TRANSIENT AND NOT
+  YOUR DIFF (2026-09-15).** The log line is `##[error]Failed to resolve latest Supabase CLI
+  release: rate limit exceeded` — `ci.yml` pins `version: latest`, so the action asks GitHub's
+  API for the newest release on EVERY run, and several pushes in quick succession exhaust the
+  unauthenticated quota. Hit live on a **docs-only** commit, which is what makes it obvious in
+  hindsight and baffling in the moment: nothing in the diff can touch a CLI download. Two
+  things worth knowing: the run is red but the failure is BEFORE any test, so a green run on
+  the very next commit (or a re-run) is the whole fix; and because `deploy` has `needs: check`,
+  prod simply keeps serving the previous build — the DB never moves ahead of the app. **Do not
+  chase it as a test failure, and do not "fix" it by re-running the suite locally.** The real
+  fix, if it recurs often, is pinning the CLI to an exact `version:` in `ci.yml` (a
+  shared-pipeline change — founder call, and note pinning also means CLI upgrades stop being
+  silent).
 - **Diagnosing a CI job that fails INSTANTLY with an EMPTY steps array (2026-09-02)** — this is
   never a code/test failure; the job never started. The tell: `GET /repos/<owner>/<repo>/actions/
   runs/<id>/jobs` shows `"steps": []` and `completed_at` within 1-2 seconds of `started_at`. The
