@@ -4154,6 +4154,7 @@ describe('seat authority: a module roster row requires ACTIVE org membership (20
   let seatEve: SupabaseClient // group member (demo-match) / mentor (demo-dating)
   let seatCharlie: SupabaseClient // assigned single / customer / student
   let seatFrank: SupabaseClient // demo-dating member, seated `removed`
+  let seatBob: SupabaseClient // demo-b admin — NEVER a demo-match member (docs/19 §1 outsider)
 
   // Orgs.
   let seatOrgA = '' // demo-a       (classroom)
@@ -4168,6 +4169,7 @@ describe('seat authority: a module roster row requires ACTIVE org membership (20
   let seatCharlieId = ''
   let seatFrankId = ''
   let seatAliceId = ''
+  let seatBobId = ''
 
   // Matchmaking fixture.
   let seatMmGroupId = ''
@@ -4339,6 +4341,7 @@ describe('seat authority: a module roster row requires ACTIVE org membership (20
     seatEve = await signIn('eve@demo.local')
     seatCharlie = await signIn('charlie@demo.local')
     seatFrank = await signIn('frank@demo.local')
+    seatBob = await signIn('bob@demo.local')
 
     seatMembersBaseline = await seatSnapshotMembers()
 
@@ -4353,6 +4356,7 @@ describe('seat authority: a module roster row requires ACTIVE org membership (20
     seatCharlieId = await seatUserId('charlie@demo.local')
     seatFrankId = await seatUserId('frank@demo.local')
     seatAliceId = await seatUserId('alice@demo.local')
+    seatBobId = await seatUserId('bob@demo.local')
 
     // ---- MATCHMAKING ------------------------------------------------------
     // The seeded individual assignment (mel -> charlie) is REUSED, not
@@ -5014,6 +5018,86 @@ describe('seat authority: a module roster row requires ACTIVE org membership (20
           'the own-target branch of mm_assignment_covers_me is no longer ungated — that is a deliberate exception (docs/19 §6); if it was changed on purpose, update this pin',
         ).toBe(1)
       })
+    })
+
+    // OWED per docs/19 (recorded 2026-09-14): every test above proves the
+    // SQL-side org-membership conjunct denies a seat AFTER revocation. None
+    // of them exercises docs/19 §1's actual exploit sentence — "types the
+    // email of someone who shares only org B with him" — a target who was
+    // NEVER a demo-match member, freshly minted, not revoked. RLS itself does
+    // NOT stop the INSERT (mm_can_manage is a broad staff write policy with
+    // no target-membership check; modules/matchmaking/ui/manage/actions.ts's
+    // app-level resolveOrgMemberUserId is the only thing that does). So these
+    // two prove the second half of the defense: even if that app check were
+    // ever bypassed or buggy, a bare seat minted for a genuine outsider
+    // confers nothing — the same property the revocation tests proved, now
+    // proved from a virgin outsider rather than an ex-member.
+    it('a genuine outsider — bob, never a demo-match member — freshly assigned as matchmaker over charlie, reads nothing', async () => {
+      const bobMembership = await seatReadMembership(seatOrgMatch, seatBobId)
+      expect(bobMembership, 'bob already has an org_members row in demo-match — fixture assumption violated').toBeNull()
+
+      const outsiderAssignmentId = await seatInsert(
+        'mm_matchmaker_assignments',
+        { org_id: seatOrgMatch, matchmaker_id: seatBobId, target_type: 'individual', target_user_id: seatCharlieId },
+        'outsider matchmaker assignment (docs/19 §1)',
+      )
+      try {
+        const answers = await seatBob.from('mm_answers').select('id').eq('user_id', seatCharlieId)
+        expect(answers.error).toBeNull()
+        expect(
+          answers.data,
+          'an outsider who was never a demo-match member read a single’s questionnaire through a freshly-minted assignment',
+        ).toEqual([])
+
+        const scores = await seatBob.from('mm_pair_scores').select('id')
+        expect(scores.error).toBeNull()
+        expect(scores.data, 'an outsider read pair scores through a freshly-minted assignment').toEqual([])
+
+        const rpc = await seatBob.rpc('mm_matchmaker_can_see', {
+          check_org_id: seatOrgMatch,
+          check_single_id: seatCharlieId,
+        })
+        expect(rpc.error, `mm_matchmaker_can_see errored: ${JSON.stringify(rpc.error)}`).toBeNull()
+        expect(rpc.data, 'mm_matchmaker_can_see returned TRUE for an outsider who was never a demo-match member').toBe(
+          false,
+        )
+
+        // Non-vacuity: the fixture row is real, and charlie's data still exists.
+        const seat = await seatAdmin.from('mm_matchmaker_assignments').select('id').eq('id', outsiderAssignmentId)
+        expect(seat.data?.length, 'the outsider fixture assignment vanished').toBe(1)
+        const still = await seatAdmin.from('mm_answers').select('id').eq('user_id', seatCharlieId)
+        expect(still.data!.length, 'charlie mm_answers disappeared mid-test').toBeGreaterThan(0)
+      } finally {
+        await seatAdmin.from('mm_matchmaker_assignments').delete().eq('id', outsiderAssignmentId)
+      }
+    })
+
+    it('the same outsider, freshly assigned to the fixture GROUP, reads neither the group nor its roster (the two inline arms)', async () => {
+      const outsiderGroupAssignmentId = await seatInsert(
+        'mm_matchmaker_assignments',
+        { org_id: seatOrgMatch, matchmaker_id: seatBobId, target_type: 'group', target_group_id: seatMmGroupId },
+        'outsider group assignment (docs/19 §1)',
+      )
+      try {
+        const group = await seatBob.from('mm_groups').select('id').eq('id', seatMmGroupId)
+        expect(group.error).toBeNull()
+        expect(group.data, 'an outsider read the GROUP row through a freshly-minted assignment').toEqual([])
+
+        const roster = await seatBob.from('mm_group_members').select('user_id').eq('group_id', seatMmGroupId)
+        expect(roster.error).toBeNull()
+        expect(
+          roster.data,
+          'an outsider read the group’s ENTIRE ROSTER through a freshly-minted assignment',
+        ).toEqual([])
+
+        // Non-vacuity: the group and its roster still exist for a legitimate reader.
+        const g = await seatAdmin.from('mm_groups').select('id').eq('id', seatMmGroupId)
+        expect(g.data?.length, 'the fixture group vanished').toBe(1)
+        const r = await seatAdmin.from('mm_group_members').select('id').eq('group_id', seatMmGroupId)
+        expect(r.data?.length, 'the fixture group membership vanished').toBe(1)
+      } finally {
+        await seatAdmin.from('mm_matchmaker_assignments').delete().eq('id', outsiderGroupAssignmentId)
+      }
     })
   })
 

@@ -17,14 +17,14 @@ OPEN; read the dated sections at the END of this doc, not just this one.**
 3. **`module_roles` reads are org-wide** (the adjacent census leak) — descoped by
    Track A (blocked on rank-mapping three modules), and **reclaimed by the
    Public Square session on 2026-09-13**, which re-verified it still live.
-4. **THE TWO APP WRITE PATHS ARE NOW GUARDED (2026-09-14, app-side only, no
-   migration)** — `assignMatchmaker` and `addGroupMember`
-   (`modules/matchmaking/ui/manage/actions.ts`) both now verify active org
-   membership before minting a seat, matching the pattern already used in
-   classroom's `enrollClassMember` and visual messaging's `addMember`. **Still
-   OWED: the RLS test proving a non-member cannot be assigned** — that needs the
-   database, which this session did not hold; see the dated entry at the end of
-   this doc.
+4. **DONE (2026-09-14).** `assignMatchmaker` and `addGroupMember`
+   (`modules/matchmaking/ui/manage/actions.ts`) now verify active org
+   membership before minting a seat (app-side, no migration), matching the
+   pattern already used in classroom's `enrollClassMember` and visual
+   messaging's `addMember`. The owed RLS test proving a non-member's seat
+   confers nothing was also written once the database and `rls.test.ts` were
+   free — db 206/206, CI-verified. See the dated entries at the end of this
+   doc for both.
 
 *Original 2026-09-04 header, kept for context: findings, verified, not fixed;
 produced as a follow-on to `20260904010000`, which fixed one instance of this
@@ -684,11 +684,27 @@ clean. The RLS suite and db-backed verification were NOT run — another
 session held the database per this session's instructions; CI carries its own
 database and is the verification of record for this change.
 
-**OWED, not written this session: an RLS test proving a non-member cannot be
-assigned as a matchmaker or added to a group** — i.e. the analogue of the test
-class rls.test.ts already has for visual messaging's `addMember` guard (the
-same shape docs/19's §"CLEAN-ROOM HANDOFF TEST" pointed at). This needs a real
-database session to author and run, and was out of scope for an app-only,
-no-migration change made while another session held the database. Whoever
-picks up the module-role half (open item 1) or the next matchmaking migration
-should add it then, or sooner if the database is free.
+**OWED test above — DONE 2026-09-14, once the database and `rls.test.ts` were
+free.** Two new `it()`s in the existing `seat authority: a module roster row
+requires ACTIVE org membership` describe block in `packages/db/src/rls.test.ts`
+(matchmaking section), using `bob@demo.local` — admin of Demo Org B, never a
+`demo-match` member at all. Deliberately a DIFFERENT scenario from every test
+above it: those all prove the conjunct denies access AFTER a real membership
+is revoked; these two prove it denies a seat minted for someone who was NEVER
+a member — docs/19 §1's literal exploit sentence ("someone who shares only
+org B with him"), not the revocation case. Both freshly INSERT a
+`mm_matchmaker_assignments` row via the service-role client (bob as
+matchmaker, over charlie individually and over the fixture group), then
+assert bob's own RLS client reads nothing — `mm_answers`, `mm_pair_scores`,
+`mm_matchmaker_can_see`, `mm_groups`, `mm_group_members` all empty/false —
+with non-vacuity controls (the row exists, charlie's data exists), cleaned up
+in a `finally`. **Worth stating plainly: RLS itself does NOT block the
+INSERT** — `mm_can_manage` is a broad staff write policy with no
+target-membership check, so the insert succeeds exactly as it would for a
+real member. The only thing that stops this seat from ever being minted in
+practice is the app-level `resolveOrgMemberUserId` check shipped earlier this
+session. These two tests prove the second layer: if that app check is ever
+bypassed, weakened, or has a bug, the SQL-side conjunct still makes the seat
+worthless. Verified: db suite 206/206 (204 baseline + 2), typecheck clean,
+then pushed and confirmed green on the actual CI run — see the commit for the
+run id.
