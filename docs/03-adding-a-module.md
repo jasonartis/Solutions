@@ -944,6 +944,47 @@ mechanism is proven in the managed environment, but it carries rules that are no
       failure that never crosses the Server Action boundary) — those are
       ordinary thrown JS exceptions, caught with a normal try/catch, and
       Next's redaction has no bearing on them.
+23. **A scope-sync trigger that is NOT `security definer` is also an access
+    check — and you will not find that out by reading the policies.** The
+    pattern (docs/03 #10) is a `before insert or update` trigger that derives
+    `org_id` (or another scope column) from the parent entity by SELECTing it.
+    Because a non-definer trigger runs as the CALLER, that SELECT is subject to
+    the caller's own RLS — so the moment the caller can no longer read the
+    parent, the trigger finds nothing and **raises**, before any policy on the
+    target table gets to decide anything. The write is refused by the trigger,
+    not by the gate you think is guarding it.
+    - **Three live instances, and the consequence is different every time,
+      which is exactly why this needs stating rather than just noting:**
+      1. **It becomes the REAL guarantee, replacing the documented one.**
+         `vm_members_scope` / `vm_sync_from_conversation` is what actually
+         prevents self-UNBAN in `20260910030000`, not the status pin its own
+         header credits — a banned member never reaches the pin, because
+         `vm_conversations_select` stops matching them first. Stronger than
+         intended, and attributed to the wrong mechanism.
+      2. **It makes a genuinely bare policy UNREACHABLE.**
+         `sd_participants_update_self` really had no `is_org_member` conjunct
+         (docs/19 recorded it as open), but `sd_sync_from_event` raises
+         `Unknown event` for an ex-member first, so the hole was never
+         exploitable. Found 2026-09-15 only because a test failed in an
+         unexpected WAY rather than failing flat — the assertion expected a
+         silent zero-row RLS refusal and got P0001. Adding the conjunct there
+         is defence in depth, not a fix, and saying otherwise would overstate
+         what shipped.
+      3. **"Fixing" it to `security definer` would REMOVE an enforcement
+         nobody wrote down.** `20260914010000`'s header carries an explicit
+         do-not-make-this-definer warning for precisely this reason.
+    - **The asymmetry that decides which of the three you are looking at is
+      whether the parent's SELECT policy has a self-referential arm.**
+      `vm_conversations_select` has a `created_by = auth.uid()` arm, so a
+      banned member who CREATED the conversation still resolves it, reaches the
+      pin, and is stopped there instead — two different mechanisms depending on
+      who you are, and only one is documented. `sd_events_select` has no such
+      arm, so speed dating blocks uniformly.
+    - → When auditing a write path, read the target table's TRIGGERS and the
+      PARENT's select policy, not just the target's own policies. And never
+      flip one of these to `security definer` as a tidy-up: establish what it
+      is currently enforcing first, because the answer has twice been "more
+      than its header claims."
 
 ## Hard rules
 
