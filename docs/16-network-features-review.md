@@ -221,7 +221,24 @@ in a network-class org?"*
 
 ---
 
-## Decision checklist (all founder calls, none made yet)
+## Decision checklist (all founder calls, ~~none made yet~~ — SEVERAL NOW MADE)
+
+> **STALE HEADER, corrected 2026-09-15. Read
+> [docs/20 §17.9](20-public-square.md) before using this list** — the whole P1
+> checklist was re-scored against Public Square's v4 design on 2026-09-11, and
+> the founder answered several of these on 09-14.
+> **In particular: P1-6's request for "named owner/admin seats" was RESOLVED** —
+> the seat exists with the ordinary mechanism and is simply left unassigned
+> (docs/20 §24.2), so no special rule is written for one org. Its other half (a
+> user-level ban, rate limits, a non-per-conversation report path) is genuinely
+> untouched.
+> **Two items here are still open and are called out in docs/20 §17.9:**
+> **checklist item 1** — the trust-class principle into docs/00 — is untracked
+> anywhere and the coherence review called it the item that gates the rest
+> (drafted wording: docs/20 §32.1); and **P3** ("a network module gets its own
+> org, NOT Public Square") conflicts structurally with docs/20 §7.9's
+> per-module-review answer and **needs narrowing to pool-shaped modules in a
+> dated entry here**, or §7.9's permission withdrawn.
 
 1. Adopt the trust-class principle into docs/00 (and the `orgs.kind` column when
    built)? — gates everything below.

@@ -511,9 +511,18 @@ owners/admins can reassign the Director seat at any time, including to themselve
 
 - **Cross-org module switching** (Bob flipping VM between OrgA and OrgB from inside
   the module) — a navigation/UI feature on a different axis; queued separately.
-- **Public Square** — a shared opt-in org for network-shaped modules. The model
+- **Public Square** — a shared opt-in org for network-shaped modules. ~~The model
   *absorbs* it with no special casing (an org where VM's default grant is global
-  member), but the Public Square itself is its own product decision.
+  member)~~, but the Public Square itself is its own product decision.
+  **CORRECTED 2026-09-15 — the parenthetical named as its mechanism the very
+  thing the design must SUPPRESS.** Absorption holds at the POLICY layer and
+  fails at the DEFAULTS layer: a global `member` grant would put everyone in
+  visual messaging, which destroys the per-module opt-in (the second of the
+  founder's two consents) **and** destroys the peer-lookup's only bound, since
+  `find_module_peer` filters on "holds the module" and everyone would. See
+  [docs/20](20-public-square.md) §7.10 and §31. **The unbuilt module-defaults
+  slice must therefore carry an explicit exception for this org**, and that is a
+  build prerequisite rather than a known-open.
 
 Both now have a dedicated Fable-tier tenancy review with findings and an approved
 implementation shape for the switcher: **[docs/16-network-features-review.md](16-network-features-review.md)**

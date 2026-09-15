@@ -326,7 +326,22 @@ Found in a deliberate "what haven't we thought of" pass; ordered by urgency.
    here, and it is the one a real user is most likely to ask about: "what do you
    keep after I delete my account, and why."** It is also the honest answer to the
    audit-log tension above — the record survives because it is *someone else's*
-   record, not because the platform declined to erase. Not urgent (there is no
+   record, not because the platform declined to erase.
+   **AND A FIFTH, ADDED 2026-09-15 — the numbering collided, so read both.** A
+   parallel session recorded a "fourth owed line" for the MODERATOR disclosure
+   (docs/20 §10, §16.2) while this entry's fourth is the deletion/silhouette
+   line. They are different lines and both are owed. The moderator one follows
+   from a founder decision of 2026-09-14: **a delegated moderator can open any
+   conversation in the org and every image in it, reported or not, with no log** —
+   accepted deliberately, and to be disclosed in the same impersonal wording
+   founder decision 7 already chose for superadmin access.
+   **Draft all of the owed lines TOGETHER, not one per feature** (docs/20 §21.2):
+   the founder's rule is that privacy copy describes the MECHANISM and never
+   names an org, so one well-written sentence about what co-members and
+   moderators can see may discharge more than one of these — and writing them
+   piecemeal is how the page ends up naming Public Square, which he explicitly
+   refused.
+   Not urgent (there is no
    account-deletion feature yet), but it must ship WITH that feature, not after:
    docs/21 §7.4 notes the mechanism keeps the `auth.users` row rather than
    deleting it, which is exactly the kind of thing a privacy policy must not
