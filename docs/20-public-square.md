@@ -2879,13 +2879,13 @@ finding joins as **§8.8**. Everything below uses §8's numbering.
 | # | bug | status |
 |---|---|---|
 | **8.1** | `vm_layers.author_id` **and** `parent_layer_id` are both `ON DELETE CASCADE` — deleting a user destroys other people's drawings and can take a whole thread | **LIVE.** Verified: both FKs unchanged. docs/21 is a PLAN; the founder's silhouette decision is recorded but **not built**. Still no product deletion flow, while `/privacy:41` promises deletion on request |
-| **8.2** | the sole conversation admin can LEAVE and orphan the conversation | **LIVE, and verified precisely:** `vm_conversation_members` has **three triggers, all BEFORE INSERT or UPDATE** (`_updated_at`, `vm_members_scope`, `vm_members_a_pin`). **There is no DELETE trigger at all**, so `vm_members_delete_self` is unguarded. Track A's self-block covers the self-BAN path (an UPDATE, caught by `vm_pin_member`); **the self-DELETE path is still open** |
+| **8.2** | the sole conversation admin can LEAVE and orphan the conversation | **DONE 2026-09-14 (§29).** Was: **LIVE, verified precisely:** `vm_conversation_members` has **three triggers, all BEFORE INSERT or UPDATE** (`_updated_at`, `vm_members_scope`, `vm_members_a_pin`). **There is no DELETE trigger at all**, so `vm_members_delete_self` is unguarded. Track A's self-block covers the self-BAN path (an UPDATE, caught by `vm_pin_member`); **the self-DELETE path is still open** |
 | **8.3** | `org_find_user_by_email` has no org join — any org admin resolves any email platform-wide | **LIVE.** `prosrc` unchanged. Fix shape corrected in §25.2 — **do not add the join**, it breaks invites |
 | **8.4** | `module_roles_select_member` leaks the module-role census | **LIVE and BLOCKED.** §25.3: every visual-messaging and matchmaking role ranks 0, so `module_has_manager_grant` cannot serve as the replacement read path. Needs those modules rank-mapped first |
-| **8.5** | `addMember` does a bare INSERT, so edge cases surface as raw duplicate-key errors | **LIVE — AND TRACK A'S SELF-BLOCK MADE IT WORSE. See §28.2** |
+| **8.5** | `addMember` does a bare INSERT, so edge cases surface as raw duplicate-key errors | **DONE 2026-09-14 (§29).** Was: LIVE, and Track A's self-block had made it worse — see §28.2 for the mechanism |
 | **8.6** | a departed creator still reads the conversation ROW via `created_by = auth.uid()` | **LIVE.** `vm_conversations_select` unchanged. Recorded as a deliberate remainder in `20260904010000` |
 | **8.7** | self-block was owed and kept being dropped | **DONE.** Track A, `20260910030000`, applied and prod-verified, **6 tests added 2026-09-11** after a handoff audit found it shipped with none |
-| **8.8** | five `vm_*` `FOR ALL` policies carry a redundant read arm | **MIGRATION DRAFTED, UNDER REVIEW, NOT APPLIED** (`20260914010000`). Re-scored LOW as a live exposure (§26); its value is as a precondition. Sibling sweep: §27 |
+| **8.8** | five `vm_*` `FOR ALL` policies carry a redundant read arm | **DONE 2026-09-14, ON PROD (§29).** Re-scored LOW as a live exposure (§26); its value was as a precondition. Sibling sweep: §27 |
 
 ### 28.2 NEW FINDING — self-block leaks through `addMember`'s error message
 
@@ -2930,3 +2930,122 @@ Track A took; 8.3 and 8.4 are this track's; 8.8 is in flight.
 **8.2 and 8.5 are the cheap ones** and both are in `vm_conversation_members` /
 `addMember` territory — one DELETE guard and one error-handling change. **8.1 is
 the dangerous one** and is gated on docs/21 being built, which is a real slice.
+
+---
+
+## 29. SHIPPED 2026-09-14 — §8.8, §8.2 and §8.5, applied to PRODUCTION and verified
+
+Three of §28's eight are now closed. **"Closed" here means closed ON PROD**, per
+the correction CLAUDE.md records about calling a migration shipped when it had
+only reached the repo.
+
+| # | what | state |
+|---|---|---|
+| **8.8** | the five `vm_*` `FOR ALL` policies split | **DONE** — `20260914010000`, commit `11faed5` |
+| **8.2** | the sole conversation admin can no longer leave | **DONE** — `20260914020000`, commit `d16c26f` |
+| **8.5** | self-block no longer leaks through `addMember`'s duplicate key | **DONE** — same commit, app-side, no migration |
+
+**Verification, in CI's exact order after ONE clean reset and seed:** db
+**204/204** (was 189 before this session's work), then e2e **52/52** on the same
+database with no reset between. Typecheck 9/9 forced.
+
+**Prod:** `pnpm migrate:prod` applied both, and
+**`scripts/prod-verify-vm-policy-split.mts` returns 15 ok, 0 failed.** That
+script is new and owed: `prod-verify-migration.ts` parses `create function`
+blocks only, so for `20260914010000` — which defines no function at all — it
+would have reported a **vacuous** 0 failures.
+
+**Two things the prod run is worth remembering for:**
+
+1. **`migrate:prod` printed a scary `Failed to read certificate file …
+   pgdelta-target-ca.crt` error and then `Finished supabase db push.`** The
+   migrations HAD in fact applied. The error is in an auxiliary pg-delta path,
+   not the push. **Neither reading — "it failed" nor "it's fine" — was safe
+   without checking**; the verifier settled it (policies 27 → 37, triggers
+   3 → 4, both with controls).
+2. **The pre-flight run caught a vacuity bug in the verifier itself.** Two
+   checks used `.every()` on a filtered array, which is TRUE for an empty array,
+   so both reported `ok` against a database where the migration had never run.
+   Running the verifier BEFORE applying is what exposed it. Both now require a
+   non-empty subject. *Generalisable: an assertion of the form "all of X are Y"
+   is vacuous until something proves X is non-empty — the vacuity rule in its
+   `.every()` costume.*
+
+### 29.1 Blast radius, measured on prod BEFORE applying
+
+Per the convention Track A added on 2026-09-13. `20260914020000` is a narrowing —
+it refuses a DELETE that used to succeed — so the number it can bite was
+measured rather than assumed: **prod holds 0 visual-messaging conversations and
+0 seats.** Zero blast radius. The guard is pure insurance there today.
+
+---
+
+## 30. TWO MORE LIVE BUGS FOUND WHILE BUILDING §8.2 — NEITHER FIXED
+
+Both are the same family as the trap `20260914020000` was written to avoid, and
+both are **squarely across docs/21's path**, which plans account deletion while
+`/privacy` already promises it.
+
+### 30.1 DELETING AN ORG IS IMPOSSIBLE
+
+`org_members.org_id` references `orgs(id) ON DELETE CASCADE`, and
+`org_members_guard_last_admin` is a BEFORE DELETE trigger with **no cascade
+escape** — no `pg_trigger_depth()` test, no parent-existence test. So the
+cascade fires the guard for the last owner and it raises. Demonstrated inside a
+rolled-back transaction, 2026-09-14:
+
+```
+insert into orgs (name, slug) values ('Cascade Probe','cascade-probe-tmp');
+insert into org_members (... 'owner','active');
+delete from orgs where slug='cascade-probe-tmp';
+-- ERROR:  An org must keep at least one owner or admin
+-- CONTEXT: SQL statement "DELETE FROM ONLY public.org_members WHERE $1 = org_id"
+```
+
+Latent only because there is no delete-an-org surface. **Not fixed: "should
+deleting an org be possible at all, and what happens to its modules' data" is a
+product question**, and it is the same question docs/21 asks about users.
+
+### 30.2 DELETING A USER WHO CREATED ANY CONVERSATION IS IMPOSSIBLE
+
+Worse, because it is on the exact path docs/21 is building.
+
+`vm_conversations.created_by` is nullable and references
+`auth.users(id) ON DELETE SET NULL` — which looks correct. But
+**`vm_pin_conversation` is a BEFORE UPDATE trigger whose body includes
+`new.created_by := old.created_by`**, and Postgres implements `SET NULL` as a
+real UPDATE. So the pin reverts the null, the FK then fails, and the whole user
+deletion aborts:
+
+```
+delete from auth.users where id = <a conversation creator>;
+-- ERROR: insert or update on table "vm_conversations"
+--        violates foreign key constraint "vm_conversations_created_by_fkey"
+```
+
+**This is CLAUDE.md's own recorded gotcha — *`ON DELETE SET NULL` fires the
+referencing table's BEFORE UPDATE triggers* — live in the schema.** That gotcha
+was written after the same mechanism made `vm_moderation_log` rows undeletable;
+the lesson was recorded and the identical shape shipped anyway in a different
+table, because the pin's author was thinking about spoofing, not deletion.
+
+**The pin has an escape (`if vm_can_manage(old.org_id) then return new;`) and it
+does not help**: a cascade runs with no JWT, so `auth.uid()` is null,
+`vm_can_manage` is false, and the pin applies.
+
+**Measured on prod: 0 users currently affected** (nobody has created a
+conversation there), so this is a landmine rather than an outage — but it fires
+the first time account deletion is built on top of it, which is docs/21's whole
+subject. **Recorded, not fixed: the fix is a decision about what `created_by`
+should become, which belongs with the silhouette model.**
+
+### 30.3 The generalisable lesson, for docs/03
+
+Three separate BEFORE-trigger guards on this platform (`org_members_guard_last_admin`,
+`vm_pin_conversation`, and the first draft of `vm_guard_last_conversation_admin`)
+each broke a DELETE they were never meant to govern, because a foreign key's
+`CASCADE` or `SET NULL` action is executed as an ordinary DELETE/UPDATE and
+fires the child's BEFORE triggers. **Any BEFORE DELETE or BEFORE UPDATE trigger
+that RAISES or PINS must state what it does under a cascade** — and
+`pg_trigger_depth() > 1` is the one test that distinguishes a user's own
+statement (depth 1) from a referential action (depth 2). Measured, not assumed.

@@ -4,6 +4,57 @@ The running, dated build journal that used to live in `CLAUDE.md`'s "## Current 
 section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every session)
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
+- **2026-09-14 (TRACK B: the Public Square redesign reached BUILDABLE, and three of its
+  live-bug backlog shipped to PROD; Opus, two migrations, `11faed5` + `d16c26f`).**
+  Continued the docs/20 workstream while a parallel session ran docs/19's module-role half.
+  **Shipped and prod-verified:** `20260914010000` — the five `vm_*` `for all` write policies
+  split into per-command policies so their USING stops granting SELECT; and `20260914020000`
+  — a BEFORE DELETE guard so the sole conversation admin can no longer LEAVE and orphan a
+  conversation (docs/20 §8.2), plus the app-side fix for §8.5. **db 204/204 → e2e 52/52** in
+  CI's exact order after one clean reset+seed; typecheck 9/9 forced. `pnpm migrate:prod`
+  applied both and the new **`scripts/prod-verify-vm-policy-split.mts` returns 15 ok, 0
+  failed** — owed because `prod-verify-migration.ts` parses `create function` blocks only and
+  would have reported a VACUOUS 0 failures for a policy-only migration.
+  **The design half: v3 was killed and v4 survived review.** v3's column revoke on
+  `profiles.email` is a **no-op** — `pg_class.relacl` shows `authenticated=ard`, a TABLE-level
+  grant, and the "seven column grants" it rested on were `information_schema` expanding one
+  table grant into one synthetic row per column. v4 narrows a ROW policy instead. **The
+  regression review that had died on session limits three times finally completed** (split
+  into two narrow agents — the fix now recorded in CLAUDE.md's subagent section): existing
+  client orgs are SAFE, `shares_org_with` has exactly one consumer and zero dependent
+  functions, and nothing anywhere embeds `profiles` as a PostgREST resource.
+  **Four founder decisions recorded, and one of them overturned the recommendation:** display
+  name collected at signup; a delegated moderator sees everything and it is disclosed;
+  invite-only for v1; and self-enrolment eligibility declared in code with a per-org
+  default-off switch — the founder's own shape, which is more general than the one proposed to
+  him because it names no org in code at all. Founder decision 5 (per-org info choice) was
+  restored from "partly superseded" to **deferred**: v4 ships first, the choice slice follows.
+  Privacy copy must describe the mechanism, never a named org — the founder's call, applying
+  §0's principle to prose.
+  **Five findings worth more than the fixes**, all measured live, none previously recorded:
+  (1) **matchmaking's six `for all` policies are LOAD-BEARING** — `mm_matchmaker_can_see` has
+  no `mm_can_manage` disjunct, so splitting them (which docs/20's own fix 3 prescribed
+  platform-wide) would revoke a matchmaking admin's read of the tables it administers. 58 such
+  policies exist; 43 are safe, 6 must not be touched, 9 are unresolved. (2) **Deleting an ORG
+  is impossible** — the cascade into `org_members` trips `org_members_guard_last_admin`, which
+  has no cascade escape. (3) **Deleting a user who CREATED any conversation is impossible** —
+  `vm_pin_conversation` is a BEFORE UPDATE trigger doing `new.created_by := old.created_by`,
+  so it reverts the FK's `SET NULL` and the delete aborts. That is CLAUDE.md's own recorded
+  `ON DELETE SET NULL` gotcha, live in a second table. Both land squarely on docs/21's
+  account-deletion plan. (4) **`module_position_rank` maps only classroom, nail-salon and
+  speed-dating**, so `module_has_manager_grant` is false for vm/matchmaking/synagogue admins —
+  which blocks the `module_roles` census fix AND means those modules' `_update_module_manager`
+  / `_delete_module_manager` policies are already dead. (5) **self-signup sets no display
+  name**, so for every real self-signed-up user their EMAIL is what renders as their name to
+  every co-member — the fixture (seeded names) is what hid it.
+  **Method notes worth keeping.** A `pg_trigger_depth() > 1` test distinguishes a user's own
+  statement (depth 1) from a referential action (depth 2) — measured with a probe trigger, not
+  assumed, after an adversarial review caught the first draft escaping only ONE of this
+  table's THREE cascading foreign keys. Every ratchet was proven to FAIL before being trusted
+  (a `for all` policy planted and caught; the guard trigger disabled and caught). And running
+  the new prod verifier BEFORE applying exposed a vacuity bug in the verifier itself: two
+  `.every()` checks passed against an empty array — *"all of X are Y" is vacuous until
+  something proves X is non-empty.*
 
 - **2026-09-10 (SEAT AUTHORITY FIXED — docs/19's class closed for the four remaining modules;
   Opus, two migrations, `cf63e77`).** Ran as TRACK A while a parallel session took Track B

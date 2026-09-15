@@ -84,9 +84,22 @@ doc.
   a month earlier). **docs/20 §9 records each failure so a fourth is not re-derived.** Decided
   and unchanged throughout: auto-invite pending-until-accepted, two consents (join the space,
   then join each module), superadmin access with privacy-policy-only disclosure, 30-day invite
-  expiry. **Four founder decisions are OPEN and listed in docs/20 §6/§7** — the biggest is that
-  self-signup creates NO display name, so everyone would render as "Someone". Opus, full
-  docs/03 #12 rhythm.
+  expiry. ~~**Four founder decisions are OPEN**~~ **ANSWERED 2026-09-14 (docs/20 §16, §20):
+  display name collected at signup; a delegated moderator sees everything and it is disclosed;
+  INVITE-ONLY for v1 (the auto-invite trigger is simply not installed); self-enrolment
+  eligibility declared in CODE with a per-org default-OFF switch. Founder decision 5 (per-org
+  info choice) is DEFERRED, not superseded — v4 ships first, that slice follows.**
+  **v4 SURVIVED adversarial review (docs/20 §17) and is buildable; v3 is dead — its column
+  revoke is a no-op, `authenticated` holds a TABLE-level grant.** Still blocking before the
+  Public Square org itself: docs/20 §17.8's remaining items, chiefly `org_find_user_by_email`
+  (§8.3 — and do NOT "fix" it by adding an org join, that breaks every invite) and
+  `join_module`, which is unbuildable as specified because a SECURITY DEFINER does not bypass
+  a BEFORE trigger. Opus, full docs/03 #12 rhythm.
+  **Three of docs/20 §8's live bugs SHIPPED AND ARE ON PROD 2026-09-14** (`11faed5`,
+  `d16c26f`, prod-verified 15/15 via the new `scripts/prod-verify-vm-policy-split.mts`):
+  the five `vm_*` `for all` policies are split, the sole conversation admin can no longer
+  leave and orphan a conversation, and self-block no longer leaks through `addMember`'s
+  duplicate-key error. **§8.1, §8.3, §8.4 and §8.6 remain open** — status table in docs/20 §28.
 - **⚠ CORRECTED 2026-09-11: "CLOSED" MEANT CLOSED IN THE REPO, NOT ON PRODUCTION.**
   `pnpm migrate:prod --dry-run` on 2026-09-11 listed `20260904010000` as still PENDING — so the
   cross-org hole below has been **live on prod for a week while this file called it closed**,
@@ -329,6 +342,18 @@ urgent — **there is no account-deletion feature at all** (`deleteUser` appears
 but `/privacy` already promises deletion on request. Trap named in the doc: `ON DELETE SET NULL`
 fires BEFORE UPDATE triggers, which has already bitten this repo once.
 
+- **TWO DELETION LANDMINES, found 2026-09-14, NOT fixed — both block docs/21's account-deletion
+  plan and both are the SAME recorded gotcha (a foreign key's cascade/SET-NULL action fires the
+  child's BEFORE triggers).** (1) **Deleting an ORG is impossible**: the cascade into
+  `org_members` trips `org_members_guard_last_admin`, which has no cascade escape. (2)
+  **Deleting a user who CREATED any conversation is impossible**: `vm_pin_conversation` is a
+  BEFORE UPDATE trigger doing `new.created_by := old.created_by`, so it reverts the FK's
+  `SET NULL` and the delete aborts. Both demonstrated in rolled-back transactions; 0 users
+  affected on prod today, so they are landmines rather than outages. Full detail + the fix
+  shape: **docs/20 §30**. The general rule that falls out — *any BEFORE DELETE/UPDATE trigger
+  that RAISES or PINS must state what it does under a cascade, and `pg_trigger_depth() > 1` is
+  the test that distinguishes a user's own statement (depth 1) from a referential action
+  (depth 2)* — is applied in `20260914020000` and belongs in docs/03.
 - **LATENT BUG, found in passing 2026-09-04, NOT fixed: `profiles.email` IS NEVER SYNCED after a
   user changes their auth email.** `handle_new_user()` sets it once at signup and **no trigger on
   `auth.users` email-change exists** (verified: zero matches for email-sync patterns across every
@@ -482,7 +507,13 @@ Everything below is open but unranked:
   **NO LONGER PURELY OPTIONAL AS OF 2026-09-10 — it now BLOCKS a real fix.** `module_roles`
   reads are org-wide (`module_roles_select_member` is `is_org_member OR is_superadmin`, no
   module/role/self filter), so any org member can enumerate who holds which module role — in
-  `demo-match`, that is the dating pool's membership. Narrowing it needs a replacement read
+  `demo-match`, that is the dating pool's membership.
+  **MEASURED 2026-09-14, and it also kills two policies nobody had noticed were dead:**
+  `module_position_rank`'s body maps ONLY classroom, nail-salon and speed-dating and falls
+  through to 0 for everything else — so `module_has_manager_grant` (needs rank ≥ 2) is FALSE
+  for a visual-messaging admin and a matchmaking admin, which is why the census fix is blocked,
+  **and why `module_roles_update_module_manager` and `module_roles_delete_module_manager` are
+  already dead policies for those three modules today.** Narrowing it needs a replacement read
   path for the people who legitimately administer grants, and the natural one
   (`module_has_manager_grant`) requires rank ≥ 2 — which is FALSE for a matchmaking admin,
   because these three modules sit entirely at rank 0. So the census leak cannot be closed
