@@ -6097,3 +6097,289 @@ describe('visual messaging: the `for all` split preserves manager reach (2026091
     }
   })
 })
+
+// ---------------------------------------------------------------------------
+// THE LAST CONVERSATION ADMIN CANNOT LEAVE (20260914020000), docs/20 §8.2 —
+// and the SELF-BLOCK LEAK through addMember's duplicate key, docs/20 §28.2.
+//
+// `vm_pin_member` already refused to let the last admin be DEMOTED or BANNED
+// away, but it is bound BEFORE UPDATE only and no DELETE trigger existed, while
+// `vm_members_delete_self` permits the self-DELETE. So the one transition the
+// pin exists to prevent was reachable by leaving instead of demoting.
+//
+// FIXTURE NOTE, load-bearing twice over: the new guard returns early for anyone
+// with `vm_can_manage`, exactly as the pin's first branch does. alice is
+// demo-visual's ORG OWNER, so she can never demonstrate the refusal — she is
+// used here only to prove the MANAGER ESCAPE. charlie holds the vm `member`
+// module role and is not an org admin, so he is the only configuration in which
+// the floor is reachable.
+//
+// Touches no seeded state: conversations are created here and deleted in
+// afterAll, leaving demo-visual with none, exactly as the seed intends.
+// ---------------------------------------------------------------------------
+describe('visual messaging: the last conversation admin cannot LEAVE (20260914020000)', () => {
+  const laServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
+
+  let laAdmin: SupabaseClient
+  let laCharlie: SupabaseClient
+  let laDana: SupabaseClient
+  let laAlice: SupabaseClient
+  let laOrg: string
+  let laCharlieId: string
+  let laDanaId: string
+  const laConvIds: string[] = []
+
+  // A fresh conversation whose ONLY active admin seat is charlie's.
+  const laMakeConv = async (title: string) => {
+    const conv = await laAdmin
+      .from('vm_conversations')
+      .insert({ org_id: laOrg, title, created_by: laCharlieId })
+      .select('id')
+      .single()
+    if (conv.error) throw new Error(`fixture conversation failed: ${conv.error.message}`)
+    const id = conv.data!.id as string
+    laConvIds.push(id)
+    const seat = await laAdmin
+      .from('vm_conversation_members')
+      .insert({ org_id: laOrg, conversation_id: id, user_id: laCharlieId, role: 'admin' })
+    if (seat.error) throw new Error(`fixture seat failed: ${seat.error.message}`)
+    return id
+  }
+
+  beforeAll(async () => {
+    if (!laServiceKey) throw new Error('SUPABASE_SERVICE_ROLE_KEY not set — run `pnpm dev` once')
+    laAdmin = createClient(url, laServiceKey, { auth: { persistSession: false } })
+    laCharlie = await signIn('charlie@demo.local')
+    laDana = await signIn('dana@demo.local')
+    laAlice = await signIn('alice@demo.local')
+
+    laOrg = (await laAdmin.from('orgs').select('id').eq('slug', 'demo-visual').single()).data!.id as string
+    laCharlieId = (await laAdmin.from('profiles').select('user_id').eq('email', 'charlie@demo.local').single())
+      .data!.user_id as string
+    laDanaId = (await laAdmin.from('profiles').select('user_id').eq('email', 'dana@demo.local').single()).data!
+      .user_id as string
+  })
+
+  afterAll(async () => {
+    for (const id of laConvIds) await laAdmin.from('vm_conversations').delete().eq('id', id)
+  })
+
+  it('CONTROL: charlie really holds the sole ACTIVE admin seat, and is NOT a manager', async () => {
+    // Both halves matter. Without the first, the refusal below could be about
+    // some other row; without the second, the manager escape would explain it.
+    const conv = await laMakeConv('RLS fixture — last admin control')
+    const { data: admins } = await laAdmin
+      .from('vm_conversation_members')
+      .select('user_id, role, status')
+      .eq('conversation_id', conv)
+      .eq('role', 'admin')
+      .eq('status', 'active')
+    expect(admins?.map((a) => a.user_id), 'the fixture does not have charlie as sole admin').toEqual([laCharlieId])
+
+    const { data: orgSeat } = await laAdmin
+      .from('org_members')
+      .select('role')
+      .eq('org_id', laOrg)
+      .eq('user_id', laCharlieId)
+      .single()
+    expect(orgSeat?.role, 'charlie is an org admin — the manager escape would explain the refusal').toBe('member')
+  })
+
+  it('the sole conversation admin cannot delete their own seat', async () => {
+    const conv = await laMakeConv('RLS fixture — sole admin leaves')
+    const { error } = await laCharlie
+      .from('vm_conversation_members')
+      .delete()
+      .eq('conversation_id', conv)
+      .eq('user_id', laCharlieId)
+    expect(error?.message ?? '', 'the sole conversation admin left and orphaned the conversation').toContain(
+      'at least one admin',
+    )
+
+    const { data: still } = await laAdmin
+      .from('vm_conversation_members')
+      .select('user_id')
+      .eq('conversation_id', conv)
+      .eq('user_id', laCharlieId)
+      .maybeSingle()
+    expect(still?.user_id, 'the seat is gone despite the refusal').toBe(laCharlieId)
+  })
+
+  it('CONTROL: a NON-admin seat still leaves freely — the guard is narrow', async () => {
+    // Proves the refusal above is about the admin floor and not about DELETE.
+    const conv = await laMakeConv('RLS fixture — participant leaves')
+    const seat = await laAdmin
+      .from('vm_conversation_members')
+      .insert({ org_id: laOrg, conversation_id: conv, user_id: laDanaId, role: 'participant' })
+    expect(seat.error, `fixture participant seat failed: ${seat.error?.message}`).toBeNull()
+
+    const { error } = await laDana
+      .from('vm_conversation_members')
+      .delete()
+      .eq('conversation_id', conv)
+      .eq('user_id', laDanaId)
+    expect(error, `an ordinary participant can no longer leave: ${error?.message}`).toBeNull()
+  })
+
+  it('the founder’s remedy works: transfer adminship first, then leave', async () => {
+    // docs/20 §8.2 — "transfer adminship before leaving, as Google Docs
+    // requires". If this failed, the guard would be a trap with no exit.
+    const conv = await laMakeConv('RLS fixture — transfer then leave')
+    const promoted = await laAdmin
+      .from('vm_conversation_members')
+      .insert({ org_id: laOrg, conversation_id: conv, user_id: laDanaId, role: 'admin' })
+    expect(promoted.error, `fixture second admin failed: ${promoted.error?.message}`).toBeNull()
+
+    const { error } = await laCharlie
+      .from('vm_conversation_members')
+      .delete()
+      .eq('conversation_id', conv)
+      .eq('user_id', laCharlieId)
+    expect(error, `the outgoing admin cannot leave even after transferring: ${error?.message}`).toBeNull()
+  })
+
+  it('the MANAGER ESCAPE holds — a vm manager may still remove the last admin', async () => {
+    // Mirrors vm_pin_member's first branch verbatim. A manager is who repairs
+    // an orphaned conversation, so refusing them here would be a new and
+    // inconsistent restriction.
+    const conv = await laMakeConv('RLS fixture — manager removes last admin')
+    const { error } = await laAlice
+      .from('vm_conversation_members')
+      .delete()
+      .eq('conversation_id', conv)
+      .eq('user_id', laCharlieId)
+    expect(error, `the manager escape is gone: ${error?.message}`).toBeNull()
+  })
+
+  it('THE CASCADE ESCAPE: deleting a conversation whose sole admin is seated still works', async () => {
+    // The bug this guard deliberately does NOT inherit from
+    // org_members_guard_last_admin, where the same shape makes deleting an ORG
+    // impossible (docs/20 §29). Without the escape this raises.
+    const conv = await laMakeConv('RLS fixture — cascade')
+    const { error } = await laAdmin.from('vm_conversations').delete().eq('id', conv)
+    expect(error, `deleting a conversation now trips the last-admin guard: ${error?.message}`).toBeNull()
+
+    const { data: seats } = await laAdmin
+      .from('vm_conversation_members')
+      .select('user_id')
+      .eq('conversation_id', conv)
+    expect(seats ?? [], 'the cascade left seats behind').toEqual([])
+  })
+
+  it('SELF-BLOCK LEAK: a re-add attempt on a banned seat raises 23505, which addMember must swallow', async () => {
+    // docs/20 §28.2. Self-block KEEPS the seat and flips it to 'banned' — that
+    // persistence is the mechanism. So re-adding hits the unique constraint,
+    // and surfacing that error told the admin the person had a row, i.e. that
+    // they blocked them rather than left. addMember now ignores code 23505
+    // specifically; this asserts the code it keys on is really what Postgres
+    // returns, so the branch cannot silently stop matching.
+    const conv = await laMakeConv('RLS fixture — self-block re-add')
+    const seat = await laAdmin
+      .from('vm_conversation_members')
+      .insert({ org_id: laOrg, conversation_id: conv, user_id: laDanaId, role: 'participant' })
+    expect(seat.error, `fixture seat failed: ${seat.error?.message}`).toBeNull()
+
+    const banned = await laDana
+      .from('vm_conversation_members')
+      .update({ status: 'banned' })
+      .eq('conversation_id', conv)
+      .eq('user_id', laDanaId)
+      .select('status')
+      .single()
+    expect(banned.data?.status, 'dana could not self-block — the fixture is wrong').toBe('banned')
+
+    const readd = await laAdmin
+      .from('vm_conversation_members')
+      .insert({ org_id: laOrg, conversation_id: conv, user_id: laDanaId, role: 'participant' })
+    expect(readd.error?.code, 'the re-add no longer returns 23505 — addMember’s guard stops matching').toBe('23505')
+
+    // CONTROL: the ban really survived the attempt, which is the property the
+    // whole mechanism rests on.
+    const { data: after } = await laAdmin
+      .from('vm_conversation_members')
+      .select('status')
+      .eq('conversation_id', conv)
+      .eq('user_id', laDanaId)
+      .single()
+    expect(after?.status, 'a re-add lifted the self-block').toBe('banned')
+  })
+
+  it('THE USER-DELETION CASCADE: deleting a user who is a sole conversation admin still works', async () => {
+    // The defect the adversarial review found in the first draft, which tested
+    // `not exists(vm_conversations)` instead of pg_trigger_depth(). That covered
+    // only ONE of this table's three ON DELETE CASCADE parents. Deleting a USER
+    // still raised, because vm_conversations.created_by is SET NULL (so the
+    // conversation survives) while the seat cascades — reproducing the
+    // org_members bug one foreign key over, on the exact path docs/21 is
+    // planning to build.
+    const { data: created, error: createErr } = await laAdmin.auth.admin.createUser({
+      email: `soleadmin-${Date.now()}@demo.local`,
+      password: 'password123',
+      email_confirm: true,
+    })
+    expect(createErr, `fixture user creation failed: ${createErr?.message}`).toBeNull()
+    const doomedId = created!.user!.id
+    const conv = await laMakeConv('RLS fixture — user deletion cascade')
+
+    // Make the doomed user the SOLE admin. Order matters and the first draft of
+    // this test got it wrong in an instructive way: it deleted charlie's seat
+    // FIRST and ignored the result, so the new guard refused that delete (he
+    // was the last admin at that moment), charlie stayed, and the assertion
+    // below failed against a conversation that still had two admins. An
+    // unchecked `await` manufacturing a confident wrong answer — the exact trap
+    // docs/03's test-discipline section records.
+    const seat = await laAdmin
+      .from('vm_conversation_members')
+      .insert({ org_id: laOrg, conversation_id: conv, user_id: doomedId, role: 'admin' })
+    expect(seat.error, `fixture second admin failed: ${seat.error?.message}`).toBeNull()
+
+    const removeCharlie = await laAdmin
+      .from('vm_conversation_members')
+      .delete()
+      .eq('conversation_id', conv)
+      .eq('user_id', laCharlieId)
+    expect(removeCharlie.error, `could not hand over to the doomed user: ${removeCharlie.error?.message}`).toBeNull()
+
+    const { data: admins } = await laAdmin
+      .from('vm_conversation_members')
+      .select('user_id')
+      .eq('conversation_id', conv)
+    expect(admins?.map((a) => a.user_id), 'the doomed user is not the sole seat holder').toEqual([doomedId])
+
+    const { error: delErr } = await laAdmin.auth.admin.deleteUser(doomedId)
+    expect(delErr, `deleting a user now trips the last-admin guard: ${delErr?.message}`).toBeNull()
+
+    const { data: seats } = await laAdmin
+      .from('vm_conversation_members')
+      .select('user_id')
+      .eq('conversation_id', conv)
+    expect(seats ?? [], 'the user cascade left the seat behind').toEqual([])
+  })
+
+  it('a conversation admin may remove ANOTHER admin while the floor still holds', async () => {
+    // Exercises vm_members_delete_admin rather than vm_members_delete_self.
+    // Note the REFUSAL direction is not reachable through this policy: removing
+    // "the last admin" as a conversation admin means removing yourself, which
+    // routes through delete_self and is the test above. Stated so the gap is
+    // known rather than assumed covered.
+    const conv = await laMakeConv('RLS fixture — admin removes admin')
+    const second = await laAdmin
+      .from('vm_conversation_members')
+      .insert({ org_id: laOrg, conversation_id: conv, user_id: laDanaId, role: 'admin' })
+    expect(second.error, `fixture second admin failed: ${second.error?.message}`).toBeNull()
+
+    const { error } = await laCharlie
+      .from('vm_conversation_members')
+      .delete()
+      .eq('conversation_id', conv)
+      .eq('user_id', laDanaId)
+    expect(error, `an admin can no longer remove a co-admin: ${error?.message}`).toBeNull()
+
+    const { data: left } = await laAdmin
+      .from('vm_conversation_members')
+      .select('user_id')
+      .eq('conversation_id', conv)
+      .eq('role', 'admin')
+    expect(left?.map((r) => r.user_id), 'the wrong admin was removed').toEqual([laCharlieId])
+  })
+})

@@ -197,7 +197,26 @@ export async function addMember(orgSlug: string, conversationId: string, formDat
     user_id: profile.user_id,
     role: 'participant',
   })
-  fail(error, 'Add member failed')
+
+  // 23505 = unique_violation on (conversation_id, user_id): the person ALREADY
+  // HAS A SEAT. That is deliberately NOT surfaced, because the two cases it
+  // covers MUST be indistinguishable to the caller:
+  //
+  //   * they are already an active member — harmless, nothing to do; or
+  //   * they SELF-BLOCKED. `20260910030000` deliberately KEEPS the seat row and
+  //     flips it to 'banned'; that persistence is the entire mechanism, and is
+  //     exactly what stops a conversation admin undoing the block by re-adding.
+  //
+  // Reporting the error told the admin the person has a row — and since LEAVING
+  // deletes the row (so a re-add would succeed), an error meant "they did not
+  // leave, they blocked you", handed to the very person self-block exists to
+  // protect against. Self-block is the platform's only user-level block
+  // (CLAUDE.md), so that confirmation is the whole thing worth withholding.
+  //
+  // Deliberate silence, not an oversight: the page renders no member roster
+  // (it reads only the caller's own seat), so a no-op and a real add look
+  // identical to the admin either way.
+  if (error && error.code !== '23505') fail(error, 'Add member failed')
   revalidatePath(`/o/${orgSlug}/m/visual-messaging/conversations/${conversationId}`)
 }
 
