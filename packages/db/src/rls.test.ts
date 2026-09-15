@@ -4139,6 +4139,20 @@ type SeatMembership = {
   accepted_at: string | null
 }
 
+// The MODULE-ROLE dimension (20260915010000). Deliberately a separate type from
+// SeatMembership: the two revocations are different acts with different
+// blast radii, and conflating them is how the second gap hid behind the first.
+// scope_ref is load-bearing — classroom enrolment is a SCOPED grant and
+// restoring it as global would silently widen the grant instead of putting it
+// back (module_roles_identity_uniq is NULLS NOT DISTINCT over the five columns).
+type SeatGrant = {
+  org_id: string
+  user_id: string
+  module_key: string
+  role: string
+  scope_ref: string | null
+}
+
 describe('seat authority: a module roster row requires ACTIVE org membership (20260910040000)', () => {
   const seatServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
   const seatDbUrl = process.env.DATABASE_URL ?? 'postgresql://postgres:postgres@127.0.0.1:54322/postgres'
@@ -4193,6 +4207,12 @@ describe('seat authority: a module roster row requires ACTIVE org membership (20
   let seatSalTimeOffId = '' // SEEDED
   let seatSalApptControlId = '' // fixture, checked_in -> used by the CONTROL update
   let seatSalApptNegativeId = '' // fixture, checked_in -> used by the NEGATIVE update
+  // A THIRD appointment, for the ROLE-dimension negative (20260915010000). It
+  // gets its own row for the same reason the org-dimension negative does: if
+  // the write ever DOES land (i.e. the migration is missing), the row is
+  // consumed, and sharing it would make the other test pass vacuously against
+  // an already-`in_progress` row on the next run.
+  let seatSalApptRoleNegativeId = ''
 
   // Classroom fixture.
   let seatClsClassId = ''
@@ -4209,7 +4229,17 @@ describe('seat authority: a module roster row requires ACTIVE org membership (20
   // CI-ORDER GUARD at the end compares against it exactly.
   let seatMembersBaseline: string[] = []
 
+  // Same two structures for the MODULE-ROLE dimension (20260915010000). A
+  // leaked grant revocation is every bit as destructive to the downstream e2e
+  // run as a leaked membership one — it would silently un-enrol a demo student
+  // or un-badge the demo stylist — so it gets the same snapshot/restore/guard
+  // treatment rather than a best-effort teardown.
+  const seatTouchedGrants = new Map<string, SeatGrant>()
+  let seatGrantsBaseline: string[] = []
+
   const seatKey = (orgId: string, userId: string) => `${orgId}|${userId}`
+  const seatGrantKey = (g: { org_id: string; user_id: string; module_key: string; role: string }) =>
+    `${g.org_id}|${g.user_id}|${g.module_key}|${g.role}`
 
   async function seatReadMembership(orgId: string, userId: string): Promise<SeatMembership | null> {
     const r = await seatAdmin
@@ -4316,6 +4346,123 @@ describe('seat authority: a module roster row requires ACTIVE org membership (20
     }
   }
 
+  // ---- MODULE-ROLE dimension helpers (20260915010000) --------------------
+  async function seatSnapshotGrants(): Promise<string[]> {
+    const r = await seatAdmin.from('module_roles').select('org_id, user_id, module_key, role, scope_ref')
+    expect(r.error, `service-role snapshot of module_roles failed: ${JSON.stringify(r.error)}`).toBeNull()
+    return (r.data ?? [])
+      .map((g) => `${g.org_id}|${g.user_id}|${g.module_key}|${g.role}|${g.scope_ref ?? 'GLOBAL'}`)
+      .sort()
+  }
+
+  async function seatReadGrant(
+    orgId: string,
+    userId: string,
+    moduleKey: string,
+    role: string,
+  ): Promise<SeatGrant | null> {
+    const r = await seatAdmin
+      .from('module_roles')
+      .select('org_id, user_id, module_key, role, scope_ref')
+      .eq('org_id', orgId)
+      .eq('user_id', userId)
+      .eq('module_key', moduleKey)
+      .eq('role', role)
+      .maybeSingle()
+    expect(r.error, `service-role read of module_roles failed: ${JSON.stringify(r.error)}`).toBeNull()
+    return (r.data as SeatGrant | null) ?? null
+  }
+
+  // Refuses to manufacture the condition unless a real grant is there to
+  // revoke — the same discipline the membership helper uses, for the same
+  // reason: every negative below would otherwise pass vacuously.
+  async function seatRevokeRole(
+    orgId: string,
+    userId: string,
+    moduleKey: string,
+    role: string,
+    label: string,
+  ): Promise<SeatGrant> {
+    const before = await seatReadGrant(orgId, userId, moduleKey, role)
+    expect(
+      before,
+      `CONTROL: ${label} holds no ${moduleKey}/${role} grant to revoke — the negatives below would be vacuous`,
+    ).not.toBeNull()
+
+    seatTouchedGrants.set(seatGrantKey(before!), before!)
+
+    // The service role bypasses module_roles_guard_hierarchy's rank rules
+    // (auth.uid() is null for it — verified in the live function body), and
+    // none of the roles revoked here is a director, so
+    // module_roles_guard_last_director does not fire either.
+    const del = await seatAdmin
+      .from('module_roles')
+      .delete()
+      .eq('org_id', orgId)
+      .eq('user_id', userId)
+      .eq('module_key', moduleKey)
+      .eq('role', role)
+    expect(del.error, `fixture could not revoke ${label}'s ${moduleKey}/${role} grant: ${JSON.stringify(del.error)}`)
+      .toBeNull()
+    expect(
+      await seatReadGrant(orgId, userId, moduleKey, role),
+      `${label}'s ${moduleKey}/${role} grant survived the fixture delete — the condition was never created`,
+    ).toBeNull()
+    return before!
+  }
+
+  async function seatRestoreRole(snap: SeatGrant) {
+    // scope_ref is restored EXACTLY as snapshotted. Restoring a scoped grant
+    // as global would look like a successful restore and silently widen a demo
+    // student's enrolment to every class in the org.
+    const res = await seatAdmin.from('module_roles').insert({
+      org_id: snap.org_id,
+      user_id: snap.user_id,
+      module_key: snap.module_key,
+      role: snap.role,
+      scope_ref: snap.scope_ref,
+    })
+    expect(
+      res.error,
+      `GRANT RESTORE FAILED for ${snap.user_id} (${snap.module_key}/${snap.role}) — CI runs e2e on this same database with no reset: ${JSON.stringify(res.error)}`,
+    ).toBeNull()
+    const back = await seatReadGrant(snap.org_id, snap.user_id, snap.module_key, snap.role)
+    expect(back, `GRANT RESTORE left ${snap.user_id} without their ${snap.module_key}/${snap.role} grant`).not.toBeNull()
+    expect(
+      back!.scope_ref ?? 'GLOBAL',
+      `GRANT RESTORE changed the SCOPE of ${snap.user_id}'s ${snap.module_key}/${snap.role} grant`,
+    ).toBe(snap.scope_ref ?? 'GLOBAL')
+    seatTouchedGrants.delete(seatGrantKey(snap))
+  }
+
+  async function seatWithModuleRoleRevoked(
+    orgId: string,
+    userId: string,
+    moduleKey: string,
+    role: string,
+    label: string,
+    body: () => Promise<void>,
+  ) {
+    const snap = await seatRevokeRole(orgId, userId, moduleKey, role, label)
+    try {
+      await body()
+    } finally {
+      await seatRestoreRole(snap)
+    }
+  }
+
+  // The assertion that makes every test below a ROLE-dimension test and not an
+  // accidental re-run of the org-dimension ones: org membership must still be
+  // ACTIVE while the role is gone. Without this, a passing negative could just
+  // be 20260910040000 working.
+  async function seatExpectStillOrgMember(orgId: string, userId: string, label: string) {
+    const m = await seatReadMembership(orgId, userId)
+    expect(
+      m?.status,
+      `${label} is not an ACTIVE org member during a ROLE-only revocation — this test would then be proving the ORG dimension, not the role one`,
+    ).toBe('active')
+  }
+
   const seatOrgId = async (slug: string) => {
     const r = await seatAdmin.from('orgs').select('id').eq('slug', slug).single()
     if (r.error) throw new Error(`fixture could not resolve org ${slug}: ${r.error.message}`)
@@ -4344,6 +4491,7 @@ describe('seat authority: a module roster row requires ACTIVE org membership (20
     seatBob = await signIn('bob@demo.local')
 
     seatMembersBaseline = await seatSnapshotMembers()
+    seatGrantsBaseline = await seatSnapshotGrants()
 
     seatOrgA = await seatOrgId('demo-a')
     seatOrgMatch = await seatOrgId('demo-match')
@@ -4584,6 +4732,11 @@ describe('seat authority: a module roster row requires ACTIVE org membership (20
       })
       seatSalApptControlId = await seatInsert('sal_appointments', mkAppt(48), 'salon appointment (control)')
       seatSalApptNegativeId = await seatInsert('sal_appointments', mkAppt(52), 'salon appointment (negative)')
+      seatSalApptRoleNegativeId = await seatInsert(
+        'sal_appointments',
+        mkAppt(56),
+        'salon appointment (role-dimension negative)',
+      )
     }
 
     // ---- CLASSROOM --------------------------------------------------------
@@ -4663,10 +4816,19 @@ describe('seat authority: a module roster row requires ACTIVE org membership (20
       }
     }
 
+    // Same belt-and-braces for module-role grants (20260915010000).
+    for (const snap of [...seatTouchedGrants.values()]) {
+      try {
+        await seatRestoreRole(snap)
+      } catch {
+        // seatRestoreRole already asserted; the CI-ORDER GUARD test reports it.
+      }
+    }
+
     if (seatClsFileRowId) await seatAdmin.from('cls_submission_files').delete().eq('id', seatClsFileRowId)
     if (seatClsStoragePath) await seatAdmin.storage.from('cls-submissions').remove([seatClsStoragePath])
 
-    for (const id of [seatSalApptControlId, seatSalApptNegativeId]) {
+    for (const id of [seatSalApptControlId, seatSalApptNegativeId, seatSalApptRoleNegativeId]) {
       if (id) await seatAdmin.from('sal_appointments').delete().eq('id', id)
     }
 
@@ -5759,6 +5921,433 @@ describe('seat authority: a module roster row requires ACTIVE org membership (20
   })
 
   // =========================================================================
+  // 5b. THE MODULE-ROLE DIMENSION (20260915010000)
+  //
+  // Everything above revokes ORG MEMBERSHIP. These revoke only the MODULE
+  // ROLE and leave org membership ACTIVE — the founder's own question on
+  // 2026-09-10 ("still part of the org but no longer part of the module") and
+  // arguably the more common administrative act of the two.
+  //
+  // EVERY test here calls seatExpectStillOrgMember() inside the revocation.
+  // That is not decoration: without it, a passing negative could simply be
+  // 20260910040000 working, and this whole block would prove nothing new.
+  // =========================================================================
+  describe('module-role dimension: a seat dies when the ROLE dies, org membership intact', () => {
+    it('CONTROL: the migration under test is applied (and names what is missing if not)', async () => {
+      // Same method as the org-dimension control: read the LIVE CATALOG, never
+      // the migration file. PRE-MIGRATION this FAILS and names the un-gated
+      // objects, which explains at a glance why every negative below failed.
+      const sql = postgres(seatDbUrl, { prepare: false, max: 1 })
+      try {
+        // FOUR functions gain the ROLE conjunct. cls_set_preferred_name is
+        // deliberately NOT one of them — it gains the ORG conjunct only (both
+        // adversarial reviews showed the role version would silently stop a
+        // professor renaming herself), so it is asserted separately below
+        // rather than being quietly dropped from the list.
+        const fns = await sql<{ proname: string; role_gated: boolean }[]>`
+          select p.proname::text as proname,
+                 (pg_get_functiondef(p.oid) ilike '%mm_is_matchmaker%'
+                   or pg_get_functiondef(p.oid) ilike '%mm_is_single%'
+                   or pg_get_functiondef(p.oid) ilike '%sal_is_worker%'
+                   or pg_get_functiondef(p.oid) ilike '%cls_is_class_member%') as role_gated
+          from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+          where n.nspname = 'public'
+            and p.proname in ('mm_matchmaker_can_see', 'mm_assignment_covers_me',
+                              'sal_worker_sees_customer', 'cls_reviews_submission')
+          order by p.proname
+        `
+        expect(fns.length, 'the four role-gated functions are not all present').toBe(4)
+        expect(
+          fns.filter((f) => !f.role_gated).map((f) => f.proname),
+          'these functions do NOT consult the module role — 20260915010000 is not applied',
+        ).toEqual([])
+
+        // cls_set_preferred_name: ORG-gated, and it had NO gate of any kind
+        // before this migration, so this still has teeth.
+        const pref = await sql<{ org_gated: boolean }[]>`
+          select pg_get_functiondef(p.oid) ilike '%is_org_member%' as org_gated
+          from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+          where n.nspname = 'public' and p.proname = 'cls_set_preferred_name'
+        `
+        expect(pref.length, 'cls_set_preferred_name is missing').toBe(1)
+        expect(
+          pref[0]!.org_gated,
+          'cls_set_preferred_name has no org-membership gate — 20260915010000 is not applied',
+        ).toBe(true)
+
+        // The policy half, which no function change can reach.
+        const pols = await sql<{ policyname: string; role_gated: boolean }[]>`
+          select policyname::text as policyname,
+                 (coalesce(qual, '') || ' ' || coalesce(with_check, '')) ilike '%_is_%' as role_gated
+          from pg_policies
+          where policyname in ('mm_assignments_select', 'sal_appointments_select',
+                               'sal_appointments_update_worker', 'sal_worker_time_off_select',
+                               'cls_review_assignments_select', 'cls_review_assignments_update_reviewer')
+          order by policyname
+        `
+        expect(pols.length, 'the six role-gated policies are not all present').toBe(6)
+        expect(
+          pols.filter((p) => !p.role_gated).map((p) => p.policyname),
+          'these policies do NOT consult the module role — 20260915010000 is not applied',
+        ).toEqual([])
+      } finally {
+        await sql.end()
+      }
+    })
+
+    // ---- MATCHMAKING ------------------------------------------------------
+    it('mel loses the matchmaker ROLE (still in the org): no questionnaires, no scores, no own assignment row', async () => {
+      // PRE-MIGRATION every assertion here FAILS: mm_matchmaker_can_see and
+      // mm_assignments_select consulted only is_org_member, which is still
+      // true throughout this test by construction.
+      await seatWithModuleRoleRevoked(seatOrgMatch, seatMelId, 'matchmaking', 'matchmaker', 'mel', async () => {
+        await seatExpectStillOrgMember(seatOrgMatch, seatMelId, 'mel')
+
+        const answers = await seatMel.from('mm_answers').select('id')
+        expect(answers.error).toBeNull()
+        expect(answers.data, "an ex-matchmaker still in the org read her singles' QUESTIONNAIRES").toEqual([])
+
+        const scores = await seatMel.from('mm_pair_scores').select('id')
+        expect(scores.error).toBeNull()
+        expect(scores.data, 'an ex-matchmaker still in the org read PAIR SCORES').toEqual([])
+
+        const rpc = await seatMel.rpc('mm_matchmaker_can_see', {
+          check_org_id: seatOrgMatch,
+          check_single_id: seatCharlieId,
+        })
+        expect(rpc.error).toBeNull()
+        expect(rpc.data, 'mm_matchmaker_can_see returned TRUE for someone who no longer holds the role').toBe(false)
+
+        // The §1.3 half-fixed policy: her OWN assignment row, which
+        // 20260910040000 left on a completely bare `matchmaker_id = auth.uid()`
+        // arm.
+        const own = await seatMel.from('mm_matchmaker_assignments').select('id').eq('id', seatMmCharlieAssignmentId)
+        expect(own.error).toBeNull()
+        expect(own.data, 'an ex-matchmaker read her own assignment row through the bare arm').toEqual([])
+
+        // Non-vacuity: the seat and the data both still exist.
+        const seat = await seatAdmin
+          .from('mm_matchmaker_assignments')
+          .select('id')
+          .eq('id', seatMmCharlieAssignmentId)
+        expect(seat.data?.length, 'the assignment row vanished — wrong thing proved').toBe(1)
+        const still = await seatAdmin.from('mm_answers').select('id').eq('user_id', seatCharlieId)
+        expect(still.data!.length, "charlie's answers disappeared mid-test").toBeGreaterThan(0)
+      })
+    })
+
+    it('mel loses the matchmaker ROLE: she reads neither the assigned GROUP nor its roster (§1.4/1.5, the two INLINE arms)', async () => {
+      // These MUST be asserted separately from mm_matchmaker_can_see: they are
+      // inline `exists (...)` arms on mm_groups / mm_group_members, so no
+      // function change reaches them. The adversarial review found the draft
+      // had missed both — the migration would have claimed matchmaking's role
+      // half was closed while an ex-matchmaker still in the org kept reading
+      // every assigned group and its ENTIRE roster of user_ids (in demo-match,
+      // the dating pool's membership).
+      await seatWithModuleRoleRevoked(seatOrgMatch, seatMelId, 'matchmaking', 'matchmaker', 'mel', async () => {
+        await seatExpectStillOrgMember(seatOrgMatch, seatMelId, 'mel')
+
+        const group = await seatMel.from('mm_groups').select('id').eq('id', seatMmGroupId)
+        expect(group.error).toBeNull()
+        expect(group.data, 'an ex-matchmaker still in the org read the GROUP row').toEqual([])
+
+        const roster = await seatMel.from('mm_group_members').select('user_id').eq('group_id', seatMmGroupId)
+        expect(roster.error).toBeNull()
+        expect(roster.data, "an ex-matchmaker still in the org read the group's ENTIRE ROSTER").toEqual([])
+
+        // Non-emptiness: both rows are still there for a legitimate reader.
+        const g = await seatAdmin.from('mm_groups').select('id').eq('id', seatMmGroupId)
+        expect(g.data?.length, 'the fixture group vanished').toBe(1)
+        const r = await seatAdmin.from('mm_group_members').select('id').eq('group_id', seatMmGroupId)
+        expect(r.data?.length, 'the fixture group membership vanished').toBe(1)
+      })
+    })
+
+    it('PIN (not teeth): a single who loses the `single` role still reads WHO is assigned to him', async () => {
+      // mm_assignment_covers_me's FIRST arm (check_target_user_id =
+      // auth.uid()) is deliberately ungated — the caller reading their own
+      // coverage, with no org in scope. 20260915010000 gates only the GROUP
+      // arm. This pins that choice so gating arm 1 later fails a test rather
+      // than silently changing what a person sees about themselves.
+      await seatWithModuleRoleRevoked(seatOrgMatch, seatCharlieId, 'matchmaking', 'single', 'charlie', async () => {
+        await seatExpectStillOrgMember(seatOrgMatch, seatCharlieId, 'charlie')
+        const seen = await seatCharlie
+          .from('mm_matchmaker_assignments')
+          .select('id')
+          .eq('id', seatMmCharlieAssignmentId)
+        expect(seen.error).toBeNull()
+        expect(
+          seen.data?.length,
+          'the own-target arm of mm_assignment_covers_me is no longer ungated — that is deliberate (docs/19 §6); if it was changed on purpose, update this pin',
+        ).toBe(1)
+      })
+    })
+
+    // ---- NAIL SALON -------------------------------------------------------
+    it('dana loses the worker ROLE (still in the org): no customer PII, no appointments, no time off', async () => {
+      // The exploit this closes: a stylist re-badged to the front desk keeps
+      // her org seat, so 20260910040000 does nothing here — yet she kept
+      // reading the name/phone/email/notes of every customer she ever served.
+      await seatWithModuleRoleRevoked(seatOrgSalon, seatDanaId, 'nail-salon', 'worker', 'dana', async () => {
+        await seatExpectStillOrgMember(seatOrgSalon, seatDanaId, 'dana')
+
+        const customers = await seatDana.from('sal_customers').select('id')
+        expect(customers.error).toBeNull()
+        expect(customers.data, "an ex-worker still in the org read customer PII (sal_worker_sees_customer)").toEqual([])
+
+        const appts = await seatDana.from('sal_appointments').select('id')
+        expect(appts.error).toBeNull()
+        expect(appts.data, 'an ex-worker still in the org read appointments through the worker arm').toEqual([])
+
+        const timeOff = await seatDana.from('sal_worker_time_off').select('id')
+        expect(timeOff.error).toBeNull()
+        expect(timeOff.data, 'an ex-worker still in the org read time off through the inline profile arm').toEqual([])
+
+        const rpc = await seatDana.rpc('sal_worker_sees_customer', { check_customer_id: seatSalCustomerId })
+        expect(rpc.error).toBeNull()
+        expect(rpc.data, 'sal_worker_sees_customer returned TRUE for someone who no longer holds the role').toBe(false)
+
+        // Non-vacuity: all three surfaces still hold rows for a real reader.
+        const c = await seatAdmin.from('sal_customers').select('id').eq('id', seatSalCustomerId)
+        expect(c.data?.length, 'the seeded customer vanished').toBe(1)
+        const t = await seatAdmin.from('sal_worker_time_off').select('id').eq('id', seatSalTimeOffId)
+        expect(t.data?.length, 'the seeded time-off row vanished').toBe(1)
+      })
+    })
+
+    it('dana loses the worker ROLE: she can no longer ADVANCE or ANNOTATE an appointment (the WRITE)', async () => {
+      await seatWithModuleRoleRevoked(seatOrgSalon, seatDanaId, 'nail-salon', 'worker', 'dana', async () => {
+        await seatExpectStillOrgMember(seatOrgSalon, seatDanaId, 'dana')
+
+        const before = await seatAdmin
+          .from('sal_appointments')
+          .select('state')
+          .eq('id', seatSalApptRoleNegativeId)
+          .single()
+        expect(before.data?.state, 'the role-negative appointment is not checked_in — the write test cannot run').toBe(
+          'checked_in',
+        )
+
+        const upd = await seatDana
+          .from('sal_appointments')
+          .update({ state: 'in_progress', notes: 'role-dimension NEGATIVE — must never land' })
+          .eq('id', seatSalApptRoleNegativeId)
+          .select('id, state')
+        expect(upd.error).toBeNull()
+        expect(upd.data, "an ex-worker's UPDATE matched a row while she still held org membership").toEqual([])
+
+        const after = await seatAdmin
+          .from('sal_appointments')
+          .select('state, notes')
+          .eq('id', seatSalApptRoleNegativeId)
+          .single()
+        expect(after.data?.state, 'an ex-worker ADVANCED an appointment after losing only her role').toBe('checked_in')
+        expect(after.data?.notes, 'an ex-worker WROTE NOTES after losing only her role').not.toBe(
+          'role-dimension NEGATIVE — must never land',
+        )
+      })
+    })
+
+    // ---- CLASSROOM — including THE LIVE WRITE -----------------------------
+    it('THE LIVE WRITE: an unenrolled peer reviewer can no longer GRADE a current student’s work', async () => {
+      // docs/19's sharpest unaccounted-for finding, and founder decision 3
+      // ("this obviously needs to be fixed"). Before 20260915010000,
+      // cls_review_assignments_update_reviewer was `reviewer_id = auth.uid()
+      // AND locked = false` with no membership and no role conjunct — so
+      // 20260910040000 stopped an offboarded reviewer READING the submission
+      // while leaving them able to WRITE a grade onto it. Here dana keeps her
+      // org seat and loses only the class enrolment, so the org conjunct is
+      // irrelevant by construction and the role conjunct is the only thing
+      // that can deny this.
+      //
+      // dana's classroom grant is SCOPED to the class's node (enrolment is a
+      // scoped grant since slice 2b), which is why cls_is_class_member — not
+      // a global has_module_role wrapper — is the right predicate.
+      await seatWithModuleRoleRevoked(seatOrgA, seatDanaId, 'classroom', 'student', 'dana', async () => {
+        await seatExpectStillOrgMember(seatOrgA, seatDanaId, 'dana')
+
+        const graded = await seatDana
+          .from('cls_review_assignments')
+          .update({ grade: 99, grade_submitted_at: new Date().toISOString() })
+          .eq('id', seatClsReviewAssignmentId)
+          .select('id, grade')
+        expect(graded.error).toBeNull()
+        expect(graded.data, 'an UNENROLLED peer reviewer WROTE A GRADE on a current student’s work').toEqual([])
+
+        // On disk, which is what actually matters.
+        const after = await seatAdmin
+          .from('cls_review_assignments')
+          .select('grade')
+          .eq('id', seatClsReviewAssignmentId)
+          .single()
+        expect(after.data?.grade, 'the grade landed despite the UPDATE reporting no rows').not.toBe(99)
+
+        // And the read half, same revocation.
+        const rpc = await seatDana.rpc('cls_reviews_submission', { check_submission_id: seatClsSubmissionId })
+        expect(rpc.error).toBeNull()
+        expect(rpc.data, 'cls_reviews_submission returned TRUE for an unenrolled reviewer').toBe(false)
+
+        const sub = await seatDana.from('cls_submissions').select('id').eq('id', seatClsSubmissionId)
+        expect(sub.error).toBeNull()
+        expect(sub.data, 'an unenrolled reviewer read the submission ROW').toEqual([])
+
+        const files = await seatDana.from('cls_submission_files').select('id').eq('submission_id', seatClsSubmissionId)
+        expect(files.error).toBeNull()
+        expect(files.data, 'an unenrolled reviewer read the submission FILE rows').toEqual([])
+
+        // §3.2: her own assignment row, previously on a bare reviewer arm.
+        const own = await seatDana.from('cls_review_assignments').select('id').eq('id', seatClsReviewAssignmentId)
+        expect(own.error).toBeNull()
+        expect(own.data, 'an unenrolled reviewer read her own assignment row through the bare arm').toEqual([])
+
+        // Non-vacuity: everything is still there for a legitimate reader.
+        const ra = await seatAdmin.from('cls_review_assignments').select('id').eq('id', seatClsReviewAssignmentId)
+        expect(ra.data?.length, 'the review assignment vanished — wrong thing proved').toBe(1)
+        const s = await seatAdmin.from('cls_submissions').select('id').eq('id', seatClsSubmissionId)
+        expect(s.data?.length, 'the submission vanished — wrong thing proved').toBe(1)
+      })
+    })
+
+    it('cls_set_preferred_name: an ex-ORG-member can no longer rename themselves on a live roster', async () => {
+      // A SECURITY DEFINER function that had NO authority check of any kind
+      // (docs/03 #13 is the rule it broke). The gate is added in its WHERE
+      // clause, so the call still succeeds and simply updates nothing — the
+      // assertion therefore has to read the ROW, not the RPC's return value,
+      // which is void either way.
+      //
+      // DELIBERATELY AN ORG REVOCATION. This test originally revoked the ROLE,
+      // matching an earlier draft of 20260915010000 that gated this function on
+      // cls_is_class_member. Both adversarial reviewers caught that this would
+      // silently stop a PROFESSOR renaming herself — classroom staff hold
+      // GLOBAL grants and cls_is_class_member requires `scope_ref is not null`
+      // — so the migration now applies the ORG conjunct here and nothing else,
+      // and this test follows it. The still-open half (an unenrolled student
+      // who remains listed on the roster) is recorded in docs/19, not asserted
+      // here, because asserting it would pin behaviour the migration
+      // deliberately does not implement.
+      const beforeRow = await seatAdmin
+        .from('cls_class_members')
+        .select('preferred_first_name')
+        .eq('class_id', seatClsClassId)
+        .eq('user_id', seatDanaId)
+        .maybeSingle()
+      expect(beforeRow.data, 'dana has no cls_class_members row — this test would be vacuous').not.toBeNull()
+      const original = beforeRow.data!.preferred_first_name as string | null
+
+      await seatWithMembershipRevoked(seatOrgA, seatDanaId, 'delete', 'dana in demo-a', async () => {
+        const call = await seatDana.rpc('cls_set_preferred_name', {
+          check_class_id: seatClsClassId,
+          first_name: 'OrgRevoked',
+          last_name: 'MustNotLand',
+        })
+        expect(call.error).toBeNull() // a no-op, not an error — by design
+
+        const after = await seatAdmin
+          .from('cls_class_members')
+          .select('preferred_first_name, preferred_last_name')
+          .eq('class_id', seatClsClassId)
+          .eq('user_id', seatDanaId)
+          .single()
+        expect(
+          after.data?.preferred_first_name ?? null,
+          'an ex-org-member renamed themselves on a live class roster',
+        ).toBe(original)
+        expect(after.data?.preferred_last_name, 'the surname landed too').not.toBe('MustNotLand')
+      })
+    })
+
+    it('PIN: a PROFESSOR (global grant, on the roster) can still rename herself — the regression both reviews caught', async () => {
+      // The false revocation that an earlier draft of this migration would have
+      // shipped. alice holds a GLOBAL classroom grant and sits on the roster as
+      // 'professor'; cls_is_class_member is FALSE for her because it requires
+      // `scope_ref is not null`. Note module_scope_covers(NULL, node) returns
+      // TRUE, so coverage is NOT what excludes her — reading coverage alone
+      // would mislead. This test fails if anyone later "tightens"
+      // cls_set_preferred_name to the role conjunct.
+      const call = await alice.rpc('cls_set_preferred_name', {
+        check_class_id: seatClsClassId,
+        first_name: 'Prof',
+        last_name: 'Alice',
+      })
+      expect(call.error).toBeNull()
+      const after = await seatAdmin
+        .from('cls_class_members')
+        .select('preferred_first_name')
+        .eq('class_id', seatClsClassId)
+        .eq('user_id', seatAliceId)
+        .maybeSingle()
+      expect(after.data, 'alice is not on the class roster — this pin would be vacuous').not.toBeNull()
+      expect(
+        after.data?.preferred_first_name,
+        'a professor with a GLOBAL classroom grant can no longer set her own preferred name — cls_set_preferred_name was tightened to the role conjunct, which is the exact regression 20260915010000 avoided on purpose',
+      ).toBe('Prof')
+    })
+
+    // ---- SPEED DATING — ORG dimension only (see the migration header) -----
+    it('sd_participants_update_self: an ex-ORG-member can no longer edit their own participant row', async () => {
+      // The one speed-dating gap NOT entangled with the audience/mentor role
+      // question: this policy was `user_id = auth.uid()` with no org conjunct
+      // at all. The pin trigger blocks the dangerous columns, but checked_in
+      // and the opt-in profile card that paired participants read were
+      // writable by someone who had left the org entirely.
+      //
+      // Deliberately an ORG revocation, not a role one — 20260915010000 adds
+      // is_org_member here and NO role conjunct, because requiring the
+      // 'participant' role would revoke audience and mentor seats, which have
+      // no role of their own.
+      const before = await seatAdmin
+        .from('sd_participants')
+        .select('checked_in')
+        .eq('id', seatSdPartCharlie)
+        .single()
+      expect(before.error, 'the fixture participant row is missing — this test would be vacuous').toBeNull()
+
+      await seatWithMembershipRevoked(seatOrgDating, seatCharlieId, 'delete', 'charlie in demo-dating', async () => {
+        const upd = await seatCharlie
+          .from('sd_participants')
+          .update({ checked_in: !before.data?.checked_in })
+          .eq('id', seatSdPartCharlie)
+          .select('id')
+
+        // TWO ACCEPTABLE SHAPES OF REFUSAL, and which one you get is itself a
+        // finding — measured here, not assumed. PRE-MIGRATION this raises
+        // P0001 'Unknown event <id>': sd_sync_from_event is a BEFORE INSERT OR
+        // UPDATE trigger that re-derives org_id by SELECTing sd_events, and it
+        // is NOT `security definer` (verified live), so once the caller loses
+        // org membership no sd_events_select arm matches for them, the select
+        // finds nothing, and the trigger raises instead of the policy quietly
+        // matching no rows. This is the SAME mechanism CLAUDE.md records for
+        // visual messaging's vm_members_scope — a non-definer scope-sync
+        // trigger silently becomes an access check — and it means docs/19's
+        // sd_participants_update_self finding was already blocked in practice
+        // by that trigger rather than by the (genuinely bare) policy.
+        // 20260915010000's org conjunct here is therefore DEFENCE IN DEPTH, not
+        // the closing of a live hole; unlike visual messaging there is no
+        // created_by-style carve-out that lets anyone resolve the event anyway,
+        // so the trigger blocks uniformly. The assertion accepts either shape
+        // and pins the thing that actually matters: the row does not move.
+        if (upd.error) {
+          expect(
+            upd.error.message,
+            'the self-update failed for an unexpected reason — expected the scope trigger or an RLS refusal',
+          ).toMatch(/Unknown event|row-level security|permission denied/i)
+        } else {
+          expect(upd.data, 'an ex-org-member updated their own participant row').toEqual([])
+        }
+
+        const after = await seatAdmin
+          .from('sd_participants')
+          .select('checked_in')
+          .eq('id', seatSdPartCharlie)
+          .single()
+        expect(after.data?.checked_in, 'an ex-org-member CHANGED their own participant row').toBe(
+          before.data?.checked_in,
+        )
+      })
+    })
+  })
+
+  // =========================================================================
   // 6. CI-ORDER GUARD — must be the LAST describe in this block
   // =========================================================================
   describe('CI-ORDER GUARD: this block leaves org_members exactly as it found it', () => {
@@ -5781,6 +6370,23 @@ describe('seat authority: a module roster row requires ACTIVE org membership (20
 
       const now = await seatSnapshotMembers()
       expect(now, 'org_members differs from the snapshot taken before this block ran').toEqual(seatMembersBaseline)
+    })
+
+    it('every module_roles grant is byte-identical to the pre-block snapshot', async () => {
+      // Added with 20260915010000, which made this block mutate module_roles
+      // as well as org_members. The hazard is identical and arguably worse: a
+      // leaked grant revocation would leave a demo student un-enrolled or the
+      // demo stylist un-badged, and e2e — running next, on this same database,
+      // with no reset — would fail somewhere entirely unrelated. The snapshot
+      // includes scope_ref, because a scoped grant restored as global is a
+      // WIDER grant wearing the right name and a presence-only check misses it.
+      expect(
+        [...seatTouchedGrants.keys()],
+        'a module-role grant revoked by this block was never restored (org|user|module|role keys listed)',
+      ).toEqual([])
+
+      const now = await seatSnapshotGrants()
+      expect(now, 'module_roles differs from the snapshot taken before this block ran').toEqual(seatGrantsBaseline)
     })
   })
 })

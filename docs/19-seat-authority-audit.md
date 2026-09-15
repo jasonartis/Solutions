@@ -8,12 +8,14 @@ and the trigger binding the function-only script cannot see). (2026-09-10, `cf63
 db 183/183 then e2e 52/52 in CI's exact order. FOUR THINGS BELOW ARE STILL
 OPEN; read the dated sections at the END of this doc, not just this one.**
 
-1. **The MODULE-ROLE half** — none of the 8 predicates consults the module role,
-   so revoking a module role while keeping org membership leaves the seat
-   working. Decided in shape, not built.
-2. **Four more items in the same class** the original audit never listed — one
-   is a live WRITE (an offboarded peer reviewer can still grade a current
-   student's work).
+1. **The MODULE-ROLE half — BUILT AND MERGED 2026-09-15 for matchmaking, nail
+   salon and classroom (`20260915010000`), NOT YET ON PROD.** Speed dating's
+   role conjunct is the one piece deliberately deferred, and it is now a
+   **FOUNDER DECISION** (there is no audience or mentor module role to require —
+   see the 2026-09-15 section). db 217/217 → e2e 52/52 in CI's order.
+2. **Four more items in the same class — ALL FOUR FIXED 2026-09-15 in the same
+   migration**, including the live WRITE (an offboarded peer reviewer could
+   still grade a current student's work) per founder decision 3.
 3. **`module_roles` reads are org-wide** (the adjacent census leak) — descoped by
    Track A (blocked on rank-mapping three modules), and **reclaimed by the
    Public Square session on 2026-09-13**, which re-verified it still live.
@@ -708,3 +710,152 @@ bypassed, weakened, or has a bug, the SQL-side conjunct still makes the seat
 worthless. Verified: db suite 206/206 (204 baseline + 2), typecheck clean,
 then pushed and confirmed green on the actual CI run — see the commit for the
 run id.
+
+## 2026-09-15 — THE MODULE-ROLE HALF, BUILT (`20260915010000`). NOT ON PROD YET.
+
+Open items 1 and 2 are closed for three of the four modules, in one migration,
+with the four previously-unaccounted-for findings folded in per founder decision
+3. **Merged and CI-green; `migrate:prod` has NOT run, so by this repo's own
+correction of 2026-09-11 this is NOT "shipped" yet** — it is closed in the repo
+only. Prod application and a policy-aware prod-verify script are the remaining
+steps and need their own go-ahead.
+
+### What changed
+
+Four predicates gained the role conjunct — `mm_matchmaker_can_see`
+(+`mm_is_matchmaker`), `mm_assignment_covers_me`'s GROUP arm (+`mm_is_single`),
+`sal_worker_sees_customer` (+`sal_is_worker`), `cls_reviews_submission`
+(+`cls_is_class_member`) — plus five policies: `mm_assignments_select`'s bare
+matchmaker arm, the two inline matchmaking group arms
+(`mm_groups_select_assigned`, `mm_group_members_select_assigned`), the three
+salon worker arms, `cls_review_assignments_select`, and **the live WRITE
+`cls_review_assignments_update_reviewer`**. `cls_set_preferred_name` gained an
+ORG conjunct (see below). `sd_participants_update_self` gained the org conjunct
+it never had.
+
+### The blocking measurement is now SCRIPTED, not ad hoc
+
+Clean-room finding #4 asked for exactly this.
+`scripts/prod-verify-seat-authority-orphans.mts` gained a **ROLE dimension** and
+a **`--local` mode**, so the mapping is reviewable in one place and re-runnable
+before the next migration instead of being re-derived a third time. It encodes
+the seat→role mapping explicitly, including the three different scope semantics.
+**Result, PROD and LOCAL identical: 0 would-lose-access.** Caveat kept in view:
+`mm_group_members` and `sd_participants` are EMPTY on both databases, so two of
+six mappings rest on reading code, not on data. The script carries a control
+asserting at least one row POSITIVELY holds its mapped role, so a clean sheet
+cannot be a silently broken join.
+
+### GLOBAL vs SCOPED is a cliff, and it nearly shipped a regression
+
+`has_module_role` requires `scope_ref is null`. So `mm_is_*` and
+`sd_is_participant` are **global-only**, `sal_is_worker` ignores scope, and
+`cls_is_class_member` requires scope COVERAGE. **Both adversarial reviewers
+independently caught the same latent false revocation from opposite
+directions:** the draft gated `cls_set_preferred_name` on
+`cls_is_class_member`, and classroom STAFF hold GLOBAL grants — so a professor
+who sits on her own class roster would have silently lost the ability to set her
+own preferred name, with no error, because the function is `returns void`.
+Verified live: alice is a `cls_class_members` row with role `professor` and a
+global grant, and the predicate is false for her.
+
+**The trap inside the trap, worth keeping:** `module_scope_covers(NULL, node)`
+returns **TRUE** — a global grant does cover everything — so the exclusion comes
+from the explicit `scope_ref is not null` filter, NOT from coverage failing.
+Reading coverage alone would tell you the opposite of the truth. That is now
+pinned by a test ("PIN: a PROFESSOR can still rename herself").
+
+### A CORRECTION to this audit's own §"Also still open": `sd_participants_update_self` was already blocked
+
+The policy really was bare (`user_id = auth.uid()`, no org conjunct), but the
+hole was **not reachable**, and the reason is mechanical rather than lucky:
+`sd_sync_from_event` is a BEFORE INSERT OR UPDATE trigger that re-derives
+`org_id` by SELECTing `sd_events`, and it is **NOT `security definer`** — so once
+the caller loses org membership no `sd_events_select` arm matches for them, the
+select finds nothing, and the trigger raises `Unknown event` before the policy is
+ever the deciding factor. Found by the test failing in an unexpected WAY, not by
+reading. **This is the same mechanism recorded for visual messaging's
+`vm_members_scope`** (CLAUDE.md: a non-definer scope-sync trigger silently
+becomes an access check) — and unlike visual messaging there is no
+`created_by`-style carve-out, so it blocks uniformly. The org conjunct added here
+is therefore **defence in depth, not the closing of a live hole.** The test
+accepts either refusal shape and asserts the row does not move.
+
+### STILL OPEN after this migration
+
+1. **FOUNDER DECISION — speed dating's role conjunct.**
+   `sd_participants.seat_type` is `participant | audience | mentor`, and **there
+   is no audience or mentor module role** (speed-dating has only `organizer` and
+   `participant`). So requiring `sd_is_participant` on `sd_owns_participant` /
+   `sd_in_event` / `sd_paired_with` would revoke every audience and mentor seat,
+   and `sd_mentors` keys on `seat_type = 'mentor'` explicitly, where requiring
+   `participant` would be simply wrong. Nothing breaks TODAY: `sd_participants`
+   is empty everywhere and **no app code sets `seat_type` at all** (grepped:
+   zero non-test matches), so audience/mentor is schema-only and unbuilt. But an
+   organizer CAN already mint any `seat_type` for anyone via
+   `sd_participants_write_organize`, with no requirement that the holder hold any
+   speed-dating role. **The question: what role justifies an audience or mentor
+   seat — a new role per seat type, "any speed-dating role", or does the seat
+   genuinely stand alone for observers?** Answering it is a prerequisite for the
+   audience/mentor observer surface, which is already on module 6's list.
+2. **The vm/conversation last-admin floor**, handed over by the Public Square
+   session: both `vm_pin_member`'s floor and `20260914020000`'s new guard count
+   `role = 'admin' and status = 'active'` with **no `is_org_member` conjunct**, so
+   a seat whose holder has left the org still holds the floor open and lets the
+   effective last admin leave. It IS this class, but a different failure mode
+   (lockout, not confidentiality) in a module that took two migrations hours
+   before this one — deliberately its own change rather than widening this one's
+   review surface.
+3. **`cls_set_preferred_name`'s remaining half:** an unenrolled-but-still-in-org
+   member who is still listed on a roster can still rename themselves on it.
+   Needs `class member OR class manager`, i.e. two predicates and an `org_id`
+   derivation the function does not have — new mechanism, which this remediation
+   explicitly rules out. Also still `returns void`, so a refusal is silent; there
+   are zero app callers today, and docs/03 #22's `{ok, reason}` convention
+   applies if one is ever added.
+4. **§5's status filter on `sd_in_event`** — unchanged, still a founder decision.
+
+### THREE LATENT FRAGILITIES, recorded rather than "fixed"
+
+None is live (each needs a row that does not exist), but each turns a working
+feature off SILENTLY if that row appears:
+
+1. **One scoped matchmaker grant would kill that matchmaker's whole console.**
+   `mm_is_matchmaker` is global-only; matchmaking has no scoped-grant UI at all,
+   so every grant is global today. The admin's `mm_can_manage` FOR ALL arm would
+   NOT save them — they are not an admin.
+2. **A GA ever assigned as a peer reviewer loses the reviewer arm** on both the
+   select and the update, because classroom staff grants are global.
+   §3.1–3.3 are safe only BY CONSTRUCTION: reviewers are drawn exclusively from
+   `cls_class_members` rows with role `student`
+   (`grading/[homeworkId]/actions.ts:103`) and `enrollClassMember` always mints a
+   CLASS-SCOPED grant (`manage/actions.ts:92`). Staff are unaffected today
+   because they read and write through the separate `cls_can_manage_class` /
+   `cls_*_write_staff` arms.
+3. **`sal_appointments.worker_id` FKs to `auth.users`, not to
+   `sal_worker_profiles`**, and holding a worker profile does not require the
+   `worker` role — only the dropdown constrains it. A manager or cashier
+   assigned as `worker_id` survives only via `sal_can_operate_location`; grace
+   (manager scoped to Uptown) assigned at another location would lose both the
+   read and the write.
+
+### Verification
+
+Adversarial review: two independent narrow reviewers (per CLAUDE.md's lesson
+that one broad review agent dies on session limits), each run against the LIVE
+database BEFORE the migration was applied anywhere — which is why the migration
+file had to be reviewed before `db reset`, since applying it first would have
+erased the "before" they were comparing to. Both simulated every affected
+predicate as every seeded user, old expression vs new: **zero row-count deltas
+for all eight seeded users across all seven seat surfaces.** Three findings were
+acted on: the two missing inline group arms (§1.4/1.5, added), the
+`cls_set_preferred_name` regression (rewritten), and the three fragilities
+(recorded). **13 new RLS tests**, every one asserting org membership is still
+ACTIVE during a role-only revocation — without that assertion a passing negative
+could just be `20260910040000` working. Pre-migration 8 of them FAIL (teeth);
+the two PINs pass before and after by design. The block's CI-ORDER GUARD gained a
+second test asserting `module_roles` is byte-identical to its pre-block
+snapshot, **including `scope_ref`** — a scoped grant restored as global is a
+WIDER grant wearing the right name, and a presence-only check misses it.
+Verified in CI's exact order on one database with no reset: **db 217/217 → e2e
+52/52**, typecheck 9/9, clean build. Ratchet floor raised 200 → 211.

@@ -4,6 +4,53 @@ The running, dated build journal that used to live in `CLAUDE.md`'s "## Current 
 section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every session)
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
+- **2026-09-15 (docs/19's MODULE-ROLE HALF built; Opus, one migration `20260915010000`,
+  merged and CI-green, NOT on prod).** Closed docs/19 open items 1 and 2 for matchmaking,
+  nail salon and classroom: four predicates gained the role conjunct, five policies were
+  rewritten, and all four of the previously-unaccounted-for findings went in — including
+  **the live WRITE** (`cls_review_assignments_update_reviewer`, where an offboarded peer
+  reviewer could still write a grade onto a current student's work after `20260910040000`
+  had stopped them reading it). Founder decision 3 said fold it in, so it is folded in.
+  **The blocking measurement is now scripted** — `prod-verify-seat-authority-orphans.mts`
+  gained a ROLE dimension and a `--local` mode (docs/19 clean-room #4 asked for exactly
+  that), encoding the seat→role mapping in one reviewable place. Prod and local agree:
+  **0 would-lose-access**, with the honest caveat that two of six rosters are empty
+  everywhere so their mapping rests on code-reading, not data.
+  **The interesting part is what the adversarial review caught.** Two narrow reviewers (one
+  asking only "does this over-revoke?", one only "is it correct?") independently found the
+  SAME latent regression from opposite directions: the draft gated
+  `cls_set_preferred_name` on `cls_is_class_member`, but classroom STAFF hold GLOBAL
+  grants and that predicate requires `scope_ref is not null` — so a professor would have
+  silently lost the ability to set her own preferred name, silently because the function
+  is `returns void`. **Trap inside the trap:** `module_scope_covers(NULL, node)` returns
+  TRUE, so a global grant DOES cover everything and reading coverage alone tells you the
+  opposite of the truth; the exclusion comes from the explicit `scope_ref is not null`
+  filter. Rewritten to the org conjunct and pinned by a test. The review also found two
+  inline matchmaking group arms missing from the draft entirely — the migration would
+  have claimed matchmaking's role half was closed while leaving the group roster readable
+  to an ex-matchmaker.
+  **A correction to docs/19's own open list, found by a test failing in an unexpected
+  WAY:** `sd_participants_update_self`'s bare policy was real but not reachable —
+  `sd_sync_from_event` is a non-`security definer` BEFORE UPDATE trigger that re-derives
+  `org_id` by selecting `sd_events`, so an ex-member trips `Unknown event` before the
+  policy decides anything. Same mechanism already recorded for `vm_members_scope`, and
+  here with no `created_by` carve-out, so it blocks uniformly. The conjunct is defence in
+  depth, not a closed hole.
+  **Deliberately deferred, each recorded rather than quietly dropped:** speed dating's
+  role conjunct is now a FOUNDER DECISION (there is no audience or mentor module role, so
+  requiring `participant` would revoke those seats — and `sd_mentors` keys on
+  `seat_type = 'mentor'` explicitly); the vm last-admin floor handed over by the Public
+  Square session (same class, different failure mode — lockout, not confidentiality); and
+  `cls_set_preferred_name`'s remaining unenrolled-student half, which needs new mechanism
+  docs/19 rules out. Three latent fragilities recorded too, all of the same shape: one
+  scoped grant where a global one is expected silently kills a console.
+  **13 new RLS tests**, each asserting org membership is still ACTIVE during a role-only
+  revocation — otherwise a passing negative is just the previous migration working. 8 of
+  them fail pre-migration (teeth); 2 are PINs that pass either way by design. The
+  CI-ORDER GUARD gained a `module_roles` snapshot check including `scope_ref`, because a
+  scoped grant restored as global is a wider grant wearing the right name. Verified in
+  CI's exact order, one database, no reset: **db 217/217 → e2e 52/52**, typecheck 9/9,
+  clean build; ratchet floor 200 → 211. Full detail: docs/19's 2026-09-15 section.
 - **2026-09-14 (TRACK B: the Public Square redesign reached BUILDABLE, and three of its
   live-bug backlog shipped to PROD; Opus, two migrations, `11faed5` + `d16c26f`).**
   Continued the docs/20 workstream while a parallel session ran docs/19's module-role half.

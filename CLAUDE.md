@@ -328,19 +328,32 @@ non-`security definer` scope-sync trigger silently becomes an access check. **rl
 — the first anywhere asserting a roster row stops conferring authority once membership ends.
 Verified in CI's exact order: **db 183/183 → e2e 52/52**, same database, no reset.
 
-**STILL OPEN, and the founder found it: NONE of the 8 predicates consults the MODULE ROLE, only
-org membership** — so revoking someone's module role while keeping them in the org leaves their
-seat fully working (their event, revealed matches, contact details). Arguably the MORE common
-revocation. **Fix shape + the measurement that must come first** (does every seat holder actually
-hold the matching role? if not, the conjunct revokes LIVE access) → docs/19's 2026-09-10 section.
-Note the zero-orphan evidence is **forced for the RE-INVITE path and genuine for the REMOVAL
-path** — see docs/19's 2026-09-11 post-migration measurement for the precise reading; the
-blunt version ("all memberships are active, so the zero proves nothing") is wrong in one
-direction and "zero orphans, so it never fired" is wrong in the other. Local and prod both
-carry the same shape: **structurally forced, not independent** — all 28 `org_members` rows are `active`, so it could not have come back otherwise.
-**Four more items in the same class that the original audit never listed** are recorded there
-too; the sharpest is a live **WRITE** — `cls_review_assignments_update_reviewer` lets an
-offboarded peer reviewer still grade a current student's work.
+**THE MODULE-ROLE HALF IS NOW BUILT (2026-09-15, `20260915010000`) — MERGED AND CI-GREEN, BUT
+`migrate:prod` HAS NOT RUN, so per this file's own 2026-09-11 correction it is NOT "shipped."**
+Matchmaking, nail salon and classroom: 4 predicates + 5 policies gained the role conjunct, and
+all four previously-unaccounted-for findings went in, including the live **WRITE**
+(`cls_review_assignments_update_reviewer` — an offboarded peer reviewer could still grade a
+current student's work). db 217/217 → e2e 52/52 in CI's order; ratchet floor 200 → 211.
+**The blocking measurement is now SCRIPTED** (`prod-verify-seat-authority-orphans.mts` gained a
+ROLE dimension + `--local`): prod and local both 0 would-lose-access, with two of six rosters
+empty everywhere so their mapping rests on code-reading.
+**FOUR THINGS STAY OPEN, all in docs/19's 2026-09-15 section — one is a founder decision:**
+(1) **SPEED DATING'S ROLE CONJUNCT IS A FOUNDER DECISION** — `seat_type` is
+`participant|audience|mentor` and there is NO audience or mentor role, so requiring
+`participant` would revoke those seats outright; nothing breaks today (table empty everywhere,
+no app code sets `seat_type`) but it blocks the audience/mentor observer surface.
+(2) the vm/conversation **last-admin floor** (handed over by the Public Square session: both
+floors count `admin`+`active` with no `is_org_member`, so a departed member holds the floor open
+and the real last admin can leave) — same class, different failure mode, its own change.
+(3) `cls_set_preferred_name`'s unenrolled-student half. (4) §5's `sd_in_event` status filter.
+**Two lessons worth carrying (full version in docs/19):** GLOBAL vs SCOPED grants are a CLIFF —
+`has_module_role` demands `scope_ref is null`, so gating a staff-facing surface on
+`cls_is_class_member` silently locks out professors/GAs, which is the regression BOTH adversarial
+reviewers caught independently; and `module_scope_covers(NULL, node)` returns **TRUE**, so
+reading coverage alone tells you the opposite of the truth. Also a correction: docs/19's
+`sd_participants_update_self` hole was **already unreachable** — `sd_sync_from_event` is a
+non-definer scope-sync trigger that raises `Unknown event` first (the `vm_members_scope`
+mechanism again), so that conjunct is defence in depth, not a fix.
 
 **DECIDED 2026-09-11 — CARVE `sd_reports` OUT, and build it WITH the module-role fix.** After
 `20260910040000` an ejected speed-dating participant can neither file a safety report nor read
