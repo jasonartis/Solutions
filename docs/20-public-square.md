@@ -10,6 +10,10 @@ DECISION or **VERIFIED LIVE** (a `pg_catalog` read or a file read, dated).
 > table, and determine whether that removes v4's `kind = 'public_square'`
 > carve-out entirely. §31 carries the brief. **If it holds, much of §12 is
 > superseded rather than built.**
+>
+> **§33 is the OPEN REGISTER — every unresolved item in one place.** Read it
+> before starting and before calling anything finished; it also states plainly
+> which questions were settled and which were only parked.
 
 **What IS built and on prod** (§29): `20260914010000` — the five `vm_*`
 `for all` policies split; `20260914020000` — the last-conversation-admin DELETE
@@ -3226,13 +3230,24 @@ moved the schema once already.
 5. **The 30-day-expiry orphan (§7.7) and the privacy copy (§21)** — the copy rule
    is already decided: describe the MECHANISM, never a named org.
 
-### 31.5 The one founder decision still blocking, unchanged
+### 31.5 The founder decisions still blocking — THREE, not one (full register: §33)
 
-**§8.3: should `org_find_user_by_email` stop returning the display name?** It
-trades directly against §3.4, where `find_module_peer` was deliberately given the
-name back so a user can confirm *"did you mean Sarah Cohen?"* before mailing a
-private picture to a typo'd address. **The two must agree.** Ask it with that
-trade named.
+**The blocking one for THIS design (F2 in §33): should `org_find_user_by_email`
+stop returning the display name?** It trades directly against §3.4, where
+`find_module_peer` was deliberately given the name back so a user can confirm
+*"did you mean Sarah Cohen?"* before mailing a private picture to a typo'd
+address. **The two must agree.** Ask it with that trade named.
+
+**Two more need him, and an earlier draft of this section wrongly called the one
+above "the one":**
+
+- **F1 — does v4 survive at all, or does this design replace it?** That is the
+  question §31 exists to answer, and it is the founder's own (§31.1). It should
+  be put to him explicitly once the design is drafted, not assumed either way.
+- **F3 — does the trust-class principle go into docs/00?** (§32.1.) One
+  paragraph, no code. **Answer it BEFORE drafting**, because it changes whether
+  this design is written as an exception or as the first application of a stated
+  rule — and that changes the prose, not just the label.
 
 ### 31.6 The bar this design must clear
 
@@ -3347,3 +3362,75 @@ neither appears in §10.
 - **docs/21** — created by Track A on 2026-09-13, and §16.4 already points at its
   §7 for the silhouette rule that supersedes this document's §8.1 framing. It is
   also where §30's two deletion landmines land.
+
+---
+
+## 33. THE OPEN REGISTER — every unresolved item in one place
+
+**Written 2026-09-15 because it did not exist.** Each item below was recorded
+somewhere in this document, but they had never been listed together, so the only
+way to know what was still open was to read 3,300 lines. **This is the list to
+check before starting work and before claiming anything is finished.**
+
+**Honest framing of where this document stands:** the vigorous design argument of
+2026-09-13/15 **settled the arguments and did not settle the design.** Four
+founder decisions closed, several of them overturning what was recommended to
+him. But the central question — *does v4 survive at all* — is exactly where the
+founder left it when he raised it (§31.1), because the sessions that followed did
+adjacent build work he directed. **That is a parked question, not a concluded
+one.**
+
+### 33.1 NEEDS THE FOUNDER (3)
+
+| # | question | where | blocks |
+|---|---|---|---|
+| **F1** | **Does v4 survive, or does the email-table design replace it?** The founder's own argument says the `kind='public_square'` carve-out should go; if the email-table approach holds, much of §12 is superseded rather than built | **§31** | the whole design; everything in §12 |
+| **F2** | Should `org_find_user_by_email` stop returning the display name? **Trades directly against §3.4**, where `find_module_peer` was deliberately given the name back. The two must agree, so ask them together | §31.5, §25.2 | the §8.3 bug fix |
+| **F3** | Does the **trust-class principle** go into docs/00? One paragraph, no code — but it decides whether this design is *an exception* or *the first application of a stated rule* | §32.1 | nothing, but it changes how F1 should be written |
+
+### 33.2 NEEDS DESIGN WORK (4)
+
+| # | item | where | note |
+|---|---|---|---|
+| **D1** | `join_module` is **unbuildable as specified** — a SECURITY DEFINER does not bypass a BEFORE trigger, and `module_roles_guard_hierarchy` refuses self-grants before any authority check | §17.6 | amending a platform-wide control; its own slice. **The `set_config` shortcut must never be written** |
+| **D2** | `granted_by` for a **self-granted** seat — neither human- nor system-granted, and a recorded decision requires every grant to carry it | §3.7, §16.3b | on the critical path now that the founder asked for self-enrolment |
+| **D3** | Is **self-leaving a module** permitted at all? The symmetry principle is decided (§24.1); the mechanism does not exist — `module_roles` has no self-insert and no self-delete policy | §16.4 | check speed-dating's write-once `contact_shared` first |
+| **D4** | **docs/16 P3** conflicts structurally with §7.9's per-module-review answer — narrow P3 to pool-shaped modules in a dated entry, or withdraw §7.9 | §17.9 | docs/16 now carries a banner pointing here |
+
+### 33.3 DELIBERATELY PARKED (3) — decided to defer, not solved
+
+| # | item | where | when it becomes live again |
+|---|---|---|---|
+| **P1** | **The abuse posture** — user-level ban, rate limits, a non-per-conversation report path. None exists | §7.2, §17.9 | the moment auto-invite is switched on |
+| **P2** | Is **leaving the ORG** reversible? Currently permanent, and the dashboard copy implies otherwise | §16.4(a), §13.2 | same — moot only while invite-only holds |
+| **P3** | The **no-account invite flow** is gone and nobody decided that. It orphans founder decision 8 (30-day expiry) and drops two recorded privacy obligations | §7.7 | if the abuse answer ever becomes "open signup" |
+
+### 33.4 ALSO OPEN, lower stakes but recorded so they are not lost
+
+- **§8.1** `vm_layers` double cascade — deleting a user destroys other people's
+  drawings. Gated on docs/21 being built.
+- **§8.4** the `module_roles` census — **blocked** until vm/matchmaking/synagogue
+  are rank-mapped (§25.3).
+- **§8.6** a departed creator still reads the conversation row — deliberate
+  remainder in `20260904010000`.
+- **§30.1 / §30.2** the two deletion landmines — deleting an ORG, and deleting a
+  user who created any conversation. Both need product decisions; both land on
+  docs/21.
+- **§17.8 items 5–9** — the unique index, `org_member_profiles`' missing
+  `status` filter, `job_requests`/`module_scope_nodes`, the kinds ratchet test,
+  and restating the ACL on the `shares_org_with` replace. **Several of these
+  evaporate if F1 goes the email-table way.**
+- **§22.5** a read-only count of prod users with a NULL display name — offered,
+  never run. It would turn "this could be exposing real people's email addresses
+  as their names" into a fact.
+- **§4's two figures** — the module-predicate role-gated split and the
+  "TEN grant on plain membership" breakdown both need a **body read**, not a
+  regex (§4, corrected 2026-09-15).
+
+### 33.5 What is NOT open
+
+Recorded so nobody re-opens it: the four founder decisions of §16, the
+order-not-scope answer of §20, the privacy-copy rule of §21, the admin-seat
+answer of §24.2, the leaving-symmetry principle of §24.1, and the org/module
+vocabulary of §16.4. **And v1, v2 and v3 are dead — §9 and §9.3 record why, so a
+fourth is not re-derived.**
