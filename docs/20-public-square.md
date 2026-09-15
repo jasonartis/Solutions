@@ -2952,7 +2952,28 @@ finding joins as **§8.8**. Everything below uses §8's numbering.
 | **8.3** | `org_find_user_by_email` has no org join — any org admin resolves any email platform-wide | **LIVE.** `prosrc` unchanged. Fix shape corrected in §25.2 — **do not add the join**, it breaks invites |
 | **8.4** | `module_roles_select_member` leaks the module-role census | **LIVE and BLOCKED.** §25.3: every visual-messaging and matchmaking role ranks 0, so `module_has_manager_grant` cannot serve as the replacement read path. Needs those modules rank-mapped first |
 | **8.5** | `addMember` does a bare INSERT, so edge cases surface as raw duplicate-key errors | **DONE 2026-09-14 (§29).** Was: LIVE, and Track A's self-block had made it worse — see §28.2 for the mechanism |
-| **8.6** | a departed creator still reads the conversation ROW via `created_by = auth.uid()` | **LIVE.** `vm_conversations_select` unchanged. Recorded as a deliberate remainder in `20260904010000` |
+| **8.6** | a departed creator still reads the conversation ROW via `created_by = auth.uid()` | **LIVE.** `vm_conversations_select` unchanged. Recorded as a deliberate remainder in `20260904010000`. **AND IT TURNS OUT TO BE LOAD-BEARING FOR SOMETHING ELSE — see below** |
+
+> **§8.6's `created_by` arm is now the DIAGNOSTIC for a whole class — docs/03 #23,
+> added 2026-09-15 (`a96e2ad`) by the parallel session.** The convention is *a
+> non-`security definer` scope-sync trigger is also an access check*, and the
+> tell for which behaviour you will get is **whether the PARENT's select policy
+> carries a self-referential arm**:
+> - `vm_conversations_select` HAS `created_by = auth.uid()` — so visual
+>   messaging behaves **asymmetrically**. A banned member who CREATED the
+>   conversation still resolves the parent, reaches `vm_pin_member`, and is
+>   stopped by a different mechanism than everyone else (who are stopped earlier,
+>   by the scope trigger failing to resolve the parent at all).
+> - `sd_events_select` has no such arm — so speed dating blocks **uniformly**.
+>
+> **Three instances, three different consequences**: vm self-block (where the
+> trigger is the REAL guarantee, not the one its migration header documents),
+> `sd_participants_update_self` (where it makes a real policy unreachable), and
+> `20260914010000`'s forward hazard (§17.1's fix must NOT be "tidied up" by
+> making that trigger definer — doing so would silently remove self-block's
+> actual enforcement). **The convention's closing rule is the one that matters:
+> establish what one of these is currently enforcing BEFORE changing it, because
+> twice now the answer has been "more than its header claims."**
 | **8.7** | self-block was owed and kept being dropped | **DONE.** Track A, `20260910030000`, applied and prod-verified, **6 tests added 2026-09-11** after a handoff audit found it shipped with none |
 | **8.8** | five `vm_*` `FOR ALL` policies carry a redundant read arm | **DONE 2026-09-14, ON PROD (§29).** Re-scored LOW as a live exposure (§26); its value was as a precondition. Sibling sweep: §27 |
 
