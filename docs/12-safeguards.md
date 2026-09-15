@@ -10,22 +10,26 @@ rot; pipelines don't.
 1. **CI gates every deploy.** Every push runs typecheck → build → RLS tests →
    the full e2e suite; the Vercel deploy job runs ONLY on green. A red build
    cannot reach production through the normal path.
-   **INCOMPLETE, FOUND 2026-09-04 — read `.github/workflows/ci.yml` yourself
-   before trusting this line.** "RLS tests" names `pnpm --filter @platform/db
-   test` specifically. There is NO step running `pnpm test` / `turbo run
-   test` / any per-module `pnpm --filter @modules/<key> test` — so every
-   module's OWN vitest suite (`modules/speed-dating/src/rotation.test.ts` and
-   its siblings across every module) has **never once been run by CI**, only
-   ever manually by whoever built it. Found as a side effect of adding 21 new
-   speed-dating unit tests this session and noticing CI's green run never
-   mentioned them. **Not fixed here, deliberately**: adding a new required CI
-   step is a shared-pipeline change (this session's own instructions list
-   "modifying CI/CD pipelines" as something to confirm before doing, and a
-   concurrent session was actively pushing at the time this was found — an
-   untested new step could break CI for reasons having nothing to do with
-   either session's actual work). Flagged for the founder to decide: add a
-   `pnpm test` (or `turbo run test`) step to `ci.yml`, verifying it passes
-   clean across every module first.
+   **FOUND 2026-09-04, FIXED 2026-09-14 (founder-initiated, no DB touched).**
+   "RLS tests" named `pnpm --filter @platform/db test` specifically — there was
+   NO step running `pnpm test` / `turbo run test` / any per-module
+   `pnpm --filter @modules/<key> test`, so every module's OWN vitest suite
+   (`modules/speed-dating/src/rotation.test.ts` and its siblings across every
+   module) had **never once been run by CI**, only ever manually by whoever
+   built it. Found as a side effect of adding 21 new speed-dating unit tests
+   in an earlier session and noticing CI's green run never mentioned them.
+   **Fix:** `.github/workflows/ci.yml` now runs
+   `pnpm exec turbo run test --filter='!@platform/db' --concurrency=1` right
+   after `pnpm typecheck` — before Supabase is even started, since these four
+   suites (classroom, matchmaking, speed-dating, synagogue-schedules; nail-salon
+   and visual-messaging have no package.json and no test files, so turbo never
+   saw them and there was nothing to add) are pure logic with no DB dependency.
+   `@platform/db` stays excluded from this step and keeps running later, after
+   seed, exactly as before — this only adds the four module suites CI never
+   ran. Verified clean locally first (`--force`, no cache reliance): 4/4
+   packages, 107 tests, all green. **CI itself is the verification of
+   record for a CI change** — see the dated note this same day for the actual
+   pushed-run result, not just the local pass.
    **The mechanism is `needs: check` inside the workflow, NOT a branch rule** —
    worth stating precisely, because the two get conflated. If `check` fails,
    `deploy` never runs, so no production deployment is created; that is a
