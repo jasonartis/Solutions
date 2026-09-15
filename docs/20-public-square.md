@@ -1991,12 +1991,21 @@ v4 adds to it, so P1-8 is newly worse, not unchanged.)
 
 ### 17.8 The remaining required changes, consolidated
 
-**Blocking before any build:**
+**Blocking before any build — STATUS UPDATED 2026-09-15, read the markers before
+working this list:**
 
-1. Split the five `vm_*` `FOR ALL` policies (§17.1).
-2. Bound `org_find_user_by_email` (§17.2).
-3. Answer the self-enrolment default — (i)/(ii)/(iii) (§17.5, §18.1).
-4. Decide `join_module`'s guard amendment, or drop §3.7 from v4's scope (§17.6).
+1. ~~Split the five `vm_*` `FOR ALL` policies (§17.1).~~ **DONE AND ON PROD** —
+   `20260914010000`, §29. Do not redo it.
+2. **STILL BLOCKING.** Bound `org_find_user_by_email` (§17.2) — **but NOT by
+   adding an org join, which breaks every invite (§25.2).** Needs the §31.5
+   founder decision first.
+3. ~~Answer the self-enrolment default — (i)/(ii)/(iii).~~ **ANSWERED by the
+   founder 2026-09-14 (§18.4), and his shape beat all three options offered**:
+   eligibility declared in code, per-org switch, default OFF, no org named in
+   code. §17.5's three-way question is closed.
+4. **STILL BLOCKING.** Decide `join_module`'s guard amendment, or drop §3.7 from
+   v4's scope (§17.6) — it is unbuildable as specified, because a SECURITY
+   DEFINER does not bypass a BEFORE trigger.
 
 **Required, non-blocking:**
 
@@ -2013,16 +2022,19 @@ v4 adds to it, so P1-8 is newly worse, not unchanged.)
    growth is syntactically visible (§17.4's polarity/uniqueness tension).
 9. Restate `security definer`, `stable`, `set search_path = public` and the full
    intended ACL on the `create or replace`.
-10. Read `org_members_guard_last_admin`'s body — it also fires on `org_members`
-    INSERT/UPDATE and its behaviour on a null-`auth.uid()` pending insert is
-    **unread by anyone**.
+10. ~~Read `org_members_guard_last_admin`'s body.~~ **DONE 2026-09-14, and it
+    found a live bug: deleting an ORG is impossible, because the cascade into
+    `org_members` trips that guard, which has no cascade escape (§30.1).** Its
+    behaviour on a null-`auth.uid()` pending INSERT is still unread — the guard
+    returns early for `auth.uid() is null` via the rank ladder's bypass, but that
+    was not exercised.
 11. Correct §10's stale-docs list: **add docs/00** (docs/16 checklist item 1,
     which gates the rest) and **docs/21**.
 
 **Corrections owed inside this document** — the coherence review found 12 stale
 claims; **three actively mis-instruct a builder and are fixed in §17.9**: §1's
 history ends at v3, §2's flow still builds the auto-invite trigger §16.3 cancelled,
-and §5 step 4 still lists it as build work. The rest are listed there.
+and §5 step 4 still lists it as build work. **The other nine are listed in §32.3** — that pointer originally said §17.9, which is a different table, and the list had never been written down.
 
 **One cross-reference error, mine:** §16.3b says `join_module` abuse was "sent to
 the adversarial review as attack 6." **Wrong — §14's attack 6 is the auto-invite
@@ -3176,3 +3188,102 @@ was not what the doc assumed.** So —
   this, including v4 (§17.1) and my own first draft of `20260914020000`.
 - Every negative result carries a control.
 - Nothing reaches a migration before the review returns.
+
+---
+
+## 32. RECOVERED FROM THE SESSION TRANSCRIPT, 2026-09-15
+
+Found by auditing the 09-13/09-15 session for state that existed only in chat,
+before closing it. Each of these would have had to be re-derived.
+
+### 32.1 The trust-class paragraph — drafted, asked about, NOT answered
+
+§17.4 records that docs/16's checklist item 1 (the trust-class principle into
+docs/00) is untracked and that adopting it would turn v4 from a carve-out into
+the first application of a stated rule. **What it does not record is the actual
+wording, which the founder asked for on 2026-09-13 and which is the whole cost
+of the item.** Drafted then, unanswered since:
+
+> **Organizations carry a trust class.** In a CLOSED org, membership is granted
+> by a human who knows both parties, so co-membership may be treated as evidence
+> of a relationship. In an OPEN org it may not. **Any policy that widens
+> visibility because two users share an org must state which class it assumes.**
+
+**The argument for it, in one line:** today every security predicate treats
+co-membership as meaningful — `shares_org_with` effectively says *you share an
+org with this person, therefore you may see who they are.* **That inference is
+sound in Pozna and false in a public square**, and nothing in the schema says so.
+
+**The argument against, which is real:** extract-don't-speculate. There is one
+open org, so this is a principle about a class with one member.
+**Counter-argument:** the mechanism is being built regardless, so the paragraph
+describes what is being done rather than predicting anything.
+
+**FOUNDER DECISION, still open.** It costs one paragraph in docs/00 and no code.
+It is not blocking, but it changes whether v4 (or its email-table successor) is
+*an exception* or *an application* — and §31's design should know which it is
+before it is written.
+
+### 32.2 A manager is EXEMPT from the `org_id` pin, and can create orphaned children
+
+Found by the adversarial review of `20260914010000` and not recorded with it,
+because it was scored LOW and is zero-row today.
+
+**`vm_layers_before_write` and `vm_pin_conversation` both `return new` early when
+`vm_can_manage(old.org_id)`** — the same manager escape that appears throughout
+this module. The effect is that **a manager who belongs to two orgs can MOVE a
+conversation from org A to org B**, and its children (`vm_layers`,
+`vm_conversation_members`, `vm_reactions`, `vm_flags`) keep `org_id = A`.
+
+The child rows then match **no** policy on either side — every vm predicate
+joins on `org_id` — so they become invisible and unwritable to everyone,
+including the manager who caused it. **Silent zero rows, not an error.**
+
+**Measured 2026-09-14: zero divergent rows exist** (`layers 0, members 0,
+flags 0`, each against a real non-empty table, so those are genuine negatives).
+**The `vm_reactions` check was VACUOUS — that table had 0 rows** — so it is
+unproven rather than clean.
+
+**Not fixed, and not urgent** (no cross-org manager exists today, and there is no
+move-a-conversation UI). Recorded because it is the kind of thing that becomes
+real the first time someone builds conversation-moving, and because the
+zero-result has a vacuous component that a future check must not mistake for
+evidence.
+
+### 32.3 The NINE remaining stale claims — §17.8 promised this list and it was never written
+
+§17.8 says *"the coherence review found 12 stale claims; three actively
+mis-instruct a builder and are fixed in §17.9. The rest are listed there."*
+**§17.9 is the docs/16 P1 checklist. The other nine were never recorded
+anywhere**, so they existed only in the session transcript. Recovered here.
+
+Referenced by SECTION, not by line — the reviewer's line numbers were against a
+1721-line snapshot and this document is now twice that.
+
+| where | what it still says | what is true |
+|---|---|---|
+| **§4**, the "seven non-module surfaces" bullet | *"v3's fixes 1–3 address `profiles` and `module_roles`"* | Fix 1 is DEAD (§9.3). Fixes 2–3 were Track A's and came BACK to this track (§23.2). v4 addresses `profiles` only |
+| **§6**, the OPEN decision block | option (a) *"**Ship v3 as-is.** … Recommended."* | v3 is dead and the founder chose §13.1(a) on 2026-09-14 (§16.1). The whole block is superseded by §13/§16 and still reads as live |
+| **§7.2** | *"FOUNDER DECISION, and it is genuinely blocking"* | **Decided** — invite-only for v1 (§16.3) |
+| **§7.5** | *"Fix 1 should revoke `select (settings)` in the same migration"* | Fix 1 does not exist; v4 touches no grant. **The instruction is unbuildable as written.** The underlying point — `profiles.settings` is readable by every org-mate — stands and needs a new home |
+| **§7.6** | *"v3's registry-declared self-join"* | The mechanism survived v3's death and was superseded again by the founder on 2026-09-14 (§18.4). Version label wrong twice over |
+| **§7.7** | *"Under v3 the answer is 'tell them to sign up like anyone else'"* | Version label only — the substance is unchanged and still undecided |
+| **§10 header** | *"written for v3; still accurate for v4"* | Mostly true, except the line below |
+| **§10**, the docs/13 bullet | *"Fix 1 moves email behind a **column grant** and a definer, so the map needs extending … to column privileges"* | **v4 moves nothing behind a column grant.** This would send someone to extend docs/13's visibility map for a mechanism that does not exist |
+| **§12.7** | *"FOUNDER DECISION — §13.1"* | Decided in **§16.1**. The cross-reference points at the question, not the answer |
+
+**None of these is dangerous the way the three already fixed were** — those told
+a builder to build something cancelled. These mislead about version and status.
+Fix them opportunistically; do not let the list be lost again.
+
+### 32.4 §10's stale-docs list is still missing docs/00 and docs/21
+
+§17.8 item 11 says to add them and it was never done. Verified 2026-09-15:
+neither appears in §10.
+
+- **docs/00** — docs/16's checklist item 1 (the trust-class principle) belongs
+  there, and the coherence review called it the item that *gates the rest*. See
+  §32.1 for the drafted wording.
+- **docs/21** — created by Track A on 2026-09-13, and §16.4 already points at its
+  §7 for the silhouette rule that supersedes this document's §8.1 framing. It is
+  also where §30's two deletion landmines land.

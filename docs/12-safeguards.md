@@ -619,6 +619,20 @@ Guards against well-meaning but confused sessions (any AI, any tool):
   below `tests-floor.json`, CI fails. Deleting or weakening a test to get a
   green build is never the fix; the founder approves any deliberate lowering.
   When ADDING tests, raise the floor in the same commit.
+  **THAT INSTRUCTION WENT UNFOLLOWED FOR A LONG STRETCH AND NOTHING NOTICED —
+  found and corrected 2026-09-14 (`1f0d010`).** The floor read `rls 135 / e2e 51`
+  while the suite stood at `200 / 52`: **65 tests of slack**, meaning every test
+  added since the floor was last touched could have been deleted with CI staying
+  green. A ratchet with that much slack is decoration, not a safeguard.
+  **The reason it drifted invisibly is structural, and worth fixing properly:
+  CI asserts `count >= floor`, so ADDING tests without raising the floor can
+  never fail.** The rule above is therefore unenforced by construction — it
+  relies entirely on each session remembering. **An `==` check would catch it**
+  (the floor is already defined as the EXACT count, so equality is the intended
+  invariant), at the cost of failing every legitimate test-count change until the
+  floor is updated in the same commit — which is precisely the behaviour the rule
+  asks for. **Not changed unilaterally: it is a shared-pipeline change and a
+  founder call.**
   **Both counters are ANCHORED, and the RLS one only became so on 2026-08-04
   (founder-approved).** It had been a bare `grep -c "it("`, which matched every
   line containing that substring — including every `.limit(` call, of which the
