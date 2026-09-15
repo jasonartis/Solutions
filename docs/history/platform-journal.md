@@ -4,8 +4,12 @@ The running, dated build journal that used to live in `CLAUDE.md`'s "## Current 
 section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every session)
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
-- **2026-09-15 (docs/19's MODULE-ROLE HALF built; Opus, one migration `20260915010000`,
-  merged and CI-green, NOT on prod).** Closed docs/19 open items 1 and 2 for matchmaking,
+- **2026-09-15 (docs/19's MODULE-ROLE HALF built AND SHIPPED TO PROD; Opus, one migration
+  `20260915010000`, CI-green then prod-verified same day — `prod-verify-module-role.mts` 85/85
+  and `prod-verify-migration.ts` 0/0, prod data 0 seats revoked. The evidence is the
+  before/after: that same new script scored 18 FAILURES against prod pre-apply, every control
+  green in both runs. Also recorded: `migrate:prod` printed an alarming `pgdelta` cert stack
+  trace that is only the CLI failing to cache its own catalog — the migration applied fine).** Closed docs/19 open items 1 and 2 for matchmaking,
   nail salon and classroom: four predicates gained the role conjunct, five policies were
   rewritten, and all four of the previously-unaccounted-for findings went in — including
   **the live WRITE** (`cls_review_assignments_update_reviewer`, where an offboarded peer

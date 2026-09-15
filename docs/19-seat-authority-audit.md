@@ -8,8 +8,11 @@ and the trigger binding the function-only script cannot see). (2026-09-10, `cf63
 db 183/183 then e2e 52/52 in CI's exact order. FOUR THINGS BELOW ARE STILL
 OPEN; read the dated sections at the END of this doc, not just this one.**
 
-1. **The MODULE-ROLE half — BUILT AND MERGED 2026-09-15 for matchmaking, nail
-   salon and classroom (`20260915010000`), NOT YET ON PROD.** Speed dating's
+1. **The MODULE-ROLE half — SHIPPED, ON PRODUCTION AND PROD-VERIFIED
+   2026-09-15** for matchmaking, nail salon and classroom (`20260915010000`;
+   `migrate:prod` applied, then `prod-verify-module-role.mts` **85/85** and
+   `prod-verify-migration.ts` **0 failures / 0 warnings**, all five function
+   bodies md5-matching). Speed dating's
    role conjunct is the one piece deliberately deferred, and it is now a
    **FOUNDER DECISION** (there is no audience or mentor module role to require —
    see the 2026-09-15 section). db 217/217 → e2e 52/52 in CI's order.
@@ -711,14 +714,35 @@ worthless. Verified: db suite 206/206 (204 baseline + 2), typecheck clean,
 then pushed and confirmed green on the actual CI run — see the commit for the
 run id.
 
-## 2026-09-15 — THE MODULE-ROLE HALF, BUILT (`20260915010000`). NOT ON PROD YET.
+## 2026-09-15 — THE MODULE-ROLE HALF, SHIPPED AND PROD-VERIFIED (`20260915010000`)
 
 Open items 1 and 2 are closed for three of the four modules, in one migration,
 with the four previously-unaccounted-for findings folded in per founder decision
-3. **Merged and CI-green; `migrate:prod` has NOT run, so by this repo's own
-correction of 2026-09-11 this is NOT "shipped" yet** — it is closed in the repo
-only. Prod application and a policy-aware prod-verify script are the remaining
-steps and need their own go-ahead.
+3. **CI-green, then applied to production the same day and verified there** —
+so this one satisfies the 2026-09-11 correction (nothing is "shipped" until
+`migrate:prod` has run AND prod verification passed) rather than tripping it.
+
+**Prod verification, both halves:**
+- `scripts/prod-verify-module-role.mts` — **85/85, 0 failures.** NEW script,
+  written because `prod-verify-migration.ts` parses `create function` blocks
+  only and this migration is mostly POLICIES (nine of them), so a function-only
+  run would have reported "0 failures" while asserting nothing about them.
+- `prod-verify-migration.ts` — **0 failures, 0 warnings**, all five function
+  bodies md5-matching, `definer`, `search_path=public`, `anon=no`.
+- **The before/after is the actual evidence, not the pass.** The same policy
+  script scored **18 FAILURES against prod before the apply** (naming each
+  missing conjunct) and **85/85 after**, with every CONTROL passing in both
+  runs — so the failures were genuine absences and the passes are a genuine
+  change of state, not a script that always agrees with itself.
+- **Data half on prod: 0 seats lost access** (2/2/2 rows across the three
+  rosters, every holder holding the now-required role).
+
+One cosmetic scare worth recording so the next `migrate:prod` is not misread:
+the push printed a long `pgdelta` stack trace about a missing
+`pgdelta-target-ca.crt`. It is prefixed **"Warning: failed to cache migrations
+catalog"** — the CLI failing to write its own local catalog cache, AFTER
+`Applying migration ...` and before `Finished supabase db push`. The migration
+applied fine; the verification above is what proved it.
 
 ### What changed
 

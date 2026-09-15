@@ -328,8 +328,13 @@ non-`security definer` scope-sync trigger silently becomes an access check. **rl
 — the first anywhere asserting a roster row stops conferring authority once membership ends.
 Verified in CI's exact order: **db 183/183 → e2e 52/52**, same database, no reset.
 
-**THE MODULE-ROLE HALF IS NOW BUILT (2026-09-15, `20260915010000`) — MERGED AND CI-GREEN, BUT
-`migrate:prod` HAS NOT RUN, so per this file's own 2026-09-11 correction it is NOT "shipped."**
+**THE MODULE-ROLE HALF IS SHIPPED, ON PRODUCTION AND PROD-VERIFIED (2026-09-15,
+`20260915010000`)** — `migrate:prod` applied, then **`prod-verify-module-role.mts` 85/85** (a
+NEW policy-aware script; the generic one is function-only and this migration is mostly
+policies) **plus `prod-verify-migration.ts` 0 failures/0 warnings**, five function bodies
+md5-matching. The evidence is the BEFORE/AFTER, not the pass: the same script scored **18
+failures against prod pre-apply and 85/85 post-apply**, every CONTROL green in both. Prod data:
+**0 seats lost access.**
 Matchmaking, nail salon and classroom: 4 predicates + 5 policies gained the role conjunct, and
 all four previously-unaccounted-for findings went in, including the live **WRITE**
 (`cls_review_assignments_update_reviewer` — an offboarded peer reviewer could still grade a
