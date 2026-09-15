@@ -27,9 +27,9 @@ rot; pipelines don't.
    `@platform/db` stays excluded from this step and keeps running later, after
    seed, exactly as before — this only adds the four module suites CI never
    ran. Verified clean locally first (`--force`, no cache reliance): 4/4
-   packages, 107 tests, all green. **CI itself is the verification of
-   record for a CI change** — see the dated note this same day for the actual
-   pushed-run result, not just the local pass.
+   packages, 107 tests, all green — then verified for real: pushed (`b2d0393`)
+   and confirmed the actual CI run (`34919036811`) completed green, not just
+   the local pass.
    **The mechanism is `needs: check` inside the workflow, NOT a branch rule** —
    worth stating precisely, because the two get conflated. If `check` fails,
    `deploy` never runs, so no production deployment is created; that is a
