@@ -1,30 +1,39 @@
 # Public Square — an ordinary org, made safe by fixing the general case
 
-**Status: PROPOSED DESIGN v4, 2026-09-10. NOT BUILT. REGRESSION REVIEW COMPLETE.**
+**Status, 2026-09-15: DESIGN v4 SURVIVED REVIEW. THE ORG ITSELF IS NOT BUILT.
+THREE OF ITS LIVE-BUG BACKLOG ARE BUILT AND ON PRODUCTION.**
 Written to be attacked. Everything is a claim except where marked FOUNDER
 DECISION or **VERIFIED LIVE** (a `pg_catalog` read or a file read, dated).
+
+> **START AT §31.** The next piece of work is a DESIGN slice, founder-agreed
+> 2026-09-15: move `profiles.email` out of `profiles` into its own row-policied
+> table, and determine whether that removes v4's `kind = 'public_square'`
+> carve-out entirely. §31 carries the brief. **If it holds, much of §12 is
+> superseded rather than built.**
+
+**What IS built and on prod** (§29): `20260914010000` — the five `vm_*`
+`for all` policies split; `20260914020000` — the last-conversation-admin DELETE
+guard; and the app-side fix so self-block no longer leaks through `addMember`.
+Verified db 204/204 → e2e 52/52 in CI's order, and 15/15 by
+`scripts/prod-verify-vm-policy-split.mts`.
+
+**What is NOT built:** the Public Square org, `orgs.kind`, `find_module_peer`,
+the auto-invite trigger (deliberately — the founder chose invite-only, §16.3),
+and `join_module`, which is **unbuildable as specified** (§17.6).
 
 **Review state, stated honestly:** v1 (2026-09-06) was reviewed by four agents
 and abandoned. v2 (2026-09-08) was sent to six; three returned and three died on
 a session limit. v3 (2026-09-09) folded in the three that returned and was
 **killed on 2026-09-10 by a live check of its own central mechanism** (§9.3).
+**The regression review that had died three times completed on 2026-09-10**
+(§11) — the question "what breaks in the six shipped modules" was answered for
+the first time in this document's history. **v4's own adversarial review then
+died once more and RAN on 2026-09-11: SURVIVES WITH CHANGES** (§17), including
+one defect this design missed in its own documented failure pattern (§17.1).
 
-**The two reviews that had never completed are now COMPLETE (2026-09-10) — §11.**
-The regression question ("what breaks in the six shipped modules") is answered
-for the first time in this document's history. **v4 is the design that answer
-supports.** **v4 has NOT survived its own adversarial security review — that
-review was spawned and DIED ON A SESSION LIMIT, the fourth review of this
-design to do so (§14). v4 is measured, not vetted.** No migration has been
-written or applied.
-
-**Adversarial review RAN 2026-09-11: SURVIVES WITH CHANGES — four blocking items in §17.8, including one this design missed in its own documented failure pattern (§17.1).**
-
-**Build status: BLOCKED ON THE LOCAL DATABASE, deliberately.** A concurrent
-session (Track A) holds it for the `module_roles` census fix, the docs/19 seat
-authority fix, the `vm_layers` cascade and self-block. Everything below was
-established with read-only catalog queries. **No migration is written; a
-migration nobody has run is the same mistake in SQL that killed v1–v3.**
-
+**Founder decisions are RECORDED, not pending** — §16, §18, §20, §24. Several
+sections below still read as open because they predate those answers; the ones
+that actively mislead are marked in place, and §32.3 lists the rest.
 ---
 
 ## 0. THE PRINCIPLE (founder's, 2026-09-08), and its corrected reading

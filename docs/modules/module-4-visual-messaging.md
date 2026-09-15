@@ -580,12 +580,25 @@ would close it if ever wanted.
      invite looks exactly like a patient one.
    - `invited_by` (FK → `auth.users`) must be declared in
      `data-browser-modules.ts` or `data-browser-coverage.test.ts` TIER 1 fails.
-5. **Self-block.** Permit a self-UPDATE of `vm_conversation_members.status` to
-   `'banned'` only. Today `vm_pin_member`'s self-service branch pins
-   `new.status := old.status`, so a member **cannot** opt out of being
-   re-added: they may leave (`vm_members_delete_self`) and the admin re-inserts
-   immediately. Cheapest real abuse mitigation available, and there is no
-   user-level ban or rate limit anywhere on the platform (docs/16 P1-6).
+5. ~~**Self-block.**~~ **SHIPPED 2026-09-10 and ON PROD — `20260910030000`, six
+   tests added 09-11. It is the only user-level block on the platform.** It was
+   deliberately taken OUT of this queue precisely because it depends on none of
+   the ad-hoc-group design that kept being redesigned around it.
+   **Two things about it are NOT in this section and matter more than the item
+   did.** (a) That migration's own header describes the wrong mechanism: it says
+   self-UNBAN is prevented by the status pin, and it is not — a banned member
+   never reaches `vm_pin_member` at all, because the non-`security definer`
+   scope trigger can no longer resolve the conversation. The outcome is stronger
+   than intended, but the guarantee rests on a different trigger than documented
+   (CLAUDE.md, 2026-09-11). (b) It **leaked through `addMember`** until
+   2026-09-14: re-adding a self-blocked person raised a duplicate key, telling
+   the admin the person had a row — i.e. that they blocked them — handed to the
+   very person the block protects against. Fixed in `d16c26f`; see
+   [docs/20](../20-public-square.md) §28.2.
+   Original text: *permit a self-UPDATE of `vm_conversation_members.status` to
+   `'banned'` only … cheapest real abuse mitigation available, and there is no
+   user-level ban or rate limit anywhere on the platform (docs/16 P1-6)* — that
+   last clause is still true of the platform as a whole.
 
 ### Deliberately NOT part of this
 
