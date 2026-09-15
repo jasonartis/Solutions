@@ -1535,7 +1535,13 @@ early — but "probably harmless" is the register this document exists to avoid.
 
 ---
 
-## 15. STATE FOR THE NEXT SESSION
+## 15. STATE FOR THE NEXT SESSION — SUPERSEDED, see §31
+
+> **STALE, 2026-09-15.** This section was written on 2026-09-10, before v4's
+> adversarial review ran, before three of §8's bugs shipped to prod, and before
+> the founder answered the open decisions. **Start at §31.** Kept because its
+> account of what was blocking on 09-10 is accurate history, not because any of
+> it is current.
 
 **Done this session (2026-09-10):**
 
@@ -3049,3 +3055,124 @@ fires the child's BEFORE triggers. **Any BEFORE DELETE or BEFORE UPDATE trigger
 that RAISES or PINS must state what it does under a cascade** — and
 `pg_trigger_depth() > 1` is the one test that distinguishes a user's own
 statement (depth 1) from a referential action (depth 2). Measured, not assumed.
+
+---
+
+## 31. NEXT SESSION STARTS HERE — work up the EMAIL-TABLE design (founder-agreed 2026-09-15)
+
+**THE TASK: design (do not build) moving `profiles.email` out of `profiles` into
+its own row-policied table, and determine whether that makes v4's
+`kind = 'public_square'` carve-out unnecessary.** Founder agreed to do this, in a
+fresh session, as the next piece of work.
+
+**This is a DESIGN slice: draft → adversarial review → then decide whether to
+build.** Nothing about it should reach a migration before review.
+
+### 31.1 Why — the founder's own argument, which is better than v4's
+
+Founder, 2026-09-14: *"I thought we are generalising this and changing 'share an
+org with this person, therefore you may see who they are' to 'a user within an
+org chooses what other members of that org get to see'. For the rule 'exclude
+orgs of kind public_square' — I thought we are taking this out since we are
+treating all orgs the same."*
+
+He is right, and **§17.4 already concedes that v4 violates the LETTER of founder
+decision 2**: the partial unique index pins `kind='public_square'` to exactly one
+row, and a class with cardinality 1 is an identity with an indirection.
+
+**What the industry does, checked when he asked (2026-09-14) — and it settles the
+shape:**
+
+- **Display name is essentially ALWAYS visible to co-members.** Slack, Discord,
+  Meetup, Google Groups, LinkedIn — you cannot be anonymous in a group you
+  joined. What varies is *which* name you show: **Discord's per-server
+  nicknames** are exactly "a user chooses what other members of that org see."
+- **Email is essentially NEVER visible to co-members.** Where it is visible at
+  all it is an ORG-level admin setting (Slack, Google Groups), never a per-user
+  opt-in.
+
+**So the general rule is:** *email is not something co-members see, in any org;
+your name is always visible, but you choose which name you show per org.* **If
+email is hidden everywhere, the `kind='public_square'` exclusion has nothing left
+to do** — which is precisely what the founder said.
+
+### 31.2 Why this is NOT a fourth mechanism — checked against §9
+
+§1 and §9 forbid proposing a fourth without reading why v1–v3 died. Read, and
+this is none of them:
+
+- **v1** was a per-org carve-out. This removes the carve-out.
+- **v2** put per-membership flags on `org_members`, which any org admin can
+  write. This touches no `org_members` column.
+- **v3** tried to remove ACCESS to the `email` column while leaving it in place,
+  and died on three counts (§9.3). **This moves the DATA instead**, and each of
+  v3's three killers is inapplicable: the table grant problem is about
+  `profiles`' ACL, which is untouched; `scripts/verify-acl-hardening.ts`'s
+  expected set for `profiles` is unchanged; and the superadmin is served by a
+  ROW policy's `is_superadmin()` arm, which v4 proved works (§12.3), not by a
+  definer on the console path.
+
+**The adversarial reviewer named this option explicitly and noted it was never
+considered:** *"moving `email` off `profiles` into its own row-policied table is
+never considered anywhere in the document."*
+
+### 31.3 What is already MEASURED and must be respected
+
+Do not re-derive these; do re-verify them against the live catalog, since Track A
+moved the schema once already.
+
+- **Nine member-facing sites RENDER a co-member's email** (§22). Seven are
+  `display_name || email` fallback chains that **dissolve once §16.1's
+  display-name-at-signup ships** — which needs no migration, because
+  `handle_new_user` already reads the metadata field.
+- **Two are real product questions, not ports** (§22.3): matchmaking's
+  `<datalist>` autocomplete, and speed-dating's `contact_shared` write, which is
+  a **write-once snapshot that never retries** (§11.3).
+- **Three are email→user lookups** that can re-route through a definer.
+- **`org_member_profiles` and `org_find_user_by_email` are SECURITY DEFINER** and
+  would read the new table unaffected — but `org_find_user_by_email` has **no org
+  join at all** (§8.3) and **must not be "fixed" by adding one** (§25.2 — it
+  breaks every invite).
+- **`profiles_update_own` is `user_id = auth.uid()` on both clauses, and
+  `profiles` already carries column-level UPDATE grants limited to
+  `display_name` and `settings`** — so a per-user choice is already writable
+  safely; a per-ORG choice needs its own table (§18.3).
+
+### 31.4 The questions the design must answer
+
+1. **Where does the per-org display NAME live**, and does Discord's per-server
+   nickname shape fit this schema without becoming v2 again? (v2's fatal flaw
+   was the home, not the goal — §18.3.)
+2. **What happens to the ~14 read sites**, and specifically the two product
+   questions in §22.3.
+3. **Does v4 survive, get absorbed, or get withdrawn?** If email is gone from
+   co-member reach, state plainly whether `orgs.kind` is still needed for
+   anything — §17.4 says its only remaining justification (the auto-invite
+   uniqueness index) died when the founder chose invite-only.
+4. **Does it close §8.3?** If `email` is behind its own policy, the oracle's
+   shape changes.
+5. **The 30-day-expiry orphan (§7.7) and the privacy copy (§21)** — the copy rule
+   is already decided: describe the MECHANISM, never a named org.
+
+### 31.5 The one founder decision still blocking, unchanged
+
+**§8.3: should `org_find_user_by_email` stop returning the display name?** It
+trades directly against §3.4, where `find_module_peer` was deliberately given the
+name back so a user can confirm *"did you mean Sarah Cohen?"* before mailing a
+private picture to a typo'd address. **The two must agree.** Ask it with that
+trade named.
+
+### 31.6 The bar this design must clear
+
+Same as v4's, and v4's own history is the argument for it: **the regression
+review died three times before completing, and when it ran it found the answer
+was not what the doc assumed.** So —
+
+- Two NARROW adversarial agents with capped output, not one broad one (the fix
+  recorded in CLAUDE.md after four failures).
+- Every claim from `pg_catalog`, never `information_schema` (§9.3).
+- **Check the siblings**: the other policies on that table, the other tables of
+  that module, the other call sites. Four designs have now failed on exactly
+  this, including v4 (§17.1) and my own first draft of `20260914020000`.
+- Every negative result carries a control.
+- Nothing reaches a migration before the review returns.

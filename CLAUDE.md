@@ -24,7 +24,15 @@ NOW — 1, 2, 3, AND 8 ALL SHIPPED; 4, 5, 6, 7 ARE ALL DELIBERATELY PAUSED** (fo
 extract-don't-speculate: each adds real cost or a new dependency for a problem that only
 exists once a real client generates real volume — **do not start any of them unprompted,
 revisit together when the first real client is signed**, per docs/18's status note).
-**NEXT SESSION STARTS HERE (handoff rewritten 2026-09-10).** Two tracks ran in parallel and
+**NEXT SESSION STARTS HERE → [docs/20 §31](docs/20-public-square.md) (founder-agreed
+2026-09-15).** The next piece of work is a DESIGN slice: work up moving `profiles.email` out of
+`profiles` into its own row-policied table, and determine whether that removes v4's
+`kind = 'public_square'` carve-out entirely. §31 carries the full brief — why it beats v4, why
+it is NOT a fourth mechanism (checked against §9), what is already measured, the questions it
+must answer, and the one founder decision still blocking (§8.3). **Design only; nothing reaches
+a migration before an adversarial review returns.**
+
+**Handoff context below rewritten 2026-09-10.** Two tracks ran in parallel and
 both are live state you must not re-derive:
 **(A) SEAT AUTHORITY IS FIXED, MERGED, **APPLIED TO PRODUCTION AND PROD-VERIFIED** (2026-09-11).
 `pnpm migrate:prod` pushed THREE pending migrations — `20260904010000`, `20260910030000`,
