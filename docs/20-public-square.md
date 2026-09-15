@@ -366,9 +366,33 @@ human-granted nor system-granted. Needs a third marker or an explicit exemption.
 
 ## 4. What was MEASURED (live catalog)
 
+- **UPDATED 2026-09-15: the module-policy count is now 178, not 168** — and the
+  delta is exactly explained: `20260914010000` turned five `for all` policies
+  into fifteen per-command ones, **+10** (§29). No other policy was added or
+  removed by this session. **The "TEN grant on plain org membership" sub-figure
+  is NOT re-derived** — for the same reason as the bullet above, a regex over
+  `qual` returns 13 while the original came from reading bodies and counted a
+  `storage`-schema policy this query cannot see. Treat the breakdown below as
+  the reliable part and the number as needing a re-read.
+  **Still accurate, re-verified: 8 orgs, 28 memberships, 11 local users.**
+  Original text follows:
 - **168 module policies; TEN grant on plain org membership** — 3 nail-salon, 6
   synagogue tables, 1 synagogue storage policy. visual-messaging, matchmaking,
   classroom, speed-dating: **zero**. Re-derived independently three times.
+- ~~**12 of 14 module predicate functions**~~ **STALE — CORRECTED 2026-09-15,
+  and CLAUDE.md had flagged this as owed to whoever holds this document.**
+  Measured live: **22** module-prefixed functions now reference `is_org_member`,
+  not 14 — Track A's `20260910040000` added the conjunct to 8 more. **The two
+  named exceptions below still exist** (verified). **But the MEANING of the
+  number moved, not just its size:** those 8 new ones are org-gated and
+  deliberately NOT role-gated, which is precisely the module-role gap docs/19
+  now records — so docs/19 and this document converge on the same finding from
+  opposite directions.
+  **The role-gated split is NOT re-derived here, deliberately.** A narrow regex
+  over `prosrc` returns 5 of 22; a broad one returns 22 of 22. Neither is the
+  answer — the original figure came from reading bodies, and reconciling it
+  needs the same. **Do not cite a split until someone reads them.** Original
+  text follows for the record:
 - **12 of 14 module predicate functions** using `is_org_member` conjoin it with a
   module-role check. The two that do not, both directly-callable RPCs:
   `sal_worker_has_time_off`, `sd_side_registered_count`.
@@ -485,7 +509,14 @@ holds no seat and no module role*.
    no such flow, so this decision is currently orphaned.**
 9. Deleted users' content STAYS; author detached, marked departed (09-08) — §8.1.
 
-**OPEN, and it is the one v3 needs answered:**
+> **ANSWERED 2026-09-14 — this block is HISTORY, not an open question.** The
+> founder chose §13.1(a): **a display name is collected at signup** (§16.1). And
+> decision 5 itself is **DEFERRED, not superseded** — the per-org info choice IS
+> being built, sequenced after v4 (§20). The three options below are v3's, and
+> v3 is dead (§9.3); option (a) in particular says "Ship v3 as-is", which must
+> not be done. **The live successor to this whole question is §31.**
+
+~~**OPEN, and it is the one v3 needs answered:**~~
 
 **Decision 5 asked for user-controlled sharing. v3 delivers "nobody reads anyone's
 email, everybody's name is visible."** That is simpler and enforceable, but it is
@@ -520,8 +551,13 @@ display name. Three options:
    asked for a user-level ban, rate limits, an abuse-report path that is not
    per-conversation, and *"a written acknowledgment that Public Square means
    operating a public community, with the ongoing cost that implies."* **None of
-   that is in this design, and no fix in §2 touches it. FOUNDER DECISION, and it
-   is genuinely blocking.**
+   that is in this design, and no fix in §2 touches it.** ~~FOUNDER DECISION,
+   and it is genuinely blocking.~~ **ANSWERED 2026-09-14: INVITE-ONLY for v1
+   (§16.3), which defers the abuse question rather than solving it — the
+   auto-invite trigger is simply not installed and the founder adds people by
+   hand. Everything above remains TRUE and becomes live again the moment
+   auto-invite is switched on.** The kit docs/16 P1-6 asks for is still unbuilt
+   (§17.9).
 3. **Admins still read member emails** (`org_member_profiles`, `is_org_admin`-gated)
    regardless of fix 1. Deliberate — administration needs it — but the privacy
    copy must not overclaim.

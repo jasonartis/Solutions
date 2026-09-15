@@ -132,10 +132,22 @@ doc.
   it along with the ad-hoc build.
 - **Anonymous public view-links stay deferred post-v1** — not part of "completing" this module.
 - **PUBLIC SQUARE is now its own workstream and the founder still wants it** ("a module
-  completely public and independent of a real org is a good thing to have"). It is blocked on
-  docs/16 checklist items 1–3, none decided. Note ad-hoc groups will build `orgs.kind` for a
-  **cosmetic** use only, so expect the column to exist and still need its security semantics
-  decided. Its real cost is docs/16 P1-6's tail: *operating a public community*, ongoing.
+  completely public and independent of a real org is a good thing to have").
+  **CORRECTED 2026-09-15 — this bullet was stale in three ways, one of them an affirmative
+  falsehood about the schema:**
+  **(1) `orgs` has NO `kind` COLUMN. VERIFIED LIVE.** This bullet said to "expect the column to
+  exist" because ad-hoc groups would build it for a cosmetic use. **That work never landed** —
+  `orgs` is `id, name, slug, settings, created_at, updated_at`. Any design that wants it must
+  create it (docs/20 §11.4).
+  **(2) docs/16's checklist is no longer "items 1–3, none decided."** The whole P1 list was
+  re-scored against v4 on 2026-09-11 — **docs/20 §17.9** is the current reading, including
+  which items v4 closes, which it only partly closes, and P1-6's conflict, which the founder
+  resolved on 09-14 (§24.2).
+  **(3) The security semantics ARE now decided** (v4, §12) and survived adversarial review —
+  **but the next slice may remove the need for them entirely**: see docs/20 §31, the
+  email-table design, which if it holds makes the per-org carve-out unnecessary.
+  Its real cost is still docs/16 P1-6's tail: *operating a public community*, ongoing — and
+  that half is genuinely untouched, deferred by the invite-only decision.
 
 Read [docs/18-go-live-checklist.md](docs/18-go-live-checklist.md) for the full go-live story;
 full dated detail in the 2026-08-31 → 2026-09-04 journal entries.
