@@ -2208,9 +2208,11 @@ which avoids `org_members` entirely and therefore avoids all three failures.
 
 **NOT designed here, deliberately** — it is a real slice, not a conjunct. But
 **the decision is live, not superseded**, and this document should stop implying
-otherwise. **FOUNDER DECISION owed: does v4 ship as an interim (emails private,
-names visible) with per-org choice as a later slice, or does the choice block
-launch?**
+otherwise. ~~**FOUNDER DECISION owed: does v4 ship as an interim … or does the
+choice block launch?**~~ **ANSWERED 2026-09-14 — §19/§20: ship v4 first, the
+choice slice follows. ORDER, NOT SCOPE.** Note the question as phrased above was
+itself wrong ("emails private, names visible" is v3's behaviour, not v4's — see
+§12.7's correction and §19.1's table).
 
 ### 18.4 "Why not: per-org chooses which modules are self-join, default OFF, we turn it on manually?" — THIS IS BETTER THAN MY RECOMMENDATION. ADOPTED.
 
