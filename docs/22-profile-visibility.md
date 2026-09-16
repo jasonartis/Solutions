@@ -754,7 +754,15 @@ different labels for the same person; moderation and abuse reports lose a shared
 referent; nothing is shown until the viewer names them). **Neither shape is
 chosen. This is the substance of the deferred slice §15.1 names.**
 
-### 15.4 THE FINDING — the founder's own model REQUIRES a trust class, for NAMES
+### 15.4 A FINDING THAT WAS WITHDRAWN THE SAME DAY — read §16.2 first
+
+> **⚠ The conclusion of this subsection is WRONG and is superseded by §16.2.**
+> It argued that the founder's model requires a trust-class MECHANISM in code.
+> His own follow-up proposal achieves the same distinction as per-org
+> CONFIGURATION, so no mechanism is needed. **The analysis of WHY email and
+> names split is still correct and still useful — the remedy it proposed is
+> not.** Kept rather than deleted because the split is the reasoning §16 rests
+> on.
 
 Asked whether reaching out differs between Public Square and a client org, the
 founder framed his model as: *"the only way that Sarah can see anything from
@@ -783,9 +791,10 @@ v4's flaw was never the conjunct; it was that `kind='public_square'` names ONE
 ORG, and a class with cardinality 1 is an identity with an indirection
 (docs/20 §17.4 conceded this). A **trust class** — open vs closed — is a real
 class with a stated rule, and the carve-out becomes an application of it rather
-than an exception to it. **So F3 is not documentation-only after all: the
-founder's own model needs the distinction to EXIST, not merely to be written
-down.**
+than an exception to it. **WITHDRAWN SAME DAY BY §16.2** — the founder's own proposal (org-declared
+lookup fields) achieves the distinction as CONFIGURATION, so no trust-class
+MECHANISM is needed in code. The reasoning above stands as the argument for the
+doc paragraph; the claim that a mechanism is required does not.
 
 **This is NOT a reversal of §4 and does not reopen the reviewed design.** Email
 and names are separable and the founder chose to separate them (§15.1). Option B
@@ -797,7 +806,147 @@ slice, not in this one.
 
 ---
 
-## 16. Decisions log
+## 16. THE FOUNDER'S MODEL, 2026-09-16 — org-declared lookup fields + three name layers
+
+**This supersedes §15.4's conclusion that the founder's model requires a trust
+class. It does not. His own proposal removes the need.** Recorded in his terms,
+then assessed.
+
+### 16.1 The proposal
+
+Restated principle, unchanged and reaffirmed: *"I want every organization to
+follow the same code and structure so I don't want any `if org=xyz` then
+something unique."*
+
+Scope, in his words: *"the issue we are discussing is looking up existing
+members to have a discussion with or have an interaction with and what info is
+shared along with the lookup info."* **Note this scopes to EXISTING members —
+see §16.3 on why that leaves the invite lookup untouched.**
+
+1. **The ORG declares which fields are LOOKUP-ABLE**, at setup. A company might
+   tick *name, title, email*; **Public Square ticks email only.**
+2. **The USER fills an in-org profile** and chooses, **from the items NOT in the
+   org's lookup set**, what is shared with other members. If the org allows
+   lookup by email only, the user chooses whether their name is displayed.
+3. **THREE NAME LAYERS, which compose:**
+   - a **global platform name** — *"perhaps will be a legal name, we never
+     discussed this part"* (his words; a genuinely new question — §16.5);
+   - a **per-org name** the user picks — Matt at work, Mathew globally;
+   - a **per-viewer alias** — *"each user has the ability to give the users they
+     communicate with a per org alias"*. The WhatsApp model he drew explicitly:
+     a stranger shows the name they chose for themselves; a contact shows the
+     name YOU saved.
+4. **A per-user contacts / phone-book** to hold those aliases.
+5. **Storage note, his:** most users use one name everywhere, so design it so the
+   same name need not be repeated per org.
+
+### 16.2 THE KEY PROPERTY — it replaces `orgs.kind` with CONFIGURATION
+
+**The org's lookup configuration IS the open/closed distinction, expressed as
+DATA rather than as code.** The salon ticks name+title+email; Public Square ticks
+email only. **The same code reads the same setting in both.** No `orgs.kind`, no
+privileged org, no branch — which satisfies §0's principle in a way v4 and my
+own §15.4 did not. Both of those still branched; they merely branched on a
+better-named column.
+
+**VERIFIED LIVE 2026-09-16 — the mechanism already exists and has precedent:**
+`orgs.settings` is an existing `jsonb not null` column, and **four tables already
+carry a per-org / per-entity `settings` jsonb** (`orgs`, `org_modules`,
+`profiles`, `vm_conversations`). Control: the same catalog query returns only
+those four, run against a database holding 230 policies. **So the lookup config
+needs no new column.**
+
+### 16.3 Fit against the four decisions
+
+| | decision | fit |
+|---|---|---|
+| **A** | email never visible to co-members | **compatible and SUBSUMED** — email becomes a lookup KEY, never a displayed field. **Caveat: §16.6.** |
+| **B** | can a co-member see your name? | **ANSWERED GENERALLY.** Not by org kind, but by the org's lookup config plus the user's own per-org choice. **This closes what §15.4 left open and withdraws §15.4's trust-class requirement.** |
+| **C** | which name, who picks it | **answered by taking ALL THREE** (§15.3's shapes) rather than choosing one. They compose. |
+| **D** | the invite lookup returns existence only | **UNTOUCHED — and these are TWO DIFFERENT LOOKUPS.** The founder's model governs finding someone **already in the org**; D governs finding someone **not yet in it**, where there is no membership to configure and no per-org profile to consult, so it can only ever be by email. §15.2 stands. **Do not conflate them.** |
+
+### 16.4 Doability — measured, and it is MODULE-SIZED, not a slice
+
+**Cheap, precedent exists:**
+- **Org lookup config** -> `orgs.settings`. No new column (§16.2).
+- **Per-viewer alias table** -> the SIMPLEST object in the design:
+  `(owner_user_id, subject_user_id, org_id nullable, alias)` with one policy,
+  `owner_user_id = auth.uid()`. Nobody else ever reads it, so there is no
+  visibility question to get wrong.
+- **Name resolution** -> one function: viewer's alias -> subject's per-org name
+  -> subject's global name -> a fallback that is **never an email**.
+
+**Moderate, with two traps MEASURED LIVE 2026-09-16:**
+- **The in-org profile needs its OWN TABLE. It cannot live on `org_members`** —
+  `org_members_write_org_admin` is a **`for all`** policy with
+  `is_org_admin(org_id)` on **both** USING and WITH CHECK, so an org admin can
+  write every column of that table. **That is exactly what killed v2** (docs/20
+  §9). Its write policy must be self-only.
+- **`org_member_profiles` is already a FUNCTION name** — a table cannot reuse it.
+
+**Honest size: three new tables, a resolver, and three UIs (org setup, in-org
+profile, contacts), on top of the ~22 email call sites. This is module-sized
+work, not a slice** — materially larger than anything currently designed.
+
+### 16.5 FIVE THINGS THE MODEL LEAVES OPEN — these decide the design
+
+1. **DEFAULTS — the most important one.** If a user shares nothing, what does a
+   co-member see? At Public Square scale, default-ON leaks names by default.
+   WhatsApp's own answer implies the per-org name is **mandatory** and only the
+   extra fields optional — but the proposal says the name itself may be hidden,
+   so something must fill the gap.
+2. **SEARCHABLE vs VISIBLE-IN-CONTEXT.** WhatsApp forbids browsing users but
+   shows a name once someone messages you. Does the org's lookup config govern
+   what is **findable**, or also what is **shown to someone you are already
+   talking to**? They should probably be separate settings.
+3. **Is the global platform name a LEGAL name?** The founder raised this and
+   correctly noted it has never been discussed. It bears on the privacy page
+   (docs/12 item 6) and on docs/21's departed-user silhouette.
+4. **MODERATION LOSES ITS SHARED REFERENT.** If one person sees "Tennis-Master"
+   and another sees "Matt", an abuse report is hard to action. Staff likely need
+   the per-org name as canonical. **A real cost of viewer-side naming, and it
+   was not in the proposal.**
+5. **STORAGE** (the founder's own point). Cleanest answer: the per-org name is
+   OPTIONAL and falls back to the global one, so nothing is stored unless it
+   differs.
+
+### 16.6 THE CAVEAT ON DECISION A — flagged, not smuggled
+
+If an org may tick email as a **shareable** field rather than only a lookup key,
+a client org could re-enable today's leak for itself. The founder's wording
+implies lookup-only, but the model does not say so.
+
+**Worth knowing this is what Slack and Google Groups actually do** (§17.1: where
+email is visible at all it is an ORG-level admin setting, never a per-user
+opt-in), so either answer is defensible — **but it changes decision A, so it
+must be deliberate.**
+
+### 16.7 THE LEAK, DEMONSTRATED — not asserted, 2026-09-16
+
+The founder asked *"Sarah's browser can run one query and get Dana's email
+address? How so? I don't understand. Is this a mistake?"* It is not. Run live
+against the local database as **charlie@demo.local — a rank-0 salon CUSTOMER**,
+the lowest-privilege real account seeded:
+
+```
+GET /rest/v1/profiles?select=display_name,email,is_superadmin
+-> 8 rows: Alice A, Charlie C, Dana D, Eve E, Frank F (the salon ADMIN),
+           Gabe G, Grace G, Mel M — each with their email address.
+```
+
+**Cause:** `profiles_select_shared_org` (`20260708020000`) grants read of the
+whole ROW to anyone sharing an org — added deliberately, to stop rosters
+rendering raw UUIDs. **A policy filters ROWS, never COLUMNS**, so the email came
+along with the name. Nobody chose to expose it.
+
+**Why "the UI does not show it" is not a defence:** the app queries as the user,
+so anything the database will answer, the browser can ask for directly with the
+token the app already issued. docs/03 hard rule 6 — *UI hiding is convenience,
+not security.*
+
+---
+
+## 17. Decisions log
 
 - **2026-09-16 — this document created, reviewed twice, and corrected.** Design
   drafted, **not built; no SQL written.** Both adversarial reviews ran (§13,
@@ -806,7 +955,7 @@ slice, not in this one.
 - **2026-09-16 — F2 and F3 were asked; NEITHER IS ANSWERED.** The founder asked
   for a fuller explanation of the trust-class idea before deciding F3, and for
   the industry evidence before deciding F2. **The F2 evidence was gathered and
-  is recorded in §16.1 below** — it did not previously exist in writing
+  is recorded in §17.1 below** — it did not previously exist in writing
   anywhere, and the founder's decision should be made against it.
 - **2026-09-16 — docs/00 insertion point for F3 identified, not edited.** The
   trust-class paragraph (docs/20 §32.1) belongs in **docs/00 §"Core
@@ -815,7 +964,7 @@ slice, not in this one.
   docs/00** — F3 is unanswered. Recorded so the next session does not re-derive
   where it goes.
 
-### 16.1 THE F2 EVIDENCE — what other products do, gathered 2026-09-16
+### 17.1 THE F2 EVIDENCE — what other products do, gathered 2026-09-16
 
 The founder asked for this explicitly before deciding whether
 `org_find_user_by_email` (and `find_module_peer`) should keep returning the
