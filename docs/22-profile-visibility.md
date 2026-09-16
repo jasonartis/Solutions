@@ -373,9 +373,11 @@ exposure is through raw RLS, not through any screen.
 - **Moving `email`, `settings` and `is_superadmin`** reduces `profiles` to
   `user_id, display_name, created_at, updated_at` — a genuinely public identity
   table. At that point `shares_org_with` means only *"are you co-members"* and
-  gates a row containing nothing a co-member should mind seeing. **The carve-out
-  is then completely unnecessary, and `orgs.kind` has no remaining
-  justification** — docs/20 §17.4 already records that its last one (the
+  gates a row containing nothing a co-member should mind seeing. **⚠ CORRECTED 2026-09-16 (§15.4): the carve-out is then
+  unnecessary FOR EMAIL, and `orgs.kind` has no remaining justification FOR
+  EMAIL** — but the founder's own model needs an open/closed distinction for
+  NAMES, which is the deferred slice. An earlier draft of this bullet said
+  "completely unnecessary" full stop, and that was wrong.** — docs/20 §17.4 already records that its last one (the
   auto-invite uniqueness index) died when the founder chose invite-only.
 
 **This design recommends the second**, and notes it is a *widening of the brief*
@@ -706,7 +708,96 @@ task ordering. §11 step 4 now says so explicitly.
 
 ---
 
-## 15. Decisions log
+## 15. FOUNDER DECISIONS, 2026-09-16 — and one finding that came OUT of them
+
+### 15.1 DECIDED — EMAIL FIRST, the username slice second
+
+**FOUNDER DECISION.** Ship the reviewed email work as its own slice; design the
+per-org display identifier afterwards. His words: *"email first. The per org
+username still needs hashing out."* So §7 Q1's deferral **stands**, but for a
+different reason than it was written: not "a product feature we don't need yet"
+but "a design question that is genuinely open."
+
+### 15.2 DECIDED — F2: do NOT suggest a name on a mistyped address
+
+**FOUNDER DECISION**, and it settles docs/20 §33.1's F2. Asked whether a lookup
+should confirm *"did you mean Sarah Cohen?"* before a user mails something to a
+typo'd address, he answered: *"Are we asking if they mistype the email address,
+if we should suggest to them, no we should not."*
+
+**So the name is dropped from BOTH lookups** — `org_find_user_by_email` and
+`find_module_peer` — which keeps them consistent, as docs/20 §3.4 required.
+This **overturns §3.4's own recommendation**, which had deliberately kept the
+name on `find_module_peer` for exactly this confirmation. The trade was put to
+him with the cost named and he chose the other way.
+It also aligns with five of the six products in §15.4 and with OWASP
+WSTG-IDNT-04. **§8's `findable_by_email` toggle is therefore NOT needed** — it
+was conditional on keeping the name. Do not build it.
+
+### 15.3 NEW, FROM THE FOUNDER — a THIRD shape for the per-org identifier
+
+Raised 2026-09-16 and **not previously considered anywhere in docs/20 or this
+document.** Both shapes on the table so far were **subject-side**: the person
+chooses the name others see (a `display_name`, or Discord's per-server
+nickname). The founder raised a **viewer-side** alternative:
+
+> *"I am not sure if a user should give a per-org username or if the contact
+> that they are reaching out to should make a name and store it that way,
+> similar to WhatsApp using personA's local contact info of personB to display
+> on personA's phone."*
+
+**This is a materially different mechanism, not a variant.** Under viewer-side
+naming the label lives with the VIEWER, so it is not a disclosure by the subject
+at all — which sidesteps the whole "what may a co-member see" question for
+names, exactly as WhatsApp does. It also has real costs (two people see
+different labels for the same person; moderation and abuse reports lose a shared
+referent; nothing is shown until the viewer names them). **Neither shape is
+chosen. This is the substance of the deferred slice §15.1 names.**
+
+### 15.4 THE FINDING — the founder's own model REQUIRES a trust class, for NAMES
+
+Asked whether reaching out differs between Public Square and a client org, the
+founder framed his model as: *"the only way that Sarah can see anything from
+Dana is if she knows [Dana's] email, similar to how the only way I can connect
+with personA on whatsapp is knowing their phonenumber."*
+
+**Followed through, that model splits in two — and only half of it is universal.**
+
+| | EMAIL | NAME / ROSTER |
+|---|---|---|
+| **rule** | **the same in every org** — nobody reads anyone's address, ever | **genuinely different by org** |
+| **client org (salon)** | hidden | **visible, and must be** — Frank assembled the roster and his staff need to see each other to work |
+| **Public Square** | hidden | **should be hidden** under the founder's model — you should need the address, as on WhatsApp |
+| **is it in the reviewed design?** | **yes** — Option B, §4 | **NO** |
+
+**The consequence, and it is uncomfortable but has to be said plainly: Option B
+does NOT deliver the founder's model for names.** `profiles_select_shared_org`
+is untouched by Option B, so in Public Square a stranger could still enumerate
+every member's `display_name`. Getting the founder's stated behaviour requires
+the database to distinguish the two kinds of org — **which is the mechanism v4
+proposed and the founder rejected as a special rule for one org (docs/20
+§31.1).**
+
+**The resolution is the trust class, and this is now its strongest argument.**
+v4's flaw was never the conjunct; it was that `kind='public_square'` names ONE
+ORG, and a class with cardinality 1 is an identity with an indirection
+(docs/20 §17.4 conceded this). A **trust class** — open vs closed — is a real
+class with a stated rule, and the carve-out becomes an application of it rather
+than an exception to it. **So F3 is not documentation-only after all: the
+founder's own model needs the distinction to EXIST, not merely to be written
+down.**
+
+**This is NOT a reversal of §4 and does not reopen the reviewed design.** Email
+and names are separable and the founder chose to separate them (§15.1). Option B
+ships as reviewed. **But §6's claim that moving three columns leaves `orgs.kind`
+with "nothing left to do" is now WRONG, and is corrected here:** it has nothing
+left to do **for email**, and something real to do **for names** — which is
+precisely the deferred slice. F3 and §15.3 should be settled together, in that
+slice, not in this one.
+
+---
+
+## 16. Decisions log
 
 - **2026-09-16 — this document created, reviewed twice, and corrected.** Design
   drafted, **not built; no SQL written.** Both adversarial reviews ran (§13,
@@ -715,7 +806,7 @@ task ordering. §11 step 4 now says so explicitly.
 - **2026-09-16 — F2 and F3 were asked; NEITHER IS ANSWERED.** The founder asked
   for a fuller explanation of the trust-class idea before deciding F3, and for
   the industry evidence before deciding F2. **The F2 evidence was gathered and
-  is recorded in §15.1 below** — it did not previously exist in writing
+  is recorded in §16.1 below** — it did not previously exist in writing
   anywhere, and the founder's decision should be made against it.
 - **2026-09-16 — docs/00 insertion point for F3 identified, not edited.** The
   trust-class paragraph (docs/20 §32.1) belongs in **docs/00 §"Core
@@ -724,7 +815,7 @@ task ordering. §11 step 4 now says so explicitly.
   docs/00** — F3 is unanswered. Recorded so the next session does not re-derive
   where it goes.
 
-### 15.1 THE F2 EVIDENCE — what other products do, gathered 2026-09-16
+### 16.1 THE F2 EVIDENCE — what other products do, gathered 2026-09-16
 
 The founder asked for this explicitly before deciding whether
 `org_find_user_by_email` (and `find_module_peer`) should keep returning the
