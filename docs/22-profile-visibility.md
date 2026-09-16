@@ -916,7 +916,7 @@ If an org may tick email as a **shareable** field rather than only a lookup key,
 a client org could re-enable today's leak for itself. The founder's wording
 implies lookup-only, but the model does not say so.
 
-**Worth knowing this is what Slack and Google Groups actually do** (§20.1: where
+**Worth knowing this is what Slack and Google Groups actually do** (§21.1: where
 email is visible at all it is an ORG-level admin setting, never a per-user
 opt-in), so either answer is defensible — **but it changes decision A, so it
 must be deliberate.**
@@ -1140,7 +1140,7 @@ it.**
 **Reading (i) is almost certainly what was meant**, and it also explains the
 founder's own wording: a user cannot honestly be promised their email is private
 in an org where anyone can confirm it by typing it — **which is an enumeration
-oracle (§20.1's F2 evidence, OWASP WSTG-IDNT-04), not a directory listing.** The
+oracle (§21.1's F2 evidence, OWASP WSTG-IDNT-04), not a directory listing.** The
 checkbox would be making a promise the platform cannot keep, so the UI tells the
 truth instead. **That is a statement about honesty, not about display.**
 
@@ -1223,7 +1223,7 @@ Neither is a directory; each is the product doing its job.
    it is the one place that would need an explicit carve-out** if the rule is ever
    enforced mechanically, so it is recorded rather than waved through.
 
-### 19.4 THE ESCALATION — the rule makes the case for a BIGGER change than deleting a column
+### 19.4 THE ESCALATION — **BLOCKED, see §20.2.** The rule argues for a bigger change than deleting a column
 
 **`profiles_select_shared_org` is the only platform-wide member directory that
 exists, and under this rule it should not exist at all.**
@@ -1262,7 +1262,88 @@ adopted afterwards.
 
 ---
 
-## 20. Decisions log
+## 20. THE SCOPE BOUNDARY — FOUNDER-DRAWN 2026-09-16, and it BLOCKS §19.4
+
+> *"single sees their own top-X scored matches, potentially seeing a list of
+> classmates, or potentially adding seeing a list of speeddating participants for
+> your event or seeing every active worker name so they can book one would be a
+> completely different module specific and more importantly most likely
+> submodule (like a specific event or a specific class) feature. completely
+> separate from this and needs its own discussion and generalization looking
+> across the apps and may even need more future modules to fully hash out."*
+
+### 20.1 The line
+
+**Two different questions, and only the first belongs to this workstream:**
+
+| | **ORG-LEVEL visibility** | **ENTITY-LEVEL visibility** |
+|---|---|---|
+| the question | who may I see **by virtue of sharing an org**? | who may I see **by virtue of being in the same class / event / conversation / booking**? |
+| the mechanism | `profiles_select_shared_org`, `shares_org_with` | per-module, and **more precisely per-ENTITY** — one class, one event |
+| examples | Charlie enumerating eight people (§16.7) | §19.3's two exceptions; a classmate list; an event roster |
+| **status** | **IN SCOPE.** This document. | **DEFERRED by the founder.** Needs its own discussion, a generalization across the apps, and *"may even need more future modules to fully hash out."* |
+
+**This is extract-don't-speculate applied by the founder to his own model**, and
+it is right: §19.3's exceptions are not counter-examples to his roster rule, they
+are a different rule that has not been written yet.
+
+**Existing home for it:** docs/15 §11's **entity-level `joinPolicy`** (slice 3
+remainder — *invite-only / request-approval / open, per class / location /
+event*), already deferred there and cross-referenced from CLAUDE.md and
+docs/04. **Entity-level VISIBILITY is the same granularity as entity-level
+JOINING and should be worked in the same pass, not invented separately.**
+
+### 20.2 THE CONSEQUENCE — §19.4 is BLOCKED, and that is correct rather than a problem
+
+**§19.4 proposed replacing `profiles_select_shared_org` with a name resolver:
+*you may resolve a name for a person you are legitimately interacting with; you
+may not browse everyone.* That phrase contains the deferred question.**
+
+"Legitimately interacting with" **is** the entity-level relationship — same
+class, same event, same conversation. So the resolver cannot be narrowed beyond
+today's org-wide rule until the entity-level rules exist. Concretely:
+
+- **Resolver rule A (org-wide):** *resolve a name for anyone you share an org
+  with.* Identical reach to today. Buildable now.
+- **Resolver rule B (entity-scoped):** *resolve a name only for someone you share
+  an entity with.* **Requires the deferred generalization.**
+
+**§19.4 assumed B. B is blocked. Therefore §19.4 is blocked** — and the founder's
+scoping decision, made independently, is what surfaces it. Recorded here so a
+future session does not attempt §19.4 and discover the dependency halfway
+through a migration.
+
+### 20.3 THE EMAIL SLICE IS UNAFFECTED — verified, not assumed
+
+**This matters, because it is the only reason the reviewed work can still
+proceed.**
+
+The email slice **does not touch `profiles_select_shared_org` at all.** It
+deletes a column. The entity-level surfaces that read `profiles` — the seven
+`display_name || email` chains in §3 R4, on classroom rosters, speed-dating
+events and vm conversations — **need the NAME, and email was only ever a
+FALLBACK.** After the slice they read `display_name` through the same unchanged
+policy and simply stop having an email to fall back to.
+
+**So the email slice has no dependency on the deferred question.** It is
+independent, adversarially reviewed (§13, §14), and ready. **The wider change
+(§19.4) is not, and the two must not be merged.**
+
+### 20.4 The three-way split, for the next session
+
+1. **Email — designed, reviewed, ready.** Delete `profiles.email`; `auth.users`
+   is the single source of truth; ~22 call sites. §4, §11. **Open: whether
+   `settings` / `is_superadmin` ride along (§6) — founder's call, near-zero cost,
+   not a live leak.**
+2. **The org-level directory (§19.4)** — kill the blanket row-read. **BLOCKED on
+   (3).** Do not start.
+3. **Entity-level visibility** — the founder's deferred generalization. Belongs
+   with docs/15 §11's entity-level `joinPolicy`. **Needs its own discussion; may
+   need more modules before it can be settled.**
+
+---
+
+## 21. Decisions log
 
 - **2026-09-16 — this document created, reviewed twice, and corrected.** Design
   drafted, **not built; no SQL written.** Both adversarial reviews ran (§13,
@@ -1271,7 +1352,7 @@ adopted afterwards.
 - **2026-09-16 — F2 and F3 were asked; NEITHER IS ANSWERED.** The founder asked
   for a fuller explanation of the trust-class idea before deciding F3, and for
   the industry evidence before deciding F2. **The F2 evidence was gathered and
-  is recorded in §20.1 below** — it did not previously exist in writing
+  is recorded in §21.1 below** — it did not previously exist in writing
   anywhere, and the founder's decision should be made against it.
 - **2026-09-16 — docs/00 insertion point for F3 identified, not edited.** The
   trust-class paragraph (docs/20 §32.1) belongs in **docs/00 §"Core
@@ -1280,7 +1361,7 @@ adopted afterwards.
   docs/00** — F3 is unanswered. Recorded so the next session does not re-derive
   where it goes.
 
-### 20.1 THE F2 EVIDENCE — what other products do, gathered 2026-09-16
+### 21.1 THE F2 EVIDENCE — what other products do, gathered 2026-09-16
 
 The founder asked for this explicitly before deciding whether
 `org_find_user_by_email` (and `find_module_peer`) should keep returning the
