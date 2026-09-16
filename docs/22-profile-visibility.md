@@ -916,7 +916,7 @@ If an org may tick email as a **shareable** field rather than only a lookup key,
 a client org could re-enable today's leak for itself. The founder's wording
 implies lookup-only, but the model does not say so.
 
-**Worth knowing this is what Slack and Google Groups actually do** (§18.1: where
+**Worth knowing this is what Slack and Google Groups actually do** (§19.1: where
 email is visible at all it is an ORG-level admin setting, never a per-user
 opt-in), so either answer is defensible — **but it changes decision A, so it
 must be deliberate.**
@@ -987,7 +987,7 @@ proposed and the founder confirmed.
 
 **That table contains no code difference. It is two rows of configuration.**
 
-### 17.2 THE ONE AMBIGUITY — stated, not silently resolved
+### 17.2 THE ONE AMBIGUITY — **RESOLVED SAME DAY, see §18. Neither reading below was right.**
 
 The founder's two messages can be read two ways and the design must not pick
 one quietly.
@@ -1061,7 +1061,110 @@ today; it will not stay small. **Recorded so it is not discovered late.**
 
 ---
 
-## 18. Decisions log
+## 18. §17.2's AMBIGUITY — RESOLVED BY THE FOUNDER, 2026-09-16, and it is a THIRD answer
+
+**Neither of the two readings §17.2 offered. A better one.**
+
+> *"The org is not marking what is shared, but what is searchable, but that makes
+> it shared. For example, a user will see a check mark next to name and email
+> allowing them to make it shared, but if the org makes email searchable, them
+> will see something additional next to email implying that it is shared since
+> the org set search by email on. The user can still select whether or not to
+> display it but that selection will only have impact if the org shuts off
+> search by email."*
+
+### 18.1 The mechanism, stated precisely
+
+- **The org declares only what is SEARCHABLE.** It never declares what is
+  shared. There is no second org-level "visible" list to maintain.
+- **The user always has a checkbox per field, and it is ALWAYS STORED.**
+- **A searchable field is force-shared while the org keeps it searchable** — and
+  **the user's stored choice is not destroyed, only inert.**
+- **If the org later turns search off for that field, the user's stored choice
+  takes effect immediately.**
+
+**So the effective rule is one expression, with no branch:**
+
+```
+visible_to_co_member(field) = user_checked(field) OR org_searchable(field)
+```
+
+**Why this is better than both readings §17.2 proposed.** "Org sets the ceiling"
+would have let a user hide a field the org can search by — a promise the
+platform cannot keep. "Org forces, user gets leftovers" would have thrown the
+user's preference away, so turning search off would silently leave the field
+exposed until every user re-visited their settings. **This keeps the user's
+intent recorded at all times and lets the org's setting override it
+temporarily.** Reversible, honest, and one boolean expression.
+
+### 18.2 TWO REQUIREMENTS THAT FALL OUT — both are design obligations, not polish
+
+1. **THE UI MUST SAY WHY.** The founder specified this directly: the user sees
+   *"something additional next to email implying that it is shared since the org
+   set search by email on."* **A greyed-out checkbox is not sufficient** — the
+   user must be able to tell that their choice is recorded, currently overridden,
+   and by whom. This is the platform telling a user the truth about their own
+   privacy, so it belongs in the design, not in a later polish pass.
+2. **TURNING SEARCH OFF IS A LIVE VISIBILITY CHANGE.** The moment an org
+   un-ticks `email` as searchable, every member who had left the box unchecked
+   goes from visible to hidden, at once, with no migration and no deploy. That is
+   the intended behaviour — but it means an **org admin's settings toggle
+   silently changes what every other member can see.** It should be logged
+   (`superadmin_lookup_log` is the worked precedent for making a legitimate but
+   consequential action accountable rather than blocking it), and the admin
+   should be told what the toggle will do before they confirm.
+
+### 18.3 THE CONFLICT THIS CREATES — BLOCKING for decision A. NOT resolved here.
+
+**"Searchable makes it shared" collides with the Public Square configuration the
+founder himself proposed, and the collision is exactly on decision A (email is
+never visible to a co-member).**
+
+Public Square was specified as **email searchable, and nothing else** (§16.1,
+§17.1). If searchable makes it shared, then **every Public Square member's email
+address is shared with every other Public Square member** — which is docs/16's
+P1-1 verbatim, the single finding this entire workstream exists to close.
+
+**That cannot be the intent**, because the same founder framed Public Square as
+the WhatsApp case: *"the only way that Sarah can see anything from Dana is if
+she knows [Dana's] email."* **Knowing an address is not the same as being shown
+it.**
+
+**The two readings of "shared", and only the first preserves decision A:**
+
+| | reading | what Mark (a Public Square member who does NOT know Dana's address) can do |
+|---|---|---|
+| **(i) shared WITH WHOEVER SUCCESSFULLY SEARCHES** | the lookup confirms *"yes, that address is Dana"* to someone who already typed it. Nothing is listed or displayed. | **Nothing.** He cannot obtain Dana's address, because he must supply it to use it. **This is WhatsApp, and decision A survives intact.** |
+| **(ii) shared = DISPLAYED** | the address appears on Dana's profile / in the member list | **He reads it straight off her profile.** docs/16 P1-1 is back, in the one org it was written about. |
+
+**Reading (i) is almost certainly what was meant**, and it also explains the
+founder's own wording: a user cannot honestly be promised their email is private
+in an org where anyone can confirm it by typing it — **which is an enumeration
+oracle (§19.1's F2 evidence, OWASP WSTG-IDNT-04), not a directory listing.** The
+checkbox would be making a promise the platform cannot keep, so the UI tells the
+truth instead. **That is a statement about honesty, not about display.**
+
+**FOUNDER CONFIRMATION REQUIRED, and this one IS blocking** — it decides whether
+decision A holds in the one org it was written for. Everything else in §16–§18
+is unaffected either way.
+
+### 18.4 A note on the OTHER fields, so (i) is not over-applied
+
+Reading (i) is specific to a field whose value the searcher must already possess.
+**For `name` or `title` it does not apply**: if an org makes `name` searchable, a
+member can search common names and enumerate the roster without knowing anything
+in advance. **There, searchable really does mean shared, in the plain sense.**
+
+So the honest general statement is: **"searchable implies shared" is true for
+every field; what differs is how much a searcher must already know to exploit
+it.** An address is high-entropy and must be supplied; a name is not.
+`demo-salon` making `name` searchable is a roster and is intended. Public Square
+making `name` searchable would be a directory of strangers and must not happen —
+which the founder's own configuration already avoids.
+
+---
+
+## 19. Decisions log
 
 - **2026-09-16 — this document created, reviewed twice, and corrected.** Design
   drafted, **not built; no SQL written.** Both adversarial reviews ran (§13,
@@ -1070,7 +1173,7 @@ today; it will not stay small. **Recorded so it is not discovered late.**
 - **2026-09-16 — F2 and F3 were asked; NEITHER IS ANSWERED.** The founder asked
   for a fuller explanation of the trust-class idea before deciding F3, and for
   the industry evidence before deciding F2. **The F2 evidence was gathered and
-  is recorded in §18.1 below** — it did not previously exist in writing
+  is recorded in §19.1 below** — it did not previously exist in writing
   anywhere, and the founder's decision should be made against it.
 - **2026-09-16 — docs/00 insertion point for F3 identified, not edited.** The
   trust-class paragraph (docs/20 §32.1) belongs in **docs/00 §"Core
@@ -1079,7 +1182,7 @@ today; it will not stay small. **Recorded so it is not discovered late.**
   docs/00** — F3 is unanswered. Recorded so the next session does not re-derive
   where it goes.
 
-### 18.1 THE F2 EVIDENCE — what other products do, gathered 2026-09-16
+### 19.1 THE F2 EVIDENCE — what other products do, gathered 2026-09-16
 
 The founder asked for this explicitly before deciding whether
 `org_find_user_by_email` (and `find_module_peer`) should keep returning the
