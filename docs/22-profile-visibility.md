@@ -888,7 +888,7 @@ needs no new column.**
 profile, contacts), on top of the ~22 email call sites. This is module-sized
 work, not a slice** — materially larger than anything currently designed.
 
-### 16.5 FIVE THINGS THE MODEL LEAVES OPEN — these decide the design
+### 16.5 FIVE THINGS THE MODEL LEAVES OPEN — **FOUR ANSWERED 2026-09-16, see §17**
 
 1. **DEFAULTS — the most important one.** If a user shares nothing, what does a
    co-member see? At Public Square scale, default-ON leaks names by default.
@@ -916,7 +916,7 @@ If an org may tick email as a **shareable** field rather than only a lookup key,
 a client org could re-enable today's leak for itself. The founder's wording
 implies lookup-only, but the model does not say so.
 
-**Worth knowing this is what Slack and Google Groups actually do** (§17.1: where
+**Worth knowing this is what Slack and Google Groups actually do** (§18.1: where
 email is visible at all it is an ORG-level admin setting, never a per-user
 opt-in), so either answer is defensible — **but it changes decision A, so it
 must be deliberate.**
@@ -946,7 +946,122 @@ not security.*
 
 ---
 
-## 17. Decisions log
+## 17. THE MODEL'S FIVE OPEN QUESTIONS — FOUNDER-ANSWERED 2026-09-16
+
+§16.5 listed five. **Four are now answered, one is deliberately deferred.** His
+answers close the model's largest gap (defaults) and add a general architectural
+rule that reaches well beyond this design (§17.4).
+
+### 17.1 DECIDED — defaults, and "searchable implies mandatory"
+
+> *"Defaults are whatever the org marks they can search by."*
+> *"the org's lookup config is controlling what's findable, and anything they
+> mark is required by the user, so if name is searchable for orgA then every
+> member must fill out their name. If they mark additional fields visible,
+> beyond the org search fields, then those are shown to someone you are talking
+> to."*
+
+**This resolves §16.5's most important gap.** There is no "what if the user
+shares nothing" hole, because the searchable set is not optional:
+
+- **SEARCHABLE (org-declared) -> MANDATORY for every member, and findable by any
+  member of that org.** If orgA makes `name` searchable, every member of orgA
+  must have a name.
+- **VISIBLE (org-declared, beyond the searchable set) -> shown to someone you
+  are ALREADY INTERACTING WITH**, not findable by search.
+- **Everything else -> private.**
+
+**So §16.5's question 2 (searchable vs visible-in-context) is answered by
+SEPARATING them into two org-declared sets**, which is what that question
+proposed and the founder confirmed.
+
+**WORKED EXAMPLE — the two shapes, in one mechanism and no branch:**
+
+| | `demo-salon` (closed) | Public Square (open) |
+|---|---|---|
+| **searchable** | name, title | **email only** |
+| **visible in context** | — | **name** |
+| a member can BROWSE/FIND by | name, title | nothing but an address they already have |
+| what you see once you are talking | name, title | the name they chose |
+| **is this the WhatsApp model?** | no, and correctly not — Frank assembled the roster | **yes, exactly** — a number finds you, a name identifies you once you are talking |
+
+**That table contains no code difference. It is two rows of configuration.**
+
+### 17.2 THE ONE AMBIGUITY — stated, not silently resolved
+
+The founder's two messages can be read two ways and the design must not pick
+one quietly.
+
+- **Message 1:** *"a user gets to fill out a within organization profile and
+  needs to select, from those items on their profile, not in the organizations
+  lookup, what information is shared."* -> the USER chooses what is shared.
+- **Message 2:** *"If they mark additional fields visible ... those are shown to
+  someone you are talking to."* -> **"they" is the ORG**, so the org chooses.
+
+**The reading this document adopts, pending confirmation:** the **org** declares
+which fields *may* be visible; the **user** decides whether to actually provide
+or share each of those, plus anything outside both sets. So the org sets the
+ceiling and the user chooses within it. **The searchable set is the exception —
+that one is mandatory and not a user choice (§17.1).**
+
+**If instead the org can FORCE a field visible, then "visible" is a second
+mandatory set and the user's choice shrinks to the leftovers.** Both are
+coherent; they differ in who holds the last word. **FOUNDER CONFIRMATION NEEDED,
+not blocking.**
+
+### 17.3 DEFERRED — is the global platform name a legal name?
+
+> *"I am not sure yet, for now its just user entered."*
+
+**Current behaviour is unchanged and already matches:** `profiles.display_name`
+is free text the user supplies. **Recorded as deferred, not resolved** — it
+still bears on the privacy page (docs/12 item 6) and docs/21's departed-user
+silhouette, so it must be revisited before either is finished.
+
+### 17.4 DECIDED — the moderation referent, and a GENERAL RULE that outgrows this design
+
+> *"The report should be their platform name. That's their main master name for
+> this type of thing for the platform higherups. A report to org leaders can
+> have their org name parenthetically. In general, a person is an id and it
+> should be easy to display the same views/reports with swaping names depending
+> on veiwer."*
+
+- **Platform-level reports -> the PLATFORM name.** One master referent, so a
+  superadmin and a moderator are always talking about the same person.
+- **Org-level reports -> the org name, with the platform name parenthetically.**
+- **The general rule, and it is the important half:** *a person is an ID, and
+  the same view or report should render different names depending on who is
+  looking.*
+
+**This is a platform architecture directive, not a detail of this design.** It
+says the name resolver (§16.4) is **not a display convenience — it is the
+general mechanism**: every surface renders a `user_id`, and exactly one place
+decides which name that becomes for this viewer.
+
+**It also changes the TARGET of the email slice, and improves it.** §11 step 3
+said "re-point every call site at the definers." Under this rule the target is
+sharper: **the ~22 sites stop rendering `display_name || email` and start
+rendering a user_id through the resolver.** Same work, better end state — and
+the resolver then already exists when the naming slice lands. **This is now a
+founder-stated rule, not an inference.**
+
+### 17.5 STORAGE — the founder's own point, recommendation unchanged
+
+§16.5 item 5. The per-org name should be **optional**, falling back to the
+platform name, so nothing is stored for the (large) majority who use one name
+everywhere. Not contradicted; carried forward as the working answer.
+
+### 17.6 ONE MIGRATION CONSEQUENCE of "searchable implies mandatory"
+
+**Turning this on is not purely additive for existing orgs.** If an org declares
+`name` searchable, every existing member must have one — and **1 of 12 prod
+users has a NULL `display_name`** (§3 R4, measured). So the naming slice needs a
+backfill or a prompt-on-next-login for members who predate the rule. Small
+today; it will not stay small. **Recorded so it is not discovered late.**
+
+---
+
+## 18. Decisions log
 
 - **2026-09-16 — this document created, reviewed twice, and corrected.** Design
   drafted, **not built; no SQL written.** Both adversarial reviews ran (§13,
@@ -955,7 +1070,7 @@ not security.*
 - **2026-09-16 — F2 and F3 were asked; NEITHER IS ANSWERED.** The founder asked
   for a fuller explanation of the trust-class idea before deciding F3, and for
   the industry evidence before deciding F2. **The F2 evidence was gathered and
-  is recorded in §17.1 below** — it did not previously exist in writing
+  is recorded in §18.1 below** — it did not previously exist in writing
   anywhere, and the founder's decision should be made against it.
 - **2026-09-16 — docs/00 insertion point for F3 identified, not edited.** The
   trust-class paragraph (docs/20 §32.1) belongs in **docs/00 §"Core
@@ -964,7 +1079,7 @@ not security.*
   docs/00** — F3 is unanswered. Recorded so the next session does not re-derive
   where it goes.
 
-### 17.1 THE F2 EVIDENCE — what other products do, gathered 2026-09-16
+### 18.1 THE F2 EVIDENCE — what other products do, gathered 2026-09-16
 
 The founder asked for this explicitly before deciding whether
 `org_find_user_by_email` (and `find_module_peer`) should keep returning the
