@@ -916,7 +916,7 @@ If an org may tick email as a **shareable** field rather than only a lookup key,
 a client org could re-enable today's leak for itself. The founder's wording
 implies lookup-only, but the model does not say so.
 
-**Worth knowing this is what Slack and Google Groups actually do** (§19.1: where
+**Worth knowing this is what Slack and Google Groups actually do** (§20.1: where
 email is visible at all it is an ORG-level admin setting, never a per-user
 opt-in), so either answer is defensible — **but it changes decision A, so it
 must be deliberate.**
@@ -1114,7 +1114,7 @@ temporarily.** Reversible, honest, and one boolean expression.
    consequential action accountable rather than blocking it), and the admin
    should be told what the toggle will do before they confirm.
 
-### 18.3 THE CONFLICT THIS CREATES — BLOCKING for decision A. NOT resolved here.
+### 18.3 THE CONFLICT THIS CREATES — **RESOLVED SAME DAY: reading (i). See §19.1.**
 
 **"Searchable makes it shared" collides with the Public Square configuration the
 founder himself proposed, and the collision is exactly on decision A (email is
@@ -1140,7 +1140,7 @@ it.**
 **Reading (i) is almost certainly what was meant**, and it also explains the
 founder's own wording: a user cannot honestly be promised their email is private
 in an org where anyone can confirm it by typing it — **which is an enumeration
-oracle (§19.1's F2 evidence, OWASP WSTG-IDNT-04), not a directory listing.** The
+oracle (§20.1's F2 evidence, OWASP WSTG-IDNT-04), not a directory listing.** The
 checkbox would be making a promise the platform cannot keep, so the UI tells the
 truth instead. **That is a statement about honesty, not about display.**
 
@@ -1164,7 +1164,105 @@ which the founder's own configuration already avoids.
 
 ---
 
-## 19. Decisions log
+## 19. DECIDED 2026-09-16 — "shared" means (i), AND a stronger platform rule
+
+### 19.1 §18.3 ANSWERED — decision A survives
+
+> *"Yes, shared means shared with a user you successfully are in contact with.
+> No organization lets you see a list of its members. You can only reach out if
+> you know the information about the member that you can search on, An email
+> address, potentially a name etc"*
+
+**FOUNDER DECISION: reading (i).** A searchable field is confirmed to someone who
+already supplied it; it is never displayed to someone who did not. **Decision A
+holds in Public Square**, and §18.3's blocking conflict is closed.
+
+### 19.2 THE SECOND SENTENCE IS A BIGGER RULE — and it contradicted ME, not the codebase
+
+> *"No organization lets you see a list of its members."*
+
+**This document repeatedly asserted the opposite** — that *"Frank's staff need to
+see each other on a roster"* was the reason the salon and Public Square must
+behave differently (§15.4, §16.3, and the §9 founder scenario all lean on it).
+**That was asserted from plausibility and never measured. It is false.**
+
+**MEASURED 2026-09-16** — every screen in `apps/web/app/` and `modules/*/ui/`
+that renders a list of other people, with its actual gate read rather than
+inferred from the filename:
+
+| question | answer | gate |
+|---|---|---|
+| ordinary org member sees an **org member list**? | **NO** | both rosters are behind `is_org_admin` (`org_member_profiles`) or `requireSuperadmin()` |
+| classroom **student** sees classmates? | **NO** | rosters are `cls_can_manage` / `cls_is_ga` only; peer review is anonymous |
+| speed-dating **participant** sees other participants? | **NO** | full roster is `sd_can_staff_event`; a participant sees only partners they were actually paired with |
+| matchmaking **single** sees other singles? | **YES, scoped** | `mm_is_single`; their own top-X scored matches only — never a directory |
+| visual-messaging user sees **conversation** members? the **org**? | **partially / NO** | author names on layers in that one conversation; the "Members" block is an add-member FORM with no roster |
+| nail-salon **customer** sees workers? other customers? | **YES / NO** | see §19.3 |
+
+**So the founder's rule is already the platform's design, and my roster argument
+was wrong.** The salon and Public Square do not differ in whether browsing is
+possible. They differ only in **which field you may search on** — which is
+exactly what §16 said, and it is now the whole story rather than half of it.
+
+### 19.3 THE TWO EXCEPTIONS — verified, and both are purpose-bound
+
+Neither is a directory; each is the product doing its job.
+
+1. **Matchmaking (`ui/page.tsx:181`)** — a single sees their own top-X scored
+   matches by name. **That is the module.** Gated on `mm_is_single`, scoped to
+   the caller's own scores, and email appears only on mutual interest via
+   `mm_mutual_matches`.
+2. **Nail salon (`ui/page.tsx:~340`, `CustomerConsole`)** — **VERIFIED by reading
+   the file:** it renders when `!canOperate && !isWorker`, i.e. for an ordinary
+   customer, and lists **every active worker's `display_name`** in a booking
+   dropdown. **Its only gate is `requireOrgModule`, which proves org membership
+   and module enablement but is NOT a role gate.** So this is literally an
+   ordinary member seeing a list of other people.
+   **Judged against the rule: legitimate.** These are staff offering a service
+   and you must pick one to book — the same as a clinic listing its doctors. **But
+   it is the one place that would need an explicit carve-out** if the rule is ever
+   enforced mechanically, so it is recorded rather than waved through.
+
+### 19.4 THE ESCALATION — the rule makes the case for a BIGGER change than deleting a column
+
+**`profiles_select_shared_org` is the only platform-wide member directory that
+exists, and under this rule it should not exist at all.**
+
+Every surface above is gated by role or narrowed to a scope. **The single
+exception is the raw policy** — which is precisely what §16.7 demonstrated:
+Charlie, a rank-0 customer with no role of any kind, enumerated eight people
+including the salon admin. **That is not a leak of the `email` column. It is a
+member directory, and `email` is merely the worst thing in it.**
+
+**So the founder's rule strengthens the email work and also outgrows it.** The
+argument until now was *"email should not be visible."* The stronger and more
+consistent argument is: **an ordinary member should not be able to enumerate the
+org at all, and one policy is the only thing on the platform that lets them.**
+
+**The end state this implies**, and it is the same direction §17.4 already
+pointed: replace the blanket row-read with the **name resolver** — you may
+resolve a name for a person you are legitimately interacting with; you may not
+browse everyone. A per-relationship lookup, not a blanket policy.
+
+**Why this is NOT v1 returning (checked, because §9 requires it):** v1 died
+because it **carved one org out** of `profiles_select_shared_org` and thereby
+broke the invite lookup that depended on that policy. This carves out no org —
+it replaces the read path **platform-wide and uniformly** — and the invite
+lookup is `org_find_user_by_email`, a SECURITY DEFINER that never consulted the
+policy in the first place. **The circularity that killed v1 is structurally
+absent.**
+
+**Scope warning, stated plainly and NOT decided here:** this is larger than the
+reviewed email slice, it touches every roster-rendering screen in six shipped
+modules, and **the two adversarial reviews in §13/§14 examined the column
+deletion, not this.** It should not be folded into the email slice by momentum.
+**§11's build order still stands as the safe path** — the resolver is built in
+step 2 either way, so nothing done for the email slice is wasted if this is
+adopted afterwards.
+
+---
+
+## 20. Decisions log
 
 - **2026-09-16 — this document created, reviewed twice, and corrected.** Design
   drafted, **not built; no SQL written.** Both adversarial reviews ran (§13,
@@ -1173,7 +1271,7 @@ which the founder's own configuration already avoids.
 - **2026-09-16 — F2 and F3 were asked; NEITHER IS ANSWERED.** The founder asked
   for a fuller explanation of the trust-class idea before deciding F3, and for
   the industry evidence before deciding F2. **The F2 evidence was gathered and
-  is recorded in §19.1 below** — it did not previously exist in writing
+  is recorded in §20.1 below** — it did not previously exist in writing
   anywhere, and the founder's decision should be made against it.
 - **2026-09-16 — docs/00 insertion point for F3 identified, not edited.** The
   trust-class paragraph (docs/20 §32.1) belongs in **docs/00 §"Core
@@ -1182,7 +1280,7 @@ which the founder's own configuration already avoids.
   docs/00** — F3 is unanswered. Recorded so the next session does not re-derive
   where it goes.
 
-### 19.1 THE F2 EVIDENCE — what other products do, gathered 2026-09-16
+### 20.1 THE F2 EVIDENCE — what other products do, gathered 2026-09-16
 
 The founder asked for this explicitly before deciding whether
 `org_find_user_by_email` (and `find_module_peer`) should keep returning the
