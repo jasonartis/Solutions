@@ -24,13 +24,38 @@ NOW — 1, 2, 3, AND 8 ALL SHIPPED; 4, 5, 6, 7 ARE ALL DELIBERATELY PAUSED** (fo
 extract-don't-speculate: each adds real cost or a new dependency for a problem that only
 exists once a real client generates real volume — **do not start any of them unprompted,
 revisit together when the first real client is signed**, per docs/18's status note).
-**NEXT SESSION STARTS HERE → [docs/20 §31](docs/20-public-square.md) (founder-agreed
-2026-09-15).** The next piece of work is a DESIGN slice: work up moving `profiles.email` out of
-`profiles` into its own row-policied table, and determine whether that removes v4's
-`kind = 'public_square'` carve-out entirely. §31 carries the full brief — why it beats v4, why
-it is NOT a fourth mechanism (checked against §9), what is already measured, the questions it
-must answer, and the one founder decision still blocking (§8.3). **Design only; nothing reaches
-a migration before an adversarial review returns.**
+**THAT DESIGN SLICE RAN 2026-09-16. ITS OUTPUT IS
+[docs/22-profile-visibility.md](docs/22-profile-visibility.md) — START THERE, NOT docs/20 §31.**
+**DESIGN ONLY: NOTHING IS BUILT, NO SQL WAS WRITTEN, NO MIGRATION EXISTS — and none should be
+written until F1 is answered.** Both adversarial reviews ran and every load-bearing finding was
+re-verified by hand (`0c60615`).
+**The answer contradicts the brief's own title: do NOT create a table.** `profiles.email` is a
+mirror of `auth.users.email` that no trigger ever refreshes — the latent staleness bug recorded
+below — so a second mirror one table over inherits the flaw and adds a sync obligation on the
+signup path. **Instead delete the column; `auth.users` is the single source of truth, read
+through the SECURITY DEFINER functions that already do every email job.** Its guarantee is
+stronger in KIND than v3's: **`authenticated` holds no privilege on `auth.users` at row OR
+column level (VERIFIED ON PROD), and no policy can grant one** — v3 died trying to SUBTRACT
+from a grant that existed; this subtracts nothing.
+**THE ONE BLOCKING FOUNDER DECISION IS F1, put to him in docs/22 §9 and OPEN:** does v4 survive?
+Answer measured: **PARTLY.** Moving email alone kills the carve-out's REASON for existing, but
+leaves it incidentally covering `profiles.settings` and `profiles.is_superadmin`, both still
+readable by every org-mate and **neither read by app code for anyone but the caller** (verified).
+**Move all three and `orgs.kind` has nothing left to do** — that widening is the founder's call.
+**F2 and F3 were asked 2026-09-16 and NEITHER IS ANSWERED** — he asked for a fuller explanation
+of the trust-class idea (F3) and for the industry evidence (F2). **That evidence is now recorded
+in docs/22 §15.1** (six products; five reveal no name at all; OWASP treats the invite-box oracle
+as a finding). docs/00's insertion point for the F3 paragraph is identified (beside principle 7)
+and deliberately NOT edited.
+**Three things the reviews changed, worth carrying:** (1) **a column can be load-bearing for a
+QUERY without being load-bearing for the PRODUCT** — matchmaking's highest-traffic page fetches
+`email` into a map that never reads it, and the first survey missed it because it searched for
+USE; grep the SELECT LIST. (2) The seven `display_name || email` fallbacks do **NOT** "dissolve"
+with display-name-at-signup — all seven name `email` in an explicit column list, so the honest
+total is **~22 call sites, none of which fall away on their own**. (3) **Dropping a column
+forfeits additive-first by design**, so deploy ordering is load-bearing and one-directional:
+code live FIRST, `migrate:prod` second — reversed, it is a simultaneous app-wide outage across
+all six modules.
 
 **Handoff context below rewritten 2026-09-10.** Two tracks ran in parallel and
 both are live state you must not re-derive:
