@@ -5,11 +5,14 @@ THREE OF ITS LIVE-BUG BACKLOG ARE BUILT AND ON PRODUCTION.**
 Written to be attacked. Everything is a claim except where marked FOUNDER
 DECISION or **VERIFIED LIVE** (a `pg_catalog` read or a file read, dated).
 
-> **START AT §31.** The next piece of work is a DESIGN slice, founder-agreed
-> 2026-09-15: move `profiles.email` out of `profiles` into its own row-policied
-> table, and determine whether that removes v4's `kind = 'public_square'`
-> carve-out entirely. §31 carries the brief. **If it holds, much of §12 is
-> superseded rather than built.**
+> **THE §31 DESIGN SLICE RAN 2026-09-16. ITS OUTPUT IS A SEPARATE DOCUMENT:**
+> **[docs/22-profile-visibility.md](22-profile-visibility.md).** Read that, not
+> §31, for the current state of the email question. Headline: the measurements
+> say the answer is **not to create a table at all** — delete `profiles.email`
+> and let `auth.users.email` be the single source of truth, read through the
+> SECURITY DEFINER functions that already do every email job. §31 below is kept
+> as the brief it was, and is now HISTORY. **F1 (does v4 survive) is put to the
+> founder in docs/22 §9 and is still open.**
 >
 > **§33 is the OPEN REGISTER — every unresolved item in one place.** Read it
 > before starting and before calling anything finished; it also states plainly
@@ -2505,7 +2508,7 @@ hypothetical one.**
 **But there is now a short path to being able to write a better sentence**, and
 its first step is a decision already made and needing no migration.
 
-### 22.5 A live question nobody has answered — OFFERED, not run
+### 22.5 A live question nobody has answered — **ANSWERED 2026-09-16: 1 of 12 prod users has a NULL display_name** (docs/22 §3 R4)
 
 **How many PROD users have a NULL `display_name`?** Every one of them is
 currently rendering their email address as their name to every co-member of every
@@ -3142,7 +3145,18 @@ statement (depth 1) from a referential action (depth 2). Measured, not assumed.
 
 ---
 
-## 31. NEXT SESSION STARTS HERE — work up the EMAIL-TABLE design (founder-agreed 2026-09-15)
+## 31. THE BRIEF THAT COMMISSIONED docs/22 — HISTORY as of 2026-09-16
+
+> **SUPERSEDED BY ITS OWN OUTPUT.** This section is the brief; the design it
+> asked for is **[docs/22-profile-visibility.md](22-profile-visibility.md)**,
+> written 2026-09-16. Kept verbatim because docs/22 answers its numbered
+> questions one by one (docs/22 §7) and the questions must stay readable.
+> **Do not act on this section directly — act on docs/22.** Two of its
+> assumptions did not survive measurement: the \email-table\ framing in its
+> title (docs/22 §4), and §31.4 Q4's hope that the move would close §8.3
+> (it does not — docs/22 §7 Q4).
+
+### 31.0 NEXT SESSION STARTS HERE — work up the EMAIL-TABLE design (founder-agreed 2026-09-15)
 
 **THE TASK: design (do not build) moving `profiles.email` out of `profiles` into
 its own row-policied table, and determine whether that makes v4's
@@ -3403,6 +3417,16 @@ one.**
 
 ### 33.1 NEEDS THE FOUNDER (3)
 
+> **UPDATED 2026-09-16.** The design slice ran —
+> **[docs/22-profile-visibility.md](22-profile-visibility.md)**. **F1 is now
+> ANSWERABLE and is put to the founder in docs/22 §9** with the recommendation
+> argued (and widened: docs/22 §6 recommends moving `settings` and
+> `is_superadmin` too, which is the version where the carve-out has nothing
+> left to do). **F2 and F3 were asked on 2026-09-16**; the founder asked for
+> more explanation on F3 and for the industry evidence on F2 before answering.
+> Neither is closed. docs/22 §8 records the shape F2 implies EITHER WAY, so the
+> design is not blocked on it.
+
 | # | question | where | blocks |
 |---|---|---|---|
 | **F1** | **Does v4 survive, or does the email-table design replace it?** The founder's own argument says the `kind='public_square'` carve-out should go; if the email-table approach holds, much of §12 is superseded rather than built | **§31** | the whole design; everything in §12 |
@@ -3441,9 +3465,10 @@ one.**
   `status` filter, `job_requests`/`module_scope_nodes`, the kinds ratchet test,
   and restating the ACL on the `shares_org_with` replace. **Several of these
   evaporate if F1 goes the email-table way.**
-- **§22.5** a read-only count of prod users with a NULL display name — offered,
-  never run. It would turn "this could be exposing real people's email addresses
-  as their names" into a fact.
+- ~~**§22.5** a read-only count of prod users with a NULL display name.~~
+  **RUN 2026-09-16 (docs/22 §3 R4): exactly 1 of 12 prod users** has a NULL
+  `display_name`. So that exposure is ONE account, not a class — and
+  display-name-at-signup plus a decision about that single row closes it.
 - **§4's two figures** — the module-predicate role-gated split and the
   "TEN grant on plain membership" breakdown both need a **body read**, not a
   regex (§4, corrected 2026-09-15).
