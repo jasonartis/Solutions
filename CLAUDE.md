@@ -24,40 +24,84 @@ NOW — 1, 2, 3, AND 8 ALL SHIPPED; 4, 5, 6, 7 ARE ALL DELIBERATELY PAUSED** (fo
 extract-don't-speculate: each adds real cost or a new dependency for a problem that only
 exists once a real client generates real volume — **do not start any of them unprompted,
 revisit together when the first real client is signed**, per docs/18's status note).
-**THAT DESIGN SLICE RAN 2026-09-16. ITS OUTPUT IS
-[docs/22-profile-visibility.md](docs/22-profile-visibility.md) — START AT ITS §0, which is the
-whole thing on one screen (the sections after it are in DISCOVERY order and four are
-superseded; §0.5 maps which). NOT docs/20 §31.** **EIGHT founder decisions were taken — §0.2.**
-**DESIGN ONLY: NOTHING IS BUILT, NO SQL WAS WRITTEN, NO MIGRATION EXISTS — and none should be
-written until F1 is answered.** Both adversarial reviews ran and every load-bearing finding was
-re-verified by hand (`0c60615`).
-**The answer contradicts the brief's own title: do NOT create a table.** `profiles.email` is a
-mirror of `auth.users.email` that no trigger ever refreshes — the latent staleness bug recorded
-below — so a second mirror one table over inherits the flaw and adds a sync obligation on the
-signup path. **Instead delete the column; `auth.users` is the single source of truth, read
-through the SECURITY DEFINER functions that already do every email job.** Its guarantee is
-stronger in KIND than v3's: **`authenticated` holds no privilege on `auth.users` at row OR
-column level (VERIFIED ON PROD), and no policy can grant one** — v3 died trying to SUBTRACT
-from a grant that existed; this subtracts nothing.
-**THE ONE BLOCKING FOUNDER DECISION IS F1, put to him in docs/22 §9 and OPEN:** does v4 survive?
-Answer measured: **PARTLY.** Moving email alone kills the carve-out's REASON for existing, but
-leaves it incidentally covering `profiles.settings` and `profiles.is_superadmin`, both still
-readable by every org-mate and **neither read by app code for anyone but the caller** (verified).
-**Move all three and `orgs.kind` has nothing left to do** — that widening is the founder's call.
-**F2 and F3 were asked 2026-09-16 and NEITHER IS ANSWERED** — he asked for a fuller explanation
-of the trust-class idea (F3) and for the industry evidence (F2). **That evidence is now recorded
-in docs/22 §15.1** (six products; five reveal no name at all; OWASP treats the invite-box oracle
-as a finding). docs/00's insertion point for the F3 paragraph is identified (beside principle 7)
-and deliberately NOT edited.
-**Three things the reviews changed, worth carrying:** (1) **a column can be load-bearing for a
-QUERY without being load-bearing for the PRODUCT** — matchmaking's highest-traffic page fetches
-`email` into a map that never reads it, and the first survey missed it because it searched for
-USE; grep the SELECT LIST. (2) The seven `display_name || email` fallbacks do **NOT** "dissolve"
-with display-name-at-signup — all seven name `email` in an explicit column list, so the honest
-total is **~22 call sites, none of which fall away on their own**. (3) **Dropping a column
-forfeits additive-first by design**, so deploy ordering is load-bearing and one-directional:
-code live FIRST, `migrate:prod` second — reversed, it is a simultaneous app-wide outage across
-all six modules.
+**NEXT SESSION STARTS HERE → BUILD THE EMAIL SLICE.
+[docs/22-profile-visibility.md](docs/22-profile-visibility.md), START AT ITS §0** — the whole
+design on one screen. The sections after §0 are in DISCOVERY order and four are superseded;
+**§0.5 maps which, so do not quote a section without checking it there.**
+**DESIGN IS COMPLETE AND NOTHING IS BUILT: no SQL was written, no migration exists.** Both
+adversarial reviews ran (§13, §14) and every load-bearing finding was re-verified by hand.
+**ELEVEN FOUNDER DECISIONS ARE RECORDED IN §0.2 — READ THEM BEFORE PROPOSING ANYTHING.**
+**Opus-tier: migration + RLS + a trigger on the signup path.**
+
+**WHAT IS DECIDED (§0.2 has all eleven with his own words):**
+**`profiles.email` IS DELETED, not moved to a new table** — it is a write-once copy of
+`auth.users.email` that NO trigger ever refreshes, so a second copy inherits the bug.
+`auth.users` becomes the single source of truth, read through SECURITY DEFINER functions.
+The guarantee is stronger in KIND than v3's: **`authenticated` holds no privilege on
+`auth.users` at row OR column level (VERIFIED ON PROD), and no policy can grant one** — v3 died
+trying to SUBTRACT from a grant that existed; this subtracts nothing.
+**`settings` AND `is_superadmin` GO TOO**, into a **new private per-user companion table**
+(docs/22 §21 — §6 originally forgot to name a destination; the founder caught it). `profiles`
+ends up as `user_id, display_name, created_at, updated_at`.
+**THE DURABLE RULE, which belongs in docs/03: `profiles` is PUBLIC — anything added to it is
+visible to every co-member by definition.** That is what would have prevented the original bug
+(`settings` was added in `20260727010000` and became org-mate-readable the same day; nobody
+decided that and nobody noticed). docs/22 §21.3 proposes a ratchet test so documentation is not
+the only defence.
+**v4 IS WITHDRAWN AND `orgs.kind` IS NEVER CREATED** — docs/20 §12 is marked DEAD.
+**A LOOKUP NEVER CONFIRMS A NAME**, on an invite or a typo, for BOTH `org_find_user_by_email`
+and `find_module_peer` — which **overturns docs/20 §3.4**. So docs/22 §8's `findable_by_email`
+toggle is **NOT to be built**; it was conditional on keeping the name.
+
+**THE FOUNDER REPLACED THE WHOLE APPROACH TO THE UNDERLYING QUESTION (docs/22 §16) — this is
+the part a fresh session will not guess.** Instead of any per-org branch: **an org declares
+which fields are SEARCHABLE**; searchable implies MANDATORY for the member; the user has a
+per-field checkbox that is always stored and goes INERT (not away) while the org forces the
+field on. `visible = user_checked OR org_searchable`. **That configuration does the work
+`orgs.kind` was invented for, with no branch anywhere** — `orgs.settings` already exists and
+four tables already carry a settings jsonb. **"Shared" means shared with someone who
+SUCCESSFULLY SEARCHED** (they already had the value), never displayed to someone who did not —
+that is what saves the email decision inside Public Square. **And: "a person is an ID" — the
+same view renders different names depending on the viewer**, which makes the name resolver a
+platform mechanism, not a display nicety.
+
+**THREE-WAY SPLIT — do NOT merge these (docs/22 §20.4):**
+**(1) The EMAIL SLICE is ready** — ~22 call sites, build order in docs/22 §11.
+**(2) Killing the blanket member directory (`profiles_select_shared_org`) is BLOCKED** on (3).
+Do not start it — docs/22 §20.2 explains why the resolver rule it needs does not exist yet.
+**(3) ENTITY-level visibility** (classmates, event participants, bookable workers) is
+**DEFERRED BY THE FOUNDER** — module- and submodule-scoped, needs its own generalization, and
+belongs with docs/15 §11's entity-level `joinPolicy`.
+
+**ONE FOUNDER QUESTION REMAINS UNANSWERED: F3** — does the trust-class paragraph go into
+docs/00? Asked twice this session, never answered. Now purely a docs/00 note (docs/22 §16.2
+removed any need for a mechanism). Insertion point identified: docs/00 "Core principles",
+beside principle 7. Settle it with the deferred naming slice. Tracked in docs/22 §0.6 with the
+three other open items, incl. **the `is_superadmin()` recursion question that must be
+DEMONSTRATED live, not reasoned about** (docs/22 §21.4).
+
+**FOUR LESSONS WORTH CARRYING OUT OF THIS SESSION:**
+(1) **A column can be load-bearing for a QUERY without being load-bearing for the PRODUCT** —
+matchmaking's highest-traffic page fetches `email` into a map that never reads it, and the
+first survey missed it because it searched for USE. **Grep the SELECT LIST.**
+(2) **The seven `display_name || email` fallbacks do NOT "dissolve"** with
+display-name-at-signup — all seven name `email` in an explicit column list, so the honest total
+is **~22 call sites, none of which fall away on their own.**
+(3) **Dropping a column forfeits additive-first by design**, so deploy ordering is
+one-directional: **code live FIRST, `migrate:prod` second.** Reversed, it is a simultaneous
+app-wide outage across all six modules.
+(4) **`prosrc` matches COMMENTS**, and `email` / `auth.users` match DIFFERENT function sets —
+both matter for docs/22 §11's ratchet test.
+
+**MEASURED THIS SESSION, do not re-derive:** prod has 12 users, 0 divergent
+`profiles.email` vs `auth.users.email`, **1 with a NULL `display_name`** (this finally runs
+docs/20 §22.5, offered and never run); `service_role` **cannot** read `auth.users` despite
+`rolbypassrls`; no `select('*')` on `profiles` exists anywhere (control: 13 elsewhere), so
+there is no silent-breakage class; `profiles` is absent from the view-as surface map; and
+**no org lets an ordinary member browse its roster today** — both member lists are
+admin/superadmin-gated, with two purpose-bound exceptions (matchmaking's own scored matches,
+and the nail-salon booking dropdown, whose only gate is `requireOrgModule`, which is NOT a
+role gate).
 
 **Handoff context below rewritten 2026-09-10.** Two tracks ran in parallel and
 both are live state you must not re-derive:
@@ -123,9 +167,15 @@ doc.
   display name collected at signup; a delegated moderator sees everything and it is disclosed;
   INVITE-ONLY for v1 (the auto-invite trigger is simply not installed); self-enrolment
   eligibility declared in CODE with a per-org default-OFF switch. Founder decision 5 (per-org
-  info choice) is DEFERRED, not superseded — v4 ships first, that slice follows.**
-  **v4 SURVIVED adversarial review (docs/20 §17) and is buildable; v3 is dead — its column
-  revoke is a no-op, `authenticated` holds a TABLE-level grant.** Still blocking before the
+  info choice) is DEFERRED, not superseded.**
+  **⚠ CORRECTED 2026-09-16 — this bullet said "v4 ships first" and "v4 is buildable". BOTH ARE
+  NOW FALSE. v4 IS WITHDRAWN** (founder, F1); `orgs.kind` is never created and docs/20 §12 is
+  marked DEAD. The live design is **[docs/22-profile-visibility.md](docs/22-profile-visibility.md)**
+  — delete `profiles.email` outright, and separately an org declares which fields are
+  SEARCHABLE (docs/22 §16), which does v4's job with no per-org branch at all. **Founder decision
+  5 (per-org info choice) is no longer waiting on v4 — it is ABSORBED into that model and rides
+  with the deferred naming slice** (docs/22 §20.4 item 3). v3 remains dead for its own reason:
+  its column revoke is a no-op, `authenticated` holds a TABLE-level grant. Still blocking before the
   Public Square org itself: docs/20 §17.8's remaining items, chiefly `org_find_user_by_email`
   (§8.3 — and do NOT "fix" it by adding an org join, that breaks every invite) and
   `join_module`, which is unbuildable as specified because a SECURITY DEFINER does not bypass
@@ -167,12 +217,17 @@ doc.
   `orgs` is `id, name, slug, settings, created_at, updated_at`. Any design that wants it must
   create it (docs/20 §11.4).
   **(2) docs/16's checklist is no longer "items 1–3, none decided."** The whole P1 list was
-  re-scored against v4 on 2026-09-11 — **docs/20 §17.9** is the current reading, including
+  re-scored against v4 on 2026-09-11 — **docs/20 §17.9** is the reading AS OF THEN, including
   which items v4 closes, which it only partly closes, and P1-6's conflict, which the founder
-  resolved on 09-14 (§24.2).
-  **(3) The security semantics ARE now decided** (v4, §12) and survived adversarial review —
-  **but the next slice may remove the need for them entirely**: see docs/20 §31, the
-  email-table design, which if it holds makes the per-org carve-out unnecessary.
+  resolved on 09-14 (§24.2). **⚠ v4 is now WITHDRAWN (2026-09-16), so §17.9's scoring is
+  against a dead mechanism and needs re-reading against docs/22 before it is cited.** The P1-1
+  item (the platform-wide email directory) is the one docs/22 actually closes.
+  **(3) The security semantics are decided, BUT NOT BY v4 — ⚠ CORRECTED 2026-09-16.** This
+  said "(v4, §12) and survived adversarial review", and v4 has since been WITHDRAWN. The
+  prediction in its own next sentence came true: **the design slice DID remove the need for the
+  per-org carve-out entirely.** Current answer: **[docs/22](docs/22-profile-visibility.md)** —
+  `profiles.email` is deleted platform-wide (so there is no carve-out to make), and visibility
+  is governed by an org-declared SEARCHABLE field list rather than by org kind.
   Its real cost is still docs/16 P1-6's tail: *operating a public community*, ongoing — and
   that half is genuinely untouched, deferred by the invite-only decision.
 

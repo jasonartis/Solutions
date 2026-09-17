@@ -1,7 +1,9 @@
 # Public Square — an ordinary org, made safe by fixing the general case
 
-**Status, 2026-09-15: DESIGN v4 SURVIVED REVIEW. THE ORG ITSELF IS NOT BUILT.
-THREE OF ITS LIVE-BUG BACKLOG ARE BUILT AND ON PRODUCTION.**
+**Status, 2026-09-16: v4 IS DEAD — WITHDRAWN BY THE FOUNDER. THE ORG ITSELF IS
+NOT BUILT. THREE OF ITS LIVE-BUG BACKLOG ARE BUILT AND ON PRODUCTION.**
+**§12 (v4) and §31 (its brief) are both HISTORY. The live design is
+[docs/22-profile-visibility.md](22-profile-visibility.md) — start at its §0.**
 Written to be attacked. Everything is a claim except where marked FOUNDER
 DECISION or **VERIFIED LIVE** (a `pg_catalog` read or a file read, dated).
 
@@ -455,7 +457,12 @@ human-granted nor system-granted. Needs a third marker or an explicit exemption.
 
 ---
 
-## 5. Build order
+## 5. Build order — **DEAD, 2026-09-16. This builds v4, which is WITHDRAWN.**
+
+> **DO NOT FOLLOW THIS SECTION.** Step 1 creates `orgs.kind`, which is never
+> being created (§12's banner, F1 in §33.1). The live build order is
+> **[docs/22](22-profile-visibility.md) §11**, and docs/22 §0.4 says which of
+> the three workstreams is actually ready. Kept as history.
 
 **REWRITTEN 2026-09-10 for v4 and the Track A split (§12.8).**
 
@@ -1126,7 +1133,16 @@ Nothing was run — no test, migration, seed or e2e. And **prod was not checked*
 given this repo's documented local/prod `ALTER DEFAULT PRIVILEGES` divergence,
 the EXECUTE grants on those two definer functions must be re-verified against
 prod before the admin-gating in Q2 is relied on.
-## 12. v4 — THE MECHANISM
+## 12. v4 — THE MECHANISM — **DEAD, 2026-09-16. DO NOT BUILD THIS.**
+
+> **WITHDRAWN BY THE FOUNDER (F1, §33.1).** `orgs.kind` is never created and
+> this conjunct is never written. It is superseded twice over:
+> **[docs/22](22-profile-visibility.md) §4** deletes `profiles.email` outright,
+> which removes the leak v4 was guarding in EVERY org rather than one; and
+> **docs/22 §16** replaces the per-org distinction entirely with an
+> org-declared SEARCHABLE field list, which needs no branch at all.
+> **Kept for the record, as v1–v3 are (§9, §9.3), so a fifth is not
+> re-derived.** Everything below is history.
 
 **One conjunct, in one function, that no other object in the database depends
 on.** v4 is v1's shape with v1's named flaw repaired. It is not a fourth
@@ -2486,16 +2502,21 @@ because the fallback never fires.
 
 | bucket | count | disposition |
 |---|---|---|
-| Seven fallback chains | 7 | **dissolved by §16.1** — ship display-name-at-signup and they render names |
+| Seven fallback chains | 7 | ~~**dissolved by §16.1**~~ **⚠ WRONG, CORRECTED 2026-09-16 — they are NOT dissolved.** All seven name `email` in an explicit PostgREST column list, so all seven raise 42703 once the column is gone, whether or not display-name-at-signup has shipped. That decision removes the NEED FOR THE VALUE, not the code edit. See docs/22 §3 R4 and §14.1 |
 | `SELECTED-UNUSED` (matchmaking `ui/page.tsx:45,117`) | 2 | **free** — drop `email` from the select; deliberate non-use is already commented |
 | `USED` as a lookup key (classroom `:52`, matchmaking `:94`, vm `:169`) | 3 | **mechanically re-routable** to `org_find_user_by_email` — which §17.2 is bounding anyway, so this rides along |
 | **Matchmaking `<datalist>`** | 2 sites, 1 decision | **REAL.** Needs a product answer: does assigning a matchmaker require an email autocomplete, or will a name-based picker do? |
 | **Speed-dating `contact_shared` write** | 1 | **REAL and the hardest.** The feature's whole point is exchanging contact details. Needs a per-module definer that returns email exactly where the product intends it |
 
 **So v2's "15 breaking sites" figure was right as a raw count and wrong as a cost
-estimate.** With §16.1 shipped and the lookup sites re-routed, the genuinely
-unresolved set is **matchmaking's autocomplete and speed-dating's contact
-share** — two product questions, not fifteen ports.
+estimate.** The genuinely unresolved PRODUCT questions are **matchmaking's
+autocomplete and speed-dating's contact share** — two, not fifteen.
+
+**⚠ BUT THE ENGINEERING COST WAS UNDERSTATED, corrected 2026-09-16.** This block
+counted only the sites needing a DECISION. Every other row still needs a code
+edit, because each names `email` in an explicit column list. **The honest total
+is ~22 call sites** (docs/22 §3), of which two are product questions. Do not use
+"three sites, not fifteen" as a build estimate.
 
 ### 22.4 What this does to §21's privacy-copy dilemma
 
@@ -3156,7 +3177,7 @@ statement (depth 1) from a referential action (depth 2). Measured, not assumed.
 > title (docs/22 §4), and §31.4 Q4's hope that the move would close §8.3
 > (it does not — docs/22 §7 Q4).
 
-### 31.0 NEXT SESSION STARTS HERE — work up the EMAIL-TABLE design (founder-agreed 2026-09-15)
+### 31.0 The brief as it was written on 2026-09-15 — **NOT a pointer to current work.** The next session builds the email slice: **[docs/22](22-profile-visibility.md) §0**
 
 **THE TASK: design (do not build) moving `profiles.email` out of `profiles` into
 its own row-policied table, and determine whether that makes v4's
@@ -3220,8 +3241,9 @@ Do not re-derive these; do re-verify them against the live catalog, since Track 
 moved the schema once already.
 
 - **Nine member-facing sites RENDER a co-member's email** (§22). Seven are
-  `display_name || email` fallback chains that **dissolve once §16.1's
-  display-name-at-signup ships** — which needs no migration, because
+  `display_name || email` fallback chains that ~~dissolve once §16.1's
+  display-name-at-signup ships~~ **⚠ DO NOT dissolve — corrected 2026-09-16, see
+  §22.3 and docs/22 §3 R4** — which needs no migration, because
   `handle_new_user` already reads the metadata field.
 - **Two are real product questions, not ports** (§22.3): matchmaking's
   `<datalist>` autocomplete, and speed-dating's `contact_shared` write, which is
@@ -3417,15 +3439,30 @@ one.**
 
 ### 33.1 NEEDS THE FOUNDER (3)
 
-> **UPDATED 2026-09-16.** The design slice ran —
-> **[docs/22-profile-visibility.md](22-profile-visibility.md)**. **F1 is now
-> ANSWERABLE and is put to the founder in docs/22 §9** with the recommendation
-> argued (and widened: docs/22 §6 recommends moving `settings` and
-> `is_superadmin` too, which is the version where the carve-out has nothing
-> left to do). **F2 and F3 were asked on 2026-09-16**; the founder asked for
-> more explanation on F3 and for the industry evidence on F2 before answering.
-> Neither is closed. docs/22 §8 records the shape F2 implies EITHER WAY, so the
-> design is not blocked on it.
+> **SUPERSEDED 2026-09-16, LATE. TWO OF THE THREE ARE ANSWERED.** The design
+> slice ran and ELEVEN founder decisions were taken — the current list is
+> **[docs/22-profile-visibility.md](22-profile-visibility.md) §0.2**, and the
+> table below is kept only as the record of what was asked.
+>
+> - **F1 — ANSWERED. v4 IS WITHDRAWN.** `profiles.email` is deleted outright;
+>   `auth.users` becomes the single source of truth; `settings` and
+>   `is_superadmin` move with it into a private companion table. **`orgs.kind`
+>   is never created and §12 below is DEAD.** See docs/22 §0.2, §4, §21.
+> - **F2 — ANSWERED: drop the name.** *"if we should suggest to them, no we
+>   should not."* Applies to BOTH `org_find_user_by_email` and
+>   `find_module_peer`, so they stay consistent — which **overturns §3.4's own
+>   recommendation.** docs/22 §8's `findable_by_email` toggle was conditional on
+>   keeping the name and is therefore **NOT to be built**. See docs/22 §15.2.
+> - **F3 — STILL OPEN, and it is the only question put to the founder this
+>   session with no answer recorded.** Its status changed though: docs/22 §16.2
+>   removed the need for any trust-class MECHANISM in code, so it is now purely
+>   a docs/00 paragraph. Settle it with the deferred naming slice.
+>   Tracked in docs/22 §0.6.
+>
+> **The founder also replaced this document's whole approach to the underlying
+> question** — an org declares which fields are SEARCHABLE, and that
+> configuration does the work `orgs.kind` was invented for, with no branch
+> anywhere. docs/22 §16.
 
 | # | question | where | blocks |
 |---|---|---|---|

@@ -223,6 +223,19 @@ in a network-class org?"*
 
 ## Decision checklist (all founder calls, ~~none made yet~~ — SEVERAL NOW MADE)
 
+> **UPDATED AGAIN 2026-09-16 — P1-1 IS ANSWERED AND v4 IS DEAD.**
+> **P1-1 (CRITICAL, the platform-wide email directory) is CLOSED BY DESIGN in
+> [docs/22-profile-visibility.md](22-profile-visibility.md)** — `profiles.email`
+> is deleted outright, so no org exposes addresses to co-members. **Designed and
+> adversarially reviewed; NOT YET BUILT.** ⚠ **The re-scoring referenced below
+> was done against v4, which the founder WITHDREW on 2026-09-16** — so
+> docs/20 §17.9 is a reading against a dead mechanism. **Read docs/22 §0 first;
+> use §17.9 only for the items docs/22 does not touch.**
+> **Checklist item 1 (the trust-class principle into docs/00) is STILL OPEN** —
+> asked twice on 2026-09-16 and never answered — but it is now WEAKER than this
+> document claimed: docs/22 §16.2 removed any need for a trust-class MECHANISM
+> in code, so it is a docs/00 paragraph only. Tracked in docs/22 §0.6.
+>
 > **STALE HEADER, corrected 2026-09-15. Read
 > [docs/20 §17.9](20-public-square.md) before using this list** — the whole P1
 > checklist was re-scored against Public Square's v4 design on 2026-09-11, and
@@ -242,6 +255,11 @@ in a network-class org?"*
 
 1. Adopt the trust-class principle into docs/00 (and the `orgs.kind` column when
    built)? — gates everything below.
+   **⚠ 2026-09-16: THE PRINCIPLE IS STILL OPEN; THE COLUMN IS NOT COMING.**
+   `orgs.kind` is **never created** (v4 withdrawn). The principle also no longer
+   "gates everything below" — docs/22 §16.2 achieves the open/closed distinction
+   as per-org CONFIGURATION, so item 1 is now a docs/00 paragraph only. Tracked
+   in docs/22 §0.6.
 2. Choose the `profiles_select_shared_org` fix shape (P1-1 a or b). **Blocking for
    Public Square and Redt-It Shape B.**
 3. Approve the Public Square charter: module whitelist, §7-default overrides,
@@ -258,6 +276,10 @@ Square is not a new workstream; it is the acceptance test for that slice.**
 **Amendment 2026-09-04:** visual messaging's ad-hoc person-to-person groups were
 briefly a *fourth* consumer of this checklist and are no longer — they took the
 per-pair-org route, which needs none of items 1–3 (see the update block at the
-top of this doc). Item 1 (`orgs.kind`) will nonetheless get built by that work,
+top of this doc). ~~Item 1 (`orgs.kind`) will nonetheless get built by that work,
 for its cosmetic/UX use only, so whoever takes Public Square should expect the
-column to already exist and to still need its security semantics decided.
+column to already exist~~ **⚠ FALSE TWICE OVER, corrected 2026-09-16. (a) That
+work never landed — `orgs` has NO `kind` column (verified live; docs/20 §11.4).
+(b) It is never going to: v4 was withdrawn and the column is not being created.
+Do NOT expect it to exist.** The security semantics it was to carry are decided
+without it — docs/22.

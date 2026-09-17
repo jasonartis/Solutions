@@ -49,10 +49,11 @@ along with the name. Nobody chose to expose it. The app never shows those
 addresses on a screen — but the browser can ask the database directly with the
 token the app already issued, so that is not a defence.
 
-### 0.2 WHAT WAS DECIDED — eight decisions, all yours
+### 0.2 WHAT WAS DECIDED — eleven decisions, all yours
 
 | # | decision | where |
 |---|---|---|
+| **0** | **NO PER-ORG BRANCHING, restated by the founder as the governing constraint:** *"I want every organization to follow the same code and structure so I don't want any `if org=xyz` then something unique."* **Everything below is checked against this.** | §16.1 |
 | **1** | **CONFIRMED 2026-09-16 (*"I will take your recommendation"*). `profiles.email` is DELETED, not moved to a new table.** It is a copy of `auth.users.email` that no trigger ever refreshes — a cache with no invalidation. A second copy inherits that bug. `auth.users` becomes the single source of truth. | §4 |
 | **2** | **`settings` and `is_superadmin` ride along** — **into a new PRIVATE COMPANION TABLE (§21), which §6 originally forgot to name** — they leave `profiles` in the same slice. Near-zero app cost; nothing reads either for anyone but the caller. | §6, §0.3 |
 | **3** | **A lookup never confirms a name.** Not on an invite, not on a typo. *"if we should suggest to them, no we should not."* | §15.2 |
@@ -61,6 +62,12 @@ token the app already issued, so that is not a defence.
 | **6** | **No org lets you browse its members.** Measured: already true everywhere except the policy in §0.1. | §19.2 |
 | **7** | **A person is an ID.** The same view renders different names depending on who is looking. Platform name for platform reports; org name parenthetically for org leaders. | §17.4 |
 | **8** | **Email first; the naming model second.** Entity-level visibility is a separate question entirely. | §15.1, §20 |
+| **9** | **The global platform name is NOT declared a legal name.** *"I am not sure yet, for now its just user entered."* Current behaviour is unchanged — it is free text the user supplies. **A deliberate deferral, not an oversight.** | §17.3 |
+| **10** | **v4 IS WITHDRAWN.** `orgs.kind` is never created; docs/20 §12 is dead. Follows from decision 0 and from deleting the column instead. | §19.1, docs/20 §12 |
+
+**Note: rows 4 and 8 each carry more than one decision** (row 4: the org declares
+searchable, searchable implies mandatory, and the user's checkbox is stored but
+inert; row 8: email-before-naming, and entity-level as a separate question).
 
 ### 0.3 WHAT THIS ACTUALLY CHANGES, in plain terms
 
@@ -114,6 +121,19 @@ three times that *"Frank's staff need to see each other on a roster"* — **meas
 and false** (§19.2).
 
 ### 0.6 STILL OPEN
+
+- **F3 — does the TRUST-CLASS paragraph go into docs/00?** *(docs/20 §33.1's
+  third founder question. **ASKED TWICE THIS SESSION AND NEVER ANSWERED** — it
+  is the one thing put to you that has no answer recorded.)* One paragraph, no
+  code: *orgs carry a trust class — in a CLOSED org a human granted the
+  membership, so co-membership is evidence of a relationship; in an OPEN org it
+  is not; any policy widening visibility on co-membership must say which it
+  assumes.* **Its status changed during the session:** §16.2 removed the need
+  for any trust-class MECHANISM in code, so this is now purely a note to the
+  next author — weaker than when it was first asked, but not moot, because the
+  distinction it names is still real. **Insertion point already identified:
+  docs/00 "Core principles", beside principle 7.** Settle it with the deferred
+  naming slice (§20.4 item 3), not before.
 
 - **§17.3** — is the global platform name a legal name? *"not sure yet, for now
   its just user entered."* Bears on the privacy page and docs/21.
@@ -777,6 +797,14 @@ one was accepted with a qualification.
    from a 2026-07-16 privacy fix, and a real 42703 on the module's
    highest-traffic page. **The survey missed it because it searched for
    `.email` USE and for fallback chains, and this is neither.**
+   **⚠ AND IT WAS NOT A NEW DISCOVERY — found 2026-09-16 while auditing the
+   handoff, and this is worth more than the bug: docs/20 §22.3 ALREADY LISTED
+   BOTH LINES, on 2026-09-11, under the heading `SELECTED-UNUSED`.** The
+   information existed in this repo the whole time; neither my survey nor the
+   review found it, and the review re-derived it from the code. **That is
+   docs/03 #21 exactly — *search docs/ by MECHANISM before designing one* — and
+   it is the second time in this workstream a prior finding was re-derived
+   rather than read.** Credit the record, not the review.
 2. **R4's seven sites do NOT "dissolve" — my wording was wrong.** VERIFIED: all
    seven name `email` in an explicit column list, so all seven raise 42703
    whether or not display-name-at-signup has shipped. §3 R4 and §9's cost figure
@@ -1044,6 +1072,21 @@ GET /rest/v1/profiles?select=display_name,email,is_superadmin
 -> 8 rows: Alice A, Charlie C, Dana D, Eve E, Frank F (the salon ADMIN),
            Gabe G, Grace G, Mel M — each with their email address.
 ```
+
+**To reproduce** (local stack up, seeded) — sign in for a real token, then query
+as that user, exactly as the browser would:
+
+```
+POST http://127.0.0.1:54321/auth/v1/token?grant_type=password
+     apikey: <NEXT_PUBLIC_SUPABASE_ANON_KEY from apps/web/.env.local>
+     {"email":"charlie@demo.local","password":"password123"}
+GET  http://127.0.0.1:54321/rest/v1/profiles?select=display_name,email,is_superadmin
+     apikey: <anon>   Authorization: Bearer <access_token>
+```
+
+**This is the acceptance test for the whole slice**: after it ships, the same two
+calls must return Charlie's own row and nothing else. Keep it — it is the one
+check a non-engineer can run and read.
 
 **Cause:** `profiles_select_shared_org` (`20260708020000`) grants read of the
 whole ROW to anyone sharing an org — added deliberately, to stop rosters
@@ -1509,7 +1552,13 @@ this kind live, and it belongs there more than here.
 ### 21.4 ONE THING THE BUILD MUST PROVE, NOT REASON ABOUT
 
 `is_superadmin()` **reads** the `is_superadmin` column; the companion table's own
-SELECT policy would **call** `is_superadmin()`. That looks circular and is
+SELECT policy would **call** `is_superadmin()`. **VERIFIED LIVE 2026-09-16: nine
+other functions in `public` reference `is_superadmin`** — `is_org_admin`,
+`module_roles_guard_hierarchy`, `module_roles_guard_last_director`,
+`org_accept_invite`, `org_caller_rank`, `org_members_guard_hierarchy`,
+`org_modules_pin_enablement`, `superadmin_log_guard` — **and they call the
+FUNCTION, not the column**, which is why moving the column is a one-line change
+to one function rather than a nine-function edit. That looks circular and is
 probably not — the function is `SECURITY DEFINER` owned by `postgres`
 (VERIFIED LIVE 2026-09-16), so it bypasses RLS entirely and never re-enters the
 policy.
