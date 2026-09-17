@@ -24,8 +24,12 @@ NOW — 1, 2, 3, AND 8 ALL SHIPPED; 4, 5, 6, 7 ARE ALL DELIBERATELY PAUSED** (fo
 extract-don't-speculate: each adds real cost or a new dependency for a problem that only
 exists once a real client generates real volume — **do not start any of them unprompted,
 revisit together when the first real client is signed**, per docs/18's status note).
-**THE EMAIL SLICE IS BUILT (2026-09-17) AND IT IS **NOT ON PRODUCTION** —
-`pnpm migrate:prod` HAS NOT RUN.** Live doc:
+**THE EMAIL SLICE IS BUILT (2026-09-17). IT IS COMMITTED BUT **NOT PUSHED**, AND **NOT ON
+PRODUCTION** — `pnpm migrate:prod` HAS NOT RUN.** The two commits are `3d20707` (the slice)
+and `26c7171` (the deploy procedure). **`git push` is STEP 2 of that procedure, not a
+separate act — pushing before `20260917010000` is applied to prod 500s every authenticated
+page.** CI has therefore not run on it either; everything below was verified locally in CI's
+exact order. Live doc:
 [docs/22-profile-visibility.md](docs/22-profile-visibility.md) — **read §23 first**
 (what exists, what the deploy still requires), then §0 if you need the design.
 **`public.profiles` is now `user_id, display_name, created_at, updated_at`.** `email` is
