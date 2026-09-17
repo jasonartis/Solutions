@@ -147,13 +147,18 @@ and false** (§19.2).
 - **§16.6** — may an org ever make email a *shareable* field rather than only a
   searchable one? Decision 5 makes this mostly moot; worth a line when the
   naming model is built.
-- **§21.4** — the companion table's policy calls `is_superadmin()`, which reads
-  a column that would live IN that table. Almost certainly fine (the function is
-  SECURITY DEFINER and bypasses RLS) but **must be demonstrated live before the
-  migration is written**, not reasoned about. Fallback if it recurses: leave
-  `is_superadmin` on `profiles`.
-- **§17.6** — "searchable implies mandatory" is not purely additive: **1 of 12
-  production users has no display name** and would need a backfill or a prompt.
+- ~~**§21.4** — does the companion table's policy recurse through
+  `is_superadmin()`?~~ **CLOSED 2026-09-17: DEMONSTRATED, not reasoned about,
+  before any SQL was written. No recursion** — the superadmin read all 11 rows,
+  with an ordinary user seeing exactly 1 as the control proving the policy was
+  ENFORCED rather than switched off. The fallback was not needed. See §23.2.
+- ~~**§17.6** — the 1 production user with no display name.~~ **CLOSED
+  2026-09-17.** Measured: it is `jasonartisenergy@gmail.com`, the founder's own
+  account, so the backfill carries no third-party privacy question.
+  `20260917020000` seeds a NULL name from the email local-part generically,
+  signup now collects one, and the new `/account` page lets anyone change theirs.
+  **The wider "searchable implies mandatory" question stays with the deferred
+  naming slice** — only its display-name tail is closed.
 
 ---
 
