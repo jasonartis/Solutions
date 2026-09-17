@@ -1747,6 +1747,24 @@ mistake it for a regression.
    This is docs/20 §8.1's already-shipped lesson arriving somewhere new. *Found
    by adversarial review A.*
 
+5. **THE MOST SERIOUS ONE, AND NEITHER REVIEW NOR THE LOCAL SUITE FOUND IT — CI
+   DID.** `20260917020000` created `public.user_private` and granted `select` +
+   `update (settings)` **without revoking first**, on the reasoning that a table
+   created by a CLI migration inherits no API-role grants. Measured:
+   `pg_default_acl` for `grantor=postgres, schema=public` gives `authenticated`
+   only `Dxtm` **locally** — but the default varies by schema and environment
+   (`schema=storage` gives the full `arwdDxtm`), and **in CI the effective grant
+   included TABLE-LEVEL UPDATE, which covers every column.** A column grant
+   cannot narrow a table grant, so `update (settings)` defended nothing.
+   **`bob@demo.local`, an ordinary seeded user with no role anywhere, set his own
+   `is_superadmin` to true** — then satisfied `is_org_admin` everywhere and took
+   **23 further tests** down with him across org self-management, invite-accept
+   and all four scoped-authority suites. The local suite had passed 231/231.
+   Fixed by `revoke all privileges … from public, anon, authenticated,
+   service_role` before the grants, and the ACL is now asserted DIRECTLY from
+   `pg_catalog` in the ratchet test and the prod-verify script rather than only
+   through behaviour. → docs/03 #27.
+
 **And two defects reviewer B found in files the survey never listed:**
 `scripts/verify-console-view-as.mts` and `scripts/verify-data-browser.mts` both
 read `profiles.is_superadmin` as a probe PRECONDITION — so each would have

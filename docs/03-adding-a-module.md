@@ -1100,6 +1100,76 @@ mechanism is proven in the managed environment, but it carries rules that are no
       is a call-site question, not a schema question, and reasoning about it
       from the schema gets it backwards — it did here.
 
+27. **A NEW TABLE MUST `revoke` BEFORE IT `grant`s — the ambient default is not
+    zero, and it differs between your machine and CI.** This cost a real
+    privilege escalation on 2026-09-17: an ordinary seeded user set his own
+    `is_superadmin` to true.
+    - **The claim that failed** was the one in this very convention list's #1,
+      applied too loosely: *"tables created in CLI migrations do NOT inherit
+      Supabase's default API-role grants."* That is true of the environment you
+      happen to be sitting in, not universally. **Measured:**
+      ```
+      pg_default_acl  grantor=postgres  schema=public   -> authenticated=Dxtm
+      pg_default_acl  grantor=postgres  schema=storage  -> authenticated=arwdDxtm
+      ```
+      A new table inherits whatever that row says — and it varies by SCHEMA and
+      by environment. Locally `public` gave no UPDATE, so a column-scoped
+      `grant update (settings)` looked like the whole story and the RLS suite
+      passed **231/231**. In CI the effective grant included **table-level
+      UPDATE**, which covers every column.
+    - **A COLUMN GRANT CANNOT NARROW A TABLE GRANT.** `grant update (settings)`
+      only adds; it never subtracts from a wider `grant update`. This is the
+      same arithmetic that killed v3 of the profile-visibility workstream
+      (docs/20 §9), where a column-level *revoke* was a no-op against an
+      existing table-level grant. **The two levels do not compose the way they
+      read**, in either direction.
+    - **`20260728010000_acl_hardening.sql` already did this correctly** —
+      `revoke all privileges on all tables in schema public from anon,
+      authenticated`, then grant back explicitly. **A table added after that
+      sweep sits outside it and must revoke for itself.** Copy the pattern;
+      do not assume the sweep covers you.
+    - **A SINGLE PRIVILEGE ERROR PRESENTS AS A BROAD, UNRELATED TEST FAILURE.**
+      24 tests failed across org self-management, invite-accept and all four
+      scoped-authority suites. **Exactly one was the cause** (`bob cannot make
+      himself superadmin`); the other 23 were consequences of bob being a
+      superadmin for the remainder of the run, since `is_org_admin()`
+      short-circuits on `is_superadmin()`. When a broad spread of unrelated
+      suites goes red at once, **look for one test that grants something**
+      rather than reading them as an environment problem.
+    - **Assert the ACL DIRECTLY, not only through behaviour.** The behavioural
+      test ("a self-promotion write is refused") passed locally precisely
+      because the ambient default happened to be restrictive there. The ACL is
+      now read from `pg_catalog` in
+      `packages/db/src/profiles-public-columns.test.ts` and in
+      `scripts/prod-verify-profile-visibility.mts` — every negative paired with
+      a control for a privilege that must EXIST, so the assertions cannot pass
+      vacuously.
+    - → **State the whole intended ACL positively**, every role including the
+      ones that get nothing, and put `revoke all privileges on <table> from
+      public, anon, authenticated, service_role;` above the grants. Reasoning
+      about what a table "inherits" is how this happens.
+
+28. **CI's append-only migration guard is absolute, and a fix to an unpushed-to-
+    prod migration still trips it.** `.github/workflows/ci.yml`'s *"Block edits
+    to existing migrations"* step fails on ANY `M` or `D` under
+    `supabase/migrations/` between the previous push and this one. There is no
+    escape hatch and it does not care whether the migration has ever been
+    applied anywhere.
+    - **The trap that follows, and it is not obvious:** once an edited migration
+      has been pushed, **reverting it is ALSO a modification** and trips the
+      same guard on the next push. So there is no way back to "unedited" — the
+      choice is between leaving the edit in place or taking a second red run.
+    - → **Decide before pushing.** If a migration needs changing and it has
+      never been applied to production, either amend before the push, or accept
+      that the fix goes in a NEW migration file. Adding a compensating migration
+      *after* a revert is the worst of both, because the revert itself fails CI.
+    - Recorded 2026-09-17, when convention #27's fix was made by editing
+      `20260917020000` and pushing; the guard was right to complain, the edit
+      was safe (that migration had never been applied to any real database), and
+      the resolution was to keep it rather than revert and fail CI twice. **Say
+      so out loud when this happens** — a silently edited migration is exactly
+      what the guard exists to surface.
+
 ## Hard rules
 
 1. **Never fork a platform primitive.** If the notifications/files/workflow primitive almost fits, extend it in `packages/platform` (benefiting every module) — don't copy it into the module.

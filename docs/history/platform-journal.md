@@ -65,7 +65,45 @@ decision log, docs/03 conventions, docs/12 safeguards) — this is the chronolog
     `grant update (display_name)` had been in place since `20260706120000` and **no screen had
     ever used it**: a display name was write-once-at-signup, which is untenable once it is the
     only label a co-member sees.
-  - **THE DEPLOY IS ONE-DIRECTIONAL AND NOT DONE.** `20260917010000` is additive →
+  - **THE SLICE IS HALF-DEPLOYED, ON PURPOSE (two sittings, founder's call).**
+    `20260917010000` (additive) **IS ON PRODUCTION** — applied after a
+    `pnpm backup:prod`, verified by `prod-verify-migration.ts` at **0 failures /
+    0 warnings**, all 8 definers body-matching with `anon` holding no EXECUTE.
+    The code is pushed. **`20260917020000` (the DROP) is NOT applied** — that is
+    sitting two, deliberately separated because the drop is the one step that
+    cannot be undone, so the founder gets to use the new code against real data
+    before anything is destroyed. Until then prod carries the old columns,
+    unread.
+  - **⚠ CI CAUGHT A REAL PRIVILEGE ESCALATION THAT PASSED LOCALLY 231/231 AND
+    THAT NEITHER ADVERSARIAL REVIEW FOUND.** `20260917020000` granted on the new
+    `user_private` table **without revoking first**, on the reasoning (stated in
+    a comment, and drawn from docs/03 #1) that a CLI-created table inherits no
+    API-role grants. **That is environment-dependent.** `pg_default_acl` for
+    `grantor=postgres, schema=public` gives `authenticated` only `Dxtm` locally —
+    but it varies by schema (`storage` gives the full `arwdDxtm`) and by
+    environment, and **in CI the effective grant included table-level UPDATE,
+    which covers every column.** A column grant cannot narrow a table grant
+    (the same arithmetic that killed v3 — docs/20 §9 — with the direction
+    reversed). **`bob@demo.local`, an ordinary seeded user, set his own
+    `is_superadmin` to true**, then satisfied `is_org_admin` everywhere and took
+    **23 further tests** down with him across four unrelated suites. **Exactly
+    one of the 24 failures was the cause and 23 were consequences** — worth
+    knowing, because the spread reads as an environment problem. Fixed with
+    `revoke all privileges … from public, anon, authenticated, service_role`
+    before the grants; the ACL is now asserted DIRECTLY from `pg_catalog` in the
+    ratchet test and the prod-verify script, with controls, rather than only
+    through behaviour. → **docs/03 #27.**
+  - **AND THE FIX TRIPPED A SECOND SAFEGUARD, which is worth recording as its
+    own trap.** CI's *"Block edits to existing migrations"* step is absolute:
+    any `M`/`D` under `supabase/migrations/` between pushes fails, regardless of
+    whether the migration has ever been applied anywhere. **Once an edited
+    migration has been pushed, REVERTING it is also a modification and trips the
+    same guard again** — so there is no way back to "unedited". The edit was
+    kept (that migration has never been applied to any real database) rather
+    than reverted into a second red run, and it is stated here rather than left
+    silent, because a quietly edited migration is exactly what that guard
+    exists to surface. → **docs/03 #28.**
+  - **THE REMAINING DEPLOY STEP IS ONE-DIRECTIONAL.** `20260917010000` is additive →
     `migrate:prod` FIRST, then the code. `20260917020000` DROPS a column → **the code must be
     LIVE FIRST**, `migrate:prod` second; reversed it is a simultaneous outage across all six
     modules. The two migrations are split precisely so each half has a statable order (→ docs/03
