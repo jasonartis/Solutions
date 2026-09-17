@@ -1090,8 +1090,15 @@ mechanism is proven in the managed environment, but it carries rules that are no
       destructive file must be physically **held out of
       `supabase/migrations/`** while the additive one is pushed, then moved
       back — a working-tree move, with the file still tracked in git. Decide
-      this before the deploy window; discovering it mid-deploy means choosing
-      between two outages. Worked procedure: docs/22 §23.6.
+      this before the deploy window. Worked procedure: docs/22 §23.6.
+    - **AND MEASURE WHAT THE WRONG ORDER ACTUALLY COSTS BEFORE CALLING IT AN
+      OUTAGE.** `supabase-js` returns `{data: null, error}` for a missing
+      function (`PGRST202`) or column (`42703`) — **it does not throw**
+      (measured 2026-09-17, with controls). So the wrong order usually DEGRADES
+      pages rather than crashing them, and which order is worse depends on
+      whether the degraded call sites are member-facing or admin-facing. That
+      is a call-site question, not a schema question, and reasoning about it
+      from the schema gets it backwards — it did here.
 
 ## Hard rules
 

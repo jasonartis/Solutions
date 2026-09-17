@@ -1788,12 +1788,35 @@ migration and offers no way to stop at one (`--help` lists `--include-all`,
 `--include-roles`, `--include-seed`, `--dry-run`, `--db-url`, `--linked`,
 `--local`, `--password` — and nothing that targets a version).
 
-**BOTH NAIVE ORDERS ARE AN OUTAGE, so neither is a fallback:**
+**⚠ CORRECTED 2026-09-17, SAME DAY, AND THE CORRECTION MATTERS BOTH WAYS.** An
+earlier version of this section called both naive orders an "outage" and said
+push-first would 500 **every authenticated page**. **That was reasoned, not
+measured, and it is wrong.** Measured against the live stack:
 
-| if you… | what breaks, and for how long |
+```
+MISSING RPC    -> did NOT throw. data = null, error.code = PGRST202
+MISSING COLUMN -> did NOT throw. data = null, error.code = 42703
+CONTROL: an existing rpc -> data = true, error = null
+CONTROL: an existing column -> 1 row, error = null
+```
+
+**`supabase-js` returns `{data: null, error}`; it does not throw.** So a missing
+function or column DEGRADES a page instead of crashing it, and most of these
+call sites already handle a null with a fallback. Neither order takes the site
+down. The real picture, traced call site by call site:
+
+| if you… | what actually happens |
 |---|---|
-| `migrate:prod` first (applies BOTH), then push | the LIVE OLD code still reads `profiles.email` → 42703 across ~22 sites in all six modules, for the length of a Vercel deploy |
-| push first, then `migrate:prod` | the NEW code calls `current_user_private()`, which does not exist yet — and `getProfile()` runs in `app/(app)/layout.tsx`, so **every authenticated page** 500s, for the same window |
+| **push first**, then `migrate:prod` | `getProfile()` gets `null` from `current_user_private()`, so **`is_superadmin` reads as false**: the Owner Console link disappears and `/console` `notFound()`s — **a 404, not a 500**. `find_module_peer` is missing, so the three "add a member by email" admin actions raise *"No user found with email X"* — a WRONG but contained message. `superadmin_user_emails` is missing, so console/data-browser/engagement show blank addresses. `sd_match_contacts` is missing, so a speed-dating reveal throws. **Ordinary member pages in all six modules are UNAFFECTED** — they read only `display_name`, which still exists. |
+| **`migrate:prod` first** (applies BOTH), then push | the live OLD code's `profiles` selects all name `email`, so they 42703 and return null — and the fallbacks turn that into **names rendering as "Someone" / raw UUIDs across every roster in all six modules**, plus the same console 404 and the same broken add-by-email. |
+
+**So the ranking is the opposite of "one is an outage and one is not": neither
+is, and the WORSE of the two is `migrate:prod` first**, because it degrades
+**member-facing** pages in every module, whereas push-first mostly degrades
+**admin and superadmin** surfaces. The procedure below avoids both, and is still
+the thing to follow — but if a step fails halfway, this table is what you are
+actually looking at, and it is recoverable by completing the sequence rather
+than by rolling back.
 
 **THE PROCEDURE THAT ACTUALLY WORKS — the drop is held out of the migrations
 directory for one step.** It is a working-tree move only; the file stays in git,

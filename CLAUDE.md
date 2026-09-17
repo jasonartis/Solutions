@@ -43,10 +43,14 @@ Two migrations: `20260917010000_email_definers.sql` (additive) and
 
 **⚠ THE DEPLOY NEEDS A PROCEDURE, NOT JUST AN ORDER — FOLLOW docs/22 §23.6 EXACTLY.**
 `pnpm migrate:prod` wraps `supabase db push`, which applies EVERY pending migration and has no
-flag to stop at one (verified against `--help`). **So both naive orders are an outage:**
-migrate-first breaks the live OLD code (42703 across ~22 sites in all six modules);
-push-first breaks the NEW code (`current_user_private()` does not exist yet, and `getProfile()`
-runs in `app/(app)/layout.tsx`, so EVERY authenticated page 500s). The working procedure holds
+flag to stop at one (verified against `--help`). **NEITHER NAIVE ORDER IS AN OUTAGE — an
+earlier version of this block said push-first 500s every authenticated page and that was
+REASONED, NOT MEASURED, and is wrong.** `supabase-js` returns `{data: null, error}` for a
+missing function or column rather than throwing (measured, with controls), so both orders
+DEGRADE rather than crash. **The worse of the two is migrate-first**, which makes names render
+as "Someone"/UUIDs on member-facing rosters in all six modules; push-first mostly costs the
+Owner Console (a 404, via `is_superadmin` reading false) and three add-by-email admin actions.
+Full call-site table: docs/22 §23.6. The working procedure holds
 the DROP file out of `supabase/migrations/` for one step: back up → apply `20260917010000`
 alone → `git push` and **wait for a READY deploy and a real signed-in page** → move the drop
 back and apply it → run `scripts/prod-verify-profile-visibility.mts` (no `--local`). **Do not
