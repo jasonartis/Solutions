@@ -129,18 +129,22 @@ and false** (§19.2).
 
 ### 0.6 STILL OPEN
 
-- **F3 — does the TRUST-CLASS paragraph go into docs/00?** *(docs/20 §33.1's
-  third founder question. **ASKED TWICE THIS SESSION AND NEVER ANSWERED** — it
-  is the one thing put to you that has no answer recorded.)* One paragraph, no
-  code: *orgs carry a trust class — in a CLOSED org a human granted the
-  membership, so co-membership is evidence of a relationship; in an OPEN org it
-  is not; any policy widening visibility on co-membership must say which it
-  assumes.* **Its status changed during the session:** §16.2 removed the need
-  for any trust-class MECHANISM in code, so this is now purely a note to the
-  next author — weaker than when it was first asked, but not moot, because the
-  distinction it names is still real. **Insertion point already identified:
-  docs/00 "Core principles", beside principle 7.** Settle it with the deferred
-  naming slice (§20.4 item 3), not before.
+- ~~**F3 — does the TRUST-CLASS paragraph go into docs/00?**~~ **ANSWERED AND
+  WRITTEN 2026-09-17 — docs/00 "Core principles" now has a principle 8.** Asked
+  three times across two workstreams; settled in the same conversation that
+  built the email slice. **The founder rejected the drafted wording and was
+  right to**: it said the org's trust class decides what a member may learn,
+  and his objection was that *"just the knowledge of how they were admitted"*
+  does not always dictate the result — self-grant may be fine for one purpose
+  and not another, and the same is true of an invitation. **So join method is
+  EVIDENCE, and the decision is PER-PURPOSE configuration** (his proposal: an
+  org setting toggling whether membership assumes a relationship for a given
+  purpose). That is §16.2's move — configuration instead of a branch —
+  generalised from "which fields are searchable" to "for which purposes".
+  **Scope note, flagged before it went in: F3 was "one paragraph, no code" and
+  this version points at a MECHANISM** (a code-enumerated purpose list plus an
+  org setting). The principle is written as DESCRIBED-NOT-BUILT; the build
+  belongs with the deferred naming slice.
 
 - **§17.3** — is the global platform name a legal name? *"not sure yet, for now
   its just user entered."* Bears on the privacy page and docs/21.
@@ -1882,8 +1886,9 @@ local-cannot-catch-prod-drift class does not reopen.
 
 ### 23.8 STILL OPEN AFTER THIS SLICE
 
-- **F3** (§0.6) — untouched, still unanswered, still not blocking. Settle it
-  with the deferred naming slice.
+- ~~**F3** (§0.6)~~ **ANSWERED AND WRITTEN 2026-09-17: docs/00 principle 8.** The
+  drafted wording was rejected by the founder and replaced — join method is
+  EVIDENCE, the decision is PER-PURPOSE configuration. See §0.6.
 - **§19.4 / §20.4 item 2** — killing the blanket member directory. Still
   BLOCKED. Not started, deliberately.
 - **§20.4 item 3** — entity-level visibility. Still founder-deferred.

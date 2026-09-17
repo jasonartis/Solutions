@@ -27,6 +27,33 @@ Pricing philosophy: charge for the build (engagement) **plus a recurring subscri
 5. **Least cost, least maintenance, most expandable** — in that tension, prefer managed services with open-source exit ramps (e.g., Supabase: managed now, self-hostable later).
 6. **Conventions strict enough that AI can scaffold a module.** The economics depend on "new client → working module in days." That requires rigid module anatomy, exemplar modules, and docs an AI session can load cold (CLAUDE.md + docs/03).
 7. **Tenancy isolation is the existential risk.** A data leak between client organizations kills the business. Row-level security from day one, on every table, no exceptions.
+8. **Membership is evidence, not a decision.** Every group on this platform — an organization, a class, an event, a conversation — is joined in one of three ways: someone invited you, someone approved your request, or you let yourself in. How you joined is evidence of a relationship: strong for an invitation, weaker for an approval, absent for open enrolment. **But it does not by itself settle what one member may learn about another, because that depends on the purpose.** An org of strangers may reasonably let members see each other's names while never resolving an address; a closed org may want the opposite. So the answer is per-purpose: **the set of purposes is enumerated in code, and each org chooses among them in its own settings, defaulting to the most closed option.** Any rule that grants one member something about another — seeing a name, resolving an address, adding them, booking them — must name the purpose it serves and consult that setting, rather than inferring consent from co-membership alone.
+
+   > **STATUS: DESCRIBED, NOT BUILT (2026-09-17).** The principle is settled; the
+   > mechanism is not. No purpose list and no such setting exist today, and
+   > `shares_org_with` still grants a co-member read of the whole `profiles` row
+   > — which is how a rank-0 salon customer could enumerate eight colleagues *and
+   > their email addresses* in one request, the bug that produced this principle.
+   > The email half of that is fixed (docs/22); the enumeration half is
+   > [docs/22 §19.4](22-profile-visibility.md), deliberately **blocked** on the
+   > deferred entity-level question (§20.2). Build the mechanism with the naming
+   > slice, where `orgs.settings` and the org-declared searchable-field model
+   > already live.
+   >
+   > **The guardrail, which is principle 7 applied:** the purposes live in CODE
+   > so an org chooses among options the code already sanctioned, never invents
+   > reach at runtime — *anything that widens reach belongs in code; anything
+   > that only narrows it can be a runtime switch* (docs/13). And the default is
+   > the most closed option, so a new org is safe before anyone configures it and
+   > a misconfiguration is a deliberate act rather than an oversight.
+   >
+   > **Why this is configuration and not a branch:** an earlier design answered
+   > the same question with an `orgs.kind` column that would have made one
+   > organization special. That was withdrawn (docs/20 §12 is dead) against the
+   > founder's governing constraint — *"I want every organization to follow the
+   > same code and structure so I don't want any `if org=xyz` then something
+   > unique"* — and replaced by org-declared configuration. This principle is the
+   > general form of that same move.
 
 ## The engagement playbook (target state)
 
@@ -42,6 +69,7 @@ Pricing philosophy: charge for the build (engagement) **plus a recurring subscri
 - **Over-fitting:** a module built for one client rarely generalizes without a deliberate second pass. Budget that pass before reselling a module.
 - **Over-generalization:** the opposite trap — building configurability nobody asked for. Add flexibility only when a second real client needs it.
 - **Tenancy leak:** see principle 7.
+- **Mistaking co-membership for consent:** treating "we share an org" as evidence of a relationship is sound in a vetted org and false in a public one. See principle 8 — and note the mechanism it describes is not built yet.
 - **Solo-founder bus factor:** everything documented in this repo; no knowledge lives only in chat histories or one person's head.
 
 ## Maintainership

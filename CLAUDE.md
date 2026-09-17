@@ -98,12 +98,17 @@ Do not start it — docs/22 §20.2 explains why the resolver rule it needs does 
 **DEFERRED BY THE FOUNDER** — module- and submodule-scoped, needs its own generalization, and
 belongs with docs/15 §11's entity-level `joinPolicy`.
 
-**ONE FOUNDER QUESTION REMAINS UNANSWERED: F3** — does the trust-class paragraph go into
-docs/00? Asked twice this session, never answered. Now purely a docs/00 note (docs/22 §16.2
-removed any need for a mechanism). Insertion point identified: docs/00 "Core principles",
-beside principle 7. Settle it with the deferred naming slice. Tracked in docs/22 §0.6 with the
-three other open items, incl. **the `is_superadmin()` recursion question that must be
-DEMONSTRATED live, not reasoned about** (docs/22 §21.4).
+**F3 IS ANSWERED AND WRITTEN (2026-09-17) — docs/00 now has a PRINCIPLE 8.** The founder
+**rejected the drafted trust-class wording** and was right to: knowing how someone was
+admitted does not always dictate the result, because self-grant may be fine for one purpose
+and not another. **So join method is EVIDENCE, and the decision is PER-PURPOSE
+configuration** — his proposal of an org setting toggling whether membership assumes a
+relationship for a given purpose. That is docs/22 §16.2's move (configuration, never a branch)
+generalised from "which fields are searchable" to "for which purposes". **Written as
+DESCRIBED-NOT-BUILT**: no purpose list and no such setting exist, and the guardrail is that
+purposes live in CODE with the org choosing among them, defaulting to the most closed option.
+Build it with the deferred naming slice. **docs/22 §21.4's recursion question is also CLOSED**
+— demonstrated live, no recursion (§23.2).
 
 **FOUR LESSONS WORTH CARRYING OUT OF THIS SESSION:**
 (1) **A column can be load-bearing for a QUERY without being load-bearing for the PRODUCT** —
