@@ -986,6 +986,103 @@ mechanism is proven in the managed environment, but it carries rules that are no
       is currently enforcing first, because the answer has twice been "more
       than its header claims."
 
+24. **`public.profiles` is PUBLIC. Anything you add to it is visible to every
+    co-member, by definition.** `profiles_select_shared_org` grants read of the
+    WHOLE ROW to anyone sharing an org, and **a policy filters ROWS, NEVER
+    COLUMNS** — so a column added for one private purpose becomes org-mate-
+    readable the moment it exists, with no policy change and no review.
+    - **This is not hypothetical; it is the bug that produced docs/22.**
+      `settings` was added to `profiles` in `20260727010000` and became
+      readable by every org-mate **the same day**. Nobody decided that and
+      nobody noticed. `email` had been in the same position since
+      `20260706120000`: demonstrated live 2026-09-16, `charlie@demo.local` — a
+      **rank-0 nail-salon customer holding no role of any kind** — ran one
+      query and got eight people's names *and email addresses*, including the
+      salon admin's. "The UI never shows it" is not a defence (hard rule 6):
+      the app queries as the user, so the browser can ask the database directly
+      with the token the app already issued.
+    - **THREE HOMES. Choose deliberately before adding any per-user column:**
+      | the data is… | it goes in | who reads it |
+      |---|---|---|
+      | **public identity** (a name) | `public.profiles` | every co-member |
+      | **private to the user** (a setting, a flag) | `public.user_private` | the user, plus `is_superadmin()` |
+      | **shareable but org-scoped** (a title, a per-org name) | the in-org profile | per the org's searchable set + the user's own checkbox (docs/22 §16 — DEFERRED, not built) |
+    - **Data with an authoritative home elsewhere should have NO home here.**
+      `profiles.email` was a write-once copy of `auth.users.email` that no
+      trigger ever refreshed — a cache with no invalidation. The fix was not to
+      move the copy to a better-policed table, which inherits the staleness and
+      adds a sync obligation on the signup path; it was to **delete the copy**
+      and read the original through SECURITY DEFINER functions. Ask whether a
+      column is a COPY before asking where to put it.
+    - **A table privilege that was never granted beats a policy you have to get
+      right.** `authenticated` holds no privilege on `auth.users` at row OR
+      column level and no policy can create one, because a policy only filters
+      rows a GRANT already permits and `postgres` does not own that schema's
+      grants. A future author cannot widen it by writing a policy — which is a
+      **stronger kind** of guarantee than a correct policy, not just a stricter
+      one. (Contrast v3 of that workstream, which died trying to SUBTRACT from
+      a table-level grant that already existed: a column-level `revoke` cannot
+      reduce a table-level grant.)
+    - **Moving the boundary to a FUNCTION surface means the audit is a list,
+      so keep the list machine-checked.** `packages/db/src/profiles-public-columns.test.ts`
+      ratchets both halves: the column set of `profiles`, and the allow-list of
+      every function whose body touches an address. Two precision requirements,
+      both measured and both easy to get wrong: **`email` and `auth.users`
+      match DIFFERENT function sets**, so search both; and **`prosrc` includes
+      COMMENTS**, so a purely-commented match must be listed separately rather
+      than smuggled in beside the real readers.
+    - → Documentation alone did not stop `settings` and will not stop the next
+      one. The rule is also carried as a `comment on table public.profiles`,
+      where a schema reader will meet it.
+
+25. **A SQL FUNCTION BODY IS A CALL SITE.** A survey that greps TypeScript is
+    not a survey of the readers of a column, and this cost real time twice in
+    one slice.
+    - docs/22 §6 measured that *"no application code reads another user's
+      `settings` or `is_superadmin`"* and the measurement was **correct** — it
+      searched `apps/` and `modules/`. It was still incomplete:
+      `org_accept_invite` reads **another user's** `profiles.is_superadmin` to
+      revalidate that a stale invite's inviter was authorised. It was found by
+      the RLS suite failing with `column p.is_superadmin does not exist`, not
+      by any reading.
+    - **Note why `is_superadmin()` could not have covered it, because this is
+      the generalisable part:** every other one of the nine functions asks *is
+      the CALLER a superadmin*, which is what that function answers. This one
+      asks about a THIRD PARTY who is not the caller and may not even still be
+      in the org — a question the no-argument helper can never answer. When you
+      re-point a column's readers at a helper, check whether any reader asks
+      about someone OTHER than `auth.uid()`; those are the ones the helper
+      cannot absorb.
+    - **The sibling of docs/22 §14.1's lesson: grep the SELECT LIST, not the
+      USE.** Matchmaking's highest-traffic page fetched `email` into a map that
+      never read it — dead weight from a two-month-old privacy fix that removed
+      the fallback but not the column. It matched neither `.email` property
+      access nor a `display_name || email` chain, the two shapes the survey
+      searched for, and would have 42703'd the whole page. **A column can be
+      load-bearing for a QUERY without being load-bearing for the PRODUCT.**
+    - → Before dropping a column, enumerate its readers from `pg_proc.prosrc`
+      **and** from the SELECT lists in application code, not from its uses.
+
+26. **Dropping a column forfeits additive-first, so the deploy order INVERTS —
+    and it is the opposite of this repo's habit.** Every other migration here
+    can land before or after the code that uses it. A drop cannot: the code
+    must be **live first**, and `pnpm migrate:prod` second.
+    - The separation already exists by construction — `git push` deploys the
+      app through Vercel and `migrate:prod` is a manual step nothing in CI runs
+      — but it is **safety in one direction only.** Reversed, a single drop is
+      a simultaneous app-wide outage across every module that names the column.
+    - **A slice that drops a column therefore wants TWO migrations, not one.**
+      The additive one (new functions, new tables) deploys migration-first, the
+      normal way. The destructive one deploys code-first. Splitting them is
+      what makes each half's ordering statable; one combined migration has no
+      correct order.
+    - **Put an INDIRECTION in the additive half for anything the destructive
+      half moves**, or the two orderings deadlock: code written against the new
+      location cannot ship before the new location exists, and the new location
+      cannot ship before the code. A function that reads the OLD home, deployed
+      early and re-pointed later with one `create or replace`, breaks the cycle
+      and the application never changes twice.
+
 ## Hard rules
 
 1. **Never fork a platform primitive.** If the notifications/files/workflow primitive almost fits, extend it in `packages/platform` (benefiting every module) — don't copy it into the module.

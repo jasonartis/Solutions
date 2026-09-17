@@ -24,49 +24,63 @@ NOW — 1, 2, 3, AND 8 ALL SHIPPED; 4, 5, 6, 7 ARE ALL DELIBERATELY PAUSED** (fo
 extract-don't-speculate: each adds real cost or a new dependency for a problem that only
 exists once a real client generates real volume — **do not start any of them unprompted,
 revisit together when the first real client is signed**, per docs/18's status note).
-**NEXT SESSION STARTS HERE → BUILD THE EMAIL SLICE.
-[docs/22-profile-visibility.md](docs/22-profile-visibility.md), START AT ITS §0** — the whole
-design on one screen. The sections after §0 are in DISCOVERY order and four are superseded;
-**§0.5 maps which, so do not quote a section without checking it there.**
-**DESIGN IS COMPLETE AND NOTHING IS BUILT: no SQL was written, no migration exists.** Both
-adversarial reviews ran (§13, §14) and every load-bearing finding was re-verified by hand.
-**ELEVEN FOUNDER DECISIONS ARE RECORDED IN §0.2 — READ THEM BEFORE PROPOSING ANYTHING.**
-**Opus-tier: migration + RLS + a trigger on the signup path.**
+**THE EMAIL SLICE IS BUILT (2026-09-17) AND IT IS **NOT ON PRODUCTION** —
+`pnpm migrate:prod` HAS NOT RUN.** Live doc:
+[docs/22-profile-visibility.md](docs/22-profile-visibility.md) — **read §23 first**
+(what exists, what the deploy still requires), then §0 if you need the design.
+**`public.profiles` is now `user_id, display_name, created_at, updated_at`.** `email` is
+DELETED (`auth.users` is the single source of truth, read through SECURITY DEFINER
+functions); `settings` and `is_superadmin` moved to the new private `public.user_private`.
+Two migrations: `20260917010000_email_definers.sql` (additive) and
+`20260917020000_profiles_is_public.sql` (the drop). Verified in CI's exact order:
+**db 231/231 → e2e 52/52**, same database, no reset between; typecheck 9/9; 62/62 from
+`scripts/prod-verify-profile-visibility.mts --local`; 20/20 live as real users. RLS floor
+211 → 221.
 
-**WHAT IS DECIDED (§0.2 has all eleven with his own words):**
-**`profiles.email` IS DELETED, not moved to a new table** — it is a write-once copy of
-`auth.users.email` that NO trigger ever refreshes, so a second copy inherits the bug.
-`auth.users` becomes the single source of truth, read through SECURITY DEFINER functions.
-The guarantee is stronger in KIND than v3's: **`authenticated` holds no privilege on
-`auth.users` at row OR column level (VERIFIED ON PROD), and no policy can grant one** — v3 died
-trying to SUBTRACT from a grant that existed; this subtracts nothing.
-**`settings` AND `is_superadmin` GO TOO**, into a **new private per-user companion table**
-(docs/22 §21 — §6 originally forgot to name a destination; the founder caught it). `profiles`
-ends up as `user_id, display_name, created_at, updated_at`.
-**THE DURABLE RULE, which belongs in docs/03: `profiles` is PUBLIC — anything added to it is
-visible to every co-member by definition.** That is what would have prevented the original bug
-(`settings` was added in `20260727010000` and became org-mate-readable the same day; nobody
-decided that and nobody noticed). docs/22 §21.3 proposes a ratchet test so documentation is not
-the only defence.
-**v4 IS WITHDRAWN AND `orgs.kind` IS NEVER CREATED** — docs/20 §12 is marked DEAD.
-**A LOOKUP NEVER CONFIRMS A NAME**, on an invite or a typo, for BOTH `org_find_user_by_email`
-and `find_module_peer` — which **overturns docs/20 §3.4**. So docs/22 §8's `findable_by_email`
-toggle is **NOT to be built**; it was conditional on keeping the name.
+**⚠ THE DEPLOY IS ONE-DIRECTIONAL AND IS THE OPPOSITE OF THIS REPO'S HABIT (docs/22 §23.6,
+docs/03 #26).** (1) `migrate:prod` the ADDITIVE migration `20260917010000` FIRST, then deploy
+the code — reversed, the three module resolvers call `find_module_peer` before it exists.
+(2) Confirm the app is serving. (3) **Only then `migrate:prod` the DROP `20260917020000`** —
+**code live FIRST**; reversed it is a simultaneous app-wide outage across all six modules.
+(4) Then run `scripts/prod-verify-profile-visibility.mts` (no `--local`). **Do not write
+SHIPPED/CLOSED for either until `migrate:prod` has run AND that script passes on prod.**
 
-**THE FOUNDER REPLACED THE WHOLE APPROACH TO THE UNDERLYING QUESTION (docs/22 §16) — this is
-the part a fresh session will not guess.** Instead of any per-org branch: **an org declares
-which fields are SEARCHABLE**; searchable implies MANDATORY for the member; the user has a
-per-field checkbox that is always stored and goes INERT (not away) while the org forces the
-field on. `visible = user_checked OR org_searchable`. **That configuration does the work
-`orgs.kind` was invented for, with no branch anywhere** — `orgs.settings` already exists and
-four tables already carry a settings jsonb. **"Shared" means shared with someone who
-SUCCESSFULLY SEARCHED** (they already had the value), never displayed to someone who did not —
-that is what saves the email decision inside Public Square. **And: "a person is an ID" — the
-same view renders different names depending on the viewer**, which makes the name resolver a
-platform mechanism, not a display nicety.
+**FIVE THINGS WORTH CARRYING OUT OF THE BUILD (full version: docs/22 §23.4, docs/03 #24–#26):**
+(1) **A SQL FUNCTION BODY IS A CALL SITE.** docs/22 §6 measured that no app code reads another
+user's `is_superadmin` — correct, and still incomplete: it searched TypeScript, and
+`org_accept_invite` reads the INVITER's. `is_superadmin()` could not absorb it because that
+helper only answers about the CALLER.
+(2) **A SQL function returning a SCALAR over a multi-row query does not raise — it silently
+returns the first.** `auth.users`' email uniqueness is PARTIAL (`WHERE is_sso_user = false`),
+so `find_module_peer` could have minted a seat for an arbitrary one of two accounts.
+(3) **`(jsonb -> 'k')::boolean` raises 22023 on a JSON STRING and aborts the whole query.** Use
+`->>` with a text compare on any unconstrained settings blob.
+(4) **A `for all` policy's USING governs SELECT too** — docs/20 §8.1's lesson turned up again
+in the companion table's first draft, whose UPDATE half let a superadmin overwrite anyone's
+`settings` while its comment claimed a capability nobody had.
+(5) **"No `select('*')` on `profiles`" was FALSE at the SQL level** — `lib/data-browser.ts:190`
+builds `select('*')` generically from a declaration table, invisible to that grep. Harmless
+here; the lesson is that a measurement of source TEXT is not a measurement of what the database
+is asked.
+
+**ALSO BUILT BECAUSE THE SLICE EXPOSED IT: `/account`.** `grant update (display_name)` had
+existed since `20260706120000` and **no screen ever used it** — a display name was
+write-once-at-signup, untenable once it is the only label a co-member sees. Signup now collects
+one. **The single prod user with a NULL `display_name` is the founder's own account**, so that
+backfill carries no third-party privacy question; the migration seeds it from the email
+local-part generically.
+
+**⚠ docs/22 §16.7's acceptance sentence OVERSTATES the result and is corrected in §23.3.**
+After this slice charlie@demo.local still reads EIGHT co-member NAMES — only the three columns
+are gone. §20.3 (written later) is the correct reading: the email slice does not touch
+`profiles_select_shared_org`. The acceptance script asserts the eight names on purpose,
+labelled NOT IN SCOPE.
+
+**ELEVEN FOUNDER DECISIONS REMAIN SETTLED IN docs/22 §0.2 — do not re-litigate them.**
+v4 is withdrawn and `orgs.kind` is never created.
 
 **THREE-WAY SPLIT — do NOT merge these (docs/22 §20.4):**
-**(1) The EMAIL SLICE is ready** — ~22 call sites, build order in docs/22 §11.
+**(1) The EMAIL SLICE is BUILT, not deployed** — see above; docs/22 §23.
 **(2) Killing the blanket member directory (`profiles_select_shared_org`) is BLOCKED** on (3).
 Do not start it — docs/22 §20.2 explains why the resolver rule it needs does not exist yet.
 **(3) ENTITY-level visibility** (classmates, event participants, bookable workers) is
@@ -474,8 +488,13 @@ fires BEFORE UPDATE triggers, which has already bitten this repo once.
   that RAISES or PINS must state what it does under a cascade, and `pg_trigger_depth() > 1` is
   the test that distinguishes a user's own statement (depth 1) from a referential action
   (depth 2)* — is applied in `20260914020000` and belongs in docs/03.
-- **LATENT BUG, found in passing 2026-09-04, NOT fixed: `profiles.email` IS NEVER SYNCED after a
-  user changes their auth email.** `handle_new_user()` sets it once at signup and **no trigger on
+- ~~**LATENT BUG: `profiles.email` IS NEVER SYNCED after a user changes their auth email.**~~
+  **FIXED BY CONSTRUCTION 2026-09-17 (in the repo; NOT yet on prod — `migrate:prod` has not
+  run).** The column is gone, so there is no copy left to go stale; every lookup reads
+  `auth.users.email` through a definer. **The second of the two options below is the one that
+  was taken, and deliberately:** a sync trigger would have kept a copy and therefore kept the
+  bug's shape. Kept here for the reasoning, which is the durable part. Original entry:
+  **`profiles.email` was never synced after an auth-email change.** `handle_new_user()` sets it once at signup and **no trigger on
   `auth.users` email-change exists** (verified: zero matches for email-sync patterns across every
   migration, and zero `auth.updateUser` calls anywhere in `apps/web`, so the product has no
   email-change UI today either — which is the only reason this is not already biting). It matters
@@ -522,15 +541,17 @@ Everything below is open but unranked:
   client-side joining for the platform-wide "quietest members" view** — not costly at this
   platform's current scale, but real friction; full argument in docs/17's decisions log.
 - **PARKED 2026-08-09, both raised by the login-capture build and both about `profiles`:**
-  **(a) should `profiles_select_shared_org` be hierarchy-narrowed?** The founder's stated rule is
-  *never any visibility to someone lower of someone higher*, and that policy breaks it today for
-  name/email — share ANY org, read the whole row, no rank arm (proven live: charlie, a rank-0 salon
-  customer, reads frank the rank-3 admin). It has been that way deliberately since `20260708020000`
-  because rosters were rendering UUIDs. Narrowing it touches every roster in every module, so it is
-  its own migration and review. **(b) Anything placed in `profiles.settings` is readable by every
-  org-mate** — today just one console preference (`superadminDefaultAddActive`), so nothing
-  sensitive, but it is an easy trap to walk into later. Both are why the login mirror went onto a
-  superadmin-only table instead.
+  **(a) should `profiles_select_shared_org` be hierarchy-narrowed? STILL OPEN, but it is now
+  about the NAME ONLY** — the email slice (2026-09-17) left the policy untouched and emptied the
+  row instead, so charlie the rank-0 customer still reads frank the rank-3 admin's
+  `display_name` and nothing else. It has been that way deliberately since `20260708020000`
+  because rosters were rendering UUIDs. Narrowing it touches every roster in every module, so it
+  is its own migration and review — **and it is docs/22 §19.4, which is BLOCKED on the
+  founder-deferred entity-level question (§20.2). Do not start it.**
+  ~~**(b) Anything placed in `profiles.settings` is readable by every org-mate**~~ **CLOSED
+  2026-09-17: `settings` and `is_superadmin` moved to `public.user_private`, and `profiles` now
+  carries a ratchet test plus a `comment on table` stating that it is PUBLIC by definition
+  (docs/03 #24).** Both were why the login mirror went onto a superadmin-only table instead.
 - ~~**A CONFIRMED-FABLE RE-REVIEW OF `20260809010000` IS OPEN.**~~ **DONE 2026-08-16** — verdict SHIP
   AS-IS, plus one concrete fix: the "worker's pooler connection really authenticates as `postgres`"
   claim rested on a single one-time manual measurement and is now a permanent, re-runnable check in

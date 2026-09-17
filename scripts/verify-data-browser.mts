@@ -68,7 +68,8 @@ const dana = await signIn('dana@demo.local')
 const gabe = await signIn('gabe@demo.local') // GA in demo-a
 
 const ownerId = await userId(owner)
-const ownerIsSuper = (await owner.from('profiles').select('is_superadmin').eq('user_id', ownerId).single()).data
+// `is_superadmin` moved to public.user_private with the email slice (docs/22 §21).
+const ownerIsSuper = (await owner.from('user_private').select('is_superadmin').eq('user_id', ownerId).single()).data
 check('owner@demo.local is the local superadmin (probe precondition)', ownerIsSuper?.is_superadmin === true)
 
 // ---------------------------------------------------------------------------
@@ -322,11 +323,30 @@ console.log('\n[5] The TWO-HOP chain reaches a paying customer (adversarial revi
 }
 
 // ---------------------------------------------------------------------------
-console.log('\n[6] The invariant that keeps the gate safe: no definer / service-role read path')
+console.log('\n[6] The invariant that keeps the gate safe: every definer checks is_superadmin itself')
 // A source scan, because this is the one property no runtime probe can catch
-// after the fact — by the time an .rpc() call exists, the app-layer gate has
-// silently become a security boundary (docs/03 #18, #19).
+// after the fact — by the time an unchecked .rpc() call exists, the app-layer
+// gate has silently become a security boundary (docs/03 #18, #19).
+//
+// THIS USED TO BAN `.rpc()` OUTRIGHT, and the ban could not survive the email
+// slice (docs/22 §23.5). Deleting `profiles.email` removes the RLS route to
+// another user's address ON PURPOSE — `authenticated` holds no privilege on
+// `auth.users` at row or column level — so the browser must now read addresses
+// through a definer. There is nothing else left.
+//
+// The ban was a PROXY for the invariant, not the invariant. What actually has
+// to hold is that the app gate is NOT THE ONLY GATE, so each permitted definer
+// must carry its own `is_superadmin()` check. That is asserted below against
+// `pg_proc`, not trusted from a comment — a stronger statement than "no .rpc()
+// appears in this file", because it is about what the database does.
 {
+  // Every definer this surface may call, and why. Adding a name is deliberate.
+  const ALLOWED_DEFINERS: Record<string, string> = {
+    superadmin_user_emails:
+      'docs/22 §3 R3 — addresses moved to auth.users, which no api role can read at row or ' +
+      'column level, so there is no RLS route left for the browser to use.',
+  }
+  const definersCalled = new Set<string>()
   const files = [
     'apps/web/lib/data-browser.ts',
     'apps/web/app/(app)/console/data-browser/page.tsx',
@@ -342,8 +362,42 @@ console.log('\n[6] The invariant that keeps the gate safe: no definer / service-
     }
     // Strip comments so the rule's own explanation doesn't trip it.
     const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
-    check(`${f} makes no .rpc() call`, !/\.rpc\s*\(/.test(code))
+
+    // A non-literal function name would dodge the capture, so reconcile counts.
+    const totalRpc = (code.match(/\.rpc\s*\(/g) ?? []).length
+    const literalRpc = (code.match(/\.rpc\s*\(\s*'[a-z0-9_]+'/g) ?? []).length
+    check(`${f} calls .rpc() only with a literal function name`, totalRpc === literalRpc)
+    for (const m of code.matchAll(/\.rpc\s*\(\s*'([a-z0-9_]+)'/g)) {
+      const fn = m[1]!
+      check(`${f}: ${fn} is an allow-listed definer`, fn in ALLOWED_DEFINERS)
+      definersCalled.add(fn)
+    }
     check(`${f} never mentions a service-role key`, !/service_role|SERVICE_ROLE/.test(code))
+  }
+
+  // The allow-list must not rot: an entry nothing calls is standing permission.
+  for (const fn of Object.keys(ALLOWED_DEFINERS)) {
+    check(`ALLOWED_DEFINERS lists ${fn} and something actually calls it`, definersCalled.has(fn))
+  }
+  check('at least one definer was found, so the checks below are not vacuous', definersCalled.size > 0)
+
+  // THE MECHANISM, PROVED AT RUNTIME rather than read out of the source. This
+  // script has real signed-in sessions, so it can do better than inspecting a
+  // function body: call each permitted definer AS A NON-SUPERADMIN and require
+  // it to yield nothing. If it answered, the app gate would be the only thing
+  // in front of it, which is precisely what docs/03 #18 forbids.
+  const ownerId2 = await userId(owner)
+  for (const fn of definersCalled) {
+    if (fn !== 'superadmin_user_emails') {
+      skip(`runtime authority probe for ${fn}`, 'no probe written for this definer yet')
+      continue
+    }
+    const asCharlie = await charlie.rpc(fn, { target_user_ids: [ownerId2] })
+    check(`${fn}: a non-superadmin gets NOTHING back`, (asCharlie.data ?? []).length === 0)
+    // CONTROL: the superadmin DOES get a row, so the empty result above is the
+    // authority check firing and not a broken call or a bad argument.
+    const asOwner = await owner.rpc(fn, { target_user_ids: [ownerId2] })
+    check(`CONTROL ${fn}: the superadmin DOES get a row`, (asOwner.data ?? []).length === 1)
   }
 }
 

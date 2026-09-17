@@ -41,7 +41,7 @@ export default async function ManagePage(props: { params: Promise<{ orgSlug: str
         .from('cls_class_members')
         .select('class_id, user_id, role, preferred_first_name, preferred_last_name'),
       supabase.from('cls_homeworks').select('id, class_id, title, due_at').order('due_at'),
-      supabase.from('profiles').select('user_id, email, display_name'),
+      supabase.from('profiles').select('user_id, display_name'),
       supabase.from('cls_surveys').select('id, class_id, question, results_visible').order('sort'),
     ])
   const { data: exams } = await supabase
@@ -240,7 +240,7 @@ export default async function ManagePage(props: { params: Promise<{ orgSlug: str
                     .join(' ')
                   return (
                     <li key={m.user_id} className="flex items-center gap-3">
-                      <span>{preferred || p?.display_name || p?.email || m.user_id}</span>
+                      <span>{preferred || p?.display_name || m.user_id}</span>
                       <span className="text-xs uppercase text-gray-400">{m.role}</span>
                       {canManage && (
                         <form action={removeClassMember.bind(null, orgSlug, klass.id, m.user_id)}>

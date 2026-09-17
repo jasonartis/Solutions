@@ -166,26 +166,23 @@ export async function addMember(orgSlug: string, conversationId: string, formDat
     .single()
   if (!conv) throw new Error('Conversation not found')
 
-  const { data: profile } = await supabase.from('profiles').select('user_id').eq('email', email).maybeSingle()
-  if (!profile) throw new Error('No user with that email in your organization')
-
   // The target must be an ACTIVE member of the conversation's org. A seat row
   // alone grants reads of every layer, reaction, roster row and vm-images
   // object in the conversation (the vm_is_conv_* predicates gate on the seat),
   // so without this an org member could hand a NON-member of that org full
-  // access to its content — the same finding classroom guards against in
-  // modules/classroom/ui/manage/actions.ts, whose comment explains why the
-  // email lookup above is not itself a bound. 20260904010000 is the real gate;
-  // this check exists so the UI reports it as a clear error instead of an
-  // opaque RLS failure.
-  const { data: member } = await supabase
-    .from('org_members')
-    .select('user_id')
-    .eq('org_id', conv.org_id)
-    .eq('user_id', profile.user_id)
-    .eq('status', 'active')
-    .maybeSingle()
-  if (!member) {
+  // access to its content. 20260904010000 is the real gate; this check exists
+  // so the UI reports it as a clear error instead of an opaque RLS failure.
+  //
+  // The lookup and the bound are now ONE database call (docs/22 §3 R5):
+  // `find_module_peer` returns an id only for an ACTIVE member of the named
+  // org, which is why the separate `profiles`-by-email read that used to sit
+  // above this — and whose own comment had to explain that it was not itself a
+  // bound — is gone.
+  const { data: peerId } = await supabase.rpc('find_module_peer', {
+    check_org_id: conv.org_id,
+    target_email: email,
+  })
+  if (!peerId) {
     throw new Error(
       `No user found with email ${email} in this organization — add them as an org member first (and they must have accepted the invite)`,
     )
@@ -194,7 +191,7 @@ export async function addMember(orgSlug: string, conversationId: string, formDat
   const { error } = await supabase.from('vm_conversation_members').insert({
     org_id: conv.org_id,
     conversation_id: conversationId,
-    user_id: profile.user_id,
+    user_id: peerId as string,
     role: 'participant',
   })
 

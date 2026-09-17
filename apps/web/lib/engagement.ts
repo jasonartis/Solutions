@@ -92,10 +92,32 @@ async function rollupByUser(supabase: SupabaseClient, userIds: string[]): Promis
   return new Map(((data ?? []) as unknown as RollupRow[]).map((r) => [r.user_id, r]))
 }
 
+/**
+ * Name and address, from the two homes they live in since the email slice
+ * (docs/22 §21.2): `display_name` from the PUBLIC `profiles` row, the address
+ * from `auth.users` through the superadmin-gated definer. Every caller of this
+ * helper is behind `requireSuperadmin()` on `/console/engagement`, which is the
+ * same authority `superadmin_user_emails` itself checks — so the second read
+ * grants nothing the page did not already require.
+ *
+ * Kept as ONE helper on purpose: it is the only place in this file that knows
+ * where either field lives, so the three call sites below did not have to.
+ */
 async function profilesByUser(supabase: SupabaseClient, userIds: string[]): Promise<Map<string, ProfileRow>> {
   if (userIds.length === 0) return new Map()
-  const { data } = await supabase.from('profiles').select('user_id, display_name, email').in('user_id', userIds)
-  return new Map(((data ?? []) as unknown as ProfileRow[]).map((p) => [p.user_id, p]))
+  const [{ data }, { data: emailRows }] = await Promise.all([
+    supabase.from('profiles').select('user_id, display_name').in('user_id', userIds),
+    supabase.rpc('superadmin_user_emails', { target_user_ids: userIds }),
+  ])
+  const emailById = new Map(
+    ((emailRows as { user_id: string; email: string | null }[] | null) ?? []).map((r) => [r.user_id, r.email]),
+  )
+  return new Map(
+    ((data ?? []) as unknown as { user_id: string; display_name: string | null }[]).map((p) => [
+      p.user_id,
+      { user_id: p.user_id, display_name: p.display_name, email: emailById.get(p.user_id) ?? null },
+    ]),
+  )
 }
 
 /**
@@ -245,11 +267,9 @@ export async function getPersonEngagement(
   supabase: SupabaseClient,
   userId: string,
 ): Promise<PersonEngagement | null> {
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('user_id, display_name, email')
-    .eq('user_id', userId)
-    .maybeSingle()
+  // Through the same helper, so this file has exactly one place that knows
+  // where a name and an address live.
+  const profile = (await profilesByUser(supabase, [userId])).get(userId)
   if (!profile) return null
 
   const [{ data: memberships }, rollups, last30] = await Promise.all([

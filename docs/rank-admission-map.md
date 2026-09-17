@@ -248,6 +248,7 @@ Ladder: **4** director · **3** admin, coordinator · **2** lead, organizer · *
 | `sd_can_organize_event` | rank >= 2 | admin, coordinator, director, lead, organizer | sd_events, sd_interest, sd_matches, sd_pairings, sd_participants, sd_reports, sd_rounds |
 | `sd_can_staff_event` | rank >= 2 | admin, coordinator, director, lead, organizer | _no policy names it — reached through triggers/functions_ |
 | `sd_can_staff_event_of` | rank >= 2 | admin, coordinator, director, lead, organizer | sd_events, sd_pairings, sd_participants, sd_reports, sd_rounds |
+| `sd_match_contacts` | rank >= 2 | admin, coordinator, director, lead, organizer | _no policy names it — reached through triggers/functions_ |
 | `sd_pin_interest` | rank >= 2 | admin, coordinator, director, lead, organizer | _no policy names it — reached through triggers/functions_ |
 | `sd_pin_participant` | rank >= 2 | admin, coordinator, director, lead, organizer | _no policy names it — reached through triggers/functions_ |
 | `sd_pin_report` | rank >= 2 | admin, coordinator, director, lead, organizer | _no policy names it — reached through triggers/functions_ |

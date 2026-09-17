@@ -4,6 +4,79 @@ The running, dated build journal that used to live in `CLAUDE.md`'s "## Current 
 section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every session)
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
+- **2026-09-17 (THE EMAIL SLICE BUILT — `profiles.email` DELETED; Opus, TWO migrations
+  `20260917010000` + `20260917020000`, local-green in CI's exact order, **NOT ON PRODUCTION:
+  `pnpm migrate:prod` has not run**).** The design was docs/22, complete and twice
+  adversarially reviewed but with **no SQL written**; this session built it. `public.profiles`
+  is now `user_id, display_name, created_at, updated_at` — a public identity row and nothing
+  else. `email` is gone entirely (`auth.users` is the single source of truth, read through
+  SECURITY DEFINER functions); `settings` and `is_superadmin` moved to a new private
+  `public.user_private`. Verified reset → seed → **db 231/231 → e2e 52/52** on the same
+  database with no reset between, plus typecheck 9/9, module suites 4/4, a clean build, 62/62
+  from the new prod-verify script run with `--local`, and 20/20 live as real signed-in users.
+  RLS floor 211 → 221. Full account: **docs/22 §23**.
+  - **§21.4 WAS DISCHARGED BEFORE ANY SQL WAS WRITTEN, which is what the doc demanded.** The
+    companion table's SELECT policy calls `is_superadmin()`, which reads a column living in
+    that table. In a rolled-back transaction against the exact shape: the superadmin read all
+    11 rows, **no recursion**. The controls are what make it a result — an ordinary user in the
+    same transaction saw exactly 1 row and got `false`, proving the policy was ENFORCED rather
+    than switched off, and the rollback was confirmed clean with its own control. The recorded
+    fallback (leave the flag on `profiles`) was not needed.
+  - **FOUR DEFECTS THE DESIGN AND BOTH ORIGINAL REVIEWS MISSED, all fixed and each now covered
+    by a test.** (1) **`org_accept_invite` reads ANOTHER USER's `profiles.is_superadmin`** — to
+    revalidate a stale invite's inviter. docs/22 §6's measurement that "no application code
+    reads another user's `is_superadmin`" was CORRECT and still incomplete: it searched
+    TypeScript. **A SQL function body is a call site** (→ docs/03 #25). It could not use
+    `is_superadmin()` because that helper only answers about the CALLER. Found by the RLS suite,
+    not by reading. (2) **`find_module_peer` failed OPEN on an ambiguous address**:
+    `auth.users`' uniqueness is PARTIAL (`WHERE is_sso_user = false`), so two accounts may share
+    one address, and **a SQL function returning a SCALAR over a two-row query does not raise —
+    it silently returns the first** (demonstrated). It now returns NULL unless the match is
+    unique. (3) **`sd_match_contacts` would have raised `22023` on a stringified toggle** —
+    `(format -> 'k')::boolean` errors on a JSON string and aborts the query for the WHOLE event,
+    on the write-once-never-retried contact-share path. Now `->>` with a text compare, all four
+    shapes run live. (4) **The companion table's `for all` superadmin policy was an unintended
+    widening** — its SELECT half duplicated an existing arm and its UPDATE half let a superadmin
+    overwrite any user's `settings`, while its comment claimed a flag-write capability
+    `authenticated` never had. Removed; nothing needs it. 2–4 came from adversarial review A,
+    each re-verified by hand before acceptance.
+  - **THE CONSOLE's BLANKET `.rpc()` BAN HAD TO BE REPLACED, and the replacement is stronger.**
+    `rls.test.ts` banned `.rpc()` outright on the Owner Console path so that
+    `requireSuperadmin()` granted nothing (docs/03 #18). Deleting the column removes the RLS
+    route to another user's address **on purpose**, so the console must now use a definer. The
+    ban was a PROXY for the invariant, not the invariant: it is replaced by an allow-list where
+    **each permitted function must carry `is_superadmin()` in its own body, read from
+    `pg_proc`**, with `is_org_member` as a control proving the predicate can fail.
+  - **A CLAIM OF docs/22 IS FALSIFIED, and it is the interesting kind.** §3 and §14.3 both
+    asserted, with a control, that *"no `select('*')` on `profiles` exists anywhere."* At the
+    SQL level it is false: `apps/web/lib/data-browser.ts:190` runs
+    `supabase.from(lookup.table).select('*')` generically and `profiles` is a declared lookup.
+    Harmless post-drop, but **the measurement was of literal source text, not of what the
+    database is asked** — a query built from a declaration table is invisible to that grep.
+  - **§13.3's OPEN ITEM IS CLOSED WITH PROD MEASUREMENTS.** The publication/view checks had only
+    ever run against LOCAL. On prod: `pg_publication_tables` **0 rows** (control:
+    `supabase_realtime` exists); non-system views only in `extensions`/`vault` (control: 146
+    views total); `profiles.email` vs `auth.users.email` divergence **0 of 12**. Both checks are
+    now permanent in the prod-verify script.
+  - **THE 1 NULL `display_name` ON PROD IS THE FOUNDER'S OWN ACCOUNT** (`jasonartisenergy@gmail.com`),
+    which makes §11 step 1's backfill question concrete and free of any third-party privacy
+    dimension. The migration seeds it from the email local-part, generically; `/account` — a new
+    page — lets him change it. That page exists because the build found that
+    `grant update (display_name)` had been in place since `20260706120000` and **no screen had
+    ever used it**: a display name was write-once-at-signup, which is untenable once it is the
+    only label a co-member sees.
+  - **THE DEPLOY IS ONE-DIRECTIONAL AND NOT DONE.** `20260917010000` is additive →
+    `migrate:prod` FIRST, then the code. `20260917020000` DROPS a column → **the code must be
+    LIVE FIRST**, `migrate:prod` second; reversed it is a simultaneous outage across all six
+    modules. The two migrations are split precisely so each half has a statable order (→ docs/03
+    #26). Nothing is SHIPPED until `migrate:prod` has run AND
+    `scripts/prod-verify-profile-visibility.mts` has passed against prod.
+  - **NOT MERGED IN, deliberately:** docs/22 §20.4 item 2 (killing `profiles_select_shared_org`
+    — BLOCKED) and item 3 (entity-level visibility — founder-deferred). Charlie the rank-0
+    customer still reads eight co-member NAMES after this slice; the acceptance script asserts
+    that ON PURPOSE, labelled "NOT IN SCOPE". **§16.7's own sentence ("his own row and nothing
+    else") overstates the outcome and is corrected in §23.3** — §20.3, written later, is the
+    correct reading.
 - **2026-09-15 (docs/19's MODULE-ROLE HALF built AND SHIPPED TO PROD; Opus, one migration
   `20260915010000`, CI-green then prod-verified same day — `prod-verify-module-role.mts` 85/85
   and `prod-verify-migration.ts` 0/0, prod data 0 seats revoked. The evidence is the

@@ -361,21 +361,31 @@ export async function subjectsIn(
   const members = (data ?? []) as unknown as MemberRow[]
   if (members.length === 0) return []
 
-  const { data: profiles } = await supabase
-    .from('profiles')
-    .select('user_id, display_name, email')
-    .in('user_id', Array.from(new Set(members.map((m) => m.user_id))))
+  const userIds = Array.from(new Set(members.map((m) => m.user_id)))
+  // Name and address come from two different homes since the email slice
+  // (docs/22 §21.2): the name from the PUBLIC identity row, the address from
+  // `auth.users` through the superadmin-gated definer. This browser is
+  // superadmin-only (`requireSuperadmin`), so the second read is authorised by
+  // the same authority the page already required.
+  const [{ data: profiles }, { data: emailRows }] = await Promise.all([
+    supabase.from('profiles').select('user_id, display_name').in('user_id', userIds),
+    supabase.rpc('superadmin_user_emails', { target_user_ids: userIds }),
+  ])
 
-  type ProfileRow = { user_id: string; display_name: string | null; email: string | null }
+  type ProfileRow = { user_id: string; display_name: string | null }
   const byId = new Map(((profiles ?? []) as unknown as ProfileRow[]).map((p) => [p.user_id, p]))
+  const emailById = new Map(
+    ((emailRows as { user_id: string; email: string | null }[] | null) ?? []).map((r) => [r.user_id, r.email]),
+  )
 
   return members
     .map((m) => {
       const p = byId.get(m.user_id)
+      const email = emailById.get(m.user_id) ?? null
       return {
         userId: m.user_id,
-        displayName: p?.display_name || p?.email || m.user_id,
-        email: p?.email ?? '',
+        displayName: p?.display_name || email || m.user_id,
+        email: email ?? '',
         orgRole: m.role,
         status: m.status,
       }

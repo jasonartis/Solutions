@@ -33,9 +33,20 @@ export default async function ConsolePage() {
       supabase.from('orgs').select('id, name, slug').order('name'),
       supabase.from('org_members').select('org_id, user_id, role, status'),
       supabase.from('org_modules').select('org_id, module_key, enabled, settings'),
-      supabase.from('profiles').select('user_id, email, display_name'),
+      supabase.from('profiles').select('user_id, display_name'),
       supabase.from('module_roles').select('org_id, user_id, module_key, role'),
     ])
+
+  // Addresses no longer live in `profiles` (docs/22 §3 R3). This console is the
+  // one surface that legitimately shows another user's, so it asks the
+  // superadmin-gated definer for exactly the people it is about to render —
+  // never for a directory.
+  const { data: emailRows } = await supabase.rpc('superadmin_user_emails', {
+    target_user_ids: (profiles ?? []).map((p) => p.user_id),
+  })
+  const emailById = new Map(
+    ((emailRows as { user_id: string; email: string | null }[] | null) ?? []).map((r) => [r.user_id, r.email]),
+  )
 
   const profileById = new Map((profiles ?? []).map((p) => [p.user_id, p]))
 
@@ -181,7 +192,7 @@ export default async function ConsolePage() {
                   return {
                     userId: m.user_id,
                     displayName: p?.display_name ?? null,
-                    email: p?.email ?? null,
+                    email: emailById.get(m.user_id) ?? null,
                     orgRole: m.role,
                     status: (m.status ?? 'active') as 'pending' | 'active',
                     moduleRoles: (moduleRoles ?? [])

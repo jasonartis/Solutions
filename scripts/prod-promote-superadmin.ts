@@ -23,21 +23,30 @@ async function main() {
     { auth: { persistSession: false } },
   )
 
-  const { data: profile, error: findErr } = await admin
-    .from('profiles')
-    .select('user_id, email, is_superadmin')
-    .eq('email', email)
-    .single()
-  if (findErr || !profile) {
-    throw new Error(`Profile not found for ${email} — did they sign up? (${findErr?.message})`)
+  // Resolve through the ADMIN AUTH API. `profiles.email` no longer exists
+  // (docs/22), and `service_role` holds no privilege on `auth.users` either
+  // despite `rolbypassrls` (docs/22 §2.2) — so neither table read is available.
+  // The GoTrue admin endpoint is a separate surface that the service-role key
+  // does authorise.
+  const { data: list, error: listErr } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 })
+  if (listErr) throw new Error(listErr.message)
+  const found = list.users.find((u) => u.email?.toLowerCase() === email.toLowerCase())
+  if (!found) {
+    throw new Error(`No account found for ${email} — did they sign up?`)
   }
 
+  // `is_superadmin` lives on the PRIVATE companion row now (docs/22 §21).
+  const { data: before } = await admin
+    .from('user_private')
+    .select('is_superadmin')
+    .eq('user_id', found.id)
+    .maybeSingle()
+
   const { error } = await admin
-    .from('profiles')
-    .update({ is_superadmin: true })
-    .eq('user_id', profile.user_id)
+    .from('user_private')
+    .upsert({ user_id: found.id, is_superadmin: true })
   if (error) throw new Error(error.message)
-  console.log(`${email} -> superadmin (was: ${profile.is_superadmin})`)
+  console.log(`${email} -> superadmin (was: ${before?.is_superadmin ?? false})`)
 }
 
 main().catch((err) => {

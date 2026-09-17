@@ -42,13 +42,16 @@ export default async function MatchmakingPage(props: {
   ])
 
   // Everyone who shares the org can read display names (shares_org_with policy).
-  const { data: profiles } = await supabase.from('profiles').select('user_id, display_name, email')
+  const { data: profiles } = await supabase.from('profiles').select('user_id, display_name')
   // Founder feedback (2026-07-16): confirmed the matches list shows only a
-  // name label, never a contact email — EXCEPT this fallback used to fall
-  // through to the raw email if a real user never set a display name,
-  // silently leaking contact info to every scored match regardless of
-  // mutual interest. Falls back to a generic label instead now; email only
-  // ever surfaces via the explicit mutual-match reveal.
+  // name label, never a contact email. That fix removed the `|| email`
+  // FALLBACK but left `email` in the SELECT LIST, where it sat unread for two
+  // months — dead weight that would have 42703'd this, the module's
+  // highest-traffic page, the moment the column was dropped. Found by
+  // adversarial review B (docs/22 §14.1) and already recorded in docs/20 §22.3
+  // under SELECTED-UNUSED. THE LESSON: a column can be load-bearing for a QUERY
+  // without being load-bearing for the PRODUCT, so grep the SELECT LIST, not
+  // just the uses. Email now only ever surfaces via the mutual-match reveal.
   const nameOf = (id: string) => {
     const p = (profiles ?? []).find((pr) => pr.user_id === id)
     return p?.display_name || 'A match'
@@ -114,13 +117,16 @@ async function SingleView(props: { orgSlug: string; orgId: string; userId: strin
     .or(`user_a.eq.${props.userId},user_b.eq.${props.userId}`)
     .order('percent', { ascending: false })
     .limit(props.topX)
-  const { data: profiles } = await supabase.from('profiles').select('user_id, display_name, email')
+  const { data: profiles } = await supabase.from('profiles').select('user_id, display_name')
   // Founder feedback (2026-07-16): confirmed the matches list shows only a
-  // name label, never a contact email — EXCEPT this fallback used to fall
-  // through to the raw email if a real user never set a display name,
-  // silently leaking contact info to every scored match regardless of
-  // mutual interest. Falls back to a generic label instead now; email only
-  // ever surfaces via the explicit mutual-match reveal.
+  // name label, never a contact email. That fix removed the `|| email`
+  // FALLBACK but left `email` in the SELECT LIST, where it sat unread for two
+  // months — dead weight that would have 42703'd this, the module's
+  // highest-traffic page, the moment the column was dropped. Found by
+  // adversarial review B (docs/22 §14.1) and already recorded in docs/20 §22.3
+  // under SELECTED-UNUSED. THE LESSON: a column can be load-bearing for a QUERY
+  // without being load-bearing for the PRODUCT, so grep the SELECT LIST, not
+  // just the uses. Email now only ever surfaces via the mutual-match reveal.
   const nameOf = (id: string) => {
     const p = (profiles ?? []).find((pr) => pr.user_id === id)
     return p?.display_name || 'A match'
@@ -154,7 +160,7 @@ async function SingleView(props: { orgSlug: string; orgId: string; userId: strin
           <ul className="space-y-1 text-sm">
             {mutualMatches.map((m) => (
               <li key={m.matched_user} className="rounded border border-green-200 bg-green-50 px-3 py-2">
-                <span className="font-medium">{m.display_name || m.email || 'Someone'}</span> is interested in you
+                <span className="font-medium">{m.display_name || 'Someone'}</span> is interested in you
                 too{m.email && (
                   <>
                     {' — reach out at '}

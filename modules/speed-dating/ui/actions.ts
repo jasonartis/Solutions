@@ -345,13 +345,32 @@ async function populateContactShare(supabase: Awaited<ReturnType<typeof createCl
   fail(seatsErr, 'Read participants for contact-share failed')
   const userOfSeat = new Map((seats ?? []).map((s) => [s.id, s.user_id as string]))
 
-  const userIds = [...new Set([...userOfSeat.values()])]
-  const { data: profiles, error: profilesErr } = await supabase
-    .from('profiles')
-    .select('user_id, display_name, email')
-    .in('user_id', userIds)
-  fail(profilesErr, 'Read profiles for contact-share failed')
-  const profileOfUser = new Map((profiles ?? []).map((p) => [p.user_id, p]))
+  // THE ONE SILENT FAILURE IN THE WHOLE EMAIL SURVEY, and the reason the
+  // definer below is inside this slice rather than after it (docs/22 §5.1,
+  // §3 R7). This used to read both parties' addresses out of `profiles` with
+  // the organizer's own RLS client. Once `profiles.email` is gone that read
+  // would have returned rows with no address at all — and because this write is
+  // WRITE-ONCE AND NEVER RETRIED (docs/20 §11.3, and the `pending` filter above
+  // is exactly that mechanism), the snapshot would have been written with the
+  // addresses missing and NO later run would ever have repaired it. Every other
+  // site in the survey fails loudly with a 42703; this one would have failed
+  // quietly, with a wrong product outcome.
+  //
+  // `sd_match_contacts` carries the authority test that the `profiles` read
+  // never did: the caller must be able to organize THIS event
+  // (`sd_can_organize_event`, the scope-aware variant), the match must be
+  // `revealed`, and the event's own `shareContactOnMatch` toggle must be on —
+  // the same "mutual reveal has actually happened" test `mm_mutual_matches`
+  // encodes for matchmaking.
+  const { data: contactRows, error: contactsErr } = await supabase.rpc('sd_match_contacts', {
+    check_event_id: eventId,
+  })
+  fail(contactsErr, 'Read contacts for contact-share failed')
+  const profileOfUser = new Map(
+    ((contactRows as { user_id: string; display_name: string | null; email: string | null }[] | null) ?? []).map(
+      (r) => [r.user_id, { display_name: r.display_name, email: r.email }],
+    ),
+  )
 
   const errors: string[] = []
   for (const m of pending) {
@@ -438,7 +457,10 @@ export async function getVideoJoinToken(orgSlug: string, eventId: string, pairin
   })
   if (!decision.ok) return { ok: false, reason: decision.reason }
 
-  const { data: profile } = await supabase.from('profiles').select('display_name, email').eq('user_id', user.id).maybeSingle()
+  // The caller's OWN row. `display_name` is still on `profiles`; the address is
+  // taken from the SESSION, never from the database — it is already in the
+  // token (docs/22 §3 R2/R8).
+  const { data: profile } = await supabase.from('profiles').select('display_name').eq('user_id', user.id).maybeSingle()
 
   let provider: ReturnType<typeof getVideoProvider>
   try {
@@ -450,8 +472,8 @@ export async function getVideoJoinToken(orgSlug: string, eventId: string, pairin
   const { token, expiresAt } = await provider.issueToken({
     roomRef: pairing.room_ref!,
     userId: user.id,
-    displayName: profile?.display_name || profile?.email || 'Guest',
-    email: profile?.email,
+    displayName: profile?.display_name || user.email || 'Guest',
+    email: user.email,
     // No participant ever holds Jitsi moderator rights — the organizer
     // console is a separate surface, and "no recording, ever" is a product
     // promise a dater can't override from inside the call.

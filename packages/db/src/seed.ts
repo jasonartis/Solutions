@@ -72,14 +72,17 @@ async function ensureUser(email: string, password: string, displayName: string) 
   if (created?.user) return created.user.id
   if (error && !/already/i.test(error.message)) throw error
 
-  // Already exists — look up via profiles (service role bypasses RLS).
-  const { data: profile } = await admin
-    .from('profiles')
-    .select('user_id')
-    .eq('email', email)
-    .single()
-  if (!profile) throw new Error(`User ${email} exists but has no profile row`)
-  return profile.user_id as string
+  // Already exists — resolve through the ADMIN AUTH API, not a table read.
+  // `profiles.email` is gone (docs/22), and `service_role` CANNOT read
+  // `auth.users` either: it holds no privilege on that table despite
+  // `rolbypassrls` (docs/22 §2.2, verified live). The GoTrue admin endpoint is
+  // a different surface from Postgres and the service-role key does authorise
+  // it, which is what makes this the right route rather than a workaround.
+  const { data: list, error: listErr } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 })
+  if (listErr) throw listErr
+  const found = list.users.find((u) => u.email?.toLowerCase() === email.toLowerCase())
+  if (!found) throw new Error(`User ${email} exists but could not be resolved via the admin API`)
+  return found.id
 }
 
 async function ensureOrg(name: string, slug: string) {
@@ -101,9 +104,9 @@ async function main() {
   // remote seed the real founder account is the only superadmin — a demo
   // password must never guard platform-wide power in production.
   if (/localhost|127.0.0.1/.test(String(url))) {
-    await admin.from('profiles').update({ is_superadmin: true }).eq('user_id', founderId)
+    await admin.from('user_private').upsert({ user_id: founderId, is_superadmin: true })
   } else {
-    await admin.from('profiles').update({ is_superadmin: false }).eq('user_id', founderId)
+    await admin.from('user_private').upsert({ user_id: founderId, is_superadmin: false })
   }
 
   const orgA = await ensureOrg('Demo Org A', 'demo-a')

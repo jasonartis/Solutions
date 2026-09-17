@@ -45,7 +45,7 @@ export default async function GradingPage(props: {
         .from('cls_submissions')
         .select('id, student_id, state, visible_override_until')
         .eq('homework_id', homeworkId),
-      supabase.from('profiles').select('user_id, email, display_name'),
+      supabase.from('profiles').select('user_id, display_name'),
       supabase
         .from('cls_review_assignments')
         .select('id, reviewer_id, submission_id, grade, locked')
@@ -79,7 +79,7 @@ export default async function GradingPage(props: {
 
   const nameOf = (userId: string) => {
     const p = (profiles ?? []).find((pr) => pr.user_id === userId)
-    return p?.display_name || p?.email || userId
+    return p?.display_name || userId
   }
   const gradesByStudent = new Map<string, typeof grades>()
   for (const g of grades ?? []) {

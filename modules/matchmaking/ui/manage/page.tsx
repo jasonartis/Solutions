@@ -53,7 +53,7 @@ export default async function MatchmakingManagePage(props: {
       .from('mm_matchmaker_assignments')
       .select('id, matchmaker_id, target_type, target_user_id, target_group_id')
       .eq('org_id', org.id),
-    supabase.from('profiles').select('user_id, display_name, email'),
+    supabase.from('profiles').select('user_id, display_name'),
   ])
 
   // Mutual interest among singles (admins see every pair in the org via the
@@ -66,12 +66,18 @@ export default async function MatchmakingManagePage(props: {
   const singleCount = new Set((singles ?? []).map((s) => s.user_id)).size
   const nameOf = (userId: string) => {
     const p = (profiles ?? []).find((pr) => pr.user_id === userId)
-    return p?.display_name || p?.email || 'Someone'
+    return p?.display_name || 'Someone'
   }
   const groupName = (groupId: string) => (groups ?? []).find((g) => g.id === groupId)?.name ?? 'Unknown group'
-  const emailOf = (userId: string) => (profiles ?? []).find((pr) => pr.user_id === userId)?.email ?? null
-  const matchmakerEmails = [...new Set((matchmakerRoles ?? []).map((r) => emailOf(r.user_id)).filter(Boolean))] as string[]
-  const singleEmails = [...new Set((singles ?? []).map((s) => emailOf(s.user_id)).filter(Boolean))] as string[]
+  // People, not addresses (docs/22 §7.2). These two lists used to be every
+  // matchmaker's and every single's EMAIL ADDRESS, rendered into a <datalist>
+  // in the page source.
+  const peopleFrom = (ids: string[]) =>
+    [...new Set(ids)]
+      .map((userId) => ({ userId, name: nameOf(userId) }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+  const matchmakers = peopleFrom((matchmakerRoles ?? []).map((r) => r.user_id as string))
+  const singlePeople = peopleFrom((singles ?? []).map((s) => s.user_id as string))
 
   return (
     <div>
@@ -269,8 +275,8 @@ export default async function MatchmakingManagePage(props: {
         <AssignMatchmakerForm
           orgSlug={orgSlug}
           groups={groups ?? []}
-          matchmakerEmails={matchmakerEmails}
-          singleEmails={singleEmails}
+          matchmakers={matchmakers}
+          singles={singlePeople}
         />
       </section>
     </div>

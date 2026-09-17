@@ -88,7 +88,9 @@ const ownerId = await userId(owner)
 // ---------------------------------------------------------------------------
 console.log('\n[1] The three premises the whole design rests on')
 {
-  const prof = (await owner.from('profiles').select('is_superadmin').eq('user_id', ownerId).single()).data
+  // `is_superadmin` moved to public.user_private with the email slice (docs/22
+  // §21) — `profiles` is PUBLIC to co-members and this flag is not.
+  const prof = (await owner.from('user_private').select('is_superadmin').eq('user_id', ownerId).single()).data
   check(`${superadminEmail} is the platform superadmin (probe precondition)`, prof?.is_superadmin === true)
 
   // If either of these ever stops being true, the Owner Console stops being the

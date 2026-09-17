@@ -10,34 +10,38 @@ const btnCls = 'rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hov
 // both always visible and fillable regardless of which target type was
 // selected — confusing, and nothing stopped filling both. A small client
 // component (the only way to make "only show the relevant field" truly
-// reactive) shows exactly one target input at a time, and suggests existing
-// matchmakers/singles via <datalist> instead of a blind free-text email —
-// so an admin isn't guessing at who's already been granted which role
-// (still nobody-in-the-app can GRANT those roles; that's a separate,
-// bigger gap — see the module spec).
+// reactive) shows exactly one target input at a time.
+//
+// THE PICKER PICKS A PERSON, NOT AN ADDRESS (docs/22 §7.2, §3 R6). It used to
+// be a free-text <input type="email"> backed by a <datalist> of EVERY
+// matchmaker's and single's email address — the one place in the app that
+// rendered a bulk list of addresses straight into the page source. The email
+// was being used as a PERSON PICKER, never as contact information, so the fix
+// is not to find a new way to fetch the addresses: it is to pick the person
+// directly, by id and display name, exactly as every other roster on the
+// platform already does. docs/20 §22.3 reached the same conclusion for a
+// different reason. Nobody-in-the-app can still GRANT these roles; that is a
+// separate, bigger gap — see the module spec.
 export default function AssignMatchmakerForm(props: {
   orgSlug: string
   groups: { id: string; name: string }[]
-  matchmakerEmails: string[]
-  singleEmails: string[]
+  matchmakers: { userId: string; name: string }[]
+  singles: { userId: string; name: string }[]
 }) {
   const [targetType, setTargetType] = useState<'individual' | 'group'>('individual')
 
   return (
     <form action={assignMatchmaker.bind(null, props.orgSlug)} className="flex flex-wrap items-center gap-2">
-      <input
-        name="matchmakerEmail"
-        type="email"
-        required
-        placeholder="matchmaker@email"
-        list="mm-matchmaker-emails"
-        className={`${inputCls} w-48`}
-      />
-      <datalist id="mm-matchmaker-emails">
-        {props.matchmakerEmails.map((e) => (
-          <option key={e} value={e} />
+      <select name="matchmakerId" required className={`${inputCls} w-48`} defaultValue="">
+        <option value="" disabled>
+          — pick a matchmaker —
+        </option>
+        {props.matchmakers.map((m) => (
+          <option key={m.userId} value={m.userId}>
+            {m.name}
+          </option>
         ))}
-      </datalist>
+      </select>
 
       <select
         name="targetType"
@@ -52,19 +56,16 @@ export default function AssignMatchmakerForm(props: {
 
       {targetType === 'individual' ? (
         <>
-          <input
-            name="targetEmail"
-            type="email"
-            required
-            placeholder="single@email"
-            list="mm-single-emails"
-            className={`${inputCls} w-56`}
-          />
-          <datalist id="mm-single-emails">
-            {props.singleEmails.map((e) => (
-              <option key={e} value={e} />
+          <select name="targetUserId" required className={`${inputCls} w-56`} defaultValue="">
+            <option value="" disabled>
+              — pick a single —
+            </option>
+            {props.singles.map((t) => (
+              <option key={t.userId} value={t.userId}>
+                {t.name}
+              </option>
             ))}
-          </datalist>
+          </select>
         </>
       ) : (
         <select name="targetGroupId" required className={inputCls} defaultValue="">

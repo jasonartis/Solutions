@@ -55,6 +55,23 @@ export const platformDataBrowser = declareDataBrowser({
       limit: 1,
     },
     {
+      table: 'user_private',
+      label: 'Private account settings',
+      personColumns: ['user_id'],
+      // The PRIVATE counterpart of `profiles` (docs/22 §21.2). `profiles` is the
+      // PUBLIC identity row — every column on it is readable by every
+      // co-member, by definition — so anything per-user that must not be lives
+      // here instead: today `settings` and `is_superadmin`, and whatever
+      // private field is added next.
+      //
+      // IT BELONGS IN THE BROWSER RATHER THAN IN `omitted`: this is a
+      // subject-access surface, and "what does the platform hold about me"
+      // must include the row that exists precisely because it is not public.
+      // Like `profiles` it has no org_id — the data is global to the person.
+      orgColumn: null,
+      limit: 1,
+    },
+    {
       table: 'org_members',
       label: 'Org memberships and invitations',
       personColumns: ['user_id', 'invited_by'],

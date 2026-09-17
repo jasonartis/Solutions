@@ -647,7 +647,9 @@ test('matchmaking module: single sees seeded matches and can answer; admin recom
   await memberAdded
   await expect(groupLi).toContainText('Eve E')
 
-  await page.getByPlaceholder('matchmaker@email').fill('mel@demo.local')
+  // A PERSON PICKER, not an address (docs/22 §7.2): this was a free-text email
+  // input backed by a <datalist> of every matchmaker's address.
+  await page.locator('select[name="matchmakerId"]').selectOption({ label: 'Mel M' })
   await page.locator('select[name="targetType"]').selectOption('group')
   await page.locator('select[name="targetGroupId"]').selectOption({ label: groupName })
   const assigned = page.waitForResponse((r) => r.request().method() === 'POST')

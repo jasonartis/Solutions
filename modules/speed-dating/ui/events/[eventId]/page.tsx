@@ -75,7 +75,7 @@ export default async function EventPage(props: {
       .from('sd_matches')
       .select('participant_a_id, participant_b_id, revealed, contact_shared')
       .eq('event_id', eventId),
-    supabase.from('profiles').select('user_id, display_name, email'),
+    supabase.from('profiles').select('user_id, display_name'),
     supabase.from('sd_rounds').select('id, round_number, state, ends_at').eq('event_id', eventId),
     supabase
       .from('sd_reports')
@@ -93,7 +93,7 @@ export default async function EventPage(props: {
     const seat = (participants ?? []).find((p) => p.id === participantId)
     if (!seat) return 'Someone' // seat not visible to this caller (RLS)
     const prof = (profiles ?? []).find((pr) => pr.user_id === seat.user_id)
-    return prof?.display_name || prof?.email || 'Someone'
+    return prof?.display_name || 'Someone'
   }
   const noteFor = (userId: string) => (myNotes ?? []).find((n) => n.about_user_id === userId)?.body ?? ''
   const openReportCount = (reports ?? []).filter((r) => r.state === 'open').length

@@ -159,12 +159,12 @@ export async function requireSuperadmin() {
   } = await supabase.auth.getUser()
   if (!user) notFound()
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('is_superadmin')
-    .eq('user_id', user.id)
-    .single()
-  if (!profile?.is_superadmin) notFound()
+  // `is_superadmin` left `profiles` with the email slice (docs/22 §21) — it is
+  // a PRIVATE per-user column and `profiles` is public to co-members by
+  // definition. Read it through the function that has always been the RLS
+  // authority for it, rather than through a table read.
+  const { data: isSuperadmin } = await supabase.rpc('is_superadmin')
+  if (!isSuperadmin) notFound()
 
   // THE ONE MINT of a SuperadminGate on the platform. Every line above is the
   // check this token attests to; `notFound()` never returns, so reaching here
@@ -182,10 +182,26 @@ export async function getProfile() {
   } = await supabase.auth.getUser()
   if (!user) return null
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('user_id, email, display_name, is_superadmin, settings')
-    .eq('user_id', user.id)
-    .single()
-  return profile
+  // THREE DIFFERENT HOMES since the email slice (docs/22 §21.2), and that is the
+  // point of the shape below:
+  //   * `email`      — `auth.users`, and it is ALREADY IN THE SESSION, so it
+  //                    costs no database round trip at all (docs/22 §3 R2).
+  //   * `display_name` — `profiles`, the PUBLIC identity row.
+  //   * `settings` / `is_superadmin` — `public.user_private`, read through
+  //                    `current_user_private()` so that the app did not have to
+  //                    change again when the columns actually moved.
+  const [{ data: profile }, { data: privateRows }] = await Promise.all([
+    supabase.from('profiles').select('user_id, display_name').eq('user_id', user.id).single(),
+    supabase.rpc('current_user_private'),
+  ])
+  if (!profile) return null
+
+  const priv = (privateRows as { settings: unknown; is_superadmin: boolean }[] | null)?.[0]
+  return {
+    user_id: profile.user_id,
+    display_name: profile.display_name,
+    email: user.email ?? null,
+    is_superadmin: priv?.is_superadmin ?? false,
+    settings: (priv?.settings ?? {}) as Record<string, unknown>,
+  }
 }

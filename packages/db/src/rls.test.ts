@@ -38,6 +38,25 @@ async function acceptInviteAs(email: string, orgId: string) {
   }
 }
 
+// A FIXTURE-ONLY id resolver (docs/22). Until the email slice, a test resolved
+// a demo user by `profiles.select('user_id').eq('email', …)` — which worked
+// precisely because every co-member could read every address, i.e. because of
+// the bug. That read no longer exists, and `service_role` cannot read
+// `auth.users` either (docs/22 §2.2), so a fixture that needs an id by address
+// uses the OWNER connection — the same escape hatch the phase-2 login cleanup
+// already uses. It is deliberately NOT available to any product code path.
+const ownerDbUrl = process.env.DATABASE_URL ?? 'postgresql://postgres:postgres@127.0.0.1:54322/postgres'
+async function userIdOf(email: string): Promise<string> {
+  const sql = postgres(ownerDbUrl, { prepare: false, max: 1 })
+  try {
+    const rows = await sql`select id from auth.users where lower(email) = lower(${email})`
+    if (rows.length !== 1) throw new Error(`userIdOf(${email}): expected 1 row, got ${rows.length} (did you seed?)`)
+    return rows[0]!.id as string
+  } finally {
+    await sql.end()
+  }
+}
+
 let alice: SupabaseClient
 let bob: SupabaseClient
 let orgtest: SupabaseClient
@@ -93,14 +112,59 @@ describe('tenancy isolation', () => {
   })
 
   it('bob cannot read other profiles', async () => {
-    const { data } = await bob.from('profiles').select('email')
-    expect(data?.map((p) => p.email)).toEqual(['bob@demo.local'])
+    // Was `select('email')` until the email slice. Same property, expressed on
+    // the column that still exists: bob shares no org with anyone, so
+    // `profiles_select_shared_org` adds nothing and only his own row comes back.
+    const { data } = await bob.from('profiles').select('display_name')
+    expect(data?.map((p) => p.display_name)).toEqual(['Bob B'])
+  })
+
+  it('NOBODY can read an email address out of profiles — the column is gone (docs/22)', async () => {
+    // The acceptance test of the whole slice, as an RLS case. `profiles.email`
+    // was a write-once copy of `auth.users.email` that no trigger ever
+    // refreshed, and `profiles_select_shared_org` handed the WHOLE ROW to any
+    // co-member — a policy filters rows, never columns.
+    const { error } = await bob.from('profiles').select('email')
+    expect(error?.code, 'profiles.email must not exist').toBe('42703')
+
+    // CONTROL (docs/03 vacuity rule): the same client, the same table, a
+    // column that DOES exist — so the 42703 above is about the column and not
+    // about a broken client, an expired token or an empty table.
+    const { data: control, error: controlErr } = await bob.from('profiles').select('display_name')
+    expect(controlErr).toBeNull()
+    expect((control ?? []).length).toBeGreaterThan(0)
+  })
+
+  it('settings and is_superadmin left profiles too, into the private companion row', async () => {
+    for (const col of ['settings', 'is_superadmin']) {
+      const { error } = await bob.from('profiles').select(col)
+      expect(error?.code, `profiles.${col} must not exist`).toBe('42703')
+    }
+    // CONTROL: they exist on `user_private`, and bob reads exactly ONE row —
+    // his own. A second row would mean the companion table had become a new
+    // directory, which is the failure this whole design exists to prevent.
+    const bobId = (await bob.auth.getUser()).data.user!.id
+    const { data, error } = await bob.from('user_private').select('user_id, settings, is_superadmin')
+    expect(error).toBeNull()
+    expect(data?.map((r) => r.user_id)).toEqual([bobId])
   })
 
   it('bob cannot make himself superadmin', async () => {
-    await bob.from('profiles').update({ is_superadmin: true }).eq('email', 'bob@demo.local')
-    const { data } = await bob.from('profiles').select('is_superadmin').single()
+    // `is_superadmin` now lives on `user_private`, where `authenticated` holds
+    // a COLUMN-SCOPED update grant on `settings` ALONE — so the write is
+    // refused by a privilege, not merely by a policy.
+    const bobId = (await bob.auth.getUser()).data.user!.id
+    const { error } = await bob.from('user_private').update({ is_superadmin: true }).eq('user_id', bobId)
+    expect(error, 'a self-promotion write must be refused outright').not.toBeNull()
+
+    const { data } = await bob.from('user_private').select('is_superadmin').eq('user_id', bobId).single()
     expect(data?.is_superadmin).toBe(false)
+
+    // CONTROL: the row IS writable by him for the column he is granted, so the
+    // rejection above is about `is_superadmin` and not about the row being
+    // read-only or invisible to him.
+    const { error: allowed } = await bob.from('user_private').update({ settings: {} }).eq('user_id', bobId)
+    expect(allowed, 'bob must still be able to write his own settings').toBeNull()
   })
 })
 
@@ -121,7 +185,14 @@ describe('org self-management', () => {
       check_org_id: orgId,
       target_email: 'orgtest@demo.local',
     })
-    expect(found?.[0]?.email).toBe('orgtest@demo.local')
+    expect(found?.[0]?.user_id).toBe(await userIdOf('orgtest@demo.local'))
+
+    // A LOOKUP NEVER CONFIRMS A NAME (docs/22 decision 3, §15.2). The founder
+    // was asked whether a mistyped address should prompt "did you mean Sarah
+    // Cohen?" and said no, so the lookup answers EXISTENCE and nothing else.
+    // Asserted as the absence of the keys, with the presence of `user_id`
+    // immediately above as the control that the row is real.
+    expect(Object.keys(found![0]!)).toEqual(['user_id'])
 
     const { data: notFound } = await bob.rpc('org_find_user_by_email', {
       check_org_id: orgId,
@@ -145,22 +216,18 @@ describe('org self-management', () => {
 
   it('an owner can promote a member to admin and demote back', async () => {
     const orgId = await selfTestOrgId(alice)
-    const { data: orgtestProfile } = await alice
-      .from('profiles')
-      .select('user_id')
-      .eq('email', 'orgtest@demo.local')
-      .single()
+    const orgtestUserId = await userIdOf('orgtest@demo.local')
     const { error: promoteErr } = await alice
       .from('org_members')
       .update({ role: 'admin' })
       .eq('org_id', orgId)
-      .eq('user_id', orgtestProfile!.user_id)
+      .eq('user_id', orgtestUserId)
     expect(promoteErr).toBeNull()
     const { error: demoteErr } = await alice
       .from('org_members')
       .update({ role: 'member' })
       .eq('org_id', orgId)
-      .eq('user_id', orgtestProfile!.user_id)
+      .eq('user_id', orgtestUserId)
     expect(demoteErr).toBeNull()
   })
 
@@ -216,12 +283,7 @@ describe('org self-management', () => {
     // Fixture: alice = OWNER, orgtest = member of platform-self-test.
     const orgId = await selfTestOrgId(alice)
     const { data: aliceUser } = await alice.auth.getUser()
-    const { data: orgtestProfile } = await alice
-      .from('profiles')
-      .select('user_id')
-      .eq('email', 'orgtest@demo.local')
-      .single()
-    const orgtestId = orgtestProfile!.user_id as string
+    const orgtestId = await userIdOf('orgtest@demo.local')
     // bob's id via the admin-only email resolver (alice & bob share no org
     // otherwise, so a plain profiles read wouldn't see him).
     const { data: found } = await alice.rpc('org_find_user_by_email', {
@@ -278,15 +340,11 @@ describe('org self-management', () => {
 
   it('alice can grant a module role to orgtest for a module enabled on her org', async () => {
     const orgId = await selfTestOrgId(alice)
-    const { data: orgtestProfile } = await alice
-      .from('profiles')
-      .select('user_id')
-      .eq('email', 'orgtest@demo.local')
-      .single()
+    const orgtestUserId = await userIdOf('orgtest@demo.local')
     const { error } = await alice.from('module_roles').upsert(
       {
         org_id: orgId,
-        user_id: orgtestProfile!.user_id,
+        user_id: orgtestUserId,
         module_key: 'stub',
         role: 'user',
       },
@@ -363,8 +421,11 @@ describe('org invite-accept (slice 3)', () => {
     const { data: bobSeesMembers } = await bob.from('org_members').select('user_id').eq('org_id', pstId)
     expect(bobSeesMembers?.map((r) => r.user_id)).toEqual([bobId]) // only his own invite row (select_self)
     // …and gains no cross-member profile visibility (shares_org_with is active-only).
-    const { data: profs } = await bob.from('profiles').select('email')
-    expect(profs?.map((p) => p.email)).not.toContain('orgtest@demo.local')
+    // Was `select('email')`; the address is gone, so the same property is
+    // asserted on the name — which is the field a co-member DOES get, and so is
+    // the stronger test of "shares_org_with is active-only" anyway.
+    const { data: profs } = await bob.from('profiles').select('display_name')
+    expect(profs?.map((p) => p.display_name)).not.toContain('Org Test')
 
     // But he DOES see the invite via the narrow name-only definer.
     const { data: invites } = await bob.rpc('org_my_pending_invites')
@@ -581,7 +642,7 @@ describe('nail-salon worker availability RPC', () => {
     const charlie = await signIn('charlie@demo.local') // salon customer (org member)
     // alice administers demo-salon (operate tier), so she can read the fixtures
     // + the seeded time-off row to compute in/out-of-window probe times.
-    const { data: dana } = await alice.from('profiles').select('user_id').eq('email', 'dana@demo.local').single()
+    const danaId = await userIdOf('dana@demo.local')
     // Take the location FROM the time-off row rather than querying
     // sal_locations for the org's only one. The salon gained a second location
     // (Uptown) on 2026-08-06 and the old `.eq('org_id', …).single()` started
@@ -599,7 +660,7 @@ describe('nail-salon worker availability RPC', () => {
 
     const at = (base: string, offsetMs: number) => new Date(new Date(base).getTime() + offsetMs).toISOString()
     const args = (ws: string, we: string) => ({
-      check_worker_id: dana!.user_id,
+      check_worker_id: danaId,
       check_location_id: timeOff!.location_id,
       window_start: ws,
       window_end: we,
@@ -646,12 +707,12 @@ describe('speed-dating side capacity RPC', () => {
       })
       .select('id')
       .single()
-    const { data: dana } = await alice.from('profiles').select('user_id').eq('email', 'dana@demo.local').single()
+    const danaId = await userIdOf('dana@demo.local')
     // Seat dana on side 'a' (organizer can insert any participant row).
     await alice.from('sd_participants').insert({
       org_id: org!.id,
       event_id: event!.id,
-      user_id: dana!.user_id,
+      user_id: danaId,
       pool_side: 'a',
       status: 'registered',
     })
@@ -2365,7 +2426,11 @@ describe('data browser: the neverReadable claim is TRUE, not just declared', () 
     // not a superadmin locally, "the superadmin cannot read it" would pass for
     // the wrong reason entirely.
     const ownerId = (await superadmin.auth.getUser()).data.user!.id
-    const { data: prof } = await superadmin.from('profiles').select('is_superadmin').eq('user_id', ownerId).single()
+    const { data: prof } = await superadmin
+      .from('user_private')
+      .select('is_superadmin')
+      .eq('user_id', ownerId)
+      .single()
     expect(prof?.is_superadmin, 'owner@demo.local must be the local superadmin for this test to mean anything').toBe(true)
 
     const entries = Object.entries(dataBrowserDeclarations).flatMap(([key, decl]) =>
@@ -2435,6 +2500,14 @@ describe('Owner Console view-as (2026-08-06)', () => {
     // source-scanned for the two bans that make the UI gate sound.
     'apps/web/lib/engagement.ts',
     'apps/web/app/(app)/console/engagement/page.tsx',
+    // Added 2026-09-17 with the email slice (docs/22 §3 R3). Both gained a
+    // SECURITY DEFINER read — `superadmin_user_emails` — because addresses left
+    // `profiles` and there is no longer an RLS route to another user's. Adding
+    // them here is the point: a definer on a superadmin surface is exactly what
+    // this scan exists to reason about, so the two files that now carry one
+    // must be inside the scan rather than beside it.
+    'apps/web/lib/data-browser.ts',
+    'apps/web/app/(app)/console/page.tsx',
   ]
   const repoRoot = resolvePath(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
   const sourceOf = (f: string) => readFileSync(resolvePath(repoRoot, f), 'utf8')
@@ -2446,27 +2519,109 @@ describe('Owner Console view-as (2026-08-06)', () => {
 
   const dbUrl = process.env.DATABASE_URL ?? 'postgresql://postgres:postgres@127.0.0.1:54322/postgres'
 
-  it('no file on the console view-as path calls .rpc() or names a service-role key', () => {
-    // THE INVARIANT THAT MAKES THE UI GATE SOUND. Every query this surface
-    // issues is one the superadmin could already issue against PostgREST as
-    // themselves, so `requireSuperadmin()` grants nothing and bypassing it takes
-    // nothing away. One SECURITY DEFINER read and the app gate silently becomes
-    // the only thing between a user and data RLS would have refused — which
-    // docs/03 #18 forbids outright. No runtime probe can catch this after the
-    // fact, so it is a source scan (review finding 3, 2026-08-06: the existing
-    // scan in verify-data-browser.mts hardcodes three data-browser paths and
-    // never saw these files).
+  // THE ALLOW-LIST. Every SECURITY DEFINER this surface may call, and the
+  // reason each is allowed. Adding a name here is a deliberate act; the test
+  // below then proves the function actually carries its own authority check,
+  // read from `pg_proc`, so an entry cannot be justified by a comment.
+  const CONSOLE_DEFINERS: Record<string, string> = {
+    superadmin_user_emails:
+      'docs/22 §3 R3 — addresses left `profiles` for `auth.users`, which NO api role can read at ' +
+      'row or column level, so there is no RLS route to another user\'s address for the console to use.',
+  }
+
+  it('every .rpc() on the console view-as path carries its OWN is_superadmin check', async () => {
+    // THE INVARIANT THAT MAKES THE UI GATE SOUND, restated precisely. Until the
+    // email slice this was enforced by BANNING `.rpc()` outright: every query
+    // the surface issued was one the superadmin could already issue against
+    // PostgREST as themselves, so `requireSuperadmin()` granted nothing and
+    // bypassing it took nothing away. One SECURITY DEFINER read and the app gate
+    // silently becomes the only thing between a user and data RLS would have
+    // refused — which docs/03 #18 forbids outright.
+    //
+    // WHY THE BAN COULD NOT SURVIVE, and why this is not a relaxation. Deleting
+    // `profiles.email` removes the RLS route to another user's address ON
+    // PURPOSE: `authenticated` holds no privilege on `auth.users` at row OR
+    // column level and no policy can grant one (docs/22 §2.2). So the console
+    // must go through a definer — there is nothing else left. The invariant
+    // docs/03 #18 actually protects is *the app gate must not be the only
+    // gate*, and the old ban was a PROXY for it, not the thing itself.
+    //
+    // THE PROXY IS REPLACED BY THE MECHANISM. Each permitted definer must carry
+    // `is_superadmin()` INSIDE ITS OWN BODY, checked against `pg_proc` rather
+    // than trusted from a comment — so a non-superadmin who bypasses
+    // `requireSuperadmin()` entirely still gets nothing, and the app gate
+    // remains a convenience exactly as before. That is a STRONGER statement
+    // than "no .rpc() appears in these files", because it is about what the
+    // database does rather than about what the source looks like.
     let scanned = 0
+    const called = new Set<string>()
     for (const f of CONSOLE_PATH) {
       const code = codeOf(f)
-      expect(/\.rpc\s*\(/.test(code), `${f} makes an .rpc() call`).toBe(false)
+      for (const m of code.matchAll(/\.rpc\s*\(\s*'([a-z0-9_]+)'/g)) called.add(m[1]!)
+      // A bare `.rpc(` with a non-literal name would dodge the capture above,
+      // so the total count must reconcile with what was actually captured.
+      const totalRpcCalls = (code.match(/\.rpc\s*\(/g) ?? []).length
+      const literalCalls = (code.match(/\.rpc\s*\(\s*'[a-z0-9_]+'/g) ?? []).length
+      expect(totalRpcCalls, `${f} calls .rpc() with a non-literal function name`).toBe(literalCalls)
       expect(/service_role|SERVICE_ROLE/.test(code), `${f} names a service-role key`).toBe(false)
       scanned++
     }
+
+    // Nothing off the allow-list.
+    for (const fn of called) {
+      expect(
+        Object.keys(CONSOLE_DEFINERS),
+        `${fn} is called on the console path but is not on CONSOLE_DEFINERS — ` +
+          'add it with a reason, and make sure it checks is_superadmin() itself',
+      ).toContain(fn)
+    }
+
+    // And the allow-list must not rot: an entry for a function nobody calls any
+    // more is a standing permission for a future author to pick up.
+    for (const fn of Object.keys(CONSOLE_DEFINERS)) {
+      expect(Array.from(called), `CONSOLE_DEFINERS lists ${fn} but nothing calls it`).toContain(fn)
+    }
+
+    // THE MECHANISM CHECK, against the live catalog.
+    const sql = postgres(dbUrl, { prepare: false, max: 1 })
+    try {
+      for (const fn of called) {
+        const rows = await sql`
+          select p.prosecdef, p.prosrc from pg_proc p
+          join pg_namespace n on n.oid = p.pronamespace
+          where n.nspname = 'public' and p.proname = ${fn}`
+        expect(rows.length, `${fn} does not exist in public`).toBe(1)
+        expect(rows[0]!.prosecdef, `${fn} is not SECURITY DEFINER`).toBe(true)
+        expect(
+          /is_superadmin\s*\(/.test(rows[0]!.prosrc as string),
+          `${fn} is called from the console path but does not check is_superadmin() in its own body — ` +
+            'the app gate would be the only thing standing in front of it (docs/03 #18)',
+        ).toBe(true)
+      }
+
+      // CONTROL (docs/03 vacuity rule): the assertion above must be capable of
+      // FAILING. `is_org_member` is a real SECURITY DEFINER in the same schema
+      // that deliberately does NOT check is_superadmin — if the predicate
+      // matched it too, every check above would be meaningless.
+      const control = await sql`
+        select p.prosrc from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+        where n.nspname = 'public' and p.proname = 'is_org_member'`
+      expect(control.length, 'the control function is missing — this test cannot prove itself').toBe(1)
+      expect(
+        /is_superadmin\s*\(/.test(control[0]!.prosrc as string),
+        'is_org_member matched the is_superadmin predicate — the checks above prove nothing',
+      ).toBe(false)
+    } finally {
+      await sql.end()
+    }
+
     // The vacuity guards: a renamed file, or a scan whose comment-stripping ate
     // the whole file, would otherwise pass by checking nothing at all.
     expect(scanned, 'the source scan checked no files').toBe(CONSOLE_PATH.length)
     expect(codeOf('apps/web/lib/console-view-as.ts').length, 'the scanned source is empty').toBeGreaterThan(500)
+    // And the surface really does still call at least one definer, so the
+    // catalog block above is not skipped silently.
+    expect(called.size, 'no .rpc() was found at all — the catalog checks ran on nothing').toBeGreaterThan(0)
   })
 
   it('the superadmin render authority has exactly ONE mint, next to the check it attests to', () => {
@@ -2949,8 +3104,7 @@ describe('login capture (engagement monitoring phase 1, 2026-08-09)', () => {
     danaL = await signIn('dana@demo.local')
     frankL = await signIn('frank@demo.local')
     charlieL = await signIn('charlie@demo.local')
-    melId = (await owner.from('profiles').select('user_id').eq('email', 'mel@demo.local').single())
-      .data!.user_id as string
+    melId = await userIdOf('mel@demo.local')
   })
 
   it('CONTROL: a real sign-in is CAPTURED — one new event, and the rollup counts it', async () => {
@@ -3025,8 +3179,7 @@ describe('login capture (engagement monitoring phase 1, 2026-08-09)', () => {
     // settles only the notice question. Shipping it inside a capture migration
     // would be deciding it by accident. dana has certainly signed in — beforeAll
     // did it — so this is a real absence, not an empty table.
-    const danaId = (await owner.from('profiles').select('user_id').eq('email', 'dana@demo.local')
-      .single()).data!.user_id as string
+    const danaId = await userIdOf('dana@demo.local')
     expect((await eventsOf(danaId)).length,
       'CONTROL: dana has no captured logins, so the negative below is vacuous').toBeGreaterThan(0)
     expect((await danaL.from('login_events').select('id').eq('user_id', danaId)).data ?? [],
@@ -3351,14 +3504,10 @@ describe('org-scoped activity (engagement monitoring phase 2, 20260810010000)', 
 
     salon = (await owner.from('orgs').select('id').eq('slug', 'demo-salon').single()).data!.id as string
     orgB = (await owner.from('orgs').select('id').eq('slug', 'demo-b').single()).data!.id as string
-    danaId = (await owner.from('profiles').select('user_id').eq('email', 'dana@demo.local').single())
-      .data!.user_id as string
-    charlieId = (await owner.from('profiles').select('user_id').eq('email', 'charlie@demo.local').single())
-      .data!.user_id as string
-    graceId = (await owner.from('profiles').select('user_id').eq('email', 'grace@demo.local').single())
-      .data!.user_id as string
-    bobId = (await owner.from('profiles').select('user_id').eq('email', 'bob@demo.local').single())
-      .data!.user_id as string
+    danaId = await userIdOf('dana@demo.local')
+    charlieId = await userIdOf('charlie@demo.local')
+    graceId = await userIdOf('grace@demo.local')
+    bobId = await userIdOf('bob@demo.local')
   })
 
   afterAll(async () => {
@@ -3851,10 +4000,8 @@ describe('visual messaging: a seat requires ACTIVE org membership (2026090401000
     dana = await signIn('dana@demo.local')
 
     visualOrg = (await admin.from('orgs').select('id').eq('slug', 'demo-visual').single()).data!.id as string
-    eveId = (await admin.from('profiles').select('user_id').eq('email', 'eve@demo.local').single()).data!
-      .user_id as string
-    danaId = (await admin.from('profiles').select('user_id').eq('email', 'dana@demo.local').single()).data!
-      .user_id as string
+    eveId = await userIdOf('eve@demo.local')
+    danaId = await userIdOf('dana@demo.local')
 
     // The seed deliberately creates NO conversations for demo-visual ("created
     // through the UI", seed.ts) and deletes any that exist, so this block must
@@ -4469,7 +4616,9 @@ describe('seat authority: a module roster row requires ACTIVE org membership (20
     return r.data!.id as string
   }
   const seatUserId = async (email: string) => {
-    const r = await seatAdmin.from('profiles').select('user_id').eq('email', email).single()
+    // Resolved through the owner connection since the email slice: no api role
+    // can map an address to a user id any more, which is the point.
+    const r = { data: { user_id: await userIdOf(email) }, error: null as { message: string } | null }
     if (r.error) throw new Error(`fixture could not resolve user ${email}: ${r.error.message}`)
     return r.data!.user_id as string
   }
@@ -6451,10 +6600,8 @@ describe('visual messaging: a member can BLOCK THEMSELVES, and it sticks (202609
     sbDana = await signIn('dana@demo.local')
 
     sbOrg = (await sbAdmin.from('orgs').select('id').eq('slug', 'demo-visual').single()).data!.id as string
-    sbCharlieId = (await sbAdmin.from('profiles').select('user_id').eq('email', 'charlie@demo.local').single())
-      .data!.user_id as string
-    sbDanaId = (await sbAdmin.from('profiles').select('user_id').eq('email', 'dana@demo.local').single()).data!
-      .user_id as string
+    sbCharlieId = await userIdOf('charlie@demo.local')
+    sbDanaId = await userIdOf('dana@demo.local')
 
     const conv = await sbAdmin
       .from('vm_conversations')
@@ -6647,10 +6794,8 @@ describe('visual messaging: the `for all` split preserves manager reach (2026091
     spEve = await signIn('eve@demo.local')
 
     spOrg = (await spAdmin.from('orgs').select('id').eq('slug', 'demo-visual').single()).data!.id as string
-    spCharlieId = (await spAdmin.from('profiles').select('user_id').eq('email', 'charlie@demo.local').single())
-      .data!.user_id as string
-    spAliceId = (await spAdmin.from('profiles').select('user_id').eq('email', 'alice@demo.local').single()).data!
-      .user_id as string
+    spCharlieId = await userIdOf('charlie@demo.local')
+    spAliceId = await userIdOf('alice@demo.local')
 
     const conv = await spAdmin
       .from('vm_conversations')
@@ -6844,10 +6989,8 @@ describe('visual messaging: the last conversation admin cannot LEAVE (2026091402
     laAlice = await signIn('alice@demo.local')
 
     laOrg = (await laAdmin.from('orgs').select('id').eq('slug', 'demo-visual').single()).data!.id as string
-    laCharlieId = (await laAdmin.from('profiles').select('user_id').eq('email', 'charlie@demo.local').single())
-      .data!.user_id as string
-    laDanaId = (await laAdmin.from('profiles').select('user_id').eq('email', 'dana@demo.local').single()).data!
-      .user_id as string
+    laCharlieId = await userIdOf('charlie@demo.local')
+    laDanaId = await userIdOf('dana@demo.local')
   })
 
   afterAll(async () => {
@@ -7071,5 +7214,239 @@ describe('visual messaging: the last conversation admin cannot LEAVE (2026091402
       .eq('conversation_id', conv)
       .eq('role', 'admin')
     expect(left?.map((r) => r.user_id), 'the wrong admin was removed').toEqual([laCharlieId])
+  })
+})
+
+
+// ---------------------------------------------------------------------------
+// THE EMAIL SLICE (docs/22, 2026-09-17). `profiles.email` is deleted;
+// `auth.users` is the single source of truth, reached only through SECURITY
+// DEFINER functions.
+//
+// The column-level facts (what `profiles` still has, who may read `auth.users`,
+// which functions are allow-listed) live in `profiles-public-columns.test.ts`.
+// THIS block is the BEHAVIOURAL half: each definer exercised through a real
+// signed-in session, with its NEGATIVE case, because a definer's whole value is
+// the authority test inside it and only a real session exercises that.
+//
+// Three of these cases exist because an adversarial reviewer found the defect
+// on 2026-09-17 and it was then reproduced by hand; each is marked.
+// ---------------------------------------------------------------------------
+describe('the email slice: addresses are reachable only through definers (docs/22)', () => {
+  let owner: SupabaseClient
+  let visualOrgId: string
+  let pstOrgId: string
+  let charlieUserId: string
+
+  beforeAll(async () => {
+    owner = await signIn('owner@demo.local')
+    visualOrgId = (await alice.from('orgs').select('id').eq('slug', 'demo-visual').single()).data!.id as string
+    pstOrgId = (await alice.from('orgs').select('id').eq('slug', 'platform-self-test').single()).data!.id as string
+    charlieUserId = await userIdOf('charlie@demo.local')
+  })
+
+  it('superadmin_user_emails: the superadmin reads an address; nobody else does', async () => {
+    const su = await owner.rpc('superadmin_user_emails', { target_user_ids: [charlieUserId] })
+    expect(su.data?.[0]?.email, 'the superadmin must still be able to read an address').toBe('charlie@demo.local')
+
+    // An ORG ADMIN is not a superadmin. This is the case that would silently
+    // widen if the definer trusted its caller instead of checking.
+    const asAdmin = await alice.rpc('superadmin_user_emails', { target_user_ids: [charlieUserId] })
+    expect(asAdmin.data ?? []).toEqual([])
+
+    // And the subject himself gets nothing — the function is not a self-read.
+    const charlie = await signIn('charlie@demo.local')
+    expect((await charlie.rpc('superadmin_user_emails', { target_user_ids: [charlieUserId] })).data ?? []).toEqual([])
+  })
+
+  it('find_module_peer: resolves only an ACTIVE member of the named org, and never a name', async () => {
+    const inOrg = await alice.rpc('find_module_peer', { check_org_id: visualOrgId, target_email: 'charlie@demo.local' })
+    expect(inOrg.data, 'a real co-member must resolve, or the three module resolvers are broken').toBe(charlieUserId)
+
+    // Case and whitespace: the app lowercases today, but the bound belongs in
+    // the database, not in three call sites.
+    const messy = await alice.rpc('find_module_peer', {
+      check_org_id: visualOrgId,
+      target_email: '  CHARLIE@Demo.Local ',
+    })
+    expect(messy.data).toBe(charlieUserId)
+
+    // THE ORACLE IS CLOSED (docs/22 §3 R5). Before the slice, the lookup and
+    // the org check were separate, so the app raised two DIFFERENT errors and
+    // the second told the caller that an address exists on the platform but is
+    // not in their org. Both cases must now be indistinguishable.
+    const outsideOrg = await alice.rpc('find_module_peer', {
+      check_org_id: visualOrgId,
+      target_email: 'bob@demo.local',
+    })
+    const noAccount = await alice.rpc('find_module_peer', {
+      check_org_id: visualOrgId,
+      target_email: 'nobody-at-all@demo.local',
+    })
+    expect(outsideOrg.data).toBeNull()
+    expect(noAccount.data).toBeNull()
+    expect(outsideOrg.error).toEqual(noAccount.error)
+
+    // A non-member of the org resolves nothing at all — is_org_member is the
+    // caller gate.
+    expect((await bob.rpc('find_module_peer', { check_org_id: visualOrgId, target_email: 'charlie@demo.local' })).data)
+      .toBeNull()
+  })
+
+  it('find_module_peer FAILS CLOSED when one address matches two accounts (review A, 2026-09-17)', async () => {
+    // `auth.users`' email uniqueness is PARTIAL (`WHERE is_sso_user = false`),
+    // so two accounts may legitimately share one address. A SQL function
+    // declared to return a SCALAR over a two-row query does not raise — it
+    // silently returns the first. Minting a module seat for an ARBITRARY one of
+    // two accounts is a wrong PRODUCT outcome, not an error, so the function
+    // returns NULL unless the match is unique.
+    //
+    // The collision is manufactured through an owner connection inside a
+    // transaction that is ALWAYS rolled back; nothing is left behind.
+    const sql = postgres(ownerDbUrl, { prepare: false, max: 1 })
+    const dupId = '00000000-0000-4000-8000-0000000000dd'
+    let ambiguous: string | null = 'not-run'
+    let unique: string | null = 'not-run'
+    try {
+      await sql
+        .begin(async (tx) => {
+          const aliceId = await (async () => (await tx`select id from auth.users where email='alice@demo.local'`)[0]!.id)()
+          await tx.unsafe(
+            `insert into auth.users (id, instance_id, email, is_sso_user, aud, role)
+             values ('${dupId}','00000000-0000-0000-0000-000000000000','charlie@demo.local',true,'authenticated','authenticated')`,
+          )
+          await tx.unsafe(
+            `insert into public.org_members (org_id, user_id, role, status)
+             values ('${visualOrgId}','${dupId}','member','active')`,
+          )
+          const callAsAlice = async () => {
+            await tx.unsafe('set local role authenticated')
+            await tx.unsafe(`select set_config('request.jwt.claims','{"sub":"${aliceId}","role":"authenticated"}',true)`)
+            const r = await tx`select public.find_module_peer(${visualOrgId}::uuid, 'charlie@demo.local') as v`
+            await tx.unsafe('reset role')
+            return (r[0]!.v as string | null) ?? null
+          }
+          ambiguous = await callAsAlice()
+
+          // CONTROL: remove the duplicate and the IDENTICAL call resolves — so
+          // the null above is the guard firing, not a broken call.
+          await tx.unsafe(`delete from public.org_members where user_id='${dupId}'`)
+          await tx.unsafe(`delete from auth.users where id='${dupId}'`)
+          unique = await callAsAlice()
+          throw new Error('ROLLBACK_ON_PURPOSE')
+        })
+        .catch((e: Error) => {
+          if (e.message !== 'ROLLBACK_ON_PURPOSE') throw e
+        })
+
+      expect(ambiguous, 'an ambiguous address must resolve to NOTHING, never to an arbitrary account').toBeNull()
+      expect(unique, 'CONTROL: a unique address still resolves').toBe(charlieUserId)
+
+      // And the fixture really is gone.
+      const left = await sql`select count(*)::int as n from auth.users where id = ${dupId}`
+      expect(left[0]!.n, 'the manufactured account outlived its transaction').toBe(0)
+    } finally {
+      await sql.end()
+    }
+  })
+
+  it('org_find_user_by_email answers EXISTENCE only — no name, no address (decision 3)', async () => {
+    const found = await alice.rpc('org_find_user_by_email', { check_org_id: pstOrgId, target_email: 'bob@demo.local' })
+    expect(found.data?.[0]?.user_id, 'CONTROL: the row is real, so the absences below mean something').toBeTruthy()
+    expect(Object.keys(found.data![0]!)).toEqual(['user_id'])
+  })
+
+  it('org_member_profiles still gives an ORG ADMIN the roster, and an ordinary member nothing', async () => {
+    const asAdmin = await alice.rpc('org_member_profiles', { check_org_id: visualOrgId })
+    expect(
+      (asAdmin.data ?? []).some((r: { email: string | null }) => (r.email ?? '').includes('@')),
+      'an org admin must still see the addresses of the people they administer',
+    ).toBe(true)
+
+    const charlie = await signIn('charlie@demo.local')
+    expect((await charlie.rpc('org_member_profiles', { check_org_id: visualOrgId })).data ?? []).toEqual([])
+  })
+
+  it('sd_match_contacts tolerates a STRINGIFIED toggle instead of raising (review A, 2026-09-17)', async () => {
+    // `sd_events.format` is an unconstrained jsonb blob. An earlier draft read
+    // the flag as `(format -> 'shareContactOnMatch')::boolean`, which raises
+    // 22023 on a JSON STRING and would abort the whole query for that event —
+    // and the contact-share write is WRITE-ONCE AND NEVER RETRIED, so the
+    // failure would have been permanent and silent for every pair.
+    const sql = postgres(ownerDbUrl, { prepare: false, max: 1 })
+    try {
+      const body = (
+        await sql`select prosrc from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+                  where n.nspname = 'public' and p.proname = 'sd_match_contacts'`
+      )[0]!.prosrc as string
+      expect(/->>\s*'shareContactOnMatch'/.test(body), 'the flag must be read with ->>').toBe(true)
+      expect(
+        /->\s*'shareContactOnMatch'\s*\)\s*::\s*boolean/.test(body),
+        'the ::boolean cast is back — it raises 22023 on a stringified flag',
+      ).toBe(false)
+
+      // The behaviour itself, over all four real shapes.
+      for (const [json, expected] of [
+        [`'{"shareContactOnMatch": true}'`, true],
+        [`'{"shareContactOnMatch": "true"}'`, true],
+        [`'{}'`, false],
+        [`'null'`, false],
+      ] as const) {
+        const r = await sql.unsafe(
+          `select coalesce(f ->> 'shareContactOnMatch', '') = 'true' as v from (select ${json}::jsonb as f) t`,
+        )
+        expect(r[0]!.v, `format ${json} evaluated wrongly`).toBe(expected)
+      }
+    } finally {
+      await sql.end()
+    }
+  })
+
+  it('a superadmin may READ every private row but may not WRITE anyone else\'s (review A, 2026-09-17)', async () => {
+    // An earlier draft carried `user_private_write_superadmin ... for all`,
+    // whose UPDATE half let a superadmin overwrite ANY user's settings blob —
+    // never intended, and its own comment described a different capability
+    // (`is_superadmin` writes) that no api role has at all. docs/20 §8.1's
+    // lesson: a `for all` policy's USING governs SELECT too, so split them.
+    const charlie = await signIn('charlie@demo.local')
+    const written = await owner
+      .from('user_private')
+      .update({ settings: { hijacked: true } })
+      .eq('user_id', charlieUserId)
+      .select()
+    expect(written.data ?? [], 'a superadmin wrote another user\'s private row').toEqual([])
+
+    // Asserted from the SUBJECT's side too — "no rows returned" alone could
+    // mean the write landed and the read-back was filtered.
+    const after = await charlie.rpc('current_user_private')
+    expect(after.data?.[0]?.settings).toEqual({})
+
+    // CONTROL 1: the superadmin CAN still read every row, so the block above is
+    // specifically on writing.
+    const read = await owner.from('user_private').select('user_id')
+    expect((read.data ?? []).length, 'the superadmin lost their read of user_private').toBeGreaterThan(1)
+
+    // CONTROL 2: and can still write their OWN, so the refusal is about the
+    // ROW, not about the table being read-only.
+    expect((await owner.rpc('set_current_user_settings', { new_settings: { probe: 1 } })).error).toBeNull()
+    await owner.rpc('set_current_user_settings', { new_settings: {} })
+  })
+
+  it('no `for all` policy exists on user_private', async () => {
+    const sql = postgres(ownerDbUrl, { prepare: false, max: 1 })
+    try {
+      const pols = await sql`select polname, polcmd from pg_policy
+                             where polrelid = 'public.user_private'::regclass order by polname`
+      expect(pols.length, 'user_private has no policies — this check is vacuous').toBeGreaterThan(0)
+      for (const p of pols) {
+        expect(p.polcmd, `user_private.${p.polname} is a for-all policy`).not.toBe('*')
+      }
+      // CONTROL: `polcmd = '*'` is a shape this query really can return, so the
+      // loop above is not matching on something that never occurs.
+      const anyForAll = await sql`select count(*)::int as n from pg_policy where polcmd = '*'`
+      expect((anyForAll[0]!.n as number) > 0, 'no for-all policy exists anywhere — the check is vacuous').toBe(true)
+    } finally {
+      await sql.end()
+    }
   })
 })

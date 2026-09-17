@@ -31,12 +31,12 @@ export default async function SpeedDatingPage(props: { params: Promise<{ orgSlug
           .select('id, blocked_user_id, reason')
           .eq('org_id', org.id)
           .eq('blocker_user_id', me.id),
-        supabase.from('profiles').select('user_id, display_name, email'),
+        supabase.from('profiles').select('user_id, display_name'),
       ])
     : [{ data: null }, { data: null }]
   const nameOf = (userId: string) => {
     const p = (profiles ?? []).find((pr) => pr.user_id === userId)
-    return p?.display_name || p?.email || 'Someone'
+    return p?.display_name || 'Someone'
   }
 
   const fmt = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })

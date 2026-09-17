@@ -27,9 +27,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           )}
         </div>
         <div className="flex items-center gap-4 text-sm text-gray-600">
-          <span className="max-w-[40vw] truncate sm:max-w-none">
-            {profile?.display_name || profile?.email || user.email}
-          </span>
+          <Link href="/account" className="max-w-[40vw] truncate hover:underline sm:max-w-none">
+            {profile?.display_name || user.email}
+          </Link>
           <form action="/auth/signout" method="post">
             <button type="submit" className="text-gray-500 hover:text-gray-800 hover:underline">
               Sign out

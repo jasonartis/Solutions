@@ -23,12 +23,10 @@ async function requireSuperadmin() {
   } = await supabase.auth.getUser()
   if (!user) throw new Error('Not signed in')
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('is_superadmin')
-    .eq('user_id', user.id)
-    .single()
-  if (!profile?.is_superadmin) throw new Error('Not authorized')
+  // `is_superadmin` moved to `public.user_private` with the email slice
+  // (docs/22 §21); `is_superadmin()` is and always was the RLS authority.
+  const { data: isSuperadmin } = await supabase.rpc('is_superadmin')
+  if (!isSuperadmin) throw new Error('Not authorized')
   return supabase
 }
 
@@ -89,16 +87,17 @@ export async function addMember(orgId: string, formData: FormData) {
 }
 
 // Persist the superadmin's default for "add member" (immediately-active vs
-// pending invite). Stored on their own profile; only their own row is writable.
+// pending invite). Stored on their own private row; only their own is writable.
 export async function setAddMemberDefault(formData: FormData) {
   const supabase = await requireSuperadmin()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
   const active = formData.get('defaultActive') != null
-  const { data: profile } = await supabase.from('profiles').select('settings').eq('user_id', user!.id).single()
-  const settings = { ...((profile?.settings as Record<string, unknown>) ?? {}), superadminDefaultAddActive: active }
-  const { error } = await supabase.from('profiles').update({ settings }).eq('user_id', user!.id)
+  // `settings` moved off `profiles` (docs/22 §21). Read-modify-write through the
+  // two definers, which only ever touch `auth.uid()`'s own row — there is no
+  // parameter on either that could name another user.
+  const { data: privateRows } = await supabase.rpc('current_user_private')
+  const current = ((privateRows as { settings: unknown }[] | null)?.[0]?.settings ?? {}) as Record<string, unknown>
+  const settings = { ...current, superadminDefaultAddActive: active }
+  const { error } = await supabase.rpc('set_current_user_settings', { new_settings: settings })
   if (error) throw new Error(error.message)
   revalidatePath('/console')
 }

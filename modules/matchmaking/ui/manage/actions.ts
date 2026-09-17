@@ -89,30 +89,27 @@ export async function recompute(orgSlug: string) {
   revalidatePath(`/o/${orgSlug}/m/matchmaking`)
 }
 
-async function resolveUserId(supabase: Awaited<ReturnType<typeof createClient>>, email: string) {
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('user_id')
-    .eq('email', email.trim().toLowerCase())
-    .maybeSingle()
-  if (!profile) throw new Error(`No user with email ${email}`)
-  return profile.user_id as string
-}
-
-// The email lookup above resolves anyone sharing ANY org with the caller
-// (profiles_select_shared_org), not just this one — so a matchmaker/group-
-// member seat minted from it would hand a non-member of THIS org full access
-// via the bare-row mm_matchmaker_can_see / mm_groups_select_assigned /
-// mm_group_members_select_assigned predicates (docs/19 §1). Verify active
-// membership before minting the seat, same check as
-// modules/classroom/ui/manage/actions.ts:71-80 and
-// modules/visual-messaging/ui/actions.ts:181-192.
-async function resolveOrgMemberUserId(
+// Resolve an address to a user id, BOUNDED TO THIS ORG by the database
+// (docs/22 §3 R5). This replaces a `.eq('email', …)` read of `profiles` plus a
+// separate org-membership check in application code.
+//
+// The old lookup resolved anyone sharing ANY org with the caller
+// (profiles_select_shared_org), not just this one — so a matchmaker/group-member
+// seat minted from it would hand a non-member of THIS org full access via the
+// bare-row mm_matchmaker_can_see / mm_groups_select_assigned /
+// mm_group_members_select_assigned predicates (docs/19 §1). `find_module_peer`
+// carries that bound itself: it returns an id only for an ACTIVE member of the
+// named org. Same replacement as modules/classroom/ui/manage/actions.ts and
+// modules/visual-messaging/ui/actions.ts.
+// The id-based half of the same bound `find_module_peer` enforces for an
+// address: a user id that arrives from a form is client-supplied, so it is
+// verified as an ACTIVE member of THIS org before any seat is minted from it —
+// the same reason the email lookup was never itself a bound (docs/19 §1).
+async function requireActiveOrgMember(
   supabase: Awaited<ReturnType<typeof createClient>>,
   orgId: string,
-  email: string,
+  userId: string,
 ) {
-  const userId = await resolveUserId(supabase, email)
   const { data: member } = await supabase
     .from('org_members')
     .select('user_id')
@@ -121,11 +118,25 @@ async function resolveOrgMemberUserId(
     .eq('status', 'active')
     .maybeSingle()
   if (!member) {
+    throw new Error('That person is not an active member of this organization.')
+  }
+}
+
+async function resolveOrgMemberUserId(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  orgId: string,
+  email: string,
+) {
+  const { data: peerId } = await supabase.rpc('find_module_peer', {
+    check_org_id: orgId,
+    target_email: email,
+  })
+  if (!peerId) {
     throw new Error(
       `No user found with email ${email} in this organization — add them as an org member first (and they must have accepted the invite)`,
     )
   }
-  return userId
+  return peerId as string
 }
 
 // Groups + matchmaker assignments (RLS: mm_can_manage's staff `for all`
@@ -172,18 +183,24 @@ export async function removeGroupMember(orgSlug: string, memberId: string) {
 }
 
 export async function assignMatchmaker(orgSlug: string, formData: FormData) {
-  const matchmakerEmail = String(formData.get('matchmakerEmail') ?? '').trim()
+  // The form now submits USER IDS, not email addresses (docs/22 §7.2): the
+  // picker picks a person out of this org's own matchmakers/singles, so there
+  // is nothing to resolve. Both ids are still verified as ACTIVE members of
+  // THIS org below — a <select> is a client-side control and confers no
+  // authority, and mm_matchmaker_assignments' RLS is the real gate either way.
+  const matchmakerId = String(formData.get('matchmakerId') ?? '').trim()
   const targetType = String(formData.get('targetType') ?? '') as 'individual' | 'group'
-  const targetEmail = String(formData.get('targetEmail') ?? '').trim()
+  const submittedTargetUserId = String(formData.get('targetUserId') ?? '').trim()
   const targetGroupId = String(formData.get('targetGroupId') ?? '').trim()
-  if (!matchmakerEmail) throw new Error('Matchmaker email is required')
-  if (targetType === 'individual' && !targetEmail) throw new Error('Target single email is required')
+  if (!matchmakerId) throw new Error('A matchmaker is required')
+  if (targetType === 'individual' && !submittedTargetUserId) throw new Error('A target single is required')
   if (targetType === 'group' && !targetGroupId) throw new Error('Target group is required')
 
   const supabase = await createClient()
   const orgId = await resolveOrgId(supabase, orgSlug)
-  const matchmakerId = await resolveOrgMemberUserId(supabase, orgId, matchmakerEmail)
-  const targetUserId = targetType === 'individual' ? await resolveOrgMemberUserId(supabase, orgId, targetEmail) : null
+  await requireActiveOrgMember(supabase, orgId, matchmakerId)
+  const targetUserId = targetType === 'individual' ? submittedTargetUserId : null
+  if (targetUserId) await requireActiveOrgMember(supabase, orgId, targetUserId)
 
   const { error } = await supabase.from('mm_matchmaker_assignments').insert({
     org_id: orgId, // group-target rows get this overwritten by mm_sync_assignment_org

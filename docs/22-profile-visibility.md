@@ -1,9 +1,16 @@
 # Profile visibility — where a user's email actually lives
 
-**Status, 2026-09-16: DESIGN COMPLETE. NOTHING IS BUILT. NO SQL WAS WRITTEN AND
-NO MIGRATION EXISTS.** Both adversarial reviews ran (§13, §14) and EIGHT founder
-decisions were taken. **The email slice is ready to build; the naming model is
-designed but unreviewed; two further items are blocked or deferred.**
+**Status, 2026-09-17: THE EMAIL SLICE IS BUILT AND COMMITTED — AND IT IS NOT
+"SHIPPED", because `pnpm migrate:prod` HAS NOT RUN. See §23 for exactly what
+exists and what the deploy still requires.** The naming model is designed but
+unreviewed; two further items are blocked or deferred.
+
+> **⚠ §16.7's acceptance sentence OVERSTATES the outcome and is corrected in
+> §23.3.** It says the two calls must afterwards return *"Charlie's own row and
+> nothing else"*. They do not, and should not: §20.3 — written LATER — says the
+> email slice does not touch `profiles_select_shared_org` at all. Charlie still
+> reads eight NAMES; what he can no longer read is an address, a settings blob,
+> or who the superadmin is.
 
 > ### → START AT §0. It is the whole thing on one screen.
 > The sections below it are in the order things were DISCOVERED, so reading
@@ -93,7 +100,7 @@ and gets a ratchet test (§21.3).**
 
 | | status |
 |---|---|
-| **The email slice** (decisions 1–3) | **DESIGNED, ADVERSARIALLY REVIEWED TWICE, READY TO BUILD.** ~22 call sites. Build order in §11. **Opus-tier: migration + RLS + a trigger on the signup path.** |
+| **The email slice** (decisions 1–3) | **BUILT AND COMMITTED 2026-09-17 — NOT ON PRODUCTION.** Two migrations, ~22 call sites, both ratchets, a prod-verify script. **`pnpm migrate:prod` has NOT run; the deploy order is one-directional — see §23.6.** |
 | **The naming model** (decisions 4, 5, 7) | **DESIGNED, NOT REVIEWED.** Three new tables, a resolver, three UIs — **module-sized, not a slice** (§16.4). |
 | **Killing the member directory** (§19.4) | **BLOCKED** on the item below. Do not start (§20.2). |
 | **Entity-level visibility** — who you see because you share a *class / event / conversation*, not an org | **DEFERRED BY YOU.** Belongs with docs/15 §11's entity-level `joinPolicy`. May need more modules before it can be settled (§20.1). |
@@ -1645,3 +1652,172 @@ private picture to a wrong address). **No surveyed product has that feature**,
 so the industry is silent on it. Discord's answer is the closest analogue and is
 instructive: it removed email lookup entirely and made you type an exact
 username — which is the same move §7.2 recommends for the matchmaking picker.
+
+
+---
+
+## 23. WHAT WAS BUILT, 2026-09-17 — and what "done" does NOT yet mean
+
+**Written by the session that built it.** §11's build order was followed in
+order and nothing was merged in from §20.4 items 2 or 3.
+
+### 23.1 THE ARTEFACTS
+
+| # | what | where |
+|---|---|---|
+| 1 | **Display-name-at-signup** (§11 step 1, no migration) | `apps/web/app/login/page.tsx` — a required field in signup mode, passed as `options.data.display_name`, which is where `handle_new_user` already looked |
+| 2 | **An `/account` page** — NOT in §11, and it is a gap the build found | `apps/web/app/(app)/account/*`. `grant update (display_name)` has existed since `20260706120000` and **no screen had ever used it**, so a display name was write-once-at-signup. Once it is the ONLY label a co-member sees, that is not tenable — and the one prod user with a NULL name is the founder's own account |
+| 3 | **The definers** (§11 step 2), additive, reversible | `supabase/migrations/20260917010000_email_definers.sql` |
+| 4 | **The drop + the companion table** (§11 step 4) | `supabase/migrations/20260917020000_profiles_is_public.sql` |
+| 5 | **~22 call sites re-pointed** (§11 step 3) | all of §3's R1–R10 |
+| 6 | **RLS cases with controls** (§11 step 5) | `rls.test.ts` — a new 8-case block, plus every one of the 16 `.eq('email', …)` fixtures re-pointed at an owner-connection resolver |
+| 7 | **Both ratchets** (§11 step 6, §21.3) | `packages/db/src/profiles-public-columns.test.ts` |
+| 8 | **The prod-verify script** (§11 step 7) | `scripts/prod-verify-profile-visibility.mts` — 62 checks, `--local` supported |
+| 9 | **The acceptance test a non-engineer can run** (§16.7) | `scripts/verify-profile-visibility-local.mts` |
+
+**Verified in CI's exact order** (reset → seed → db → e2e, same database, no
+reset between): **db 231/231 → e2e 52/52**, typecheck 9/9, module suites 4/4,
+clean build. RLS floor raised 211 → 221.
+
+### 23.2 §21.4 IS DISCHARGED — the recursion was DEMONSTRATED, not reasoned about
+
+The doc required this before any SQL was written, and it was done first.
+`is_superadmin()` reads the `is_superadmin` column; the companion table's SELECT
+policy calls `is_superadmin()`. Run in a ROLLED-BACK transaction against the
+exact shape: **the superadmin read all 11 rows — no recursion, no 42P17.**
+
+**The controls are what make that a result rather than an anecdote:** an
+ordinary user in the same transaction saw exactly **1** row (their own) and got
+`false` from the function, proving the policy was genuinely ENFORCED rather than
+switched off; and the rollback was confirmed clean with its own control query.
+Re-demonstrated afterwards on the DEPLOYED objects. **The recorded fallback —
+leave `is_superadmin` on `profiles` — was not needed.**
+
+### 23.3 ⚠ §16.7's ACCEPTANCE SENTENCE WAS WRONG, and §20.3 is the correct reading
+
+§16.7 says that after the slice the same two calls *"must return Charlie's own
+row and nothing else."* **They do not.** Charlie still gets **eight rows of
+`display_name`**; the three moved columns 42703.
+
+This is not a shortfall, it is §16.7 having been written BEFORE the scope
+boundary in §20. **§20.3 is explicit that the email slice does not touch
+`profiles_select_shared_org`**, and killing that blanket directory is §19.4,
+which is **BLOCKED** on the founder-deferred entity-level question (§20.2).
+Decision 6 keeps the name visible deliberately. The acceptance script asserts
+the eight names ON PURPOSE, labelled "NOT IN SCOPE", so a future reader cannot
+mistake it for a regression.
+
+### 23.4 FOUR THINGS THE BUILD FOUND THAT THE DESIGN AND BOTH REVIEWS MISSED
+
+1. **`org_accept_invite` reads ANOTHER USER's `profiles.is_superadmin`.** §6
+   measured that no application code reads another user's `settings` or
+   `is_superadmin` and that measurement was *correct* — it searched TypeScript.
+   **A SQL function body is also a call site.** Found by the RLS suite failing
+   with `column p.is_superadmin does not exist`. It could not use
+   `is_superadmin()` because that helper answers only about the caller, and this
+   asks about the INVITER. → docs/03 #25.
+2. **`find_module_peer` failed OPEN on an ambiguous address.** `auth.users`'
+   uniqueness is PARTIAL (`WHERE is_sso_user = false`), so two accounts may
+   share one address — and a SQL function declared to return a SCALAR over a
+   two-row query **does not raise; it silently returns the first**
+   (demonstrated). Minting a module seat for an arbitrary one of two accounts is
+   a wrong PRODUCT outcome. Now returns NULL unless the match is unique. *Found
+   by adversarial review A.*
+3. **`sd_match_contacts` would have raised `22023` on a stringified toggle.**
+   `sd_events.format` is unconstrained jsonb; `(format -> 'k')::boolean` raises
+   on a JSON string and would abort the query **for the whole event** — and this
+   is the write-once-never-retried path, so the failure would have been
+   permanent. Now `->>` with a text compare; all four shapes run live. *Found by
+   adversarial review A.*
+4. **The companion table's `for all` superadmin policy was an unintended
+   widening.** Its SELECT half duplicated an arm that already existed; its
+   UPDATE half let a superadmin overwrite **any user's** `settings`. Its own
+   comment claimed it existed to administer the `is_superadmin` FLAG — a
+   capability `authenticated` never had, since the column grant is `settings`
+   only. Policy **removed**; nothing needs it (promotion runs as `service_role`).
+   This is docs/20 §8.1's already-shipped lesson arriving somewhere new. *Found
+   by adversarial review A.*
+
+**And two defects reviewer B found in files the survey never listed:**
+`scripts/verify-console-view-as.mts` and `scripts/verify-data-browser.mts` both
+read `profiles.is_superadmin` as a probe PRECONDITION — so each would have
+reported a FAILING precondition rather than crashing, which is the worse
+failure. Both re-pointed.
+
+**One claim of this document is FALSIFIED, and it matters for the next audit.**
+§3 and §14.3 both state, with a control, that *"no `select('*')` on `profiles`
+exists anywhere."* At the SQL level that is **not true**:
+`apps/web/lib/data-browser.ts:190` runs `supabase.from(lookup.table).select('*')`
+generically, and `profiles` is a declared lookup. It is harmless after the drop
+(fewer columns return; the UI derives its columns from the row), but **the
+measurement was of literal source text, not of what the database is asked** — a
+generic query built from a declaration table is invisible to that grep.
+
+### 23.5 THE CONSOLE'S `.rpc()` BAN HAD TO BE REPLACED, and the replacement is stronger
+
+`rls.test.ts` carried a source scan banning `.rpc()` outright on the Owner
+Console path: every query the surface issued had to be one the superadmin could
+already issue as themselves, so `requireSuperadmin()` granted nothing (docs/03
+#18). **Deleting `profiles.email` removes the RLS route to another user's
+address on purpose, so the console MUST now go through a definer** — there is
+nothing else left.
+
+The ban was a PROXY for the invariant, not the invariant. It is replaced by:
+every `.rpc()` on that path must name an allow-listed function, and **each one
+must carry `is_superadmin()` in its own body, read from `pg_proc`** rather than
+trusted from a comment — with `is_org_member` as a control proving the predicate
+can fail. `lib/data-browser.ts` and `console/page.tsx` were ADDED to the scanned
+surface, since they now carry a definer too.
+
+### 23.6 THE DEPLOY — NOT DONE, AND THE ORDER IS ONE-DIRECTIONAL
+
+**Nothing is on production. `pnpm migrate:prod` has not been run, and nothing in
+CI runs it.** The order is NOT symmetric and §11 step 4 is the authority:
+
+1. **`20260917010000` (additive): `migrate:prod` FIRST, then deploy the code.**
+   Reversed, the three module resolvers call `find_module_peer` before it
+   exists.
+2. **Deploy the app and confirm it is serving.**
+3. **`20260917020000` (the drop): the CODE MUST BE LIVE FIRST, `migrate:prod`
+   second.** Reversed, it is a simultaneous app-wide outage across all six
+   modules.
+4. **Then `scripts/prod-verify-profile-visibility.mts`** (no `--local`).
+
+**Do not write SHIPPED or CLOSED for either migration until `migrate:prod` has
+run AND that script has passed against prod** — CLAUDE.md is emphatic, and this
+file has been burned by exactly that before.
+
+### 23.7 PROD MEASUREMENTS TAKEN THIS SESSION — §13.3's open item is CLOSED
+
+§13.3 recorded that the publication and view checks had been run **on LOCAL
+ONLY**, and warned against carrying the local zero forward. Both were run
+against PROD on 2026-09-17:
+
+- **`pg_publication_tables` on prod: 0 rows.** Control: `supabase_realtime`
+  exists, so the empty list is a real absence, not a missing publication.
+- **Prod's only non-system views are in `extensions` and `vault`** — none in
+  `public`, none over `profiles`. Control: 146 views exist in total.
+- `profiles.email` vs `auth.users.email` divergence on prod: **0 of 12**, so
+  re-pointing the three existing definers is behaviour-preserving today.
+- The **1 NULL `display_name` is `jasonartisenergy@gmail.com`** — the founder's
+  own account. That makes §11 step 1's backfill question concrete and free of
+  any third-party privacy dimension: the migration seeds it from the email
+  local-part, generically, and `/account` lets him change it in one screen.
+
+Both checks are now permanent in `prod-verify-profile-visibility.mts`, so the
+local-cannot-catch-prod-drift class does not reopen.
+
+### 23.8 STILL OPEN AFTER THIS SLICE
+
+- **F3** (§0.6) — untouched, still unanswered, still not blocking. Settle it
+  with the deferred naming slice.
+- **§19.4 / §20.4 item 2** — killing the blanket member directory. Still
+  BLOCKED. Not started, deliberately.
+- **§20.4 item 3** — entity-level visibility. Still founder-deferred.
+- **docs/20 §8.3** — `org_find_user_by_email` still resolves a user who is not
+  in the org, because it is an INVITE lookup and an org join would break every
+  invite. This slice **narrowed what it returns** (id only, no name, no address)
+  but did not close §8.3, which needs logging. §7 Q4 already said so.
+- **The privacy line.** §7 Q5's sentence is now literally true in every org and
+  cheap to add: *"Other members of an organization can see your name. They
+  cannot see your email address."* `/privacy` exists; this was NOT added here.

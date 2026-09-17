@@ -103,7 +103,7 @@ export default async function ConversationPage(props: {
       .eq('conversation_id', conversationId)
       .order('path'),
     supabase.from('vm_reactions').select('layer_id, kind').eq('conversation_id', conversationId),
-    supabase.from('profiles').select('user_id, display_name, email'),
+    supabase.from('profiles').select('user_id, display_name'),
     // vm_can_moderate: tombstone/restore/flag-triage. vm_is_conv_admin:
     // add-member, freeze branch, join policy — those RLS paths require the
     // admin tier, so the UI must gate on it too or a plain moderator would
@@ -160,7 +160,7 @@ export default async function ConversationPage(props: {
 
   const nameOf = (id: string) => {
     const p = (profiles ?? []).find((pr) => pr.user_id === id)
-    return p?.display_name || p?.email || 'Someone'
+    return p?.display_name || 'Someone'
   }
   const children = rows.filter((l) => l.parent_layer_id === current.id)
   const reactionCount = (layerId: string, kind: string) =>

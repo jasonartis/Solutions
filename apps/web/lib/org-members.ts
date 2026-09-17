@@ -12,18 +12,23 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 // service-role key (docs/03 #14) — so a bug here fails closed under RLS
 // rather than silently bypassing tenancy.
 
+// A LOOKUP NEVER CONFIRMS A NAME (docs/22 decision 3, §15.2). The founder was
+// asked directly whether a mistyped address should prompt "did you mean Sarah
+// Cohen?" and answered *"no we should not"* — so `org_find_user_by_email` now
+// returns the id ALONE. It no longer returns a name or an address, and this
+// signature narrowed with it: the caller gets a user id or nothing.
 export async function resolveEmailToUserId(
   supabase: SupabaseClient,
   orgId: string,
   email: string,
-): Promise<{ userId: string; displayName: string | null } | null> {
+): Promise<{ userId: string } | null> {
   const { data } = await supabase.rpc('org_find_user_by_email', {
     check_org_id: orgId,
     target_email: email.trim().toLowerCase(),
   })
-  const row = data?.[0]
+  const row = (data as { user_id: string }[] | null)?.[0]
   if (!row) return null
-  return { userId: row.user_id as string, displayName: row.display_name as string | null }
+  return { userId: row.user_id }
 }
 
 // Add someone to the org (slice 3, 20260727010000). A plain INSERT: the

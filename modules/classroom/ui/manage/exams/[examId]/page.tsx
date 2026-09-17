@@ -42,7 +42,7 @@ export default async function ExamGradingPage(props: {
         .eq('role', 'student'),
       supabase.from('cls_exam_papers').select('id, student_id, storage_path').eq('exam_id', examId),
       supabase.from('cls_grades').select('student_id, source, score, detail, is_final').eq('exam_id', examId),
-      supabase.from('profiles').select('user_id, email, display_name'),
+      supabase.from('profiles').select('user_id, display_name'),
     ])
 
   const nameOf = (userId: string) => {
@@ -50,7 +50,7 @@ export default async function ExamGradingPage(props: {
     const preferred = [m?.preferred_first_name, m?.preferred_last_name].filter(Boolean).join(' ')
     if (preferred) return preferred
     const p = (profiles ?? []).find((pr) => pr.user_id === userId)
-    return p?.display_name || p?.email || userId
+    return p?.display_name || userId
   }
 
   const scanLinks = new Map<string, { name: string; url: string }[]>()

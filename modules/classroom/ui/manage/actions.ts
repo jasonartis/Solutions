@@ -49,10 +49,6 @@ export async function enrollClassMember(orgSlug: string, classId: string, formDa
   if (!['student', 'ga', 'professor'].includes(role)) throw new Error('Unknown role')
 
   const supabase = await createClient()
-  const { data: profile } = await supabase.from('profiles').select('user_id').eq('email', email).maybeSingle()
-  if (!profile) {
-    throw new Error(`No user found with email ${email} in this organization — add them as an org member first`)
-  }
 
   // The class's scope node — the grant is pinned to it. Readable to any staff
   // who can manage the class (cls_classes_select policy).
@@ -63,19 +59,21 @@ export async function enrollClassMember(orgSlug: string, classId: string, formDa
     .single()
   if (!klass?.scope_node_id) throw new Error('Class has no scope node')
 
-  // The target must be a member of THIS org (review Note 4): the email lookup
-  // above resolves anyone sharing ANY org with the caller, so verify org
-  // membership before minting a classroom grant — otherwise a non-member could
-  // be enrolled and read class content via the grant-based RLS. (Readable to
-  // the caller: org_members_select_member lets any org member read the roster.)
-  const { data: member } = await supabase
-    .from('org_members')
-    .select('user_id')
-    .eq('org_id', klass.org_id)
-    .eq('user_id', profile.user_id)
-    .eq('status', 'active')
-    .maybeSingle()
-  if (!member) {
+  // ONE lookup that is ALSO the org bound (docs/22 §3 R5). This used to be a
+  // `.eq('email', …)` read of `profiles` — which resolved anyone sharing ANY
+  // org with the caller — followed by a separate org-membership check here,
+  // because the lookup was not itself a bound (review Note 4 / docs/19 §1).
+  // `find_module_peer` does both in the database: it returns an id only for an
+  // ACTIVE member of THIS org. Two consequences worth stating: a non-member can
+  // no longer be enrolled and then read class content through the grant-based
+  // RLS, and the two distinct error messages this code used to raise — one for
+  // "no such address", one for "exists but not in your org" — collapse into the
+  // single message below, which removes an existence oracle nobody had named.
+  const { data: peerId } = await supabase.rpc('find_module_peer', {
+    check_org_id: klass.org_id,
+    target_email: email,
+  })
+  if (!peerId) {
     throw new Error(`No user found with email ${email} in this organization — add them as an org member first (and they must have accepted the invite)`)
   }
 
@@ -87,11 +85,11 @@ export async function enrollClassMember(orgSlug: string, classId: string, formDa
     .delete()
     .eq('org_id', klass.org_id)
     .eq('module_key', 'classroom')
-    .eq('user_id', profile.user_id)
+    .eq('user_id', peerId as string)
     .eq('scope_ref', klass.scope_node_id)
   const { error: grantErr } = await supabase.from('module_roles').insert({
     org_id: klass.org_id,
-    user_id: profile.user_id,
+    user_id: peerId as string,
     module_key: 'classroom',
     role,
     scope_ref: klass.scope_node_id,
@@ -103,7 +101,7 @@ export async function enrollClassMember(orgSlug: string, classId: string, formDa
     {
       org_id: DERIVED_SCOPE_PLACEHOLDER, // derived by cls_class_members_scope trigger from class_id
       class_id: classId,
-      user_id: profile.user_id,
+      user_id: peerId as string,
       role,
     },
     { onConflict: 'class_id,user_id' },
