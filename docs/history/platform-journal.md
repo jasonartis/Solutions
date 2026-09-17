@@ -65,7 +65,29 @@ decision log, docs/03 conventions, docs/12 safeguards) — this is the chronolog
     `grant update (display_name)` had been in place since `20260706120000` and **no screen had
     ever used it**: a display name was write-once-at-signup, which is untenable once it is the
     only label a co-member sees.
-  - **THE SLICE IS HALF-DEPLOYED, ON PURPOSE (two sittings, founder's call).**
+  - **SHIPPED: BOTH MIGRATIONS ARE ON PRODUCTION AND PROD-VERIFIED, deployed in TWO
+    SITTINGS (founder's call).** `prod-verify-profile-visibility.mts` **70/70**;
+    `prod-verify-migration.ts` **0 failures** on both files (13 functions body-matching, `anon`
+    holding no EXECUTE; its single warning is `handle_new_user` having no api-role EXECUTE,
+    correct for a trigger function); **the acceptance test run against PROD as
+    charlie@demo.local 7/7**; **8/8 live as real users** — including an ordinary user's
+    self-promotion refused `42501` and the founder's account still reading as superadmin. Site
+    serving; the NEW `/account` route resolves where a missing route 404s.
+  - **THE TWO-SITTING SPLIT IS THE PART TO COPY.** The drop is the only irreversible step, so
+    sitting one stopped after the additive migration + code deploy — production ran the new
+    code with the old columns present and unread, a fully working state — and sitting two
+    applied the drop. That converts "get the deploy order right" into "stop and look before
+    anything is destroyed", which is a much easier thing to get right.
+  - **A NEAR-MISS AT THE BACKUP CHECK, and it is the vacuity rule in its most dangerous
+    location.** Before dropping, the backup was grepped for the `profiles` rows and returned
+    **ZERO** — a stop-everything result. It was a **VACUOUS NEGATIVE**: `pg_dump` writes
+    `INSERT INTO "public"."profiles"` with QUOTED identifiers and the pattern looked for the
+    unquoted form, so it could not have matched anything. The data was present (12 rows, all
+    three columns). Had the mistake run the other way — a pattern that matches something
+    harmless — it would have waved through a backup that was actually empty. **Prove the
+    search works before trusting its answer, and most of all at a backup check.**
+  - **(superseded by the two entries above)** The slice was half-deployed at one point,
+    on purpose.
     `20260917010000` (additive) **IS ON PRODUCTION** — applied after a
     `pnpm backup:prod`, verified by `prod-verify-migration.ts` at **0 failures /
     0 warnings**, all 8 definers body-matching with `anon` holding no EXECUTE.

@@ -24,15 +24,21 @@ NOW — 1, 2, 3, AND 8 ALL SHIPPED; 4, 5, 6, 7 ARE ALL DELIBERATELY PAUSED** (fo
 extract-don't-speculate: each adds real cost or a new dependency for a problem that only
 exists once a real client generates real volume — **do not start any of them unprompted,
 revisit together when the first real client is signed**, per docs/18's status note).
-**THE EMAIL SLICE IS BUILT AND HALF-DEPLOYED (2026-09-17), IN TWO SITTINGS BY FOUNDER
-DECISION.** **SITTING ONE IS DONE:** `pnpm backup:prod` taken, the ADDITIVE migration
-`20260917010000` **IS ON PRODUCTION** (`prod-verify-migration.ts` 0 failures / 0 warnings,
-all 8 definers body-matching, `anon` holding no EXECUTE), and the code is pushed.
-**SITTING TWO IS NOT DONE: `20260917020000` — THE DROP — HAS NOT BEEN APPLIED.** It was
-split off deliberately because the drop is the one step that cannot be undone; prod currently
-carries the old columns, unread, and everything works. **To finish: `pnpm migrate:prod` then
-`pnpm exec tsx scripts/prod-verify-profile-visibility.mts` (no `--local`).** Nothing is
-SHIPPED until both have passed. Live doc:
+**THE EMAIL SLICE IS SHIPPED — BOTH MIGRATIONS APPLIED TO PRODUCTION AND PROD-VERIFIED
+(2026-09-17).** Deployed in two sittings by founder decision, the drop separated because it is
+the one step that cannot be undone. **`public.profiles` on PRODUCTION is now
+`user_id, display_name, created_at, updated_at`.** `email` is gone (`auth.users` is the single
+source of truth, read through SECURITY DEFINER functions); `settings` and `is_superadmin` live
+in the new private `public.user_private`.
+**PROD EVIDENCE, not a local pass:** `prod-verify-profile-visibility.mts` **70/70**;
+`prod-verify-migration.ts` **0 failures** on both migrations (13 functions body-matching,
+`anon` holding no EXECUTE; its 1 warning is `handle_new_user` having no api-role EXECUTE,
+which is correct for a trigger function); **the acceptance test run against PROD as
+charlie@demo.local: 7/7** — the three columns 42703, names still readable, his own private row
+and nobody else's; **8/8 live as real users**, including an ordinary user's self-promotion
+attempt refused with `42501` and the founder's account still reading as superadmin. Site
+serving: `/login` and `/dashboard` 200, the NEW `/account` route 307 (control: a missing route
+404s). Backups taken before each sitting. Live doc:
 [docs/22-profile-visibility.md](docs/22-profile-visibility.md) — **read §23 first**
 (what exists, what the deploy still requires), then §0 if you need the design.
 **`public.profiles` is now `user_id, display_name, created_at, updated_at`.** `email` is
@@ -58,7 +64,7 @@ look for one test that GRANTS something rather than blaming the environment. The
 tripped CI's append-only migration guard, and **reverting an already-pushed migration edit
 trips it again**, so there is no way back once pushed (docs/03 #28).
 
-**⚠ THE REMAINING DEPLOY STEP — FOLLOW docs/22 §23.6 EXACTLY.**
+**⚠ THE DEPLOY PROCEDURE THAT WAS USED, kept because the next column drop needs it — docs/22 §23.6.**
 `pnpm migrate:prod` wraps `supabase db push`, which applies EVERY pending migration and has no
 flag to stop at one (verified against `--help`). **NEITHER NAIVE ORDER IS AN OUTAGE — an
 earlier version of this block said push-first 500s every authenticated page and that was

@@ -1,9 +1,9 @@
 # Profile visibility — where a user's email actually lives
 
-**Status, 2026-09-17: THE EMAIL SLICE IS BUILT AND COMMITTED — AND IT IS NOT
-"SHIPPED", because `pnpm migrate:prod` HAS NOT RUN. See §23 for exactly what
-exists and what the deploy still requires.** The naming model is designed but
-unreviewed; two further items are blocked or deferred.
+**Status, 2026-09-17: THE EMAIL SLICE IS SHIPPED — both migrations applied to
+PRODUCTION and prod-verified (§23.6 has the evidence and the procedure).** The
+naming model is designed but unreviewed; two further items are blocked or
+deferred.
 
 > **⚠ §16.7's acceptance sentence OVERSTATES the outcome and is corrected in
 > §23.3.** It says the two calls must afterwards return *"Charlie's own row and
@@ -100,7 +100,7 @@ and gets a ratchet test (§21.3).**
 
 | | status |
 |---|---|
-| **The email slice** (decisions 1–3) | **BUILT AND COMMITTED 2026-09-17 — NOT ON PRODUCTION.** Two migrations, ~22 call sites, both ratchets, a prod-verify script. **`pnpm migrate:prod` has NOT run; the deploy order is one-directional — see §23.6.** |
+| **The email slice** (decisions 1–3) | **SHIPPED 2026-09-17** — both migrations on PRODUCTION, prod-verified 70/70, acceptance test 7/7 against prod. Two migrations, ~22 call sites, both ratchets, a prod-verify script. §23. |
 | **The naming model** (decisions 4, 5, 7) | **DESIGNED, NOT REVIEWED.** Three new tables, a resolver, three UIs — **module-sized, not a slice** (§16.4). |
 | **Killing the member directory** (§19.4) | **BLOCKED** on the item below. Do not start (§20.2). |
 | **Entity-level visibility** — who you see because you share a *class / event / conversation*, not an org | **DEFERRED BY YOU.** Belongs with docs/15 §11's entity-level `joinPolicy`. May need more modules before it can be settled (§20.1). |
@@ -1796,10 +1796,34 @@ trusted from a comment — with `is_org_member` as a control proving the predica
 can fail. `lib/data-browser.ts` and `console/page.tsx` were ADDED to the scanned
 surface, since they now carry a definer too.
 
-### 23.6 THE DEPLOY — NOT DONE, AND IT NEEDS A PROCEDURE, NOT JUST AN ORDER
+### 23.6 THE DEPLOY — DONE 2026-09-17, IN TWO SITTINGS, AND IT NEEDED A PROCEDURE
 
-**Nothing is on production. `pnpm migrate:prod` has not been run, and nothing in
-CI runs it.**
+> **SHIPPED. Both migrations are on PRODUCTION and prod-verified.** Evidence:
+> `prod-verify-profile-visibility.mts` **70/70**; `prod-verify-migration.ts`
+> **0 failures** on both files; the **acceptance test run against PROD as
+> charlie@demo.local 7/7**; **8/8 live as real users**, including a
+> self-promotion attempt refused `42501` and the founder's account still reading
+> as superadmin. `pnpm backup:prod` taken before each sitting, and the second
+> backup was checked to actually contain all 12 `profiles` rows WITH the three
+> columns before anything was dropped.
+>
+> **SPLIT INTO TWO SITTINGS, founder's decision, and it is the part to copy.**
+> The drop is the only step that cannot be undone, so sitting one stopped after
+> the additive migration + the code deploy: production ran the new code for a
+> while with the old columns still present and unread, which is a fully working
+> state. Sitting two applied the drop. **That separation is worth more than the
+> ordering rule itself** — it converts "get the order right" into "you can stop
+> and look before anything is destroyed."
+>
+> **A NEAR-MISS WORTH RECORDING.** Before dropping, the backup was checked for
+> the `profiles` rows and the check came back **ZERO** — which would have been a
+> stop-everything result. It was a **VACUOUS NEGATIVE**: `pg_dump` writes
+> `INSERT INTO "public"."profiles"` with quoted identifiers and the grep looked
+> for the unquoted form, so the pattern could not have matched whatever the file
+> contained. The data was there all along (12 rows, all three columns). **A
+> backup check is exactly where a search that cannot match looks like a
+> catastrophe** — or, worse on a different day, where a real absence looks like
+> a pass. Prove the search works before trusting its answer.
 
 **THE TOOLING DOES NOT SUPPORT THE ORDER THE DESIGN REQUIRES, and this was found
 at deploy-planning time rather than mid-deploy.** §11 step 4 prescribes: additive
