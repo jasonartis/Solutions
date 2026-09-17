@@ -121,13 +121,44 @@ insert into public.user_private (user_id, settings, is_superadmin, created_at)
 select p.user_id, p.settings, p.is_superadmin, p.created_at
 from public.profiles p;
 
--- Tables created by CLI migrations do NOT inherit Supabase's default API-role
--- grants (docs/03 convention #1), so state them. NOTE what is absent: no INSERT
--- and no DELETE for `authenticated`. A row's existence is the signup trigger's
--- business, not the user's. UPDATE is COLUMN-SCOPED to `settings` alone, which
--- is what stops a user promoting themselves -- `is_superadmin` has no write
--- grant to any api role at all, so the policy below is defence in depth and the
--- grant is the real gate.
+-- ACL: REVOKE FIRST, THEN GRANT. STATE THE WHOLE INTENDED SET (docs/03 #1).
+--
+-- ⚠ THIS IS A FIX, AND THE BUG IT FIXES WAS A REAL PRIVILEGE ESCALATION THAT
+-- PASSED LOCALLY AND FAILED IN CI. The first version of this block had the
+-- `grant` lines below WITHOUT the `revoke`, on the reasoning that a table
+-- created by a CLI migration inherits no API-role grants. That reasoning is
+-- what docs/03 #1 already warns about, and it is only true of the environment
+-- you happen to be sitting in:
+--
+--   `pg_default_acl`, measured 2026-09-17 on the local stack:
+--     grantor=postgres schema=public  -> authenticated=Dxtm     (no UPDATE)
+--     grantor=postgres schema=storage -> authenticated=arwdDxtm (UPDATE on ALL)
+--
+-- So the default for a NEW TABLE is whatever that row says, and it is not the
+-- same everywhere. In CI it was permissive enough that `authenticated` held
+-- table-level UPDATE — which covers EVERY COLUMN — and the RLS suite caught it
+-- in the bluntest possible way: **`bob@demo.local`, an ordinary user, set his
+-- own `is_superadmin` to true.** He then passed `is_org_admin` everywhere and
+-- took 23 further tests down with him. The column-scoped grant below cannot
+-- defend anything if a table-level grant already covers it: a narrower grant
+-- never subtracts from a wider one (the same arithmetic that killed v3 of this
+-- workstream -- docs/20 §9).
+--
+-- `20260728010000_acl_hardening.sql` had already established exactly this
+-- pattern for every table that existed then (`revoke all privileges on all
+-- tables in schema public from anon, authenticated` and then grant back). A
+-- table added afterwards is outside that sweep and must do it itself.
+--
+-- WHAT THE INTENDED SET IS, stated positively:
+--   * `authenticated` -- SELECT (policy-filtered to own row + superadmin), and
+--     UPDATE on `settings` ONLY. No INSERT, no DELETE: a row's existence is the
+--     signup trigger's business, not the user's.
+--   * `is_superadmin` gets NO write grant to ANY api role. Promotion runs
+--     through `service_role`, which is not subject to RLS. That grant, not the
+--     policy, is the real gate -- the policies are defence in depth.
+--   * `anon` holds nothing at all.
+revoke all privileges on public.user_private from public, anon, authenticated, service_role;
+
 grant select on public.user_private to authenticated;
 grant update (settings) on public.user_private to authenticated;
 grant select, insert, update, delete on public.user_private to service_role;

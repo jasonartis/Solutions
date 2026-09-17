@@ -236,6 +236,28 @@ async function main() {
   check('authenticated CANNOT update user_private.is_superadmin', upd[0]!.flag === false)
   check('CONTROL: authenticated CAN update user_private.settings, so the grant query works', upd[0]!.settings === true)
 
+  // THE TABLE-LEVEL SET, and it is the half that actually bit. A column grant
+  // cannot narrow a table grant, so `update (settings)` above means nothing if
+  // `authenticated` also holds table-level UPDATE. That is exactly what
+  // happened in CI on 2026-09-17 when this migration granted without revoking
+  // first: an ordinary user set his own `is_superadmin` to true. `anon` must
+  // hold nothing at all.
+  for (const [role, priv] of [
+    ['authenticated', 'update'],
+    ['authenticated', 'insert'],
+    ['authenticated', 'delete'],
+    ['anon', 'select'],
+    ['anon', 'insert'],
+    ['anon', 'update'],
+    ['anon', 'delete'],
+  ] as const) {
+    const r = await sql`select has_table_privilege(${role}, 'public.user_private', ${priv}) as p`
+    check(`${role} holds NO table-level ${priv.toUpperCase()} on user_private`, r[0]!.p === false)
+  }
+  const ctl = await sql`select has_table_privilege('authenticated','public.user_private','select') as a,
+                               has_table_privilege('service_role','public.user_private','update') as s`
+  check('CONTROL: authenticated DOES hold SELECT and service_role DOES hold UPDATE', ctl[0]!.a === true && ctl[0]!.s === true)
+
   // -------------------------------------------------------------------------
   section('6. THE FEATURE IS ALIVE, not merely well-shaped')
   // -------------------------------------------------------------------------

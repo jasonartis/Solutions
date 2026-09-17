@@ -133,6 +133,60 @@ describe('profiles is PUBLIC, and the email surface is enumerable (docs/22 §21.
     }
   })
 
+  it('RATCHET 1 CONTROL: user_private\'s ACL is exactly what the migration states', async () => {
+    // ASSERTED DIRECTLY, not only through behaviour — and this test exists
+    // because the behavioural version was not enough. The first draft of the
+    // migration granted without revoking first, on the reasoning that a table
+    // created by a CLI migration inherits no API-role grants. That held on the
+    // local stack and NOT in CI, where `authenticated` ended up with
+    // TABLE-level UPDATE (which covers every column) and an ordinary user set
+    // his own `is_superadmin` to true — taking 23 other tests down with him.
+    //
+    // A table-level grant cannot be narrowed by a column-level one, so the
+    // column grant below is only meaningful while the table grant is absent.
+    // That absence is the thing under test.
+    const sql = postgres(dbUrl, { prepare: false, max: 1 })
+    try {
+      for (const role of ['anon', 'authenticated']) {
+        for (const priv of ['insert', 'delete', 'truncate']) {
+          expect(
+            (await sql`select has_table_privilege(${role}, 'public.user_private', ${priv}) as p`)[0]!.p,
+            `${role} must not hold ${priv} on user_private`,
+          ).toBe(false)
+        }
+      }
+      // TABLE-level update must be absent for authenticated — this is the exact
+      // hole. `anon` must hold nothing at all, including SELECT.
+      expect(
+        (await sql`select has_table_privilege('authenticated','public.user_private','update') as p`)[0]!.p,
+        'authenticated holds TABLE-level UPDATE — it covers is_superadmin and the column grant cannot narrow it',
+      ).toBe(false)
+      expect((await sql`select has_table_privilege('anon','public.user_private','select') as p`)[0]!.p).toBe(false)
+
+      // And the column privileges, which is where the real line sits.
+      expect(
+        (await sql`select has_column_privilege('authenticated','public.user_private','is_superadmin','update') as p`)[0]!.p,
+        'authenticated can write the superadmin flag',
+      ).toBe(false)
+      // CONTROLS: the two privileges that MUST exist, so every false above is a
+      // real measurement rather than a broken privilege query or a missing table.
+      expect(
+        (await sql`select has_column_privilege('authenticated','public.user_private','settings','update') as p`)[0]!.p,
+        'CONTROL: authenticated must still be able to write its own settings',
+      ).toBe(true)
+      expect(
+        (await sql`select has_table_privilege('authenticated','public.user_private','select') as p`)[0]!.p,
+        'CONTROL: authenticated must still be able to read (policy-filtered)',
+      ).toBe(true)
+      expect(
+        (await sql`select has_table_privilege('service_role','public.user_private','update') as p`)[0]!.p,
+        'CONTROL: service_role administers the flag, so it must retain UPDATE',
+      ).toBe(true)
+    } finally {
+      await sql.end()
+    }
+  })
+
   it('RATCHET 2: only allow-listed functions touch an email address or auth.users', async () => {
     const sql = postgres(dbUrl, { prepare: false, max: 1 })
     try {
