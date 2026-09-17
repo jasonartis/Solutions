@@ -53,8 +53,8 @@ token the app already issued, so that is not a defence.
 
 | # | decision | where |
 |---|---|---|
-| **1** | **`profiles.email` is DELETED, not moved to a new table.** It is a copy of `auth.users.email` that no trigger ever refreshes — a cache with no invalidation. A second copy inherits that bug. `auth.users` becomes the single source of truth. | §4 |
-| **2** | **`settings` and `is_superadmin` ride along** — they leave `profiles` in the same slice. Near-zero app cost; nothing reads either for anyone but the caller. | §6, §0.3 |
+| **1** | **CONFIRMED 2026-09-16 (*"I will take your recommendation"*). `profiles.email` is DELETED, not moved to a new table.** It is a copy of `auth.users.email` that no trigger ever refreshes — a cache with no invalidation. A second copy inherits that bug. `auth.users` becomes the single source of truth. | §4 |
+| **2** | **`settings` and `is_superadmin` ride along** — **into a new PRIVATE COMPANION TABLE (§21), which §6 originally forgot to name** — they leave `profiles` in the same slice. Near-zero app cost; nothing reads either for anyone but the caller. | §6, §0.3 |
 | **3** | **A lookup never confirms a name.** Not on an invite, not on a typo. *"if we should suggest to them, no we should not."* | §15.2 |
 | **4** | **The ORG declares what is SEARCHABLE. The USER has a checkbox per field, always stored.** Searchable forces it shared and makes it mandatory to fill; the user's choice goes inert, not away, and takes effect the moment the org turns search off. `visible = user_checked OR org_searchable`. | §17.1, §18.1 |
 | **5** | **"Shared" means shared with someone who successfully searched** — they already had the value. Never displayed to someone who did not. **This is what saves decision 1 in Public Square.** | §19.1 |
@@ -65,7 +65,12 @@ token the app already issued, so that is not a defence.
 ### 0.3 WHAT THIS ACTUALLY CHANGES, in plain terms
 
 `profiles` ends up holding **`user_id`, `display_name`, `created_at`,
-`updated_at`** — a public identity row and nothing else.
+`updated_at`** — a public identity row and nothing else. **Everything that left
+it has a named home (§21): the address lives in `auth.users.email` where the
+authoritative copy always was; `settings` and `is_superadmin` move to a private
+per-user companion table, which is also the designated home for anything private
+added later. The rule — `profiles` is public by definition — goes into docs/03
+and gets a ratchet test (§21.3).**
 
 - **Nobody reads anyone else's email address**, in any org. Not Sarah of Dana in
   Public Square, not Frank's cashier of Frank in the salon.
@@ -115,6 +120,11 @@ and false** (§19.2).
 - **§16.6** — may an org ever make email a *shareable* field rather than only a
   searchable one? Decision 5 makes this mostly moot; worth a line when the
   naming model is built.
+- **§21.4** — the companion table's policy calls `is_superadmin()`, which reads
+  a column that would live IN that table. Almost certainly fine (the function is
+  SECURITY DEFINER and bypasses RLS) but **must be demonstrated live before the
+  migration is written**, not reasoned about. Fallback if it recurses: leave
+  `is_superadmin` on `profiles`.
 - **§17.6** — "searchable implies mandatory" is not purely additive: **1 of 12
   production users has no display name** and would need a backfill or a prompt.
 
@@ -1017,7 +1027,7 @@ If an org may tick email as a **shareable** field rather than only a lookup key,
 a client org could re-enable today's leak for itself. The founder's wording
 implies lookup-only, but the model does not say so.
 
-**Worth knowing this is what Slack and Google Groups actually do** (§21.1: where
+**Worth knowing this is what Slack and Google Groups actually do** (§22.1: where
 email is visible at all it is an ORG-level admin setting, never a per-user
 opt-in), so either answer is defensible — **but it changes decision A, so it
 must be deliberate.**
@@ -1241,7 +1251,7 @@ it.**
 **Reading (i) is almost certainly what was meant**, and it also explains the
 founder's own wording: a user cannot honestly be promised their email is private
 in an org where anyone can confirm it by typing it — **which is an enumeration
-oracle (§21.1's F2 evidence, OWASP WSTG-IDNT-04), not a directory listing.** The
+oracle (§22.1's F2 evidence, OWASP WSTG-IDNT-04), not a directory listing.** The
 checkbox would be making a promise the platform cannot keep, so the UI tells the
 truth instead. **That is a statement about honesty, not about display.**
 
@@ -1444,7 +1454,88 @@ independent, adversarially reviewed (§13, §14), and ready. **The wider change
 
 ---
 
-## 21. Decisions log
+## 21. WHERE THINGS LIVE AFTERWARDS — a GAP the founder found, 2026-09-16
+
+**Founder: *"what about email addresses? What if we want to add something later,
+are we making provisions for that?"*** **The answer to the second half was NO,
+and this section exists because of that question.**
+
+### 21.1 The gap, stated plainly
+
+§6 and §0.2 say `settings` and `is_superadmin` "leave `profiles`". **They never
+said where they go.** They cannot simply vanish: `settings` holds a live console
+preference (`superadminDefaultAddActive`) and `is_superadmin` is the flag the
+whole Owner Console depends on. **A destination was required and was never
+named** — and that destination is exactly the provision for future fields.
+
+### 21.2 THE THREE HOMES — and the rule is the durable part
+
+| home | holds | who can read it | is it new? |
+|---|---|---|---|
+| **`auth.users.email`** | the authoritative email address | the caller (from their own session); SECURITY DEFINER functions with a reason | **no** — it is where the real address has always been. `profiles.email` was a write-once copy no trigger ever refreshed (§2.1) |
+| **`profiles`** | **the PUBLIC identity row** — `user_id`, `display_name`, `created_at`, `updated_at` | any co-member, by `profiles_select_shared_org` | no, but its MEANING becomes explicit |
+| **a private companion table**, one row per user | `settings`, `is_superadmin`, and anything added later that must not be public | the user themselves, plus `is_superadmin()` | **YES — NEW, and §6 omitted it** |
+| **the in-org profile** (the founder's model, §16) | org-scoped, shareable attributes — title, department, a per-org name | per the org's searchable set + the user's checkbox (§18.1) | yes, but in the DEFERRED naming slice, not this one |
+
+**THE RULE, which is worth more than any of the tables:**
+
+> **`profiles` is PUBLIC. Anything added to it is visible to every co-member, by
+> definition. Private per-user data goes in the companion table. Shareable
+> org-scoped data goes in the in-org profile.**
+
+**This is the durable output of the whole exercise, and it is what would have
+prevented the original bug.** `settings` was added to `profiles` in
+`20260727010000` and became org-mate-readable the same day. **Nobody decided
+that; nobody noticed.** The column was added to a table whose public nature was
+never written down.
+
+### 21.3 MAKE IT ENFORCEABLE, not merely documented
+
+Documentation did not stop `settings` and will not stop the next one. **Two cheap
+mechanisms, both in the style this repo already uses:**
+
+1. **A ratchet test** that enumerates `profiles`' columns from `pg_catalog` and
+   **fails the build if the set changes** without the allow-list being updated.
+   Identical in shape to `view-as-coverage.test.ts` and to §11.6's definer
+   ratchet. The failure message should say *"`profiles` is public to co-members —
+   if this column is private, it belongs in the companion table."*
+2. **A `comment on table public.profiles`** carrying the rule, so it is visible
+   to anyone reading the schema rather than only to someone who found this
+   document.
+
+**Add the rule to docs/03's conventions** — that is where platform-wide rules of
+this kind live, and it belongs there more than here.
+
+### 21.4 ONE THING THE BUILD MUST PROVE, NOT REASON ABOUT
+
+`is_superadmin()` **reads** the `is_superadmin` column; the companion table's own
+SELECT policy would **call** `is_superadmin()`. That looks circular and is
+probably not — the function is `SECURITY DEFINER` owned by `postgres`
+(VERIFIED LIVE 2026-09-16), so it bypasses RLS entirely and never re-enters the
+policy.
+
+**But "probably not" is not the standard here.** This must be demonstrated live
+in a rolled-back transaction before the migration is written, the same way §13's
+definer plan was. **If it does recurse, the fix is to keep `is_superadmin` on
+`profiles`** — it is the least sensitive of the three columns (§6 rates it a
+targeting hint, not personal data) and moving it is optional.
+
+### 21.5 Does this re-open Option A?
+
+**No, and the distinction is worth stating because it looks like a reversal.**
+
+Option A was rejected for creating **a second copy of email** — data that already
+has an authoritative home in `auth.users`, kept in sync by nothing (§4.4). **The
+companion table copies nothing.** `settings` and `is_superadmin` have no other
+home; they are simply moving, once, off a row that turned out to be public.
+
+**No backfill trigger, no sync obligation, no staleness** — which were the three
+arguments against Option A. **A one-time move of data that exists in exactly one
+place is not the same as a mirror that must be maintained.**
+
+---
+
+## 22. Decisions log
 
 - **2026-09-16 — this document created, reviewed twice, and corrected.** Design
   drafted, **not built; no SQL written.** Both adversarial reviews ran (§13,
@@ -1453,7 +1544,7 @@ independent, adversarially reviewed (§13, §14), and ready. **The wider change
 - **2026-09-16 — F2 and F3 were asked; NEITHER IS ANSWERED.** The founder asked
   for a fuller explanation of the trust-class idea before deciding F3, and for
   the industry evidence before deciding F2. **The F2 evidence was gathered and
-  is recorded in §21.1 below** — it did not previously exist in writing
+  is recorded in §22.1 below** — it did not previously exist in writing
   anywhere, and the founder's decision should be made against it.
 - **2026-09-16 — docs/00 insertion point for F3 identified, not edited.** The
   trust-class paragraph (docs/20 §32.1) belongs in **docs/00 §"Core
@@ -1462,7 +1553,7 @@ independent, adversarially reviewed (§13, §14), and ready. **The wider change
   docs/00** — F3 is unanswered. Recorded so the next session does not re-derive
   where it goes.
 
-### 21.1 THE F2 EVIDENCE — what other products do, gathered 2026-09-16
+### 22.1 THE F2 EVIDENCE — what other products do, gathered 2026-09-16
 
 The founder asked for this explicitly before deciding whether
 `org_find_user_by_email` (and `find_module_peer`) should keep returning the
