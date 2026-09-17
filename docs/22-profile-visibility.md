@@ -1,9 +1,14 @@
 # Profile visibility — where a user's email actually lives
 
-**Status, 2026-09-16: DESIGN DRAFT. NOTHING IS BUILT. NO MIGRATION EXISTS.**
-**REVIEW A (the mechanism) HAS RUN — §13, verdict OPTION B HOLDS.**
-**REVIEW B (the blast radius) HAS RUN — §14, verdict §3 WAS INCOMPLETE; two
-corrections applied. BOTH REVIEWS ARE IN. THE DESIGN IS READY FOR F1.**
+**Status, 2026-09-16: DESIGN COMPLETE. NOTHING IS BUILT. NO SQL WAS WRITTEN AND
+NO MIGRATION EXISTS.** Both adversarial reviews ran (§13, §14) and EIGHT founder
+decisions were taken. **The email slice is ready to build; the naming model is
+designed but unreviewed; two further items are blocked or deferred.**
+
+> ### → START AT §0. It is the whole thing on one screen.
+> The sections below it are in the order things were DISCOVERED, so reading
+> front-to-back means meeting four superseded positions before their
+> corrections. **§0.5 maps which sections are still true.**
 
 This is the design slice docs/20 §31 commissioned, founder-agreed 2026-09-15:
 *move `profiles.email` out of `profiles` into its own row-policied table, and
@@ -21,6 +26,97 @@ database. Every negative result below carries a control.
 > `auth.users.email` through the SECURITY DEFINER functions that already do
 > every other email job** — is smaller, strictly stronger, and closes a recorded
 > latent bug by construction. See §4.
+
+---
+
+## 0. READ THIS FIRST — the whole session on one screen
+
+**Everything below §1 is in the order it was DISCOVERED, not the order it should
+be read.** Several sections were overturned by later ones (the map in §0.5 says
+which). **This section is the current state. Nothing else needs reading unless
+you want the evidence behind a line.**
+
+### 0.1 THE PROBLEM, demonstrated live (§16.7)
+
+`charlie@demo.local` — a **rank-0 nail-salon customer**, the lowest-privilege
+real account seeded, holding no role of any kind — signed in and ran one query
+against `profiles`. He got back **eight people's names AND email addresses**,
+including the salon admin's. That is today's production behaviour.
+
+**Cause:** `profiles_select_shared_org` grants read of the *whole row* to anyone
+sharing an org. **A policy filters ROWS, never COLUMNS**, so the email came
+along with the name. Nobody chose to expose it. The app never shows those
+addresses on a screen — but the browser can ask the database directly with the
+token the app already issued, so that is not a defence.
+
+### 0.2 WHAT WAS DECIDED — eight decisions, all yours
+
+| # | decision | where |
+|---|---|---|
+| **1** | **`profiles.email` is DELETED, not moved to a new table.** It is a copy of `auth.users.email` that no trigger ever refreshes — a cache with no invalidation. A second copy inherits that bug. `auth.users` becomes the single source of truth. | §4 |
+| **2** | **`settings` and `is_superadmin` ride along** — they leave `profiles` in the same slice. Near-zero app cost; nothing reads either for anyone but the caller. | §6, §0.3 |
+| **3** | **A lookup never confirms a name.** Not on an invite, not on a typo. *"if we should suggest to them, no we should not."* | §15.2 |
+| **4** | **The ORG declares what is SEARCHABLE. The USER has a checkbox per field, always stored.** Searchable forces it shared and makes it mandatory to fill; the user's choice goes inert, not away, and takes effect the moment the org turns search off. `visible = user_checked OR org_searchable`. | §17.1, §18.1 |
+| **5** | **"Shared" means shared with someone who successfully searched** — they already had the value. Never displayed to someone who did not. **This is what saves decision 1 in Public Square.** | §19.1 |
+| **6** | **No org lets you browse its members.** Measured: already true everywhere except the policy in §0.1. | §19.2 |
+| **7** | **A person is an ID.** The same view renders different names depending on who is looking. Platform name for platform reports; org name parenthetically for org leaders. | §17.4 |
+| **8** | **Email first; the naming model second.** Entity-level visibility is a separate question entirely. | §15.1, §20 |
+
+### 0.3 WHAT THIS ACTUALLY CHANGES, in plain terms
+
+`profiles` ends up holding **`user_id`, `display_name`, `created_at`,
+`updated_at`** — a public identity row and nothing else.
+
+- **Nobody reads anyone else's email address**, in any org. Not Sarah of Dana in
+  Public Square, not Frank's cashier of Frank in the salon.
+- **You still read your own** — it is in your session already, so it need not
+  come from the database at all.
+- **The superadmin console still sees everything**, through one new
+  superadmin-gated function rather than a policy.
+- **An invite still works**: you type an address, it says *"that address has an
+  account"*, and nothing more.
+- **`orgs.kind` is never created.** No org is special-cased anywhere.
+
+### 0.4 WHAT IS AND IS NOT READY
+
+| | status |
+|---|---|
+| **The email slice** (decisions 1–3) | **DESIGNED, ADVERSARIALLY REVIEWED TWICE, READY TO BUILD.** ~22 call sites. Build order in §11. **Opus-tier: migration + RLS + a trigger on the signup path.** |
+| **The naming model** (decisions 4, 5, 7) | **DESIGNED, NOT REVIEWED.** Three new tables, a resolver, three UIs — **module-sized, not a slice** (§16.4). |
+| **Killing the member directory** (§19.4) | **BLOCKED** on the item below. Do not start (§20.2). |
+| **Entity-level visibility** — who you see because you share a *class / event / conversation*, not an org | **DEFERRED BY YOU.** Belongs with docs/15 §11's entity-level `joinPolicy`. May need more modules before it can be settled (§20.1). |
+
+**Nothing has been built. No SQL was written. No migration exists.**
+
+### 0.5 WHICH SECTIONS ARE STILL TRUE — read before citing anything below
+
+Four sections were overturned during the session. They are kept, bannered, because
+the reasoning inside them is what later sections rest on — but **do not quote them
+as current:**
+
+| section | status |
+|---|---|
+| **§15.4** | **WITHDRAWN.** Argued the model needs a trust-class *mechanism* in code. Your own proposal (§16.2) gets there by configuration instead. |
+| **§17.2** | **RESOLVED by §18.** Both readings it offered were wrong; yours was a third. |
+| **§18.3** | **RESOLVED by §19.1.** It flagged a blocking conflict; decision 5 closed it. |
+| **§19.4** | **BLOCKED by §20.2.** Sound reasoning, but it depends on the deferred entity-level question. |
+
+**Two errors of mine, corrected in place rather than deleted:** §3 R4 originally
+said seven call sites would "dissolve" on their own — they do not, and the honest
+total is ~22 (§14.1); and §6 claimed `orgs.kind` would have "nothing left to do"
+full stop, when it is nothing left to do **for email** (§15.4). I also asserted
+three times that *"Frank's staff need to see each other on a roster"* — **measured
+and false** (§19.2).
+
+### 0.6 STILL OPEN
+
+- **§17.3** — is the global platform name a legal name? *"not sure yet, for now
+  its just user entered."* Bears on the privacy page and docs/21.
+- **§16.6** — may an org ever make email a *shareable* field rather than only a
+  searchable one? Decision 5 makes this mostly moot; worth a line when the
+  naming model is built.
+- **§17.6** — "searchable implies mandatory" is not purely additive: **1 of 12
+  production users has no display name** and would need a backfill or a prompt.
 
 ---
 
@@ -380,8 +476,13 @@ exposure is through raw RLS, not through any screen.
   "completely unnecessary" full stop, and that was wrong.** — docs/20 §17.4 already records that its last one (the
   auto-invite uniqueness index) died when the founder chose invite-only.
 
-**This design recommends the second**, and notes it is a *widening of the brief*
-the founder should approve explicitly rather than have assumed. `settings` and
+**This design recommends the second** — and **the founder APPROVED it on
+2026-09-16: *"let them ride along."* So `settings` and `is_superadmin` leave
+`profiles` in the same slice as `email`.** `is_superadmin()` is a SECURITY
+DEFINER reading the caller's OWN row (VERIFIED LIVE), so moving that column is a
+one-line change to one function; the nine other functions call `is_superadmin()`
+rather than the column and are untouched. `settings` is only ever read and
+written for oneself. `settings` and
 `is_superadmin` are one `alter table … drop column` and one small definer each;
 they are not a second project.
 

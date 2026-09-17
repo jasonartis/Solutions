@@ -25,7 +25,9 @@ extract-don't-speculate: each adds real cost or a new dependency for a problem t
 exists once a real client generates real volume — **do not start any of them unprompted,
 revisit together when the first real client is signed**, per docs/18's status note).
 **THAT DESIGN SLICE RAN 2026-09-16. ITS OUTPUT IS
-[docs/22-profile-visibility.md](docs/22-profile-visibility.md) — START THERE, NOT docs/20 §31.**
+[docs/22-profile-visibility.md](docs/22-profile-visibility.md) — START AT ITS §0, which is the
+whole thing on one screen (the sections after it are in DISCOVERY order and four are
+superseded; §0.5 maps which). NOT docs/20 §31.** **EIGHT founder decisions were taken — §0.2.**
 **DESIGN ONLY: NOTHING IS BUILT, NO SQL WAS WRITTEN, NO MIGRATION EXISTS — and none should be
 written until F1 is answered.** Both adversarial reviews ran and every load-bearing finding was
 re-verified by hand (`0c60615`).
