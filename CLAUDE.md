@@ -37,13 +37,16 @@ Two migrations: `20260917010000_email_definers.sql` (additive) and
 `scripts/prod-verify-profile-visibility.mts --local`; 20/20 live as real users. RLS floor
 211 → 221.
 
-**⚠ THE DEPLOY IS ONE-DIRECTIONAL AND IS THE OPPOSITE OF THIS REPO'S HABIT (docs/22 §23.6,
-docs/03 #26).** (1) `migrate:prod` the ADDITIVE migration `20260917010000` FIRST, then deploy
-the code — reversed, the three module resolvers call `find_module_peer` before it exists.
-(2) Confirm the app is serving. (3) **Only then `migrate:prod` the DROP `20260917020000`** —
-**code live FIRST**; reversed it is a simultaneous app-wide outage across all six modules.
-(4) Then run `scripts/prod-verify-profile-visibility.mts` (no `--local`). **Do not write
-SHIPPED/CLOSED for either until `migrate:prod` has run AND that script passes on prod.**
+**⚠ THE DEPLOY NEEDS A PROCEDURE, NOT JUST AN ORDER — FOLLOW docs/22 §23.6 EXACTLY.**
+`pnpm migrate:prod` wraps `supabase db push`, which applies EVERY pending migration and has no
+flag to stop at one (verified against `--help`). **So both naive orders are an outage:**
+migrate-first breaks the live OLD code (42703 across ~22 sites in all six modules);
+push-first breaks the NEW code (`current_user_private()` does not exist yet, and `getProfile()`
+runs in `app/(app)/layout.tsx`, so EVERY authenticated page 500s). The working procedure holds
+the DROP file out of `supabase/migrations/` for one step: back up → apply `20260917010000`
+alone → `git push` and **wait for a READY deploy and a real signed-in page** → move the drop
+back and apply it → run `scripts/prod-verify-profile-visibility.mts` (no `--local`). **Do not
+write SHIPPED/CLOSED for either until `migrate:prod` has run AND that script passes on prod.**
 
 **FIVE THINGS WORTH CARRYING OUT OF THE BUILD (full version: docs/22 §23.4, docs/03 #24–#26):**
 (1) **A SQL FUNCTION BODY IS A CALL SITE.** docs/22 §6 measured that no app code reads another

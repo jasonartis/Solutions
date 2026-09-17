@@ -1082,6 +1082,16 @@ mechanism is proven in the managed environment, but it carries rules that are no
       cannot ship before the code. A function that reads the OLD home, deployed
       early and re-pointed later with one `create or replace`, breaks the cycle
       and the application never changes twice.
+    - **AND THE SPLIT ALONE IS NOT ENOUGH — `supabase db push` IS
+      ALL-OR-NOTHING.** Two migration files make each half's ordering
+      *statable*; they do not make it *executable*. `pnpm migrate:prod` wraps
+      `supabase db push`, which applies every pending migration and has no flag
+      that targets a version (verified against `--help`, 2026-09-17). So the
+      destructive file must be physically **held out of
+      `supabase/migrations/`** while the additive one is pushed, then moved
+      back — a working-tree move, with the file still tracked in git. Decide
+      this before the deploy window; discovering it mid-deploy means choosing
+      between two outages. Worked procedure: docs/22 §23.6.
 
 ## Hard rules
 

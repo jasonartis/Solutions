@@ -1769,23 +1769,68 @@ trusted from a comment — with `is_org_member` as a control proving the predica
 can fail. `lib/data-browser.ts` and `console/page.tsx` were ADDED to the scanned
 surface, since they now carry a definer too.
 
-### 23.6 THE DEPLOY — NOT DONE, AND THE ORDER IS ONE-DIRECTIONAL
+### 23.6 THE DEPLOY — NOT DONE, AND IT NEEDS A PROCEDURE, NOT JUST AN ORDER
 
 **Nothing is on production. `pnpm migrate:prod` has not been run, and nothing in
-CI runs it.** The order is NOT symmetric and §11 step 4 is the authority:
+CI runs it.**
 
-1. **`20260917010000` (additive): `migrate:prod` FIRST, then deploy the code.**
-   Reversed, the three module resolvers call `find_module_peer` before it
-   exists.
-2. **Deploy the app and confirm it is serving.**
-3. **`20260917020000` (the drop): the CODE MUST BE LIVE FIRST, `migrate:prod`
-   second.** Reversed, it is a simultaneous app-wide outage across all six
-   modules.
-4. **Then `scripts/prod-verify-profile-visibility.mts`** (no `--local`).
+**THE TOOLING DOES NOT SUPPORT THE ORDER THE DESIGN REQUIRES, and this was found
+at deploy-planning time rather than mid-deploy.** §11 step 4 prescribes: additive
+migration first, then code, then the drop. Splitting the work into two migration
+files was supposed to make that expressible. **It does not, on its own:**
+`pnpm migrate:prod` wraps `supabase db push`, which applies EVERY pending
+migration and offers no way to stop at one (`--help` lists `--include-all`,
+`--include-roles`, `--include-seed`, `--dry-run`, `--db-url`, `--linked`,
+`--local`, `--password` — and nothing that targets a version).
+
+**BOTH NAIVE ORDERS ARE AN OUTAGE, so neither is a fallback:**
+
+| if you… | what breaks, and for how long |
+|---|---|
+| `migrate:prod` first (applies BOTH), then push | the LIVE OLD code still reads `profiles.email` → 42703 across ~22 sites in all six modules, for the length of a Vercel deploy |
+| push first, then `migrate:prod` | the NEW code calls `current_user_private()`, which does not exist yet — and `getProfile()` runs in `app/(app)/layout.tsx`, so **every authenticated page** 500s, for the same window |
+
+**THE PROCEDURE THAT ACTUALLY WORKS — the drop is held out of the migrations
+directory for one step.** It is a working-tree move only; the file stays in git,
+so nothing is reverted and the pushed commit is unchanged.
+
+```
+# 0. Back up first — this is beyond additive (docs/12).
+pnpm backup:prod
+pnpm migrate:prod --dry-run          # expect BOTH 20260917010000 and 20260917020000
+
+# 1. Hold the DROP back, apply only the ADDITIVE migration.
+mv supabase/migrations/20260917020000_profiles_is_public.sql <somewhere outside supabase/migrations/>
+pnpm migrate:prod --dry-run          # MUST now list 20260917010000 ONLY — check before proceeding
+pnpm migrate:prod
+
+# 2. Deploy the code and WAIT for it to be live. The app is fine here: the new
+#    definers exist, and the old columns still exist but are simply unread.
+git push
+#    …confirm a READY production deployment for this commit (Vercel /v6/deployments,
+#    VERCEL_TOKEN is in .env.deploy) and sign in to a real page before continuing.
+
+# 3. Only now the drop.
+mv <the file> back into supabase/migrations/
+pnpm migrate:prod --dry-run          # MUST now list 20260917020000 ONLY
+pnpm migrate:prod
+
+# 4. Verify against prod.
+pnpm exec tsx scripts/prod-verify-profile-visibility.mts
+```
+
+**Step 2 is the load-bearing wait.** If the code is not actually serving when
+step 3 runs, step 3 is the app-wide outage §14.2 warned about.
 
 **Do not write SHIPPED or CLOSED for either migration until `migrate:prod` has
 run AND that script has passed against prod** — CLAUDE.md is emphatic, and this
 file has been burned by exactly that before.
+
+**A GENERAL LESSON FOR ANY FUTURE COLUMN DROP (→ docs/03 #26):** splitting a
+destructive change into two migrations makes each half's ordering *statable*,
+but it does not make it *executable* — `supabase db push` is all-or-nothing, so
+the split must be paired with physically holding the destructive file back for
+one step. Plan that before the deploy window, not during it.
 
 ### 23.7 PROD MEASUREMENTS TAKEN THIS SESSION — §13.3's open item is CLOSED
 
