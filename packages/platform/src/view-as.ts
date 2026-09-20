@@ -124,6 +124,31 @@ export type SurfaceTable = {
    */
   subjectColumn: string | null
   /**
+   * SELF-MASK for tables whose "is this mine?" cannot be expressed as
+   * `subjectColumn = <caller's user id>` (2026-09-20, speed-dating's
+   * participant surface).
+   *
+   * The name of a PostgREST computed column — a one-argument SQL function over
+   * the row, defined in a migration — that returns true when the row belongs to
+   * the CALLER. It exists because some tables identify a person by a per-entity
+   * SEAT id rather than a user id (sd_interest.rater_participant_id), or by
+   * either of TWO columns (sd_matches.participant_a_id / participant_b_id),
+   * neither of which an equality filter on a user id can express. Declaring
+   * `subjectColumn: null` for those would mean "not per-person, unfiltered in
+   * both modes" — which on an end-user surface renders everything the CALLER
+   * may read, the exact opposite of the intent.
+   *
+   * SELF-ONLY BY CONSTRUCTION: the underlying function takes no "whose rows"
+   * parameter — it keys on auth.uid() internally — so it can only ever answer
+   * "is this row MINE". It is therefore applied in MODE 1 ONLY. Mode 2 asks a
+   * question this cannot answer ("is this row SMITH's"), and a surface that
+   * declares a mask must keep mode 2 off, which `viewAsCompleteness()` enforces.
+   *
+   * Narrowing only: like every other filter here it can subtract rows the
+   * caller's RLS already returned, never add one.
+   */
+  selfMaskColumn?: string
+  /**
    * The column holding the module entity a row belongs to, used to intersect
    * the rendering with the target GRANT's scope (§8.1 point 10 — a CS chair
    * viewing professor Smith must not see Smith's Math101 side). `null` = the
@@ -369,6 +394,33 @@ export function viewAsCompleteness(
       if (t.columns.length === 0) say(`surface "${p}": table ${t.table} declares no columns`)
       if (t.subjectColumn && !t.columns.includes(t.subjectColumn)) {
         say(`surface "${p}": table ${t.table} omits its own subject column from the allow-list`)
+      }
+      // A self-mask answers "is this row MINE" and nothing else — it keys on
+      // auth.uid() inside the SQL function and takes no "whose rows"
+      // parameter. Declaring both would claim two different narrowings on one
+      // table and leave which one wins to the renderer's argument order.
+      if (t.selfMaskColumn && t.subjectColumn) {
+        say(
+          `surface "${p}": table ${t.table} declares BOTH selfMaskColumn and subjectColumn — ` +
+            `a self-mask is the alternative to a subject column, not an addition to it`,
+        )
+      }
+    }
+
+    // THE RULE THAT MAKES THE MASK SAFE, enforced rather than trusted: a
+    // self-mask can only answer "is this MINE", so any position whose surface
+    // uses one must never be a mode-2 target — mode 2 asks "is this SMITH's",
+    // which the mask cannot express, and it would silently fall back to
+    // rendering every row the CALLER can read.
+    if (surface.role.some((t) => t.selfMaskColumn)) {
+      for (const [from, targets] of Object.entries(decl.edges)) {
+        if (targets?.[p]?.mode2 === true) {
+          say(
+            `surface "${p}" uses a selfMaskColumn, so mode 2 must stay off — but pair ` +
+              `${from} -> ${p} enables it. A self-mask cannot answer "is this row ${p}'s", ` +
+              `only "is this row mine".`,
+          )
+        }
       }
     }
   }

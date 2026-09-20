@@ -1228,13 +1228,23 @@ export const nailSalonViewAs = declareViewAs({
 // never widen, so it needs no migration.
 // ---------------------------------------------------------------------------
 const SD_PARTICIPANT_BAN =
-  'OFF permanently, not pending review — this is §8.1 point 7\'s end-user view-as ban ' +
-  'expressed as pairs. sd_interest is a one-sided secret whose RLS deliberately gives the ' +
-  'rated person no read path at all, so rejection is indistinguishable from indecision; ' +
-  'sd_matches hides an unrevealed match from both parties until the organizer reveals it; ' +
-  'sd_notes is author-only with no staff arm anywhere. A participant tab would either be ' +
-  'empty of everything that matters or would put a third party\'s one-sided secret on a ' +
-  'staff screen. Changing this needs a dated founder decision, not a build-time judgement.'
+  'MODE 2 OFF PERMANENTLY — §8.1 point 7\'s end-user ban, which is a ban on IMPERSONATING an ' +
+  'end user. sd_interest is a one-sided secret whose RLS deliberately gives the rated person ' +
+  'no read path at all, so rejection is indistinguishable from indecision; sd_matches hides ' +
+  'an unrevealed match from both parties until the organizer reveals it; sd_notes is ' +
+  'author-only with no staff arm anywhere. Viewing AS a named participant would put a third ' +
+  'party\'s one-sided secret on a staff screen. That stays banned, permanently. ' +
+  'MODE 1 ON since 2026-09-20 (dated founder decision). This entry previously read ' +
+  '"mode1: false" and cited point 7 as its authority — a MISREADING: point 7 bans ' +
+  'impersonation and says in the same breath "Mode 1 stays available everywhere", and point ' +
+  '8 anticipates this exact case ("mode 1 renders the caller\'s own, possibly empty, data ' +
+  'and creates nothing... joining for real is an ordinary, explicit join"). The old note\'s ' +
+  'claim that a participant tab "would be empty of everything that matters" is true only for ' +
+  'a caller who never registered; for an admin who HAS registered it is their real seat. ' +
+  'The founder\'s purpose is a VOLUNTARY BLINDFOLD: an org admin\'s RLS returns every ' +
+  'interest row for every event in the org, so without this mode they cannot experience ' +
+  'their own event without spoilers. See the participant surface below for how the masking ' +
+  'works and what it deliberately does not promise.'
 
 // Shared reasoning for every ON pair below: staff reach here is RANK/SCOPE
 // -narrowed (module_position_rank + module_scope_covers via
@@ -1291,7 +1301,7 @@ export const speedDatingViewAs = declareViewAs({
           'no staff arm ever). Speed-dating\'s version of nail-salon\'s admin -> worker pair. ' +
           SD_NOT_PERSON_FILTERABLE,
       },
-      participant: { mode1: false, mode2: false, note: SD_PARTICIPANT_BAN },
+      participant: { mode1: true, mode2: false, note: SD_PARTICIPANT_BAN },
     },
     organizer: {
       host: {
@@ -1311,10 +1321,10 @@ export const speedDatingViewAs = declareViewAs({
           'the same scope, so mode 1 widens nothing. ' +
           SD_NOT_PERSON_FILTERABLE,
       },
-      participant: { mode1: false, mode2: false, note: SD_PARTICIPANT_BAN },
+      participant: { mode1: true, mode2: false, note: SD_PARTICIPANT_BAN },
     },
     host: {
-      participant: { mode1: false, mode2: false, note: SD_PARTICIPANT_BAN },
+      participant: { mode1: true, mode2: false, note: SD_PARTICIPANT_BAN },
     },
   },
 
@@ -1579,6 +1589,188 @@ export const speedDatingViewAs = declareViewAs({
           why:
             'author_user_id = auth.uid() is the ONLY policy on the table, ever — no staff arm ' +
             'exists for organizer OR host.',
+        },
+      ],
+    },
+
+    // -----------------------------------------------------------------------
+    // PARTICIPANT — the first END-USER surface on the platform, added
+    // 2026-09-20 for MODE 1 ONLY (founder decision that day; see the edge
+    // notes above). Every other surface in this file answers "what does this
+    // STAFF position see". This one answers a different question: "what would
+    // I see if I were an ordinary participant" — a VOLUNTARY BLINDFOLD for an
+    // admin who has genuinely registered and wants the real experience,
+    // suspense included.
+    //
+    // WHY IT NEEDS MASKS AND NO OTHER SURFACE DOES. Staff surfaces are
+    // narrowed by SCOPE (which events do you govern). An end-user surface must
+    // be narrowed to the PERSON — and speed dating identifies a person by their
+    // per-event SEAT id, not their user id. `subjectColumn` compares against a
+    // user id, so it cannot express "my seat", and `subjectColumn: null` means
+    // "unfiltered in BOTH modes", which for an admin renders the entire
+    // interest graph on a screen labelled "as a participant" — the exact
+    // opposite of the intent. Hence `selfMaskColumn`: a computed column calling
+    // the module's OWN seat predicate (20260920010000). The predicate is the
+    // very expression already sitting in each table's RLS policy as the
+    // participant's arm, so the mask cannot drift from the real definition of
+    // "mine" — asserted by a parity test, not assumed.
+    //
+    // THE HONEST LIMIT, stated here because a reader will assume otherwise:
+    // this is a DISPLAY mask, not an access control. The admin's RLS is
+    // untouched; they can open the organizer console in another tab and see
+    // everything. That is accepted — the blindfold is chosen, not imposed.
+    // -----------------------------------------------------------------------
+    participant: {
+      label: 'Participant (my own seat)',
+      summary:
+        'What an ordinary participant sees of their own event: the event and its round clock, ' +
+        'their own seat and profile card, the rounds they were paired for, the interest marks ' +
+        'THEY made, their REVEALED matches, and their own private notes. Every per-person ' +
+        'section is narrowed to the caller — by a direct user column where one exists, and ' +
+        'otherwise by a self-mask calling the module\'s own seat predicate. Deliberately absent: ' +
+        'who marked interest in YOU (the one-sided secret, invisible by design), any unrevealed ' +
+        'match, and anyone else\'s row of anything. This is a voluntary blindfold for a viewer ' +
+        'whose real RLS reach is wider — a display mask, never an access control.',
+      role: [
+        {
+          table: 'sd_events',
+          label: 'My event',
+          columns: [
+            'id', 'name', 'description', 'scheduled_at', 'lobby_opens_at', 'state',
+            'round_duration_seconds', 'break_duration_seconds', 'rounds_planned', 'format',
+            'resume_review_enabled', 'current_round_id', 'created_at',
+          ],
+          subjectColumn: null,
+          scopeColumn: 'id',
+          orderBy: { column: 'scheduled_at', ascending: false },
+          caveat:
+            'Not per-person by nature — the event is the same object for everyone in it. A ' +
+            'participant reaches it through sd_in_event / the sd_is_participant arm, which is ' +
+            'narrower than staff reach in one way worth knowing: staff see every state ' +
+            'including draft, participants only open/running/complete/cancelled. The column ' +
+            'list deliberately omits allow_repeat_pairings and created_by — organizer ' +
+            'machinery a participant has no business reading.',
+        },
+        {
+          table: 'sd_rounds',
+          label: 'Rounds',
+          columns: ['id', 'event_id', 'round_number', 'state', 'starts_at', 'ends_at', 'break_ends_at'],
+          subjectColumn: null,
+          scopeColumn: 'event_id',
+          orderBy: { column: 'round_number', ascending: true },
+          caveat: 'The round clock, identical for everyone in the event — not per-person.',
+        },
+        {
+          table: 'sd_participants',
+          label: 'My seat',
+          columns: [
+            'id', 'event_id', 'user_id', 'seat_type', 'pool_side', 'status',
+            'checked_in', 'checked_in_at', 'allows_audience', 'allows_mentor',
+            'profile_card', 'created_at',
+          ],
+          subjectColumn: 'user_id',
+          scopeColumn: 'event_id',
+          caveat:
+            'The one participant-facing table with a DIRECT user id, so it needs no mask. ' +
+            'Narrowed to the caller\'s own seat, which is deliberately narrower than the ' +
+            'participant RLS policy allows (that also admits people you are PAIRED with, via ' +
+            'sd_paired_with) — this surface shows you yourself, and partners appear through ' +
+            'the pairings section instead. mentee_participant_id is omitted: it is the ' +
+            'mentor-seat relationship, not part of an ordinary participant\'s own card.',
+        },
+        {
+          table: 'sd_pairings',
+          label: 'My rounds',
+          columns: [
+            'id', 'event_id', 'round_id', 'participant_a_id', 'participant_b_id',
+            'room_ref', 'room_provider', 'created_at',
+          ],
+          subjectColumn: null,
+          selfMaskColumn: 'sd_pairings_mine',
+          scopeColumn: 'event_id',
+          caveat:
+            'Masked to pairings the caller is one side of — participant_a_id OR ' +
+            'participant_b_id, which no equality filter can express. Shows who you met and ' +
+            'when, never the rest of the grid.',
+        },
+        {
+          table: 'sd_interest',
+          label: 'Who I marked',
+          columns: ['id', 'event_id', 'rater_participant_id', 'target_participant_id', 'verdict', 'created_at'],
+          subjectColumn: null,
+          selfMaskColumn: 'sd_interest_mine',
+          scopeColumn: 'event_id',
+          caveat:
+            'THE POINT OF THE WHOLE SURFACE. Masked to rows the caller RATED — never rows ' +
+            'rating the caller. An admin\'s own RLS returns every interest row for the event ' +
+            '(is_org_admin is the first disjunct of module_caller_covers_rank, so admin ' +
+            'authority does not even require a speed-dating role); the mask is what removes ' +
+            'the spoiler. The target side stays invisible by design: a participant may never ' +
+            'learn who marked interest in THEM, which is why rejection is indistinguishable ' +
+            'from indecision and why the suspense exists at all.',
+        },
+        {
+          table: 'sd_matches',
+          label: 'My matches',
+          columns: [
+            'id', 'event_id', 'participant_a_id', 'participant_b_id', 'revealed',
+            'matched_at', 'contact_shared', 'created_at',
+          ],
+          subjectColumn: null,
+          selfMaskColumn: 'sd_matches_mine',
+          scopeColumn: 'event_id',
+          filter: [{ column: 'revealed', eq: true }],
+          caveat:
+            'Two narrowings, and BOTH are needed. The mask keeps matches the caller is a side ' +
+            'of; the revealed filter reproduces the second half of the participant policy arm ' +
+            '(`revealed AND (sd_owns_participant(a) OR sd_owns_participant(b))`). Without the ' +
+            'filter an admin would see their own match before the organizer revealed it — ' +
+            'still their own row, so the mask alone would happily show it, and the suspense ' +
+            'would be gone for the one pairing the viewer cares most about.',
+        },
+        {
+          table: 'sd_notes',
+          label: 'My private notes',
+          columns: ['id', 'event_id', 'author_user_id', 'about_user_id', 'pairing_id', 'body', 'created_at'],
+          subjectColumn: 'author_user_id',
+          scopeColumn: 'event_id',
+          caveat:
+            'Author-only in RLS (author_user_id = auth.uid() is the table\'s only policy, with ' +
+            'no staff arm anywhere), and author-only here. A direct user column, so no mask ' +
+            'needed. Rendered because a participant\'s own notepad is part of the experience ' +
+            'being reproduced — and it can never contain anyone else\'s notes.',
+        },
+      ],
+      personal: [],
+      excluded: [
+        {
+          table: 'sd_reports',
+          why:
+            'Readable by the caller (sd_reports_select\'s non-staff arm is ' +
+            'sd_owns_participant(reporter_participant_id)) but deliberately not rendered. ' +
+            'Filing or reading a safety report is not part of the experience this surface ' +
+            'reproduces, and rendering it would need a fourth mask function for no gain. ' +
+            'Excluded rather than unreadableByPosition because the claim "cannot read" would ' +
+            'be false.',
+        },
+        {
+          table: 'sd_blocks',
+          why:
+            'Readable by the caller (blocker_user_id = auth.uid()) and it even has a direct ' +
+            'user column — but it carries NO event column at all, so it cannot be scope-' +
+            'intersected, and a role table without a scopeColumn in a module that HAS an ' +
+            'entity tree is refused by viewAsCompleteness (§8.1 point 10). Org-wide and ' +
+            'outside any single event\'s experience, so excluded is also the honest answer ' +
+            'rather than a workaround.',
+        },
+      ],
+      unreadableByPosition: [
+        {
+          table: 'sd_bans',
+          why:
+            'sd_bans_all_manage (sd_can_manage(org_id)) is the ONLY policy on the table — ' +
+            'admin-only, with no organizer, host or participant arm. A participant has zero ' +
+            'read path, so this is a genuine cannot-read claim, not a decline-to-render one.',
         },
       ],
     },

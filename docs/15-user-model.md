@@ -615,6 +615,55 @@ vocabulary gets locked.
 
 ## Decisions log
 
+- **2026-09-20 (FOUNDER DECISION — MODE 1 IS AVAILABLE FOR SPEED-DATING'S `participant`, and
+  the code was wrong to ban it; the VOLUNTARY BLINDFOLD).** The founder asked whether an admin
+  who wants to take part in a speed-dating event can actually get the participant
+  *experience*, given that an org admin's own RLS shows them everything. Three findings, in
+  the order they came out:
+  1. **An org admin reads the whole interest graph of every event in the org, needing no
+     speed-dating role at all** — `is_org_admin` is the FIRST disjunct of
+     `module_caller_covers_rank`, so `sd_can_organize_event` is true for them everywhere.
+     Proven live by calling it with `min_rank 99`, which no speed-dating role can satisfy
+     (organizer is rank 2), and still getting `true`. **Scoping an organizer grant to one
+     event does NOT close this** — scoping fixes the module-role path, not the admin path.
+     **Founder decision: that consistency is CORRECT and stays.** Admin access is uniform
+     across modules; speed dating gets no admin-blind data class.
+  2. **`view-as-modules.ts` had banned mode 1 into `participant` citing "§8.1 point 7's
+     end-user view-as ban" — a MISREADING of point 7**, which bans IMPERSONATION (mode 2) and
+     ends with the words *"Mode 1 stays available everywhere."* Point 8 then describes this
+     exact case: mode 1 renders the caller's own data and creates nothing, and *"joining for
+     real is an ordinary, explicit join."* The ban note's claim that a participant tab "would
+     be empty of everything that matters" is true only for someone who never registered; for
+     an admin who HAS registered it is their real seat. **Mode 1 is now ON for all three
+     pairs; mode 2 stays OFF permanently, which is the half point 7 actually bans.**
+  3. **What mode 1 now MEANS for an end-user position is a voluntary blindfold** — not a
+     preview of a page shape, but a deliberate self-narrowing: *"I choose not to know."* The
+     founder's framing. It is a DISPLAY mask, not an access control: the same admin can open
+     the organizer console in another tab and see everything. Accepted, because the blindfold
+     is chosen rather than imposed — and recorded here so nobody later cites it as enforcement.
+
+  **The mechanism, and why it is small.** The renderer narrows "to me" with
+  `eq(subjectColumn, <caller's user id>)`, so it needs a column naming the person as a USER.
+  `sd_participants.user_id` and `sd_notes.author_user_id` have one; `sd_interest`,
+  `sd_matches` and `sd_pairings` identify a person by their per-event SEAT id, and the
+  match/pairing case needs "a OR b" — which an equality filter cannot express.
+  `subjectColumn: null` was not an option: it means *"not per-person, unfiltered in BOTH
+  modes"*, which on this surface renders the entire interest graph for an admin. **The
+  founder's own suggestion resolved it**: rather than build a bespoke indirect filter, reuse
+  *the module's own seat predicate* — the expression already sitting in each table's RLS
+  policy as the participant's arm. `sd_owns_participant` already performs the user→seat hop
+  internally, so `20260920010000` adds three one-line computed columns (`sd_interest_mine`,
+  `sd_matches_mine`, `sd_pairings_mine`) that simply call it. No new definition of "mine"
+  exists to go stale, and a drift test asserts each mask still uses the predicate its policy
+  uses. **Self-only by construction**: the predicate keys on `auth.uid()` and takes no "whose
+  rows" parameter, so it cannot be pointed at a third party — which is also why
+  `viewAsCompleteness()` now refuses mode 2 on any surface that declares a mask.
+  **No RLS, policy or grant changed.** Verified live before the design was committed to: an
+  admin's unmasked read returns the whole graph and her masked read returns only her own row,
+  while an ordinary participant's masked read is unchanged — the non-vacuity control, since a
+  mask that always returned false would also "blind" the admin while breaking the participant.
+  db 238/238 → e2e 52/52 in CI's order.
+
 - **2026-08-10 — a SECOND superadmin's lookup-log visibility should follow the same shape as
   everywhere else on this platform: own lookups plus those of superadmins "lower" than them,**
   not the flat mutual-visibility default the log shipped with. Full argument, and why it is

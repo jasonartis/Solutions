@@ -1585,13 +1585,51 @@ describe('view-as: the rank-differential completeness check (slice 5)', () => {
     }
   })
 
-  it('speed-dating end-user ban is expressed as pairs, not a second mechanism (point 7 subsumed)', () => {
+  it('speed-dating end-user ban is MODE 2 only — mode 1 is available, per §8.1 points 7 and 8', () => {
+    // CHANGED 2026-09-20 (dated founder decision). This test previously
+    // asserted mode1 === false as well, matching a declaration that cited
+    // §8.1 point 7 as its authority. That was a misreading of point 7, which
+    // bans IMPERSONATION of an end user and ends with "Mode 1 stays available
+    // everywhere"; point 8 then describes this exact case. Mode 2 stays
+    // banned forever — viewing AS a named participant would put a third
+    // party's one-sided secret on a staff screen.
     const sd = getModule('speed-dating')!.viewAs
     for (const a of ['admin', 'organizer', 'host']) {
       const edge = sd.edges[a]?.participant
       expect(edge, `${a} -> participant must be declared`).toBeDefined()
-      expect(edge!.mode1).toBe(false)
-      expect(edge!.mode2).toBe(false)
+      expect(edge!.mode1, `${a} -> participant mode 1 is the voluntary blindfold; it must stay ON`).toBe(true)
+      expect(edge!.mode2, `${a} -> participant mode 2 is banned permanently (§8.1 point 7)`).toBe(false)
+    }
+  })
+
+  it('the participant surface masks every table it cannot narrow by user id, and never renders one unmasked', () => {
+    // The safety property of the whole feature, asserted structurally rather
+    // than trusted to review: on an END-USER surface every rendered table must
+    // be narrowed to the caller SOMEHOW — by a direct user column
+    // (subjectColumn) or by a self-mask. A table with neither is "not
+    // per-person, unfiltered in both modes", which on this surface would
+    // render every row the CALLER can read — for an admin, the entire interest
+    // graph on a screen labelled "as a participant".
+    //
+    // The two exceptions are named explicitly rather than pattern-matched, so
+    // adding a third requires touching this list and saying why.
+    const sd = getModule('speed-dating')!.viewAs
+    const surface = sd.surfaces.participant
+    expect(surface, 'speed-dating declares no participant surface').toBeDefined()
+
+    const CLASS_WIDE = new Set(['sd_events', 'sd_rounds'])
+    for (const t of surface!.role) {
+      if (CLASS_WIDE.has(t.table)) {
+        expect(t.subjectColumn, `${t.table} is declared class-wide, so it must not claim a subject`).toBeNull()
+        expect(t.selfMaskColumn, `${t.table} is declared class-wide, so it must not claim a mask`).toBeUndefined()
+        continue
+      }
+      const narrowed = Boolean(t.subjectColumn) || Boolean(t.selfMaskColumn)
+      expect(
+        narrowed,
+        `${t.table} is on an end-user surface with neither subjectColumn nor selfMaskColumn — it ` +
+          `would render every row the CALLER can read, which for an admin is everyone's`,
+      ).toBe(true)
     }
   })
 })
@@ -7445,6 +7483,216 @@ describe('the email slice: addresses are reachable only through definers (docs/2
       // loop above is not matching on something that never occurs.
       const anyForAll = await sql`select count(*)::int as n from pg_policy where polcmd = '*'`
       expect((anyForAll[0]!.n as number) > 0, 'no for-all policy exists anywhere — the check is vacuous').toBe(true)
+    } finally {
+      await sql.end()
+    }
+  })
+})
+
+// ---------------------------------------------------------------------------
+// VIEW-AS MODE 1 SELF-MASKS (20260920010000) — the voluntary blindfold.
+//
+// WHY THIS BLOCK EXISTS AND WHAT IT IS ACTUALLY PROVING. The structural tests
+// in the view-as block above assert the DECLARATION is shaped correctly. They
+// cannot tell you the mask works: a computed column that silently returned
+// true for every row would pass every one of them. So this block signs in as a
+// real org admin whose RLS returns EVERYONE's rows, and proves the mask cuts it
+// down to her own — through PostgREST, the same path the renderer uses.
+//
+// The non-vacuity control is the whole game here (docs/03's vacuity rule). "The
+// admin sees 0 rows" is exactly what a broken mask that always returned false
+// would also produce, and it would look like a working blindfold while
+// silently hiding the participant's OWN data too. So the assertions are
+// paired: the admin's masked count must DROP, and an ordinary participant's
+// masked count must STAY, against the very same rows.
+// ---------------------------------------------------------------------------
+describe('view-as mode 1: the participant self-mask blinds an admin without blinding a participant', () => {
+  const maskServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
+  let maskAdmin: SupabaseClient
+  let maskCharlie: SupabaseClient
+  let maskEventId = ''
+  let maskAliceSeat = ''
+  let maskCharlieSeat = ''
+  let maskOrgId = ''
+
+  beforeAll(async () => {
+    if (!maskServiceKey) throw new Error('SUPABASE_SERVICE_ROLE_KEY not set — run `pnpm dev` once')
+    maskAdmin = createClient(url, maskServiceKey, { auth: { persistSession: false } })
+    maskCharlie = await signIn('charlie@demo.local')
+
+    maskOrgId = (await maskAdmin.from('orgs').select('id').eq('slug', 'demo-dating').single()).data!.id as string
+    // Resolved through the owner connection: since the email slice no api role
+    // can map an address to a user id, which is the point of that slice.
+    const aliceId = await userIdOf('alice@demo.local')
+    const charlieId = await userIdOf('charlie@demo.local')
+
+    // A dedicated event so this block never depends on, or disturbs, seed or
+    // e2e state.
+    const ev = await maskAdmin
+      .from('sd_events')
+      .insert({
+        org_id: maskOrgId,
+        name: 'RLS fixture — self-mask',
+        state: 'open',
+        scheduled_at: new Date().toISOString(),
+      })
+      .select('id')
+      .single()
+    if (ev.error) throw new Error(`fixture event failed: ${ev.error.message}`)
+    maskEventId = ev.data!.id as string
+
+    const seat = async (userId: string) => {
+      const r = await maskAdmin
+        .from('sd_participants')
+        .insert({
+          org_id: maskOrgId,
+          event_id: maskEventId,
+          user_id: userId,
+          seat_type: 'participant',
+          status: 'registered',
+        })
+        .select('id')
+        .single()
+      if (r.error) throw new Error(`fixture seat failed: ${r.error.message}`)
+      return r.data!.id as string
+    }
+    // THE ADMIN IS GENUINELY REGISTERED. That is the founder's scenario: she is
+    // not pretending to be a participant, she IS one — and her admin reach is
+    // exactly what spoils it.
+    maskAliceSeat = await seat(aliceId)
+    maskCharlieSeat = await seat(charlieId)
+
+    // One interest row each, in opposite directions, so neither party's row is
+    // the other's and "mine" is a real distinction rather than a count.
+    const ins = await maskAdmin.from('sd_interest').insert([
+      {
+        org_id: maskOrgId,
+        event_id: maskEventId,
+        rater_participant_id: maskAliceSeat,
+        target_participant_id: maskCharlieSeat,
+        verdict: 'interested',
+      },
+      {
+        org_id: maskOrgId,
+        event_id: maskEventId,
+        rater_participant_id: maskCharlieSeat,
+        target_participant_id: maskAliceSeat,
+        verdict: 'interested',
+      },
+    ])
+    if (ins.error) throw new Error(`fixture interest failed: ${ins.error.message}`)
+  })
+
+  afterAll(async () => {
+    // sd_events cascades participants/interest; the scope node follows the event.
+    if (maskEventId) {
+      const node = await maskAdmin.from('sd_events').select('scope_node_id').eq('id', maskEventId).maybeSingle()
+      await maskAdmin.from('sd_events').delete().eq('id', maskEventId)
+      const nodeId = node.data?.scope_node_id as string | null | undefined
+      if (nodeId) await maskAdmin.from('module_scope_nodes').delete().eq('id', nodeId)
+    }
+  })
+
+  it('CONTROL: alice is an org ADMIN of demo-dating, so her RLS returns BOTH interest rows', async () => {
+    // The premise of the whole feature. If this ever returns 1, the spoiler
+    // problem was fixed elsewhere and the mask stopped being load-bearing.
+    const seen = await alice.from('sd_interest').select('id').eq('event_id', maskEventId)
+    expect(seen.error).toBeNull()
+    expect(
+      seen.data?.length,
+      'an org admin no longer reads every interest row — the premise of the self-mask changed',
+    ).toBe(2)
+  })
+
+  it('MASKED: the same admin sees only the row SHE rated — the blindfold', async () => {
+    const masked = await alice
+      .from('sd_interest')
+      .select('id')
+      .eq('event_id', maskEventId)
+      .eq('sd_interest_mine', true)
+    expect(masked.error, `the mask column is missing or unreadable: ${JSON.stringify(masked.error)}`).toBeNull()
+    expect(masked.data?.length, 'the mask did not narrow an admin to her own interest rows').toBe(1)
+
+    // ...and it kept HERS, not merely one of them.
+    const row = await maskAdmin
+      .from('sd_interest')
+      .select('rater_participant_id')
+      .eq('id', masked.data![0]!.id)
+      .single()
+    expect(row.data?.rater_participant_id, 'the mask kept the WRONG row').toBe(maskAliceSeat)
+  })
+
+  it('NON-VACUITY: an ordinary participant is NOT blinded by the same mask', async () => {
+    // The control that separates "the mask works" from "the mask returns false
+    // for everything". Charlie's RLS already limits him to his own row, and the
+    // mask must leave it alone.
+    const plain = await maskCharlie.from('sd_interest').select('id').eq('event_id', maskEventId)
+    expect(plain.error).toBeNull()
+    expect(plain.data?.length, 'charlie cannot read his own interest row — fixture broken').toBe(1)
+
+    const masked = await maskCharlie
+      .from('sd_interest')
+      .select('id')
+      .eq('event_id', maskEventId)
+      .eq('sd_interest_mine', true)
+    expect(masked.error).toBeNull()
+    expect(
+      masked.data?.length,
+      'the mask hid a participant from their OWN row — it is returning false for everything',
+    ).toBe(1)
+  })
+
+  it('the mask only ever SUBTRACTS: nobody learns who rated THEM through it', async () => {
+    // A mask cannot add rows. Charlie may not see alice's interest in him
+    // either before or after masking — the one-sided secret is RLS's job, and
+    // this feature must not have widened it.
+    const all = await maskCharlie
+      .from('sd_interest')
+      .select('id, rater_participant_id')
+      .eq('event_id', maskEventId)
+    expect(all.error).toBeNull()
+    expect(
+      (all.data ?? []).some((r) => r.rater_participant_id === maskAliceSeat),
+      'a participant can see who rated THEM — the one-sided secret leaked',
+    ).toBe(false)
+  })
+
+  it('DRIFT GUARD: each mask still calls the seat predicate its table policy uses', async () => {
+    // The mask's whole justification is that it REUSES the module's own
+    // definition of "mine" instead of restating it. If a policy is ever
+    // rewritten to define ownership differently, the mask silently diverges and
+    // the blindfold starts lying. This fails loudly instead.
+    const sql = postgres(process.env.DATABASE_URL ?? 'postgresql://postgres:postgres@127.0.0.1:54322/postgres', {
+      prepare: false,
+      max: 1,
+    })
+    try {
+      const MASKS: [string, string, string][] = [
+        ['sd_interest_mine', 'sd_interest', 'sd_interest_select'],
+        ['sd_matches_mine', 'sd_matches', 'sd_matches_select'],
+        ['sd_pairings_mine', 'sd_pairings', 'sd_pairings_select'],
+      ]
+      for (const [fn, table, policy] of MASKS) {
+        const def = await sql<{ def: string }[]>`
+          select pg_get_functiondef(p.oid) as def from pg_proc p
+          join pg_namespace n on n.oid = p.pronamespace
+          where n.nspname = 'public' and p.proname = ${fn}`
+        expect(def.length, `${fn} does not exist — 20260920010000 is not applied`).toBe(1)
+        expect(
+          def[0]!.def.includes('sd_owns_participant'),
+          `${fn} no longer calls sd_owns_participant — it stopped reusing the module's own seat predicate`,
+        ).toBe(true)
+
+        const pol = await sql<{ qual: string | null }[]>`
+          select qual from pg_policies
+          where schemaname = 'public' and tablename = ${table} and policyname = ${policy}`
+        expect(pol.length, `${policy} is missing — the table this mask mirrors changed shape`).toBe(1)
+        expect(
+          (pol[0]!.qual ?? '').includes('sd_owns_participant'),
+          `${policy} no longer uses sd_owns_participant but ${fn} still does — the mask has drifted ` +
+            `from the policy it mirrors`,
+        ).toBe(true)
+      }
     } finally {
       await sql.end()
     }

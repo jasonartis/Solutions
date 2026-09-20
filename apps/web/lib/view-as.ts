@@ -678,6 +678,15 @@ export async function renderSurface(
   authority: RenderAuthority,
   targetScopeRef: string | null,
   subjectUserId: string | null,
+  /**
+   * The signed-in caller. Used for ONE thing: deciding whether this render is a
+   * SELF-view, i.e. `subjectUserId === callerUserId`. That is true in mode 1
+   * (in-module and the Owner Console's mode 1, which both pass the caller as
+   * the subject) and false in mode 2 (the subject is the target) and mode 3
+   * (no subject). Only a self-view may apply a `selfMaskColumn`, because the
+   * mask keys on auth.uid() and can answer nothing but "is this row mine".
+   */
+  callerUserId: string,
 ): Promise<RenderedSurface> {
   const cutoffColumn =
     surface.role.find((t) => t.hiddenWhen)?.hiddenWhen?.scopeCutoffColumn ?? null
@@ -738,6 +747,27 @@ export async function renderSurface(
       query = query.in(spec.scopeColumn, scope.entityIds)
     }
     if (subjectUserId && spec.subjectColumn) query = query.eq(spec.subjectColumn, subjectUserId)
+    // SELF-MASK (2026-09-20). For tables whose "mine" is a seat id rather than
+    // a user id, narrowing runs in the DATABASE as a computed column calling
+    // the module's own seat predicate — see
+    // supabase/migrations/20260920010000_view_as_participant_masks.sql.
+    //
+    // MODE 1 ONLY, and the condition below is the whole reason it is safe:
+    // `subjectUserId` is the CALLER in mode 1 and the TARGET in mode 2, and a
+    // self-mask keys on auth.uid() internally, so it can only ever mean "mine".
+    // Applying it in mode 2 would silently answer the wrong question. The
+    // declaration validator refuses mode 2 on any surface using a mask, so this
+    // is belt and braces rather than the only guard.
+    //
+    // FAIL-CLOSED: if the caller holds no seat the predicate is false for every
+    // row and the section renders EMPTY — never unfiltered. That is the
+    // dangerous direction for this feature (an admin seeing everyone's secrets
+    // on a screen labelled "as a participant"), so it is the direction the
+    // database enforces for us: there is no code path here that drops the
+    // filter when the result is empty.
+    if (spec.selfMaskColumn && subjectUserId === callerUserId) {
+      query = query.eq(spec.selfMaskColumn, true)
+    }
     for (const f of spec.filter ?? []) query = query.eq(f.column, f.eq)
     if (spec.orderBy) query = query.order(spec.orderBy.column, { ascending: spec.orderBy.ascending ?? true })
     query = query.limit(spec.limit ?? 200)

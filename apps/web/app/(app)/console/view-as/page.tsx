@@ -142,6 +142,7 @@ export default async function ConsoleViewAsPage({ searchParams }: Props) {
           { kind: 'platform-superadmin', gate },
           plan.scopeRef,
           plan.subjectUserId,
+          userId,
         )
       : null
 

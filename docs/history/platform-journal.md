@@ -4,6 +4,43 @@ The running, dated build journal that used to live in `CLAUDE.md`'s "## Current 
 section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every session)
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
+- **2026-09-20 (VIEW-AS MODE 1 FOR SPEED-DATING'S `participant` — the voluntary blindfold;
+  Opus, one migration `20260920010000`, no RLS change).** Founder question: can an admin who
+  joins his own speed-dating event actually get the participant *experience*? Answer was no,
+  for a reason nobody had connected: an org admin reads the whole interest graph of every
+  event in the org without holding any speed-dating role, because `is_org_admin` is the first
+  disjunct of `module_caller_covers_rank` — proven by calling it with `min_rank 99`, which no
+  role can satisfy, and still getting true. Scoping organizer grants does not close that path.
+  **Founder decided admin consistency across modules is correct and stays**; the fix belongs
+  in display, not permissions.
+  **Then the code turned out to be wrong.** `view-as-modules.ts` banned mode 1 into
+  `participant` citing §8.1 point 7 — but point 7 bans IMPERSONATION and ends "Mode 1 stays
+  available everywhere", and point 8 describes this exact case. I had quoted that ban back at
+  the founder as a prior decision before reading the point it cited; he pushed back, and he
+  was right. The lesson is already in CLAUDE.md in another form: *a grep that hits is not
+  proof — read the hits.* Here it was a code comment citing a spec section that did not say
+  what the comment claimed.
+  **The founder's own design suggestion is what made it cheap.** The renderer narrows "to me"
+  by comparing a column against a USER id; sd_interest/sd_matches/sd_pairings identify you by
+  your per-event SEAT id (and the latter two by either of two columns), so no equality filter
+  works, and `subjectColumn: null` means "unfiltered in both modes" — which for an admin
+  renders everyone's secrets on a screen labelled "as a participant". Rather than build a
+  bespoke indirect filter, he proposed deriving the mask from the policy itself. That is
+  exactly right: `sd_owns_participant` — the participant's own arm in each policy — already
+  does the user→seat hop internally. So the migration is three one-line computed columns that
+  call it, and a drift test asserts they still use the predicate their policy uses. Self-only
+  by construction (keys on auth.uid(), no "whose rows" parameter), and `viewAsCompleteness()`
+  now refuses mode 2 on any surface declaring a mask.
+  **Verified before committing to the design**, through PostgREST with real sessions: alice
+  (admin) unmasked 2 rows → masked 1, and it is hers; charlie (participant) 1 → 1. That
+  second number is the one that matters — a mask that always returned false would also
+  "blind" the admin while silently breaking every real participant.
+  Also added: the platform's first END-USER surface (all 10 `sd_` tables classified), a
+  structural test that every rendered end-user table is narrowed somehow, and the honest
+  limit written into the migration header and the declaration — **this is a display mask, not
+  an access control**; the admin can still open the organizer console in another tab.
+  db 238/238 → e2e 52/52 in CI's order, typecheck 9/9, ratchet 221 → 227. Full decision:
+  docs/15's 2026-09-20 entry.
 - **2026-09-17 (THE EMAIL SLICE BUILT — `profiles.email` DELETED; Opus, TWO migrations
   `20260917010000` + `20260917020000`, local-green in CI's exact order, **NOT ON PRODUCTION:
   `pnpm migrate:prod` has not run**).** The design was docs/22, complete and twice

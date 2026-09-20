@@ -104,6 +104,7 @@ export async function ViewAsPage({ moduleKey, params, searchParams }: Props) {
       { kind: 'module-grants', grants },
       inMode2 ? session!.targetScopeRef : null,
       inMode2 ? session!.targetUserId : user.id,
+      user.id,
     )
     if (inMode2) {
       const { data: p } = await supabase
