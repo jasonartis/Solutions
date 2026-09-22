@@ -20,10 +20,15 @@ A multi-tenant modular platform: each client engagement produces a **module** bu
      pay for the full journal. See "Session hygiene". -->
 
 **THE GO-LIVE CHECKLIST IS DONE FOR
-NOW — 1, 2, 3, AND 8 ALL SHIPPED; 4, 5, 6, 7 ARE ALL DELIBERATELY PAUSED** (founder's call,
+NOW — 1, 2, 3, AND 8 ALL SHIPPED; 4, 5, 6, 7 AND **NEW ITEM 9** ARE ALL DELIBERATELY PAUSED** (founder's call,
 extract-don't-speculate: each adds real cost or a new dependency for a problem that only
 exists once a real client generates real volume — **do not start any of them unprompted,
 revisit together when the first real client is signed**, per docs/18's status note).
+**ITEM 9 IS NEW (2026-09-22) AND IS THE ONLY SECURITY ONE:** org-admin email-lookup logging,
+the residue of docs/20 §8.3 after the email slice. Deferred on the same trigger because
+**all 3 owner/admins on production are the founder's own accounts, so the log would be
+empty** — not because it is unimportant. Its build shape is already decided in docs/18 §9
+(hash the address, never store it); do not re-derive it.
 **THE EMAIL SLICE IS SHIPPED — BOTH MIGRATIONS APPLIED TO PRODUCTION AND PROD-VERIFIED
 (2026-09-17).** Deployed in two sittings by founder decision, the drop separated because it is
 the one step that cannot be undone. **`public.profiles` on PRODUCTION is now

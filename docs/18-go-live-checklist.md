@@ -29,6 +29,7 @@ minutes, not sessions, and several can happen in parallel with build work.
 | 6 | 2FA on GitHub / Vercel / Supabase | Founder — **raised 2026-09-03, deliberately deferred until the first real client is signed** | ~15 min | One compromised account defeats every safeguard |
 | 7 | Custom SMTP | Founder account + Claude config | ~half session | Auth email rate limits at real volume |
 | 8 | Onboarding rehearsal | **DONE 2026-09-02.** | ~half session | Finding gaps live, in front of the client |
+| 9 | Org-admin email-lookup logging (or rate-limit) | Claude — **deferred 2026-09-22, SAME TRIGGER as 4/5/6/7** | ~1 session (migration) | No record if a real client's admin enumerates addresses |
 
 **Total: roughly 4–6 sessions of build work, plus about an hour of founder account chores.**
 Items 5 and 6 can be done today and are independent of everything else.
@@ -39,6 +40,15 @@ real cost or a new external dependency (a VPS, a $20/mo plan, a domain + email s
 solve a problem that only exists once a real client generates real volume — no real client
 exists yet. Extract-don't-speculate applies to this checklist too, not just to code. Revisit
 items 4/5/6/7 together when the first real client is signed, not before.**
+
+**ITEM 9 ADDED 2026-09-22, ON THE SAME TRIGGER — and it is here rather than in a doc's
+open-items list ON PURPOSE.** It is the only one of the nine that is a *security* item rather
+than an infrastructure or account chore, and the reason it sits in this table is that **this
+table is what gets opened when the trigger fires.** Two items recorded elsewhere on this
+platform went silently stale within a fortnight (docs/20 §8.3 for five days; the privacy debt
+was marked "owed" for two and a half weeks while auto-loading into every session and being
+false the whole time). A trigger is worth exactly the place it is written down. **Revisit
+4/5/6/7/9 together.**
 
 ---
 
@@ -234,6 +244,51 @@ All six steps worked cleanly on the first try. Full click-path, in order:
 Rotate the demo password afterwards (docs/12 item 4) — **still open**, unrelated to this
 rehearsal (this rehearsal used an existing demo user, `dana@demo.local`, read-only from its
 perspective; nothing about the demo password was touched).
+
+---
+
+## 9. Org-admin email-lookup logging — **DEFERRED 2026-09-22, founder's call**
+
+**The gap, measured not guessed.** `org_find_user_by_email` answers *"does this address have
+an account on this platform?"* for any active org owner/admin, about any address, in any org —
+and nothing records that they asked. It is the residue of docs/20 §8.3 after the email slice.
+
+**What is ALREADY closed, and it was the dangerous half.** Until 2026-09-17 the function also
+returned a **display name**, so a probe confirmed an *identity*. The founder's F2 decision
+(*"if they mistype the email address, if we should suggest to them, no we should not"*) removed
+both the name and the address: it is `returns table (user_id uuid)` on production. What
+survives is a bare existence check, which docs/20 §25.2 records as an **accepted limit** — it
+cannot be bounded by org membership without breaking every invite, which is the circularity
+that killed v1.
+
+**WHY DEFER, and it is not "low priority" — it is that the log would be EMPTY.** Measured on
+production 2026-09-22: **3 distinct people hold owner/admin across 9 orgs, and all 3 are the
+founder's own accounts.** A log built today records the founder probing addresses he already
+owns. There is nobody to detect. That is extract-don't-speculate applied to a safeguard, the
+same reasoning items 4–7 are parked on.
+
+**THE TRIGGER: the first real client org gains an admin who is not the founder.** Not "when it
+feels urgent" — at client onboarding, which is when this table gets read.
+
+**WHEN IT IS BUILT, the shape is already decided — do not re-derive the trade.** Four options
+were put to the founder; the recommendation, should it be built, is **log the attempt with a
+HASHED address**:
+
+| option | what it buys | what it costs |
+|---|---|---|
+| **hashed address** ← preferred | detects enumeration by volume and repetition (*"400 lookups, 380 missed"*) | cannot tell a specific person they were searched for |
+| clear address | can warn a named person | **stores email addresses of people who have NO account and never consented** — a new data subject with no export and no deletion route, the exact obligation docs/12 already flags as owed for pending invites |
+| rate-limit instead | prevents bulk enumeration outright, stores nothing new, cheaper | a slow patient probe still works, and leaves no evidence |
+| nothing | — | no record at all |
+
+`public.superadmin_lookup_log` (`actor_user_id, tool, org_id, module_key, subject_user_id,
+position, scope_ref, created_at`) is the existing template — **but note the asymmetry that
+drove the recommendation: it records a `subject_user_id`, and a FAILED email probe has no
+subject.** That is precisely why storing the attempted address is not a free extension of the
+existing pattern.
+
+**Size:** one migration + RLS + a prod-verify script. **Opus-tier** per the model-choice rules,
+and worth its own session rather than riding along with something else.
 
 ---
 
