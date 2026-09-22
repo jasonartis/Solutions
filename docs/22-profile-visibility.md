@@ -1427,6 +1427,28 @@ Charlie, a rank-0 customer with no role of any kind, enumerated eight people
 including the salon admin. **That is not a leak of the `email` column. It is a
 member directory, and `email` is merely the worst thing in it.**
 
+**HE DOES NOT SEARCH. HE ASKS FOR THE WHOLE TABLE — and that is the precise
+reason this section exists** (founder question, 2026-09-22; demonstrated live
+against the post-slice database):
+
+```
+GET /rest/v1/profiles?select=display_name          <- no filter, no name typed
+
+-> Alice A, Charlie C, Gabe G, Dana D, Eve E, Frank F, Mel M, Grace G
+   8 people in ONE request, none of whom he had to know beforehand.
+```
+
+**Hold that against DECISION 5** (§19.1): *"shared" means shared with someone who
+SUCCESSFULLY SEARCHED — they already had the value.* That test is what makes the
+email decision safe inside Public Square: you only learn something about someone
+whose identifier you already possessed. **Charlie possessed nothing.** A
+directory LISTING is the exact inverse of a search result, and it is the one
+surface on the platform that answers a question nobody asked it.
+(Two honest qualifications: no SCREEN shows him this — he would use the token the
+app already issued, which docs/03 hard rule 6 says is not a defence; and in the
+UI the only other people's names he meets are the salon workers in the booking
+dropdown, which he needs in order to book one.)
+
 **So the founder's rule strengthens the email work and also outgrows it.** The
 argument until now was *"email should not be visible."* The stronger and more
 consistent argument is: **an ordinary member should not be able to enumerate the
