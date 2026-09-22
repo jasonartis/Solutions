@@ -822,14 +822,34 @@ accepts either refusal shape and asserts the row does not move.
    seat — a new role per seat type, "any speed-dating role", or does the seat
    genuinely stand alone for observers?** Answering it is a prerequisite for the
    audience/mentor observer surface, which is already on module 6's list.
-2. **The vm/conversation last-admin floor**, handed over by the Public Square
-   session: both `vm_pin_member`'s floor and `20260914020000`'s new guard count
-   `role = 'admin' and status = 'active'` with **no `is_org_member` conjunct**, so
-   a seat whose holder has left the org still holds the floor open and lets the
-   effective last admin leave. It IS this class, but a different failure mode
-   (lockout, not confidentiality) in a module that took two migrations hours
-   before this one — deliberately its own change rather than widening this one's
-   review surface.
+2. **The vm/conversation last-admin floor** — handed over by the Public Square
+   session. **RE-VERIFIED STILL OPEN 2026-09-22**: neither
+   `public.vm_pin_member` nor `public.vm_guard_last_conversation_admin` (the
+   `20260914020000` DELETE guard) mentions `is_org_member` anywhere in its body.
+   Both count the floor with the identical predicate:
+   ```sql
+   where conversation_id = old.conversation_id
+     and role = 'admin' and status = 'active' and id <> old.id
+   ```
+   **THE CONCRETE FAILURE, spelled out because the mechanism alone does not
+   convey it.** A conversation has two admins, Alice and Bob. Bob leaves the org.
+   Since `20260910040000` Bob's seat confers *nothing* — he cannot read or do
+   anything in that conversation. But the floor still COUNTS him, so Alice, the
+   only effective admin, is allowed to leave. **What you are left with is a
+   conversation whose sole remaining "admin" cannot administer it**: nobody can
+   add a member, rename it, or moderate it. The guard that exists precisely to
+   prevent orphaning is what permits it.
+   **The fix is one conjunct in two places** — but note it makes the guard fire
+   MORE often, so someone who could previously leave now cannot. That is a
+   user-visible behaviour change, which is why it wants its own migration,
+   review and tests rather than riding along with a read-side fix.
+   **Read docs/03 #23 before touching either function.** These are trigger
+   functions carrying `pg_trigger_depth()` cascade escapes and a self-block
+   carve-out; `vm_pin_member`'s status pin is what makes self-block work, and
+   `20260914020000`'s header explicitly warns against "tidying" it to
+   `security definer`, which would remove the platform's only user-level block.
+   Different failure mode from the rest of this audit (lockout, not
+   confidentiality) — same class of cause.
 3. **`cls_set_preferred_name`'s remaining half:** an unenrolled-but-still-in-org
    member who is still listed on a roster can still rename themselves on it.
    Needs `class member OR class manager`, i.e. two predicates and an `org_id`

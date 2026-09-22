@@ -463,6 +463,23 @@ non-`security definer` scope-sync trigger silently becomes an access check. **rl
 — the first anywhere asserting a roster row stops conferring authority once membership ends.
 Verified in CI's exact order: **db 183/183 → e2e 52/52**, same database, no reset.
 
+**VIEW-AS MODE 1 FOR SPEED-DATING PARTICIPANTS — "THE VOLUNTARY BLINDFOLD" — SHIPPED AND
+PROD-VERIFIED 2026-09-22** (`20260920010000` + `20260922010000`; decision + full reasoning in
+docs/15's 2026-09-20 entry). An org admin reads the whole interest graph of every event in the
+org **without holding any speed-dating role** (`is_org_admin` is the first disjunct of
+`module_caller_covers_rank` — proven with `min_rank 99`), so they could never experience their
+own event without spoilers; **scoping an organizer grant does NOT close that path.** Founder
+decision: admin consistency across modules is CORRECT and stays, so the fix is in DISPLAY, not
+permissions. Mode 1 is now ON for the three pairs into `participant` (mode 2 stays banned
+forever — the code had banned mode 1 too, citing §8.1 point 7, which is a **misreading**: point
+7 bans impersonation and says "Mode 1 stays available everywhere"). The mask reuses each
+table's OWN policy arm (`sd_owns_participant`) as three computed columns rather than inventing
+an indirect filter — founder's suggestion, and it means no second definition of "mine" can go
+stale. **It is a DISPLAY mask, never an access control** — the same admin can open the
+organizer console in another tab; do not cite it as enforcement. Prod is verified
+STRUCTURALLY only: production holds zero `sd_participants` rows, so the live before/after proof
+(admin 2→1, participant 1→1) is local-only until the first real event.
+
 **THE MODULE-ROLE HALF IS SHIPPED, ON PRODUCTION AND PROD-VERIFIED (2026-09-15,
 `20260915010000`)** — `migrate:prod` applied, then **`prod-verify-module-role.mts` 85/85** (a
 NEW policy-aware script; the generic one is function-only and this migration is mostly

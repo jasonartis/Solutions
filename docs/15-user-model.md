@@ -664,6 +664,29 @@ vocabulary gets locked.
   mask that always returned false would also "blind" the admin while breaking the participant.
   db 238/238 → e2e 52/52 in CI's order.
 
+  **ON PRODUCTION AND PROD-VERIFIED 2026-09-22** (`20260920010000` +
+  `20260922010000`): `prod-verify-migration.ts` 0 failures / 0 warnings on both, all three
+  masks `definer`, `search_path=public`, `anon=no`, bodies md5-matching.
+  **Two honest notes:**
+  1. **The convention was violated first, and a mechanical guard caught it — not review.**
+     `20260920010000` created the masks as PLAIN (invoker) functions with no pinned
+     `search_path`, reasoning "least privilege: they only call `sd_owns_participant`, which is
+     already definer." That is why they do not NEED definer, but it skipped the standing
+     function convention, and `prod-verify-migration.ts` failed all three the moment they
+     reached prod. Fixed forward by `20260922010000` (bodies verbatim, attributes only —
+     `20260920010000` is history and is not edited). Safe to elevate, measured: each body is
+     one `select` of an already-definer predicate and touches NO table, so definer grants the
+     wrappers nothing usable. The `search_path` pin is the half that matters — the bodies
+     already schema-qualify everything, so it guards a future edit that drops a qualification,
+     which on a definer function is the difference between the intended predicate and a
+     shadowed one.
+  2. **Prod is verified STRUCTURALLY, not functionally, and cannot be otherwise today.** The
+     live before/after proof (admin 2→1, participant 1→1) was run against LOCAL. Production
+     holds **zero `sd_participants` rows**, so there is no data for a masked read to narrow —
+     the equivalent of `prod-verify-login-events.mts`'s "assert the data actually arrives"
+     beat is unsatisfiable here, and manufacturing prod rows to satisfy it would be worse than
+     the gap. First real speed-dating event on prod is the moment to re-run it for real.
+
 - **2026-08-10 — a SECOND superadmin's lookup-log visibility should follow the same shape as
   everywhere else on this platform: own lookups plus those of superadmins "lower" than them,**
   not the flat mutual-visibility default the log shipped with. Full argument, and why it is

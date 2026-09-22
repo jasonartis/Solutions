@@ -41,6 +41,19 @@ decision log, docs/03 conventions, docs/12 safeguards) — this is the chronolog
   an access control**; the admin can still open the organizer console in another tab.
   db 238/238 → e2e 52/52 in CI's order, typecheck 9/9, ratchet 221 → 227. Full decision:
   docs/15's 2026-09-20 entry.
+  **SHIPPED TO PROD 2026-09-22, and the deploy immediately found a convention miss.**
+  `prod-verify-migration.ts` failed all three masks on arrival — `INVOKER`,
+  `NO-search_path`, bodies matching, ACLs fine. I had written them as plain functions on a
+  "least privilege" argument (they only call `sd_owns_participant`, itself definer) and
+  skipped the repo's standing function convention. The guard caught what review would have
+  waved through, which is the whole reason it is mechanical. Fixed forward by
+  `20260922010000` — attributes only, bodies verbatim, since `20260920010000` was already on
+  prod and is history. Both then verified 0 failures / 0 warnings. **Worth keeping: definer
+  was safe here only because each body is one `select` of an already-definer predicate and
+  touches no table — the `search_path` pin is the half that actually mattered.** And an honest
+  limit recorded rather than glossed: prod is verified STRUCTURALLY only, because production
+  holds zero `sd_participants` rows, so there is nothing for a masked read to narrow; the
+  live before/after proof is local-only until the first real event.
 - **2026-09-17 (THE EMAIL SLICE BUILT — `profiles.email` DELETED; Opus, TWO migrations
   `20260917010000` + `20260917020000`, local-green in CI's exact order, **NOT ON PRODUCTION:
   `pnpm migrate:prod` has not run**).** The design was docs/22, complete and twice
