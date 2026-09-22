@@ -1848,6 +1848,18 @@ module-role half is open.* **So every measurement in §11 still holds as of this
 timestamp** — but the module-role half is the part §12.7 depends on, and it is
 still moving.
 
+**CROSS-TRACK UPDATE, 2026-09-22 (added by the Track A session, not this one —
+correcting a claim about ITS slice, not rewriting this doc's analysis): the
+module-role half has STOPPED moving. It is shipped and prod-verified**
+(`20260915010000`, applied 2026-09-15; `prod-verify-module-role.mts` 85/85 and
+`prod-verify-migration.ts` 0/0). So §12.7's dependency is settled rather than in
+flux, and the "still moving" caveat above no longer applies. **Two carry-overs
+that DO bear on this doc:** speed dating's role conjunct is deliberately NOT in
+that migration and is now an open FOUNDER DECISION (there is no audience or
+mentor module role to require), and the `module_roles` census leak — this doc's
+own reclaimed item — is the one thing from docs/19's original four still open.
+Full detail: docs/19's 2026-09-15 section.
+
 **Two new stale-doc items for §10**, both created by Track A today:
 
 - **docs/21 now exists** and carries the silhouette rule (its §7 supersedes its

@@ -5,8 +5,21 @@ PROD-VERIFIED (2026-09-11 — `migrate:prod` + `prod-verify-migration.ts` 0
 failures + `scripts/prod-verify-seat-authority.mts` 25/25, covering the policies
 and the trigger binding the function-only script cannot see). (2026-09-10, `cf63e77`,
 `20260910040000`) — all 8 functions and all 5 inline policy arms, verified
-db 183/183 then e2e 52/52 in CI's exact order. FOUR THINGS BELOW ARE STILL
-OPEN; read the dated sections at the END of this doc, not just this one.**
+db 183/183 then e2e 52/52 in CI's exact order.**
+
+**AND THE MODULE-ROLE HALF IS ALSO SHIPPED AND PROD-VERIFIED (2026-09-15,
+`20260915010000`).** Of the four numbered items below, **THREE ARE NOW DONE**
+(1, 2 and 4) and only **#3 — the `module_roles` census leak — remains from this
+list.** This header previously read "FOUR THINGS BELOW ARE STILL OPEN", which
+stopped being true as those items closed; corrected 2026-09-22 because a cold
+reader would otherwise treat all four as open, which is exactly the
+stale-header failure this repo keeps finding.
+**What is ACTUALLY open now lives in the 2026-09-15 section's "STILL OPEN"
+list** — #3 below, plus four items that section records: speed dating's role
+conjunct (a FOUNDER DECISION — no audience/mentor role exists), the
+vm/conversation last-admin floor, `cls_set_preferred_name`'s unenrolled-student
+half, and §5's `sd_in_event` status filter. **Read the dated sections at the END
+of this doc, not just this one.**
 
 1. **The MODULE-ROLE half — SHIPPED, ON PRODUCTION AND PROD-VERIFIED
    2026-09-15** for matchmaking, nail salon and classroom (`20260915010000`;
@@ -604,6 +617,16 @@ items — **the write paths are in NEITHER list.** Verified still unguarded: the
 resolver takes an arbitrary email through `profiles` and inserts the assignment
 with no membership check. A reader of that header would conclude the remediation
 is complete but for three named items, and these would vanish. **They are open.**
+
+**RESOLVED — this paragraph is now HISTORY, kept for the lesson not the status
+(marker added 2026-09-22).** Both write paths were guarded on 2026-09-14
+(`2ef05fc`, app-side, no migration) and the owed RLS test followed the same day
+(`53c8a5a`) — it proves a seat minted for someone who was NEVER a member confers
+nothing, which is this section's exploit sentence rather than the revocation case
+the other tests cover. See open item 4 in the header and the 2026-09-14 section.
+The paragraph is not deleted because the *failure* it describes — an item
+dropping out of both the FIXED list and the open list, and surviving only
+because a clean-room reader went looking — is the reusable part.
 
 ### 2. `mm_assignment_covers_me` CANNOT TAKE THE PRESCRIBED ONE-LINE FIX
 

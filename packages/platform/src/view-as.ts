@@ -236,7 +236,7 @@ export type ExcludedFromSurface = {
  *   unreadableByPosition  — the POSITION ITSELF cannot read it
  *
  * LOAD-BEARING AND EASY TO GET WRONG (recorded 2026-09-20, while building the
- * first end-user surface): **only `role` is ever RENDERED.** The renderer
+ * first end-user surface needing masks; classroom's student surface predates it): **only `role` is ever RENDERED.** The renderer
  * iterates `surface.role` and nothing else (apps/web/lib/view-as.ts), so the
  * other three lists are assertions and documentation — they declare WHY a table
  * is absent, they never place it on a screen. The trap: `personal` reads as

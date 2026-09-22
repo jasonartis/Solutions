@@ -1617,6 +1617,25 @@ describe('view-as: the rank-differential completeness check (slice 5)', () => {
     const surface = sd.surfaces.participant
     expect(surface, 'speed-dating declares no participant surface').toBeDefined()
 
+    // NON-VACUITY, and this test needed it as much as anything it guards
+    // (added 2026-09-22 by auditing this suite's own new tests): the loop
+    // below asserts nothing at all if `role` is empty or the tables get
+    // renamed, so it would go green while the surface rendered nothing — or
+    // worse, while a masked table quietly lost its mask. Naming the three
+    // tables that MUST carry a mask makes their disappearance a failure
+    // rather than a silent pass.
+    const MUST_BE_MASKED = ['sd_interest', 'sd_matches', 'sd_pairings']
+    expect(surface!.role.length, 'the participant surface renders no tables at all').toBeGreaterThan(0)
+    for (const table of MUST_BE_MASKED) {
+      const spec = surface!.role.find((t) => t.table === table)
+      expect(spec, `${table} is no longer on the participant surface — it carried a self-mask`).toBeDefined()
+      expect(
+        spec!.selfMaskColumn,
+        `${table} lost its selfMaskColumn — it identifies a person by SEAT id, so without the ` +
+          `mask it renders every row the CALLER can read, which for an admin is everyone's`,
+      ).toBeTruthy()
+    }
+
     const CLASS_WIDE = new Set(['sd_events', 'sd_rounds'])
     for (const t of surface!.role) {
       if (CLASS_WIDE.has(t.table)) {

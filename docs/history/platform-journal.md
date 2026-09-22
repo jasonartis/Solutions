@@ -35,7 +35,7 @@ decision log, docs/03 conventions, docs/12 safeguards) — this is the chronolog
   (admin) unmasked 2 rows → masked 1, and it is hers; charlie (participant) 1 → 1. That
   second number is the one that matters — a mask that always returned false would also
   "blind" the admin while silently breaking every real participant.
-  Also added: the platform's first END-USER surface (all 10 `sd_` tables classified), a
+  Also added: speed-dating's participant surface (all 10 `sd_` tables classified), a
   structural test that every rendered end-user table is narrowed somehow, and the honest
   limit written into the migration header and the declaration — **this is a display mask, not
   an access control**; the admin can still open the organizer console in another tab.

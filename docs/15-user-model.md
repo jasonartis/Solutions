@@ -715,7 +715,21 @@ vocabulary gets locked.
      already schema-qualify everything, so it guards a future edit that drops a qualification,
      which on a definer function is the difference between the intended predicate and a
      shadowed one.
-  2. **Prod is verified STRUCTURALLY, not functionally, and cannot be otherwise today.** The
+  3. **TEST DEBT, stated rather than implied (audited 2026-09-22).** What IS proven: the mask
+     functions themselves, live through PostgREST with real sessions (admin 2 rows → 1 masked
+     and it is hers; participant 1 → 1), the declaration's structure, and a drift guard tying
+     each mask to the policy it mirrors. What is NOT: **the renderer's `selfMaskColumn` branch
+     has never executed in a test.** `renderSurface` is exercised by the db suite and the
+     classroom view-as e2e covers the renderer end-to-end for a professor, so the machinery is
+     tested — but no test drives the speed-dating PARTICIPANT tab, so the one line that
+     applies the mask (`if (spec.selfMaskColumn && subjectUserId === callerUserId)`) is
+     covered by reasoning only. The gap is narrow and the failure mode is benign in one
+     direction (the branch not firing shows MORE, which is the spoiler the feature exists to
+     remove — it cannot leak anything RLS would not already have released). Closing it wants
+     an e2e that signs in as a registered admin, opens the participant tab, and asserts the
+     other party's interest row is absent. Recorded per this repo's rule: never document a
+     test that has not been written.
+  4. **Prod is verified STRUCTURALLY, not functionally, and cannot be otherwise today.** The
      live before/after proof (admin 2→1, participant 1→1) was run against LOCAL. Production
      holds **zero `sd_participants` rows**, so there is no data for a masked read to narrow —
      the equivalent of `prod-verify-login-events.mts`'s "assert the data actually arrives"

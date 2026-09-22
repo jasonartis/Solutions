@@ -1594,22 +1594,33 @@ export const speedDatingViewAs = declareViewAs({
     },
 
     // -----------------------------------------------------------------------
-    // PARTICIPANT — the first END-USER surface on the platform, added
-    // 2026-09-20 for MODE 1 ONLY (founder decision that day; see the edge
-    // notes above). Every other surface in this file answers "what does this
-    // STAFF position see". This one answers a different question: "what would
-    // I see if I were an ordinary participant" — a VOLUNTARY BLINDFOLD for an
-    // admin who has genuinely registered and wants the real experience,
-    // suspense included.
+    // PARTICIPANT — added 2026-09-20 for MODE 1 ONLY (founder decision that
+    // day; see the edge notes above): "what would I see if I were an ordinary
+    // participant" — a VOLUNTARY BLINDFOLD for an admin who has genuinely
+    // registered and wants the real experience, suspense included.
     //
-    // WHY IT NEEDS MASKS AND NO OTHER SURFACE DOES. Staff surfaces are
-    // narrowed by SCOPE (which events do you govern). An end-user surface must
-    // be narrowed to the PERSON — and speed dating identifies a person by their
-    // per-event SEAT id, not their user id. `subjectColumn` compares against a
-    // user id, so it cannot express "my seat", and `subjectColumn: null` means
-    // "unfiltered in BOTH modes", which for an admin renders the entire
-    // interest graph on a screen labelled "as a participant" — the exact
-    // opposite of the intent. Hence `selfMaskColumn`: a computed column calling
+    // NOT the platform's first end-user surface — CORRECTED 2026-09-22, having
+    // claimed otherwise. **Classroom's `student` surface predates this one**,
+    // and with BOTH modes on (professor -> student is mode1 + mode2, resolved
+    // ON at build time 2026-07-30). So it is the prior art, and the contrast
+    // with it is the useful part: classroom needed no masks because its
+    // student-facing tables name the person by a USER id
+    // (cls_submissions.student_id, cls_review_comments.author_id), which
+    // `subjectColumn` compares against directly. Worth stating for the same
+    // reason: §8.1 point 7's end-user impersonation ban is SPEED-DATING AND
+    // MATCHMAKING specific, named per module — it is not a platform-wide rule
+    // that end users may never be a mode-2 target, and classroom is the live
+    // counter-example.
+    //
+    // WHY THIS ONE NEEDS MASKS. Staff surfaces are narrowed by SCOPE (which
+    // events do you govern). An end-user surface must be narrowed to the
+    // PERSON — and speed dating, unlike classroom, identifies a person by
+    // their per-event SEAT id, not their user id. `subjectColumn` compares
+    // against a user id, so it cannot express "my seat", and
+    // `subjectColumn: null` means "unfiltered in BOTH modes", which for an
+    // admin renders the entire interest graph on a screen labelled "as a
+    // participant" — the exact opposite of the intent. Hence
+    // `selfMaskColumn`: a computed column calling
     // the module's OWN seat predicate (20260920010000). The predicate is the
     // very expression already sitting in each table's RLS policy as the
     // participant's arm, so the mask cannot drift from the real definition of
