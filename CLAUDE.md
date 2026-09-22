@@ -779,10 +779,38 @@ Everything below is open but unranked:
   things worth knowing: the run is red but the failure is BEFORE any test, so a green run on
   the very next commit (or a re-run) is the whole fix; and because `deploy` has `needs: check`,
   prod simply keeps serving the previous build — the DB never moves ahead of the app. **Do not
-  chase it as a test failure, and do not "fix" it by re-running the suite locally.** The real
-  fix, if it recurs often, is pinning the CLI to an exact `version:` in `ci.yml` (a
-  shared-pipeline change — founder call, and note pinning also means CLI upgrades stop being
-  silent).
+  chase it as a test failure, and do not "fix" it by re-running the suite locally.**
+  ~~The real fix, if it recurs often, is pinning the CLI to an exact `version:` in `ci.yml`.~~
+  **⚠ SUPERSEDED 2026-09-22 — DO NOT PIN A SECOND VERSION NUMBER. THE REPO ALREADY PINS THE
+  CLI AND CI IGNORES IT.** Measured:
+  - `package.json` declares `"supabase": "^2.34.0"`, the lockfile resolves it to **2.109.0**,
+    and **`ci.yml` line 23 already runs `pnpm install --frozen-lockfile`** — so that exact CLI
+    is sitting in `node_modules` on every CI run, unused.
+  - `ci.yml` then installs a SECOND CLI at line 103 (`supabase/setup-cli@v1`,
+    `version: latest` → **2.117.0**) and runs bare `supabase start`, which picks up that one.
+  - **The consequence is not cosmetic: the two CLIs select DIFFERENT POSTGRES IMAGES.**
+    Local ran `public.ecr.aws/supabase/postgres:**17.6.1.141**`; the CI log for run
+    `35238338307` shows `supabase/postgres:**17.6.1.167**`. `config.toml` pins only
+    `major_version = 17`, so the image TAG is the CLI's choice, and **`pg_default_acl` is baked
+    into the image** — which is the whole mechanism behind the privilege escalation in docs/03
+    #27 (it passed locally 231/231 and failed in CI).
+  **THE FIX IS TO DELETE THE `setup-cli` STEP, not to add a version to it** — three lines:
+  drop the `uses:` block, and change `supabase start` / `supabase status` to
+  `pnpm exec supabase ...`. That gives ONE source of truth (the lockfile, bumped by `pnpm up`
+  like any other dependency) instead of two that silently drift. Pinning a `version:` in
+  `ci.yml` creates exactly the duplicate-source-of-truth problem the email slice was about.
+  It also kills the rate-limit flake outright, since nothing would query GitHub's release API.
+  **Measured cost of leaving it: 2 of the last 36 CI runs (≈6%) died on this step before a
+  single test ran.**
+  **THE HONEST COUNTER-ARGUMENT, so it is not lost:** the drift is what CAUGHT the docs/03 #27
+  escalation — CI's newer image was the permissive one. But that was luck, not a control, and
+  it could as easily have gone the other way (CI stricter, the hole shipping to prod). The
+  actual control now exists: revoke-before-grant, plus the ACL asserted from `pg_catalog` in
+  `profiles-public-columns.test.ts` AND in `prod-verify-profile-visibility.mts` against real
+  production — which is the only environment that matters, and which neither local nor CI
+  matches anyway (Supabase chooses prod's version).
+  **STATUS: founder is deciding (asked 2026-09-17, still open 2026-09-22). Shared-pipeline
+  change, so do not do it unprompted. Nothing depends on it.**
 - **Diagnosing a CI job that fails INSTANTLY with an EMPTY steps array (2026-09-02)** — this is
   never a code/test failure; the job never started. The tell: `GET /repos/<owner>/<repo>/actions/
   runs/<id>/jobs` shows `"steps": []` and `completed_at` within 1-2 seconds of `started_at`. The
