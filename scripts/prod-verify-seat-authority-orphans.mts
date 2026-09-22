@@ -187,7 +187,7 @@ try {
       const nullGuard = t.holderNullable ? sql`and t.${sql(t.holderCol)} is not null` : sql``
       const sample = await sql`
         select t.id, t.${sql(t.orgCol)} as org_id, t.${sql(t.holderCol)} as holder_id,
-               o.name as org_name, p.email as holder_email
+               o.name as org_name, p.display_name as holder_name
         from public.${sql(t.table)} t
         join public.orgs o on o.id = t.${sql(t.orgCol)}
         left join public.profiles p on p.user_id = t.${sql(t.holderCol)}
@@ -201,7 +201,7 @@ try {
       `
       console.log(`  ${t.table} — ${r.orphaned} orphaned row(s). Exposure: ${t.exposure}`)
       for (const row of sample) {
-        console.log(`    row ${row.id}  org=${row.org_name}(${row.org_id})  holder=${row.holder_email ?? row.holder_id}`)
+        console.log(`    row ${row.id}  org=${row.org_name}(${row.org_id})  holder=${row.holder_name ?? row.holder_id}`)
       }
     }
   }
@@ -379,11 +379,131 @@ try {
   }
 
   // -------------------------------------------------------------------------
+  // [4] FLOOR DIMENSION — the pre-flight docs/19's STILL-OPEN item 2 mandates.
+  //
+  // Both `vm_pin_member` and `vm_guard_last_conversation_admin` count the
+  // last-admin floor as `role='admin' and status='active' and id <> old.id`,
+  // with NO is_org_member conjunct. Since 20260910040000 a seat whose holder
+  // has left the org confers nothing — yet it still COUNTS toward the floor,
+  // so the effective last admin is permitted to leave and orphan the
+  // conversation. The guard that exists to prevent orphaning permits it.
+  //
+  // THIS FIX MAKES A GUARD FIRE **MORE** OFTEN. Every other dimension in this
+  // script measures who would LOSE READ ACCESS. This one measures who would
+  // lose the ability to LEAVE — same question shape, opposite direction — and
+  // it is why the fix gets its own migration instead of riding along.
+  //
+  // Three populations, genuinely different findings:
+  //   (a) ORPHANED ADMIN SEATS — an active admin seat whose holder is not an
+  //       active org member. Not itself wrong; it is the raw material for the
+  //       other two.
+  //   (b) NEWLY-BLOCKED LEAVERS — an active admin seat that MAY leave today
+  //       (some other active admin seat exists) but may NOT after the fix (no
+  //       other active admin seat whose holder is an active org member). This
+  //       is the user-visible behaviour change, counted per seat.
+  //   (c) ALREADY-ORPHANED CONVERSATIONS — at least one active admin seat, but
+  //       ZERO held by an active org member. Nobody can administer it TODAY;
+  //       the fix does not create these, it stops new ones being made.
+  //
+  // CONTROL per docs/03's vacuity rule: zero here means nothing if there are
+  // no admin seats or the membership join is broken, so the totals print and a
+  // POSITIVE holder-is-member match is asserted — and a database with no
+  // active admin seats at all says so explicitly instead of reporting "0".
+  console.log('\n[4] FLOOR dimension — would the last-admin conjunct newly BLOCK anyone from leaving?\n')
+
+  const floor = await sql`
+    with admin_seats as (
+      select m.id, m.conversation_id, m.org_id, m.user_id,
+             exists (
+               select 1 from public.org_members om
+               where om.org_id = m.org_id
+                 and om.user_id = m.user_id
+                 and om.status = 'active'
+             ) as holder_is_member
+      from public.vm_conversation_members m
+      where m.role = 'admin' and m.status = 'active'
+    ),
+    per_conv as (
+      select conversation_id,
+             count(*)::int as admins,
+             count(*) filter (where holder_is_member)::int as effective_admins
+      from admin_seats group by conversation_id
+    )
+    select
+      (select count(*)::int from public.vm_conversations)                        as conversations,
+      (select count(*)::int from public.vm_conversation_members)                 as seats,
+      (select count(*)::int from admin_seats)                                    as admin_seats,
+      (select count(*) filter (where holder_is_member)::int from admin_seats)    as held_by_members,
+      (select count(*) filter (where not holder_is_member)::int from admin_seats) as orphaned_admin_seats,
+      (select count(*)::int from per_conv where admins > 0 and effective_admins = 0)
+                                                                                 as already_orphaned_convs,
+      (select count(*)::int
+         from admin_seats a
+         join per_conv c on c.conversation_id = a.conversation_id
+        where c.admins - 1 >= 1
+          and c.effective_admins - (case when a.holder_is_member then 1 else 0 end) = 0)
+                                                                                 as newly_blocked_leavers
+  `
+  const f = floor[0] ?? {}
+  console.log(`  vm_conversations                                   ${f.conversations}`)
+  console.log(`  vm_conversation_members (all seats)                ${f.seats}`)
+  console.log(`  active ADMIN seats                                 ${f.admin_seats}`)
+  console.log(`      held by an ACTIVE org member                   ${f.held_by_members}`)
+  console.log(`  (a) ORPHANED admin seats (holder left the org)     ${f.orphaned_admin_seats}`)
+  console.log(`  (b) NEWLY-BLOCKED LEAVERS (behaviour change)       ${f.newly_blocked_leavers}`)
+  console.log(`  (c) ALREADY-ORPHANED conversations                 ${f.already_orphaned_convs}`)
+
+  if ((f.admin_seats ?? 0) === 0) {
+    console.log('\n  NO ACTIVE ADMIN SEATS AT ALL on this database, so every number above is')
+    console.log('  VACUOUS. This run proves nothing about the floor — report it as')
+    console.log('  "unmeasurable here", never as "zero affected".')
+  } else {
+    check('CONTROL: at least one active admin seat POSITIVELY resolves to an active org member (proves the join works)',
+      (f.held_by_members ?? 0) > 0, `${f.held_by_members}/${f.admin_seats}`)
+  }
+
+  if ((f.orphaned_admin_seats ?? 0) > 0) {
+    console.log('\n  Detail — every active admin seat in a conversation that has an orphaned one:\n')
+    const detail = await sql`
+      select c.id as conversation_id, c.title, o.name as org_name,
+             m.id as seat_id, m.user_id, p.display_name,
+             exists (
+               select 1 from public.org_members om
+               where om.org_id = m.org_id and om.user_id = m.user_id and om.status = 'active'
+             ) as holder_is_member
+      from public.vm_conversation_members m
+      join public.vm_conversations c on c.id = m.conversation_id
+      join public.orgs o on o.id = m.org_id
+      left join public.profiles p on p.user_id = m.user_id
+      where m.role = 'admin' and m.status = 'active'
+        and m.conversation_id in (
+          select m2.conversation_id from public.vm_conversation_members m2
+          where m2.role = 'admin' and m2.status = 'active'
+            and not exists (
+              select 1 from public.org_members om
+              where om.org_id = m2.org_id and om.user_id = m2.user_id and om.status = 'active'
+            )
+        )
+      order by c.id, m.id
+      limit 50
+    `
+    for (const r of detail) {
+      console.log(`    conv ${r.conversation_id} "${r.title}" org=${r.org_name}`)
+      console.log(`      seat ${r.seat_id} holder=${r.display_name ?? r.user_id} active-org-member=${r.holder_is_member}`)
+    }
+  }
+
+  // -------------------------------------------------------------------------
   console.log(`\n${pass} control checks passed, ${fail} failed`)
   console.log('\nSummary — ORG dimension (table: total / orphaned):')
   for (const r of results) console.log(`  ${r.table.padEnd(28)} ${r.total} / ${r.orphaned}`)
   console.log('\nSummary — ROLE dimension (table: total / would-lose-access):')
   for (const r of roleResults) console.log(`  ${r.table.padEnd(28)} ${r.total} / ${r.missing}`)
+  console.log('\nSummary — FLOOR dimension (vm last-admin, docs/19 STILL-OPEN item 2):')
+  console.log(`  active admin seats             ${f.admin_seats}`)
+  console.log(`  orphaned admin seats           ${f.orphaned_admin_seats}`)
+  console.log(`  newly-blocked leavers          ${f.newly_blocked_leavers}`)
+  console.log(`  already-orphaned conversations ${f.already_orphaned_convs}`)
 } finally {
   await sql.end()
 }

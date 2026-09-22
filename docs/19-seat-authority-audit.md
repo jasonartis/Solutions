@@ -15,11 +15,14 @@ stopped being true as those items closed; corrected 2026-09-22 because a cold
 reader would otherwise treat all four as open, which is exactly the
 stale-header failure this repo keeps finding.
 **What is ACTUALLY open now lives in the 2026-09-15 section's "STILL OPEN"
-list** — #3 below, plus four items that section records: speed dating's role
-conjunct (a FOUNDER DECISION — no audience/mentor role exists), the
-vm/conversation last-admin floor, `cls_set_preferred_name`'s unenrolled-student
-half, and §5's `sd_in_event` status filter. **Read the dated sections at the END
-of this doc, not just this one.**
+list** — #3 below, plus the items that section records: speed dating's role
+conjunct (a FOUNDER DECISION — no audience/mentor role exists),
+`cls_set_preferred_name`'s unenrolled-student half, and §5's `sd_in_event`
+status filter. **The vm/conversation last-admin floor was the fourth and is now
+FIXED IN THE REPO (2026-09-22, `20260922030000`) but NOT ON PRODUCTION** — a
+migration is not closed until `migrate:prod` has run AND its prod verification
+passes, so it is neither open nor shipped; see the 2026-09-22 section.
+**Read the dated sections at the END of this doc, not just this one.**
 
 1. **The MODULE-ROLE half — SHIPPED, ON PRODUCTION AND PROD-VERIFIED
    2026-09-15** for matchmaking, nail salon and classroom (`20260915010000`;
@@ -845,7 +848,13 @@ accepts either refusal shape and asserts the row does not move.
    seat — a new role per seat type, "any speed-dating role", or does the seat
    genuinely stand alone for observers?** Answering it is a prerequisite for the
    audience/mentor observer surface, which is already on module 6's list.
-2. **The vm/conversation last-admin floor** — handed over by the Public Square
+2. ~~**The vm/conversation last-admin floor**~~ **FIXED IN THE REPO 2026-09-22
+   (`20260922030000_vm_admin_floor_requires_org_membership.sql`) — NOT YET ON
+   PRODUCTION.** `migrate:prod` has not run, so this is CLOSED IN THE REPO ONLY;
+   see the 2026-09-22 section at the end of this doc for what shipped, the
+   pre-flight measurement, and what is still owed before it can be called
+   SHIPPED. The original entry is kept verbatim below because the mechanism is
+   the durable part. Original: handed over by the Public Square
    session. **RE-VERIFIED STILL OPEN 2026-09-22**: neither
    `public.vm_pin_member` nor `public.vm_guard_last_conversation_admin` (the
    `20260914020000` DELETE guard) mentions `is_org_member` anywhere in its body.
@@ -926,3 +935,201 @@ snapshot, **including `scope_ref`** — a scoped grant restored as global is a
 WIDER grant wearing the right name, and a presence-only check misses it.
 Verified in CI's exact order on one database with no reset: **db 217/217 → e2e
 52/52**, typecheck 9/9, clean build. Ratchet floor raised 200 → 211.
+
+---
+
+## 2026-09-22 — STILL-OPEN item 2 CLOSED IN THE REPO: the last-admin floor now counts only seats that confer adminship
+
+**`20260922030000_vm_admin_floor_requires_org_membership.sql`. IN THE REPO ONLY
+— `migrate:prod` has NOT run.** Do not write SHIPPED/CLOSED for this until it
+has AND `scripts/prod-verify-vm-admin-floor.mts` passes against prod.
+
+### What was wrong
+
+`vm_pin_member` (BEFORE UPDATE) and `vm_guard_last_conversation_admin` (BEFORE
+DELETE, `20260914020000`) both decided "does this conversation keep an admin?"
+with byte-identical copies of:
+
+```sql
+where conversation_id = old.conversation_id
+  and role = 'admin' and status = 'active' and id <> old.id
+```
+
+Since `20260910040000` a seat confers nothing once its holder stops being an
+active org member — `vm_is_conv_admin` gained `is_org_member(m.org_id)`. The
+floor never learned that, so a DEPARTED admin still counted, and the only
+EFFECTIVE admin was free to leave. The guard that exists to prevent orphaning
+was what permitted it. `20260914020000`'s header had recorded this as a known
+inherited gap rather than leaving it silent.
+
+### Measured BEFORE writing SQL, because this guard now fires MORE often
+
+Every other migration in this audit took access AWAY from seats that should not
+have had it. This one takes away an ABILITY: someone who can leave today may not
+be able to afterwards. `scripts/prod-verify-seat-authority-orphans.mts` gained a
+**[4] FLOOR dimension** (`--local` capable) measuring three distinct
+populations — orphaned admin seats, newly-blocked leavers, already-stranded
+conversations.
+
+**Result against PROD: `vm_conversations` = 0, `vm_conversation_members` = 0.**
+The script reports that as **VACUOUS, not "zero affected"** — production has no
+visual-messaging data at all, so nobody can be affected because nobody uses the
+feature yet. That is a different and weaker claim than "the new predicate was
+proven harmless against real rows," and the distinction is the point. The seed
+creates no conversations either (`seed.ts` deletes them and makes none), so the
+behavioural proof lives entirely in `rls.test.ts`, which builds its own.
+
+### The shape of the fix, and the two things that shaped it
+
+1. **`is_org_member()` COULD NOT BE USED.** It answers about the CALLER
+   (`auth.uid()`); the floor asks about OTHER PEOPLE's seats, and no two-argument
+   membership helper exists anywhere in the schema. This is docs/22 §23.4's
+   lesson (1) recurring in a new place — the same reason `is_superadmin()` could
+   not absorb `org_accept_invite`'s call site. So the membership test is written
+   against the SEAT's own `user_id`/`org_id`, matching how every conjunct in
+   `20260910040000` was written. → **docs/03 #29.**
+
+2. **ONE definition, not a third copy.** The two functions held deliberate
+   byte-identical copies, justified in `20260914020000`'s header as drift
+   prevention. They did not drift — **they were identically WRONG, and the
+   defect had to be fixed twice.** The semantic definition moved into
+   `public.vm_seat_holds_admin_floor(member_id)`; both triggers call it. What
+   stays duplicated is two lines of scaffolding that carry no meaning.
+
+### The symmetry that is easy to miss — step 3 and step 4
+
+Each guard asks two questions, both of the form "is this seat a floor-holder?":
+(3) is the seat being removed/demoted one of them? (4) is there ANOTHER one?
+**Fixing only (4) would leave the two halves of one function using different
+definitions of the same phrase** — the exact defect being repaired,
+reintroduced one line lower.
+
+It matters behaviourally on the DELETE path only. `vm_members_delete_self` is a
+bare `user_id = auth.uid()` with no org conjunct (verified against `pg_policy`),
+so an ORPHANED admin can still reach the trigger to drop their own dead seat.
+With (3) unfixed they would be newly REFUSED — trapped holding a seat that
+grants them nothing, in a conversation they cannot even read. And that refusal
+would be pure friction: **running the floor check on a seat that does not count
+can only ever refuse spuriously**, since removing it cannot take the floor from
+1 to 0. So (3) is not a new carve-out; it is the removal of a check this
+migration makes vacuous. → **docs/03 #31.**
+
+### Two things the adversarial review changed (two narrow agents, word-capped)
+
+1. **An overstated claim in my own header, corrected.** It said the step-3 change
+   is "a no-op" on the UPDATE path. It is *almost* — the org-membership half
+   genuinely cannot bite there (reaching the floor needs `vm_is_conv_admin`,
+   which already requires the caller's membership), but the helper also folds in
+   `status = 'active'` on the seat being changed, where the old test was
+   `old.role = 'admin'` alone. A BANNED seat still carrying `role='admin'` used
+   to enter the floor check and no longer does. Benign for the step-3 reason
+   above, now stated precisely and **pinned by a test** rather than argued in a
+   comment.
+
+2. **A forward hazard nothing was enforcing. → docs/03 #30.** A multi-row
+   `DELETE` removing two admin seats is correctly refused, because a row-level
+   BEFORE trigger sees rows the same statement already processed. **But that
+   visibility is a property of the CALLING function's volatility, not the
+   helper's.** Both triggers are plpgsql and default VOLATILE. If either were
+   ever marked `stable` as a tidy-up, prior rows' deletions would become
+   invisible and one multi-row DELETE would silently orphan a conversation — no
+   error, no other test failing. The migration now ASSERTS both are volatile in
+   a DO block, and `prod-verify-vm-admin-floor.mts` checks it too.
+
+Review verdict otherwise: **SOUND, no defect in either direction.** Also
+confirmed clean: the helper never touches `auth.uid()`; its membership test is
+byte-equivalent to `is_org_member`'s body (no superadmin or pending disjunct),
+so the floor's definition of "counts" is exactly `vm_is_conv_admin`'s seat arm;
+and a seat's `org_id` can diverge from its conversation's (via
+`vm_pin_conversation`'s manager path) but the floor and `vm_is_conv_admin` both
+key on the SEAT's `org_id`, so they stay consistent — a pre-existing
+`vm_pin_conversation` matter, not a floor defect.
+
+### What this does NOT fix, stated so it is not mistaken for closed
+
+**Nothing fires on `org_members` DELETE.** A conversation can still reach zero
+effective admins the moment its SOLE admin leaves the org; no trigger walks the
+module rosters when a membership ends (this audit's central finding: nothing has
+a foreign key to `org_members`). Repair stays the manager escape. What changed is
+honesty — the floor no longer CONCEALS that state by counting the dead seat and
+letting the last real admin walk out on top of it. Closing the rest means
+reacting to org departure itself, which is docs/21's territory.
+
+### An existing test was relying on a seat that confers nothing
+
+`THE USER-DELETION CASCADE` handed adminship to a **freshly created user who had
+never joined demo-visual**, then deleted them. Under the new predicate that seat
+does not hold the floor, so the handover was correctly refused and the test
+failed. **Fixed in the FIXTURE, not the guard** — the doomed user now gets a real
+`org_members` row (it cascades away with them). Worth recording: the old test
+passed only because the floor counted authority nobody had, which is the defect
+in miniature.
+
+### Verification
+
+- **Pre-flight measurement** (above): prod vacuous, and it says so.
+- **Live before/after in rolled-back transactions**, as real users via
+  `request.jwt.claims`: with an orphan co-seated the effective last admin is
+  REFUSED on both the DELETE and UPDATE paths; with a REAL co-admin both are
+  ALLOWED; the orphan may still drop their own seat; the manager and cascade
+  escapes both hold; a multi-row DELETE of both admins is refused while deleting
+  one succeeds. One probe's fixture was itself defeated by `vm_pin_member`'s
+  `user_id` pin (an `update ... set user_id` was silently reverted, so the
+  "second admin" never existed) — caught by a fixture assertion, and the reason
+  every new test asserts its premise.
+- **10 new RLS tests.** Against the PRE-migration bodies **3 fail** — the three
+  bug tests, each reporting that the delete/demote SUCCEEDED — and 7 pass. The
+  two that pass either side are labelled in-line as regression guards, not
+  proofs, so nobody later mistakes them for teeth.
+- **CI's exact order, one database, no reset between: db 248/248 → e2e 52/52.**
+  Typecheck 9/9, clean build. Ratchet floor raised **227 → 237**.
+  **A SECOND identical run, made after comment-only edits plus the helper's
+  `service_role` revoke, scored db 248/248 → e2e 51/52** — and the honest
+  reading is recorded rather than the better number. The one failure is
+  `alice sees a generated week in the synagogue schedules module`, a module this
+  diff does not touch: `expect(heading 'Schedules').toBeVisible()` timing out at
+  CI's stricter 5s. **It passes in isolation in 8.8s**, and the server log shows
+  the external `myzmanim` API returning `NotAuthorizedSeeApiDashboardForDetails`
+  on EVERY date and falling back to hebcal, so that page does a failed external
+  round-trip per day before rendering. The known flake family (a slow assertion
+  after a navigation), with a plausible external cause — **and the expired-looking
+  myzmanim credential is worth its own look, independently of this slice.**
+- **`scripts/prod-verify-vm-admin-floor.mts` (NEW) — 34/34 local**, every check
+  with a control. It covers what `prod-verify-migration.ts` structurally cannot:
+  both triggers BOUND *and* ENABLED with the right timing bits, the helper's
+  attributes and real ACL, both guards calling the helper TWICE, the raw
+  predicate being GONE, self-block and both escapes still present, volatility,
+  and a live-data section that declares itself VACUOUS when there are no admin
+  seats.
+- `prod-verify-migration.ts` reports 4 failures against prod **and that is the
+  expected pre-deploy state** — the bodies differ because the migration has not
+  been pushed. It becomes the post-deploy check.
+
+### Two traps this slice re-confirmed, both already recorded
+
+- **`prosrc` matches COMMENTS.** Shortening the cascade-escape comment from
+  `user_id -> auth.users` to "user" made `vm_guard_last_conversation_admin` stop
+  matching the email ratchet's pattern, so its `COMMENT_MATCHES_ONLY` allow-list
+  entry went stale and `profiles-public-columns.test.ts` failed. The comment was
+  restored to name the three parent tables precisely — more informative anyway —
+  and now says why shortening it breaks a ratchet. The first draft of
+  `prod-verify-vm-admin-floor.mts` hit the same trap from the other side,
+  counting a comment mention as a third call site.
+- **A function's ACL looks closed locally and is open on prod.** The helper's
+  revoke list includes `service_role` deliberately: prod's
+  `ALTER DEFAULT PRIVILEGES FOR ROLE postgres` grants EXECUTE directly to
+  anon/authenticated/service_role at CREATE, which `revoke ... from public` does
+  not remove, and local has no such default. Measured rather than assumed —
+  prod's existing `vm_guard_last_conversation_admin` still shows
+  `service_role=yes` because `20260914020000` revoked only three roles. The two
+  trigger functions' ACLs are restated unchanged rather than tightened (a trigger
+  function cannot be usefully invoked directly, so the residual grant is inert).
+
+### Owed before this can be called SHIPPED
+
+1. `pnpm migrate:prod` (confirm the pending list with `--dry-run` first).
+2. `pnpm exec tsx scripts/prod-verify-vm-admin-floor.mts` (no `--local`) — expect
+   the live-data section to still declare itself VACUOUS until real conversations
+   exist on prod.
+3. `pnpm exec tsx scripts/prod-verify-migration.ts supabase/migrations/20260922030000_vm_admin_floor_requires_org_membership.sql`
+   — expect 0 failures once pushed.

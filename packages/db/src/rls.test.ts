@@ -7211,6 +7211,19 @@ describe('visual messaging: the last conversation admin cannot LEAVE (2026091402
     const doomedId = created!.user!.id
     const conv = await laMakeConv('RLS fixture — user deletion cascade')
 
+    // The doomed user must be a REAL active org member, not merely a seat
+    // holder. ADDED 2026-09-22 with 20260922030000: before that migration the
+    // floor counted any active admin seat, so a freshly-created user who had
+    // never joined demo-visual could take the handover — this fixture was
+    // quietly relying on a seat that confers no authority at all, which is the
+    // exact defect that migration closes. Without this row the handover below
+    // is (correctly) refused. The org seat cascades away with the user, so
+    // nothing is left behind.
+    const orgSeat = await laAdmin
+      .from('org_members')
+      .insert({ org_id: laOrg, user_id: doomedId, role: 'member', status: 'active' })
+    expect(orgSeat.error, `fixture org membership failed: ${orgSeat.error?.message}`).toBeNull()
+
     // Make the doomed user the SOLE admin. Order matters and the first draft of
     // this test got it wrong in an instructive way: it deleted charlie's seat
     // FIRST and ignored the result, so the new guard refused that delete (he
@@ -7271,6 +7284,324 @@ describe('visual messaging: the last conversation admin cannot LEAVE (2026091402
       .eq('conversation_id', conv)
       .eq('role', 'admin')
     expect(left?.map((r) => r.user_id), 'the wrong admin was removed').toEqual([laCharlieId])
+  })
+})
+
+// ---------------------------------------------------------------------------
+// THE LAST-ADMIN FLOOR COUNTS ONLY SEATS THAT CONFER ADMINSHIP (20260922030000)
+// — docs/19's STILL-OPEN item 2.
+//
+// Since 20260910040000 a module roster seat confers nothing once its holder
+// stops being an active org member. The floor never learned that: it counted
+// any `role='admin' and status='active'` seat, so a DEPARTED admin propped the
+// floor open and let the only EFFECTIVE admin leave — orphaning the very
+// conversation the guard exists to protect.
+//
+// FIXTURE CHOICE, and it is the load-bearing one: **bob@demo.local holds no
+// org_members row in demo-visual at all** (alice/charlie/dana are its only
+// members), so `is_org_member` is false for him — the identical predicate state
+// as someone whose seat was removed by `removeOrgMember`. One test below does
+// perform the literal departure (deleting dana's org seat and restoring it) so
+// the transition itself is proven, not just the end state.
+//
+// NON-VACUITY, asserted rather than assumed: the first test proves the OLD
+// predicate WOULD have counted bob's seat. Without that, every refusal below
+// could be passing for some unrelated reason and nobody would notice.
+// ---------------------------------------------------------------------------
+describe('visual messaging: a departed admin no longer holds the floor open (20260922030000)', () => {
+  const afServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
+
+  let afAdmin: SupabaseClient
+  let afCharlie: SupabaseClient
+  let afAlice: SupabaseClient
+  let afOrg: string
+  let afCharlieId: string
+  let afBobId: string
+  let afDanaId: string
+  const afConvIds: string[] = []
+
+  // A conversation whose admin seats are charlie (an ACTIVE org member) plus
+  // whichever extra holders are named — by default bob, the orphan.
+  const afMakeConv = async (title: string, extraAdmins: string[] = []) => {
+    const conv = await afAdmin
+      .from('vm_conversations')
+      .insert({ org_id: afOrg, title, created_by: afCharlieId })
+      .select('id')
+      .single()
+    if (conv.error) throw new Error(`fixture conversation failed: ${conv.error.message}`)
+    const id = conv.data!.id as string
+    afConvIds.push(id)
+    const rows = [afCharlieId, ...extraAdmins].map((uid) => ({
+      org_id: afOrg,
+      conversation_id: id,
+      user_id: uid,
+      role: 'admin',
+      status: 'active',
+    }))
+    const seats = await afAdmin.from('vm_conversation_members').insert(rows)
+    if (seats.error) throw new Error(`fixture seats failed: ${seats.error.message}`)
+    return id
+  }
+
+  beforeAll(async () => {
+    if (!afServiceKey) throw new Error('SUPABASE_SERVICE_ROLE_KEY not set — run `pnpm dev` once')
+    afAdmin = createClient(url, afServiceKey, { auth: { persistSession: false } })
+    afCharlie = await signIn('charlie@demo.local')
+    afAlice = await signIn('alice@demo.local')
+    afOrg = (await afAdmin.from('orgs').select('id').eq('slug', 'demo-visual').single()).data!.id as string
+    afCharlieId = await userIdOf('charlie@demo.local')
+    afBobId = await userIdOf('bob@demo.local')
+    afDanaId = await userIdOf('dana@demo.local')
+  })
+
+  afterAll(async () => {
+    for (const id of afConvIds) await afAdmin.from('vm_conversations').delete().eq('id', id)
+  })
+
+  it('CONTROL: bob is NOT an org member, yet the OLD predicate would have counted his seat', async () => {
+    // Both halves are the non-vacuity guard for this whole block. The first
+    // establishes that bob's seat is genuinely orphaned; the second proves the
+    // tests below would have PASSED (i.e. the leave would have succeeded)
+    // before this migration, so a green result here means something.
+    const conv = await afMakeConv('RLS fixture — floor control', [afBobId])
+
+    const { data: orgSeat } = await afAdmin
+      .from('org_members')
+      .select('status')
+      .eq('org_id', afOrg)
+      .eq('user_id', afBobId)
+      .maybeSingle()
+    expect(orgSeat, 'bob has an org seat in demo-visual — he is not an orphan and this block is void').toBeNull()
+
+    const { data: oldPredicate } = await afAdmin
+      .from('vm_conversation_members')
+      .select('user_id')
+      .eq('conversation_id', conv)
+      .eq('role', 'admin')
+      .eq('status', 'active')
+    expect(
+      oldPredicate?.map((r) => r.user_id).sort(),
+      'the fixture does not have two active admin seats — the old floor would not have been propped open',
+    ).toEqual([afCharlieId, afBobId].sort())
+  })
+
+  it('THE BUG: the only EFFECTIVE admin cannot leave while a DEPARTED admin is seated', async () => {
+    // Before 20260922030000 this DELETE succeeded, leaving a conversation whose
+    // sole remaining "admin" could not administer it.
+    const conv = await afMakeConv('RLS fixture — orphan props the floor', [afBobId])
+    const { error } = await afCharlie
+      .from('vm_conversation_members')
+      .delete()
+      .eq('conversation_id', conv)
+      .eq('user_id', afCharlieId)
+    expect(
+      error?.message ?? '',
+      'the effective last admin left; a departed admin is still propping the floor open',
+    ).toContain('at least one admin')
+
+    const { data: still } = await afAdmin
+      .from('vm_conversation_members')
+      .select('user_id')
+      .eq('conversation_id', conv)
+      .eq('user_id', afCharlieId)
+      .maybeSingle()
+    expect(still?.user_id, 'the seat is gone despite the refusal').toBe(afCharlieId)
+  })
+
+  it('THE BUG, UPDATE path: the only EFFECTIVE admin cannot self-demote either', async () => {
+    // vm_pin_member's floor, the sibling of the DELETE guard. Same defect, same
+    // fix — the two must not diverge.
+    const conv = await afMakeConv('RLS fixture — orphan props the floor (update)', [afBobId])
+    const { error } = await afCharlie
+      .from('vm_conversation_members')
+      .update({ role: 'participant' })
+      .eq('conversation_id', conv)
+      .eq('user_id', afCharlieId)
+    expect(error?.message ?? '', 'the effective last admin demoted himself').toContain('at least one admin')
+
+    const { data: after } = await afAdmin
+      .from('vm_conversation_members')
+      .select('role')
+      .eq('conversation_id', conv)
+      .eq('user_id', afCharlieId)
+      .single()
+    expect(after?.role, 'the demotion landed despite the refusal').toBe('admin')
+  })
+
+  it('CONTROL: a REAL co-admin still opens the floor — the guard did not simply seize up', async () => {
+    // The opposite failure. If the conjunct were wrong, EVERY admin would be
+    // trapped and the tests above would pass for the wrong reason.
+    const conv = await afMakeConv('RLS fixture — real co-admin', [afDanaId])
+    const { error } = await afCharlie
+      .from('vm_conversation_members')
+      .delete()
+      .eq('conversation_id', conv)
+      .eq('user_id', afCharlieId)
+    expect(error, `a real second admin no longer opens the floor: ${error?.message}`).toBeNull()
+  })
+
+  it('THE LITERAL DEPARTURE: dana leaving the ORG closes the floor she was holding open', async () => {
+    // The scenario docs/19 describes, performed rather than simulated: two real
+    // admins, one of them then leaves the org exactly as removeOrgMember does
+    // (apps/web/lib/org-members.ts:89-92 — a single delete that cascades to
+    // nothing), and the other is thereby trapped.
+    const conv = await afMakeConv('RLS fixture — dana departs', [afDanaId])
+
+    // Before: dana counts, so charlie may leave. Proven by the CONTROL above,
+    // so here we go straight to the departure.
+    const { data: danaSeat } = await afAdmin
+      .from('org_members')
+      .select('role, status')
+      .eq('org_id', afOrg)
+      .eq('user_id', afDanaId)
+      .single()
+    expect(danaSeat?.status, 'dana is not an active member to begin with — fixture is wrong').toBe('active')
+
+    try {
+      const removed = await afAdmin
+        .from('org_members')
+        .delete()
+        .eq('org_id', afOrg)
+        .eq('user_id', afDanaId)
+      expect(removed.error, `could not remove dana from the org: ${removed.error?.message}`).toBeNull()
+
+      const { error } = await afCharlie
+        .from('vm_conversation_members')
+        .delete()
+        .eq('conversation_id', conv)
+        .eq('user_id', afCharlieId)
+      expect(
+        error?.message ?? '',
+        'dana left the org and her dead seat still lets charlie orphan the conversation',
+      ).toContain('at least one admin')
+    } finally {
+      // Restore unconditionally: every later test in this file assumes the
+      // seeded demo-visual roster. A failure above must not cascade.
+      await afAdmin
+        .from('org_members')
+        .upsert(
+          { org_id: afOrg, user_id: afDanaId, role: danaSeat?.role ?? 'member', status: 'active' },
+          { onConflict: 'org_id,user_id' },
+        )
+    }
+
+    const { data: restored } = await afAdmin
+      .from('org_members')
+      .select('status')
+      .eq('org_id', afOrg)
+      .eq('user_id', afDanaId)
+      .maybeSingle()
+    expect(restored?.status, 'dana was not restored to demo-visual — later tests will misbehave').toBe('active')
+  })
+
+  it('THE DEPARTED ADMIN MAY STILL DROP THEIR OWN DEAD SEAT — step 3 and step 4 agree', async () => {
+    // The guard asks two questions: "is this seat holding the floor?" and "is
+    // there another?". Both now use the same definition. If only the second had
+    // been fixed, bob would be newly REFUSED here — trapped holding a seat that
+    // grants him nothing, in a conversation he cannot even read. Removing a
+    // seat that does not count can never take the floor from 1 to 0, so that
+    // refusal would be pure friction. Reachable because vm_members_delete_self
+    // is a bare `user_id = auth.uid()` with no org conjunct.
+    //
+    // MEASURED: this test passes against the PRE-migration bodies too (bob's
+    // seat counted then, and charlie's seat kept the floor either way), so it
+    // does not prove the fix — it guards against a half-fix that touched only
+    // step 4. Recorded so a future reader does not mistake it for a bug test.
+    const conv = await afMakeConv('RLS fixture — orphan drops own seat', [afBobId])
+    const bob = await signIn('bob@demo.local')
+    const { error } = await bob
+      .from('vm_conversation_members')
+      .delete()
+      .eq('conversation_id', conv)
+      .eq('user_id', afBobId)
+    expect(error, `a departed member is trapped holding a dead seat: ${error?.message}`).toBeNull()
+
+    const { data: left } = await afAdmin
+      .from('vm_conversation_members')
+      .select('user_id')
+      .eq('conversation_id', conv)
+    expect(left?.map((r) => r.user_id), 'the wrong seat went').toEqual([afCharlieId])
+  })
+
+  it('a BANNED seat still carrying role=admin is skipped, not counted', async () => {
+    // Named by the adversarial review of 20260922030000: the helper folds in
+    // `status = 'active'` on the seat being CHANGED, where the old branch test
+    // was `old.role = 'admin'` alone. Such a seat never satisfied
+    // vm_is_conv_admin, so it never counted toward the floor — asserting it
+    // here so the behaviour is pinned rather than argued in a comment.
+    //
+    // MEASURED: also passes against the PRE-migration bodies (a banned seat
+    // failed the old `status = 'active'` test as well), so this pins semantics
+    // rather than proving the fix.
+    const conv = await afMakeConv('RLS fixture — banned admin seat', [afDanaId])
+    const ban = await afAdmin
+      .from('vm_conversation_members')
+      .update({ status: 'banned' })
+      .eq('conversation_id', conv)
+      .eq('user_id', afDanaId)
+      .select('status')
+      .single()
+    expect(ban.data?.status, 'fixture could not ban dana’s seat').toBe('banned')
+
+    // dana's seat is role=admin but banned, so it does not count: charlie is
+    // now the only floor-holder and must be refused.
+    const { error } = await afCharlie
+      .from('vm_conversation_members')
+      .delete()
+      .eq('conversation_id', conv)
+      .eq('user_id', afCharlieId)
+    expect(error?.message ?? '', 'a banned admin seat is still holding the floor open').toContain('at least one admin')
+  })
+
+  it('THE MANAGER ESCAPE still holds with an orphaned admin seated', async () => {
+    // A vm manager is who REPAIRS an orphaned conversation, so this guard must
+    // never block them — alice is demo-visual's org owner.
+    const conv = await afMakeConv('RLS fixture — manager escape with orphan', [afBobId])
+    const { error } = await afAlice
+      .from('vm_conversation_members')
+      .delete()
+      .eq('conversation_id', conv)
+      .eq('user_id', afCharlieId)
+    expect(error, `the manager escape is gone: ${error?.message}`).toBeNull()
+  })
+
+  it('THE CASCADE ESCAPE still holds: the conversation can be deleted with an orphan seated', async () => {
+    // pg_trigger_depth() > 1. If the new helper had been placed ahead of the
+    // depth test, deleting a conversation would start raising again — the
+    // org_members bug 20260914020000 was written to avoid.
+    const conv = await afMakeConv('RLS fixture — cascade with orphan', [afBobId])
+    const { error } = await afAdmin.from('vm_conversations').delete().eq('id', conv)
+    expect(error, `deleting a conversation now trips the floor guard: ${error?.message}`).toBeNull()
+
+    const { data: seats } = await afAdmin
+      .from('vm_conversation_members')
+      .select('user_id')
+      .eq('conversation_id', conv)
+    expect(seats ?? [], 'the cascade left seats behind').toEqual([])
+  })
+
+  it('A MULTI-ROW DELETE cannot remove both effective admins in one statement', async () => {
+    // The guard fires per row, and a BEFORE trigger sees the rows the same
+    // statement has already deleted — so the second row's check finds no
+    // surviving floor-holder and raises. Worth pinning because the new helper
+    // is a STABLE function rather than an inline subquery, and if it ever
+    // stopped seeing in-statement deletions this would silently start passing.
+    const conv = await afMakeConv('RLS fixture — multi-row delete', [afDanaId])
+    const { error } = await afAdmin
+      .from('vm_conversation_members')
+      .delete()
+      .eq('conversation_id', conv)
+      .eq('role', 'admin')
+    expect(error?.message ?? '', 'both admins were removed in one statement').toContain('at least one admin')
+
+    // CONTROL: the same statement shape removing only ONE of them succeeds, so
+    // the refusal above is about the floor and not about multi-row deletes.
+    const ok = await afAdmin
+      .from('vm_conversation_members')
+      .delete()
+      .eq('conversation_id', conv)
+      .eq('user_id', afDanaId)
+    expect(ok.error, `a single-seat delete was refused too: ${ok.error?.message}`).toBeNull()
   })
 })
 

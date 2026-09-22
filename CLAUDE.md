@@ -501,15 +501,30 @@ current student's work). db 217/217 → e2e 52/52 in CI's order; ratchet floor 2
 **The blocking measurement is now SCRIPTED** (`prod-verify-seat-authority-orphans.mts` gained a
 ROLE dimension + `--local`): prod and local both 0 would-lose-access, with two of six rosters
 empty everywhere so their mapping rests on code-reading.
-**FOUR THINGS STAY OPEN, all in docs/19's 2026-09-15 section — one is a founder decision:**
+**THREE THINGS STAY OPEN, all in docs/19's 2026-09-15 section — one is a founder decision:**
 (1) **SPEED DATING'S ROLE CONJUNCT IS A FOUNDER DECISION** — `seat_type` is
 `participant|audience|mentor` and there is NO audience or mentor role, so requiring
 `participant` would revoke those seats outright; nothing breaks today (table empty everywhere,
 no app code sets `seat_type`) but it blocks the audience/mentor observer surface.
-(2) the vm/conversation **last-admin floor** (handed over by the Public Square session: both
-floors count `admin`+`active` with no `is_org_member`, so a departed member holds the floor open
-and the real last admin can leave) — same class, different failure mode, its own change.
-(3) `cls_set_preferred_name`'s unenrolled-student half. (4) §5's `sd_in_event` status filter.
+(2) `cls_set_preferred_name`'s unenrolled-student half. (3) §5's `sd_in_event` status filter.
+~~(4) the vm/conversation last-admin floor~~ **FIXED IN THE REPO 2026-09-22
+(`20260922030000`) — NOT ON PRODUCTION; `migrate:prod` has NOT run.** Both floors counted
+`admin`+`active` with no `is_org_member`, so a departed member held the floor open and the
+only EFFECTIVE admin could leave. Now both call ONE helper, `vm_seat_holds_admin_floor`.
+**Pre-flight measured first because this guard fires MORE often: prod has 0 conversations
+and 0 seats, and the script calls that VACUOUS, not "zero affected."** db 248/248 → e2e
+52/52 in CI's order (a second identical run scored e2e 51/52 — the failure is the
+SYNAGOGUE-SCHEDULES week render, untouched by this diff, passing in isolation in 8.8s;
+**the `myzmanim` API now returns `NotAuthorized` for every date and falls back to hebcal,
+which is worth its own look**); ratchet 227 → 237; new `scripts/prod-verify-vm-admin-floor.mts` 34/34
+local (the function-only verifier cannot see a trigger BINDING). **Owed: `migrate:prod`,
+then that script without `--local` + `prod-verify-migration.ts`.** Full story: docs/19's
+2026-09-22 section. **Three durable rules came out of it — docs/03 #29 (a caller-relative
+helper like `is_org_member` CANNOT answer about a third party), #30 (a trigger function's
+VOLATILITY is load-bearing: `stable` stops it seeing in-statement deletes, so a multi-row
+DELETE silently breaks a quorum guard), #31 (the two halves of one guard must share one
+definition — two byte-identical copies are NOT drift protection; these never drifted, they
+were identically wrong and had to be fixed twice).**
 **Two lessons worth carrying (full version in docs/19):** GLOBAL vs SCOPED grants are a CLIFF —
 `has_module_role` demands `scope_ref is null`, so gating a staff-facing surface on
 `cls_is_class_member` silently locks out professors/GAs, which is the regression BOTH adversarial

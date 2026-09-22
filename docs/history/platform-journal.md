@@ -4,6 +4,77 @@ The running, dated build journal that used to live in `CLAUDE.md`'s "## Current 
 section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every session)
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
+- **2026-09-22 (THE VM LAST-ADMIN FLOOR now counts only seats that confer adminship —
+  docs/19's STILL-OPEN item 2; Opus, one migration `20260922030000`, IN THE REPO ONLY,
+  `migrate:prod` NOT run).** `vm_pin_member` (BEFORE UPDATE) and
+  `vm_guard_last_conversation_admin` (BEFORE DELETE) both counted the floor as
+  `role='admin' and status='active' and id <> old.id`. Since `20260910040000` such a seat
+  confers NOTHING once its holder leaves the org, so a departed admin propped the floor open
+  and the only EFFECTIVE admin was free to leave — leaving a conversation whose sole
+  remaining "admin" could not add a member, rename it or moderate it. **The guard that exists
+  to prevent orphaning was what permitted it.** `20260914020000`'s header had recorded the
+  gap rather than hiding it.
+  **MEASURED BEFORE ANY SQL, because this guard now fires MORE often** — every other
+  migration in this audit removed access, this one removes an ABILITY, so someone who can
+  leave today may not be able to afterwards. Added a **[4] FLOOR dimension** to
+  `scripts/prod-verify-seat-authority-orphans.mts` (three populations: orphaned admin seats,
+  newly-blocked leavers, already-stranded conversations; `--local` capable). **Prod: 0
+  conversations, 0 seats — and the script reports that as VACUOUS, not "zero affected."**
+  Visual messaging has no prod data at all; the seed makes no conversations either, so the
+  behavioural proof lives entirely in `rls.test.ts`.
+  **Two things shaped the fix.** (1) **`is_org_member()` could not be used** — it answers
+  about the CALLER, and the floor asks about OTHER people's seats; no two-argument membership
+  helper exists. Same shape as docs/22 §23.4's `is_superadmin()`/`org_accept_invite` lesson →
+  **docs/03 #29**. (2) **The two byte-identical copies were not drift protection** — they
+  never drifted, they were identically WRONG and had to be fixed twice; the definition moved
+  into one helper `vm_seat_holds_admin_floor(member_id)` that both guards call → **docs/03
+  #31**, which also records the step-3/step-4 symmetry: fixing only "is there ANOTHER
+  floor-holder" and not "is THIS seat one" leaves one function using two definitions of the
+  same phrase. That mattered behaviourally — `vm_members_delete_self` is a bare
+  `user_id = auth.uid()`, so an orphaned admin CAN reach the trigger, and without the symmetry
+  they would be newly refused from dropping a seat that grants them nothing.
+  **TWO NARROW ADVERSARIAL AGENTS (word-capped, per the split-the-reviewer rule); verdict
+  SOUND, and both changed the work.** One caught an **overstated claim in my own header** —
+  I wrote that the step-3 change was "a no-op" on the UPDATE path; it is *almost*, but the
+  helper also folds `status='active'` into the seat being changed, so a BANNED seat still
+  carrying `role='admin'` no longer enters the floor check. Benign, now stated precisely and
+  pinned by a test. The other found **a forward hazard nothing enforced → docs/03 #30**: a
+  multi-row DELETE of two admin seats is correctly refused only because the CALLING trigger
+  functions are VOLATILE; mark either `stable` as a tidy-up and prior rows' deletions become
+  invisible, so one statement silently orphans a conversation with no error and no other test
+  failing. The migration now ASSERTS both are volatile in a DO block. (`org_members_guard_last_admin`
+  carries the identical unpinned exposure — verified volatile today.)
+  **AN EXISTING TEST WAS RELYING ON A SEAT THAT CONFERS NOTHING.** `THE USER-DELETION CASCADE`
+  handed adminship to a freshly created user who had never joined demo-visual; under the new
+  predicate that handover is correctly refused. **Fixed in the FIXTURE, not the guard** — the
+  defect in miniature.
+  **Verification: 10 new RLS tests, 3 of which FAIL against the pre-migration bodies** (each
+  reporting the delete/demote SUCCEEDED); the two that pass either side are labelled in-line
+  as regression guards, not teeth. Live before/after as real users in rolled-back
+  transactions — and one probe's own fixture was silently defeated by `vm_pin_member`'s
+  `user_id` pin (an `update ... set user_id` was reverted, so the "second admin" never
+  existed), caught only by a fixture assertion. **CI's exact order, one database, no reset:
+  db 248/248 → e2e 52/52**, typecheck 9/9, clean build, ratchet floor **227 → 237**. A
+  SECOND identical run after comment-only edits scored **e2e 51/52**, recorded rather than
+  the better number: the one failure is the SYNAGOGUE-SCHEDULES week render, a module this
+  diff does not touch, which **passes in isolation in 8.8s** and whose page does a failed
+  external round-trip per day because the `myzmanim` API now returns
+  `NotAuthorizedSeeApiDashboardForDetails` for every date and falls back to hebcal — **that
+  expired-looking credential deserves its own look.** New
+  `scripts/prod-verify-vm-admin-floor.mts` **34/34 local** — triggers BOUND *and* ENABLED with
+  the right timing bits, helper attributes and real ACL, both guards calling the helper twice,
+  the raw predicate gone, self-block and both escapes intact, volatility, and a live-data
+  section that declares itself vacuous when there are no admin seats.
+  **Two recorded traps re-confirmed.** `prosrc` matches COMMENTS: shortening a cascade comment
+  from `user_id -> auth.users` to "user" made the function stop matching the email ratchet, so
+  its `COMMENT_MATCHES_ONLY` allow-list entry went stale and `profiles-public-columns.test.ts`
+  failed (the verify script hit the same trap from the other side, counting a comment as a
+  third call site). And **a function ACL looks closed locally and is open on prod** — the new
+  helper's revoke names `service_role` deliberately, because prod's `ALTER DEFAULT PRIVILEGES`
+  grants EXECUTE to it at CREATE; measured, not assumed, from prod's existing
+  `vm_guard_last_conversation_admin` still showing `service_role=yes`.
+  **STILL OWED: `pnpm migrate:prod`, then `prod-verify-vm-admin-floor.mts` (no `--local`) and
+  `prod-verify-migration.ts` on the new file.** Full writeup: docs/19's 2026-09-22 section.
 - **2026-09-20 (VIEW-AS MODE 1 FOR SPEED-DATING'S `participant` — the voluntary blindfold;
   Opus, one migration `20260920010000`, no RLS change).** Founder question: can an admin who
   joins his own speed-dating event actually get the participant *experience*? Answer was no,

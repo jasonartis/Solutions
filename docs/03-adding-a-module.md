@@ -1196,6 +1196,70 @@ mechanism is proven in the managed environment, but it carries rules that are no
       where it went. A shipped migration's header is frozen; treat it as a
       historical record rather than living documentation.
 
+29. **A HELPER THAT ANSWERS ABOUT THE CALLER CANNOT ANSWER ABOUT A THIRD
+    PARTY — and reusing one for the wrong question compiles, runs, and is
+    wrong.** `is_org_member(org)`, `is_org_admin(org)`, `is_superadmin()`,
+    `shares_org_with(user)`, `vm_is_conv_admin(conv)` are all implicitly
+    `auth.uid()`. They answer *"may I?"*. A predicate that asks *"does THIS
+    ROW's holder still qualify?"* — counting a quorum, validating somebody
+    else's seat, deciding whether another person's row still confers anything —
+    is a different question, and there is often no two-argument helper for it.
+    - **The tell is a subquery over OTHER people's rows.** If the thing you are
+      about to call takes only a scope argument, but the row you are judging has
+      its own `user_id`, the helper cannot express it.
+    - **Three live instances now.** `is_superadmin()` could not absorb
+      `org_accept_invite`, which reads the INVITER's flag (docs/22 §23.4).
+      `find_module_peer` had the same shape. And the vm last-admin floor
+      (`20260922030000`) had to test membership against each SEAT's own
+      `user_id`/`org_id` rather than call `is_org_member`, because it asks
+      whether somebody ELSE still counts.
+    - → Write the membership test inline against the row's own columns (the way
+      every conjunct in `20260910040000` is written), or add a genuine
+      two-argument helper — but never reach for the caller-relative one because
+      it is there. **A false positive here reads as a working gate**: the
+      caller passes their own check and the third party is never examined.
+
+30. **A TRIGGER FUNCTION'S VOLATILITY IS LOAD-BEARING, and marking one `stable`
+    as a tidy-up can silently break a guard.** A row-level BEFORE trigger is
+    expected to see the rows the SAME outer statement has already processed —
+    that is what makes a per-row quorum guard survive a multi-row
+    `DELETE ... WHERE <many rows match>`. That visibility comes from the trigger
+    function being VOLATILE (plpgsql's default): each statement inside it takes
+    a fresh snapshot after a command-counter increment. Mark the function
+    `stable` and it stops taking new snapshots, prior rows' changes become
+    invisible, and **every row independently concludes the quorum still holds.**
+    - **The failure is silent in every direction.** No error, no refusal, and no
+      other test fails — the guard simply stops guarding under one statement
+      shape while passing every single-row test.
+    - A `stable` HELPER called from a volatile trigger is fine; it inherits the
+      caller's refreshed snapshot. **The volatility that matters is the
+      trigger function's own.**
+    - → When a trigger enforces a count/quorum/floor, **assert the volatility**
+      rather than trusting it (`20260922030000` raises from a DO block if either
+      guard is not `provolatile = 'v'`, and its prod-verify script checks the
+      same), and **write the multi-row-statement test** — a single-row test
+      cannot distinguish the two behaviours.
+    - Found by adversarial review 2026-09-22; nothing in the repo had pinned it,
+      and the same exposure exists for `org_members_guard_last_admin`.
+
+31. **THE TWO HALVES OF ONE GUARD MUST SHARE ONE DEFINITION.** A quorum guard
+    asks two questions: *"is the row being removed one of the things I am
+    counting?"* and *"is there ANOTHER one?"* Fix the second and leave the
+    first, and one function now uses two different definitions of the same
+    phrase — the original defect, reintroduced one line lower and much harder to
+    see because both halves look right in isolation.
+    - The corollary is a real behaviour: **running a quorum check on a row that
+      does not count can only ever refuse spuriously.** If the quorum is met the
+      action was allowed anyway; if it is not, the quorum is already lost and
+      refusing changes nothing except trapping a dead row. So widening the
+      "does this count?" test is not a new carve-out — it is deleting a check
+      the fix just made vacuous.
+    - → Extract the definition into ONE function and call it from both halves.
+      **Two byte-identical copies are not drift protection** — the vm floor
+      proved it: the copies never drifted, they were identically wrong, and the
+      defect had to be fixed twice (`20260922030000`; `20260914020000`'s header
+      had justified the duplication as safety).
+
 ## Hard rules
 
 1. **Never fork a platform primitive.** If the notifications/files/workflow primitive almost fits, extend it in `packages/platform` (benefiting every module) — don't copy it into the module.
