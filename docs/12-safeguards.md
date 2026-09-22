@@ -365,6 +365,35 @@ Found in a deliberate "what haven't we thought of" pass; ordered by urgency.
    clause above was true when written and is not any more. The obligation is
    therefore no longer "there is nowhere to put the wording" but **"the page is
    live and does not yet carry these lines"** — a concrete edit, not a build.
+   **⚠ THAT CLAIM IS ITSELF PROBABLY STALE — MEASURED 2026-09-22, NOT YET
+   DECIDED, DO NOT CLOSE OR EDIT THE PAGE WITHOUT THE FOUNDER.** Reading the
+   live page rather than this item: `apps/web/app/privacy/page.tsx`'s first
+   paragraph says *"We keep track of what happens on the platform — like when
+   you sign in and what you do within your organization — to keep things running
+   smoothly and to help keep your account safe."* That appears to cover BOTH
+   owed lines in substance — phase 1's authentication events ("when you sign
+   in") and phase 2's per-org activity ("what you do within your organization").
+   It has said so since commit `a0e388a`, **2026-09-02** — which is TWO DAYS
+   BEFORE the 2026-09-04 correction above was written asserting the page "does
+   not yet carry these lines". So the correction was already wrong when made,
+   and this item has since kept an obligation on the open list that may in fact
+   be substantively met.
+   **What is genuinely missing, if anything, is SPECIFICITY rather than
+   disclosure:** the simplified page dropped the 90-day retention figure and the
+   "who can see it" paragraph that the longer draft carried
+   (`docs/privacy-detailed-draft.md` still has both). Whether the plain sentence
+   is sufficient or wants those specifics back is a FOUNDER DECISION — it was
+   put to him 2026-09-22 and not yet answered, so nothing has been changed.
+   **A SECOND, UNRELATED AND PURELY FACTUAL DEFECT ON THE SAME PAGE:** it still
+   renders a banner reading *"DRAFT — for founder review, not yet published or
+   linked anywhere"*, and the file's header comment says the same. Both are
+   false: `6033ae9` added a `SiteFooter` linking `/privacy` from the
+   authenticated app layout and the login page on **2026-09-03**, and the page
+   has not been touched since `a881de1`, five minutes earlier the same day —
+   which is exactly why the banner was never updated. Every visitor who follows
+   the footer link lands on a page telling them it is not published. Removing it
+   is arguably a one-line factual correction, but it also reads as declaring the
+   policy final, so it was left for the founder rather than taken unilaterally.
    **A THIRD owed line joins the two below the moment ad-hoc visual-messaging
    groups ship:** their pending-invite table stores the email of a person who has
    NO account — no export, no data-browser presence, no deletion route, since
