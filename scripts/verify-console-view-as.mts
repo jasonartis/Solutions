@@ -51,6 +51,19 @@ if (!anonKey) throw new Error('SUPABASE_ANON_KEY not set and not in .env — run
 // seed.ts's remote-seed guard, which sets owner@demo.local's is_superadmin to
 // FALSE on any non-local run). Defaults reproduce the original local-only
 // behaviour exactly.
+//
+// NOT auto-loaded from .env.deploy on purpose: this script also runs LOCALLY
+// by default (no args, no env), and .env.deploy holds the founder's REAL
+// production credentials — silently preferring them here would make a plain
+// local run try to sign in as the prod superadmin against the LOCAL database
+// and fail confusingly. Export them by hand for a prod run instead (values
+// live in .env.deploy, mirrored in .env.accounts):
+//   SUPABASE_URL=https://<SUPABASE_PROJECT_REF>.supabase.co \
+//   SUPABASE_ANON_KEY=<SUPABASE_ANON_KEY from .env.deploy> \
+//   VERIFY_DEMO_PASSWORD=<PROD_DEMO_PASSWORD from .env.deploy> \
+//   VERIFY_SUPERADMIN_EMAIL=<SUPERADMIN_EMAIL from .env.accounts> \
+//   VERIFY_SUPERADMIN_PASSWORD=<SUPERADMIN_PASSWORD from .env.accounts> \
+//   pnpm exec tsx scripts/verify-console-view-as.mts
 const demoPassword = process.env.VERIFY_DEMO_PASSWORD ?? 'password123'
 const superadminEmail = process.env.VERIFY_SUPERADMIN_EMAIL ?? 'owner@demo.local'
 const superadminPassword = process.env.VERIFY_SUPERADMIN_PASSWORD ?? demoPassword

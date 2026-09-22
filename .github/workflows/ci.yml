@@ -100,14 +100,20 @@ jobs:
 
       # Supabase must be up BEFORE build: Next.js prerenders pages at build
       # time, which executes the Supabase client setup and needs real env vars.
-      - uses: supabase/setup-cli@v1
-        with:
-          version: latest
-      - run: supabase start
+      #
+      # No separate setup-cli action: the CLI is a pinned devDependency
+      # (package.json), installed above by `pnpm install --frozen-lockfile`
+      # like any other package. That used to be shadowed by a SECOND CLI here
+      # (supabase/setup-cli@v1, version: latest) that CI actually ran instead
+      # — two sources of truth that silently drifted (a real Postgres image
+      # mismatch was measured between them) and periodically failed CI outright
+      # on GitHub's release-API rate limit. `pnpm exec` always resolves to the
+      # lockfile-pinned version; bump it with `pnpm up` like any other dep.
+      - run: pnpm exec supabase start
 
       - name: Export Supabase env
         run: |
-          eval "$(supabase status -o env | grep -E '^(API_URL|ANON_KEY|SERVICE_ROLE_KEY|DB_URL)=')"
+          eval "$(pnpm exec supabase status -o env | grep -E '^(API_URL|ANON_KEY|SERVICE_ROLE_KEY|DB_URL)=')"
           {
             echo "SUPABASE_URL=$API_URL"
             echo "SUPABASE_ANON_KEY=$ANON_KEY"
