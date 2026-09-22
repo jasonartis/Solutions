@@ -650,6 +650,19 @@ vocabulary gets locked.
      say), a grant at the parent would cover every child and this reasoning would change.
      **Founder decision: that consistency is CORRECT and stays.** Admin access is uniform
      across modules; speed dating gets no admin-blind data class.
+
+     **The role-model questions this came out of, answered once so they are not re-derived.**
+     "Organizer" and "member" are two different axes, not a hierarchy: `org_members.role` is
+     `owner|admin|member` (do you belong to the organisation) and `module_roles.role` is
+     per-module (what you do inside it). A module role always IMPLIES active org membership,
+     since `has_module_role` calls `is_org_member` — so an organizer necessarily IS an org
+     member, and the question only runs one way. **Can one person hold two roles in the same
+     module — organizer AND participant, or professor AND student?** Structurally yes:
+     `role` is part of `module_roles_identity_uniq` (org_id, user_id, module_key, role,
+     scope_ref — NULLS NOT DISTINCT), so both rows coexist and nothing forbids it. Classroom
+     partially constrains its own case, because `enrollClassMember` replaces any prior grant
+     at that class's scope node — but a professor holding a GLOBAL grant plus a class-SCOPED
+     student grant is two different rows and is permitted.
   2. **`view-as-modules.ts` had banned mode 1 into `participant` citing "§8.1 point 7's
      end-user view-as ban" — a MISREADING of point 7**, which bans IMPERSONATION (mode 2) and
      ends with the words *"Mode 1 stays available everywhere."* Point 8 then describes this
