@@ -120,6 +120,16 @@ as current:**
 | **§18.3** | **RESOLVED by §19.1.** It flagged a blocking conflict; decision 5 closed it. |
 | **§19.4** | **BLOCKED by §20.2.** Sound reasoning, but it depends on the deferred entity-level question. |
 
+**FOUR MORE ADDED 2026-09-22, after the build — this map is the thing the header
+tells you to check, so it has to know about them:**
+
+| section | status |
+|---|---|
+| **§16.7** | **ITS ACCEPTANCE SENTENCE OVERSTATES THE RESULT — corrected in §23.3.** It says the two calls must afterwards return "Charlie's own row and nothing else". They do not: the three COLUMNS 42703, but he still reads eight NAMES. §20.3, written later, is the correct reading — the email slice does not touch `profiles_select_shared_org`. **The two calls themselves are still exactly right to run; only the predicted result was wrong.** |
+| **§13.3** | **DISCHARGED by §23.7.** Its publication/view caveat was honoured: both measured on PROD, and the local zero held. |
+| **§14.4** | **ALL THREE ITEMS CLOSED (§14.4's own banner).** Including the worker check it told you to do before building — done, and clear. |
+| **§11** | **EXECUTED.** It was the build order; the build happened. §23.1 lists what each step produced, §23.6 has the deploy procedure that step 4 turned out to need. |
+
 **Two errors of mine, corrected in place rather than deleted:** §3 R4 originally
 said seven call sites would "dissolve" on their own — they do not, and the honest
 total is ~22 (§14.1); and §6 claimed `orgs.kind` would have "nothing left to do"
