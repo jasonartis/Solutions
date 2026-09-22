@@ -60,7 +60,9 @@ TABLE.** The new `user_private` table granted without REVOKING first, because do
 "a CLI-created table inherits no API-role grants" was read as universal. It is
 environment-dependent: `pg_default_acl` differs by SCHEMA and by environment, and in CI
 `authenticated` ended up with TABLE-level UPDATE — which covers every column, because **a
-column grant cannot narrow a table grant**. An ordinary seeded user set his own
+column grant cannot narrow a table grant**. (**That last step is an INFERENCE, compelled but
+never queried — CI's catalog is gone. docs/03 #27 separates exactly what was measured from
+what was concluded; the fix is correct either way.**) An ordinary seeded user set his own
 `is_superadmin` to true. **It passed locally 231/231 and neither adversarial review found
 it.** Two things generalise: always `revoke all privileges ... from public, anon,
 authenticated, service_role` before granting; and **a single privilege error presents as a
