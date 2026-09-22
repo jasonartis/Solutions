@@ -1115,8 +1115,23 @@ mechanism is proven in the managed environment, but it carries rules that are no
       A new table inherits whatever that row says — and it varies by SCHEMA and
       by environment. Locally `public` gave no UPDATE, so a column-scoped
       `grant update (settings)` looked like the whole story and the RLS suite
-      passed **231/231**. In CI the effective grant included **table-level
+      passed **231/231**. **In CI the effective grant included table-level
       UPDATE**, which covers every column.
+    - **BE PRECISE ABOUT WHICH PART OF THAT IS MEASURED, because this convention
+      preaches measurement and originally stated an inference as a fact.**
+      MEASURED: local `pg_default_acl` (above); the two environments run
+      DIFFERENT Postgres images (local `17.6.1.141`, CI `17.6.1.167` — the CLI
+      picks the tag, `config.toml` pins only the major version); and **a 0-row
+      UPDATE of a forbidden column still raises `42501` at PLAN time**
+      (`aclcheck_error`), with a permitted column on the same 0-row update
+      raising nothing as the control. ALSO MEASURED, in CI: the write returned
+      NO error, and the user then behaved as a superadmin for 23 subsequent
+      tests. **INFERRED, and compelled by those but never queried directly:**
+      that CI's `authenticated` therefore held table-level UPDATE. CI's own
+      catalog was never read — the runner is gone. **The fix does not depend on
+      which mechanism it was**, since revoking first is correct under every
+      version of the story; the labelling does, because an unlabelled inference
+      inside a "measure, don't reason" rule is self-undermining.
     - **A COLUMN GRANT CANNOT NARROW A TABLE GRANT.** `grant update (settings)`
       only adds; it never subtracts from a wider `grant update`. This is the
       same arithmetic that killed v3 of the profile-visibility workstream
@@ -1169,6 +1184,17 @@ mechanism is proven in the managed environment, but it carries rules that are no
       the resolution was to keep it rather than revert and fail CI twice. **Say
       so out loud when this happens** — a silently edited migration is exactly
       what the guard exists to surface.
+    - **ALMOST REPEATED IT FIVE DAYS LATER, on 2026-09-22, while adding a
+      clarification to that same migration's HEADER COMMENT.** Caught before
+      committing, by checking `git status` rather than by remembering. **Two
+      things generalise: the guard does not distinguish a comment from a
+      statement** — any `M` under `supabase/migrations/` fails, and a
+      documentation-only edit to a shipped migration is therefore just as
+      blocked; **and the migration is now applied to PRODUCTION**, so unlike the
+      first incident the edit would NOT have been harmless to keep. **Put the
+      clarification in the convention or the design doc instead** — which is
+      where it went. A shipped migration's header is frozen; treat it as a
+      historical record rather than living documentation.
 
 ## Hard rules
 
