@@ -234,6 +234,17 @@ export type ExcludedFromSurface = {
  *   personal              — the VIEWER cannot read it (§8.1 point 1's strict sense)
  *   excluded              — the VIEWER can read it; we decline to render it
  *   unreadableByPosition  — the POSITION ITSELF cannot read it
+ *
+ * LOAD-BEARING AND EASY TO GET WRONG (recorded 2026-09-20, while building the
+ * first end-user surface): **only `role` is ever RENDERED.** The renderer
+ * iterates `surface.role` and nothing else (apps/web/lib/view-as.ts), so the
+ * other three lists are assertions and documentation — they declare WHY a table
+ * is absent, they never place it on a screen. The trap: `personal` reads as
+ * "shown to its owner, hidden upward", and it is not — a table marked
+ * `personal` is invisible in BOTH modes, including mode 1 where the viewer IS
+ * the data subject. So an end-user surface cannot use `personal` for anything
+ * it wants the caller to see about themselves; that is what forced
+ * sd_interest/sd_matches into `role` with a `selfMaskColumn` instead.
  * Collapsing any two lets a real RLS gap hide behind the wrong label — the
  * exact failure §8.1 point 1 warns about. Recording the absences is worth it
  * on its own: if a future migration adds a read arm, the entry turns into a

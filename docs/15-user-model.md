@@ -626,6 +626,28 @@ vocabulary gets locked.
      Proven live by calling it with `min_rank 99`, which no speed-dating role can satisfy
      (organizer is rank 2), and still getting `true`. **Scoping an organizer grant to one
      event does NOT close this** — scoping fixes the module-role path, not the admin path.
+
+     **What scoping WOULD and would not achieve, measured 2026-09-20 — recorded because the
+     founder asked precisely this and the answer rests on facts that are not obvious from
+     reading the predicates.** The question was: "if we scope organizers to specific events,
+     then they can be participants in other events with no extra privileges, correct?"
+     Answer: correct for the module-role path, and here is why it holds —
+     (a) `module_position_rank('speed-dating','organizer')` is **2**, exactly the `min_rank`
+     `sd_can_organize_event` demands, so a scoped organizer grant does satisfy it at its own
+     event;
+     (b) `module_scope_covers` is **path-prefix** based (`d.path like a.path || '%'`), so
+     coverage only runs ancestor → descendant; and
+     (c) **every speed-dating event's scope node is a ROOT** — measured: all 8 nodes have a
+     `path` consisting of just their own id, none nested under another, so event nodes are
+     SIBLINGS. Therefore event A's node genuinely does not cover event B's, and a
+     scoped-to-A organizer gets `sd_can_organize_event(org, B) = false`: in B they are an
+     ordinary participant seeing only their own interest and their own revealed matches.
+     **The caveat that makes it moot in practice:** `module_caller_covers_rank` short-circuits
+     on `is_org_admin` FIRST, so if the organizer is also an org admin or owner — which in a
+     small client is usually the same person — scoping changes nothing for them. That is the
+     path the blindfold addresses instead. Note (c) is a property of how sd events are created
+     today, not a guarantee: if event nodes were ever nested (a series containing its events,
+     say), a grant at the parent would cover every child and this reasoning would change.
      **Founder decision: that consistency is CORRECT and stays.** Admin access is uniform
      across modules; speed dating gets no admin-blind data class.
   2. **`view-as-modules.ts` had banned mode 1 into `participant` citing "§8.1 point 7's
