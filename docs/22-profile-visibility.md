@@ -784,13 +784,18 @@ surfaces from reading the two unique indexes side by side.
 
 ### 13.3 What the review did NOT establish — recorded so it is not assumed
 
-- **The publication and view checks were run against LOCAL ONLY.** Prod was
-  probed for grants and data, not for `pg_publication_rel` or `pg_views`.
-  Supabase Realtime is configured per-project, so **prod may well have tables
-  in `supabase_realtime` where local has none.** This is exactly the
-  local-cannot-catch-prod-drift class CLAUDE.md records. **Add both to
-  §11.7's prod-verify script; do not carry the local zero forward as a fact
-  about prod.**
+- ~~**The publication and view checks were run against LOCAL ONLY.**~~
+  **DISCHARGED 2026-09-17 — BOTH MEASURED ON PROD, AND THE LOCAL ZERO HELD.**
+  Prod: `pg_publication_tables` 0 rows (control: `supabase_realtime` exists);
+  non-system views only in `extensions`/`vault` (control: 146 views total).
+  Both are now permanent checks in `scripts/prod-verify-profile-visibility.mts`,
+  so this cannot silently reopen. **The caveat was right to exist even though
+  the answer matched** — Supabase Realtime is configured per PROJECT, so the
+  local zero genuinely did not entail the prod zero; it had to be measured.
+  Original text: Prod was probed for grants and data, not for
+  `pg_publication_rel` or `pg_views`, so prod may well have tables in
+  `supabase_realtime` where local has none — the local-cannot-catch-prod-drift
+  class CLAUDE.md records.
 - The two additions the review made to §11.6 and §11.7 were verified and are
   now folded in, including the finding that **`prosrc` matches on comments** —
   today's single `auth[.]users` hit is a comment inside
@@ -851,15 +856,33 @@ task ordering. §11 step 4 now says so explicitly.
 - **`profiles` is absent from the view-as surface map**, which corrected one of
   this document's own claims against Option A (§4.4).
 
-### 14.4 What BOTH reviews leave open
+### 14.4 What BOTH reviews leave open — **ALL THREE CLOSED 2026-09-17/22**
 
-- The publication / view checks are **LOCAL ONLY** (§13.3). Prod unverified.
-- Neither review examined the **worker** (`service_role` cannot read
-  `auth.users` — §2.2/§3 R9). Nothing found suggests the worker reads an email,
-  but that is an absence of evidence, not a cleared check. **Verify before
-  building.**
-- Neither review priced the **`settings` / `is_superadmin` widening** of §6.
-  That scope is a founder decision (F1) and would need its own pass.
+> **⚠ Do not read this list as outstanding work. Every item was discharged
+> during the build; the original text is kept because the reasoning is what the
+> later sections rest on.**
+
+- ~~The publication / view checks are **LOCAL ONLY** (§13.3). Prod unverified.~~
+  **MEASURED ON PROD (§23.7): `pg_publication_tables` returns 0 rows — control,
+  `supabase_realtime` exists, so the empty list is a real absence — and prod's
+  only non-system views live in `extensions`/`vault`, none in `public`, control
+  146 views total.** Both checks are now permanent in
+  `scripts/prod-verify-profile-visibility.mts`, so the class cannot reopen.
+- ~~Neither review examined the **worker**. Nothing found suggests the worker
+  reads an email, but that is an absence of evidence, not a cleared check.
+  **Verify before building.**~~ **CHECKED 2026-09-17 AND IT IS CLEAR — this
+  result existed nowhere but a chat transcript until now.** Every `profiles`
+  match in `apps/worker/src` is **`syn_export_profiles`**, a completely different
+  table (synagogue export profiles, in `jobs/synagogue-render.ts`), and there is
+  **no `email` match at all** in the worker's source. CONTROL: the worker source
+  tree exists and has files, so the zero is a real absence rather than a bad
+  path. **Consequence: `service_role` not being able to read `auth.users`
+  (§2.2) costs the worker nothing, because the worker never wanted an address.**
+- ~~Neither review priced the **`settings` / `is_superadmin` widening** of §6.
+  That scope is a founder decision (F1).~~ **F1 WAS ANSWERED (*"let them ride
+  along"*) and the widening SHIPPED** — both columns are in
+  `public.user_private` on production. Its real cost turned out to be one thing
+  no review predicted: the new table's ACL (docs/03 #27, §23.4 item 5).
 
 ---
 
@@ -1682,7 +1705,7 @@ order and nothing was merged in from §20.4 items 2 or 3.
 | 6 | **RLS cases with controls** (§11 step 5) | `rls.test.ts` — a new 8-case block, plus every one of the 16 `.eq('email', …)` fixtures re-pointed at an owner-connection resolver |
 | 7 | **Both ratchets** (§11 step 6, §21.3) | `packages/db/src/profiles-public-columns.test.ts` |
 | 8 | **The prod-verify script** (§11 step 7) | `scripts/prod-verify-profile-visibility.mts` — 62 checks, `--local` supported |
-| 9 | **The acceptance test a non-engineer can run** (§16.7) | `scripts/verify-profile-visibility-local.mts` |
+| 9 | **The acceptance test a non-engineer can run** (§16.7) | `scripts/verify-profile-visibility-local.mts` — **LOCAL ONLY, as its name says.** The prod run recorded in §23.6 was done ad-hoc against the prod URL with `PROD_DEMO_PASSWORD`; it was deliberately NOT turned into a committed script, because running it signs a demo user into production and writes real `login_events` (see §23.7). **The reproducible prod check is `scripts/prod-verify-profile-visibility.mts`**, which covers everything the acceptance test asserts and 60-odd checks more, read-only, with no sign-in |
 
 **Verified in CI's exact order** (reset → seed → db → e2e, same database, no
 reset between): **db 231/231 → e2e 52/52**, typecheck 9/9, module suites 4/4,
@@ -1925,6 +1948,19 @@ against PROD on 2026-09-17:
 
 Both checks are now permanent in `prod-verify-profile-visibility.mts`, so the
 local-cannot-catch-prod-drift class does not reopen.
+
+**ONE SIDE EFFECT OF VERIFYING ON PROD, recorded so it is not later mistaken for
+real activity.** The prod acceptance test and the live-user checks SIGNED IN on
+production as `charlie@demo.local`, `dana@demo.local` and the founder's
+superadmin account. That refreshed their `last_sign_in_at` and wrote real
+`login_events` rows on 2026-09-17 and 2026-09-22. **These are verification
+artefacts, not engagement.** Same class as the recorded `grace@demo.local`
+pollution in CLAUDE.md, and worth knowing before anyone reads
+`/console/engagement` and concludes the demo accounts came back to life. Related
+figure, re-measured 2026-09-22: **6 of 12 prod accounts have ever signed in**
+(CLAUDE.md, docs/12, docs/17 and docs/20 all still say "5 ever / 7 never" from
+2026-08-09 — the number drifted when the founder signed in on 2026-09-02, and it
+is illustrative in all four places, so the argument each makes is unaffected).
 
 ### 23.8 STILL OPEN AFTER THIS SLICE
 

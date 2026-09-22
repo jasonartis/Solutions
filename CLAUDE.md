@@ -745,7 +745,11 @@ Everything below is open but unranked:
   it** — the `deploy` job has `needs: check`, so a `READY` production deployment proves `check`
   was green. Query it with the `VERCEL_TOKEN` already in `.env.deploy`:
   `GET https://api.vercel.com/v6/deployments?limit=8` with `Authorization: Bearer <token>`,
-  and match `meta.githubCommitSha` against the commit. Gives state/target/sha/time per
+  and match `meta.githubCommitSha` against the commit. **To then CURL the running site, use the
+  stable alias `https://solutions-platform.vercel.app` — NOT the per-deployment
+  `*-<hash>-<team>.vercel.app` URL the API returns, which is behind Vercel deployment
+  protection and 302s every path including `/privacy` (measured 2026-09-22). The alias serves
+  200.** Handy liveness probe that needs no auth: `/privacy` is the only fully public page. Gives state/target/sha/time per
   deploy — answers "did it ship?" in seconds. **And the actual failure text IS readable from
   the terminal too, without `gh` and without a configured PAT (2026-08-21)** — the repo's
   `.env.accounts` `GITHUB_PAT` field has always been an unfilled template placeholder, not a
