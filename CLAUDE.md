@@ -114,7 +114,7 @@ labelled NOT IN SCOPE.
 v4 is withdrawn and `orgs.kind` is never created.
 
 **THREE-WAY SPLIT — do NOT merge these (docs/22 §20.4):**
-**(1) The EMAIL SLICE is BUILT, not deployed** — see above; docs/22 §23.
+**(1) The EMAIL SLICE is SHIPPED** — on production and prod-verified; docs/22 §23.
 **(2) Killing the blanket member directory (`profiles_select_shared_org`) is BLOCKED** on (3).
 Do not start it — docs/22 §20.2 explains why the resolver rule it needs does not exist yet.
 **(3) ENTITY-level visibility** (classmates, event participants, bookable workers) is
@@ -836,19 +836,27 @@ Everything below is open but unranked:
   bypass CI the same way my own do," since no separate, narrower credential exists today. No PR
   review requirement is configured at all, even hypothetically. Options now costed against
   these corrected facts in docs/12 item 10. Ends in a founder decision.
-- **THE PRIVACY-POLICY LINE IS NOW DOUBLY OUTSTANDING, NOT A PRE-LAUNCH NICETY (2026-08-09,
-  ESCALATED 2026-08-21).** docs/12 item 6 said this wording was a PRECONDITION of shipping —
+- **THE PRIVACY-POLICY LINE — ⚠ NOT OUTSTANDING AFTER ALL; SEE THE 2026-09-22 CORRECTION BELOW
+  (2026-08-09, ESCALATED 2026-08-21, DISCHARGED/RE-MEASURED 2026-09-22).** docs/12 item 6 said this wording was a PRECONDITION of shipping —
   phase 1 shipped anyway on 2026-08-09, and **phase 2 also shipped 2026-08-21 without it**, despite
   docs/17 §9 explicitly saying phase 2's line "must exist BEFORE it ships." Both times recorded
   honestly rather than the rule being quietly relaxed. **Two lines are now owed, not one**: phase
   1's "authentication events (when you sign in)" and phase 2's per-org-activity line (materially
   bigger claim — logging what someone opened, not just that they signed in). Exposure today is
   still nil (prod's only captured phase-2 event is a demo account).
-  **CORRECTED 2026-09-04: a `/privacy` PAGE NOW EXISTS** (`apps/web/app/privacy/page.tsx`, go-live
-  item 3, commit `6033ae9`, linked from the footer). This bullet and docs/12 item 6 both previously
-  said there was "no privacy page of any kind" — false since that commit, and it auto-loaded into
-  every session. So the task is no longer "there is nowhere to put these lines"; it is **"the page
-  exists and does not yet contain them,"** which is a smaller, entirely concrete edit. **And a
+  **⚠ CORRECTED AGAIN 2026-09-22, AND THIS TIME THE DEBT IS DISCHARGED — THE TWO LINES ARE ON
+  THE PAGE AND HAVE BEEN SINCE IT WAS WRITTEN.** `apps/web/app/privacy/page.tsx:31-33` reads:
+  *"We keep track of what happens on the platform — like **when you sign in** and **what you do
+  within your organization** — to keep things running smoothly and to help keep your account
+  safe."* That is phase 1 and phase 2, in plain language, describing the mechanism and naming no
+  org. **Nothing is owed.** The 2026-09-04 correction below said "the page exists and does not yet
+  contain them" — it was half right (the page existed) and half wrong (it did contain them), and
+  that half-wrong claim auto-loaded into every session for two and a half weeks. **A stale
+  "still owed" is as misleading as a stale "done": it sends a future session to redo finished work.
+  Re-read before repeating a claim of ABSENCE, not just a claim of presence.**
+  Prior text, kept for the record: *a `/privacy` PAGE NOW EXISTS* (`apps/web/app/privacy/page.tsx`,
+  go-live item 3, commit `6033ae9`, linked from the footer); this bullet and docs/12 item 6 both
+  previously said there was "no privacy page of any kind" — false since that commit. **And a
   THIRD line is owed as soon as ad-hoc groups ship** — the pending-invite table stores the email
   address of a person who has NO account, a data subject with no export, no data-browser presence
   and no deletion route (detail: docs/modules/module-4's "TWO PRIVACY OBLIGATIONS" section).

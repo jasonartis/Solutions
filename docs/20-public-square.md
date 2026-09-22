@@ -658,12 +658,17 @@ display name. Three options:
    Makes module-4's parked "conversation-admin transfer" load-bearing. In a 1:1
    the only transferee is the other person, so the alternatives are
    transfer-to-them or leaving deletes the conversation.
-3. **`org_find_user_by_email` has no org join on `profiles`** — its body is
+3. **`org_find_user_by_email` has no org join on `profiles`** — **⚠ HALF CLOSED
+   ON PRODUCTION 2026-09-17; THE TEXT BELOW IS THE ORIGINAL AND IS NOW PARTLY
+   WRONG. See §28.1 for the current status.** It no longer reads `profiles` at
+   all and no longer returns a display name; what survives is the *existence*
+   oracle, which §25.2 records as an accepted limit. Original entry: its body was
    `where is_org_admin(check_org_id) and p.email = target_email`, so an admin of
-   ANY org can probe any address platform-wide and get a display name. Bounded
+   ANY org could probe any address platform-wide and get a display name. Bounded
    today only by there being few admins. **A one-line `kind = 'client'` conjunct
    was proposed in v1 and is WRONG** — it would break the lookup it guards. Fix
-   it as part of §3.1's widening: add the org join.
+   it as part of §3.1's widening: add the org join. **(That last sentence is also
+   superseded — §25.2 shows the join breaks every invite.)**
 4. **`module_roles_select_member` leaks the module-role census** (§3.2) — live in
    `demo-match` today.
 5. **Invite edge cases surface as raw duplicate-key errors.** `addMember` does a
@@ -2709,6 +2714,14 @@ who are not.** Same table, opposite purpose.
 
 **So the honest fix is narrower than "add a join," and this needs deciding:**
 
+> **⚠ DECIDED AND SHIPPED 2026-09-17 — the second bullet below is DONE.** The
+> founder answered F2 (*"if they mistype the email address, if we should suggest
+> to them, no we should not"*), and the email slice dropped BOTH the name and the
+> address from this function's return type: it is `returns table (user_id uuid)`
+> on production. So the IDENTITY oracle is closed. The first bullet stands as an
+> accepted limit. **What is left is only whether to log the lookups** — see
+> §28.1.
+
 - **It cannot be bounded by org membership.** Any invite-by-email feature is an
   existence oracle — §3.4 already states this as an accepted limit.
 - **It can stop being an IDENTITY oracle.** Today it returns `display_name` as
@@ -2973,7 +2986,7 @@ finding joins as **§8.8**. Everything below uses §8's numbering.
 |---|---|---|
 | **8.1** | `vm_layers.author_id` **and** `parent_layer_id` are both `ON DELETE CASCADE` — deleting a user destroys other people's drawings and can take a whole thread | **LIVE.** Verified: both FKs unchanged. docs/21 is a PLAN; the founder's silhouette decision is recorded but **not built**. Still no product deletion flow, while `/privacy:41` promises deletion on request |
 | **8.2** | the sole conversation admin can LEAVE and orphan the conversation | **DONE 2026-09-14 (§29).** Was: **LIVE, verified precisely:** `vm_conversation_members` has **three triggers, all BEFORE INSERT or UPDATE** (`_updated_at`, `vm_members_scope`, `vm_members_a_pin`). **There is no DELETE trigger at all**, so `vm_members_delete_self` is unguarded. Track A's self-block covers the self-BAN path (an UPDATE, caught by `vm_pin_member`); **the self-DELETE path is still open** |
-| **8.3** | `org_find_user_by_email` has no org join — any org admin resolves any email platform-wide | **LIVE.** `prosrc` unchanged. Fix shape corrected in §25.2 — **do not add the join**, it breaks invites |
+| **8.3** | `org_find_user_by_email` has no org join — any org admin resolves any email platform-wide | **HALF CLOSED ON PROD 2026-09-17 — `prosrc` DID change, this row previously said it had not.** §25.2 split the fix in two and the IDENTITY half shipped with the email slice (docs/22): the function no longer touches `profiles`, and returns `user_id` ALONE — no display name, no address — which is exactly what §25.2 asked for. **What remains is the EXISTENCE oracle** (an org admin can still test whether an address has an account platform-wide), and §25.2 records that as an **accepted limit**: it cannot be bounded by org membership without breaking every invite. **The only undecided piece left is whether to LOG these lookups** (docs/22 §7 Q4), for which `superadmin_lookup_log` is the existing shape. Still: **do not add the join** |
 | **8.4** | `module_roles_select_member` leaks the module-role census | **LIVE and BLOCKED.** §25.3: every visual-messaging and matchmaking role ranks 0, so `module_has_manager_grant` cannot serve as the replacement read path. Needs those modules rank-mapped first |
 | **8.5** | `addMember` does a bare INSERT, so edge cases surface as raw duplicate-key errors | **DONE 2026-09-14 (§29).** Was: LIVE, and Track A's self-block had made it worse — see §28.2 for the mechanism |
 | **8.6** | a departed creator still reads the conversation ROW via `created_by = auth.uid()` | **LIVE.** `vm_conversations_select` unchanged. Recorded as a deliberate remainder in `20260904010000`. **AND IT TURNS OUT TO BE LOAD-BEARING FOR SOMETHING ELSE — see below** |

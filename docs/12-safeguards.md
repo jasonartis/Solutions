@@ -380,9 +380,34 @@ Found in a deliberate "what haven't we thought of" pass; ordered by urgency.
    **PHASE 2 SHIPPED TO PRODUCTION 2026-08-21 WITHOUT THAT WORDING — recorded
    honestly, same as phase 1 above, not quietly relaxed.** `20260810010000_activity_events.sql`
    is applied and ~48 `recordActivity()` call sites across all 6 modules are live; capture is
-   proven working with one real recorded event. **The obligation is now doubly outstanding**: both
+   proven working with one real recorded event. ~~**The obligation is now doubly outstanding**: both
    phase 1's login-timestamp line AND phase 2's per-org-activity line are owed, and there is still
-   no privacy policy page of any kind to put either on. Exposure today remains nil for the same
+   no privacy policy page of any kind to put either on.~~
+   **⚠ CORRECTED 2026-09-22 — THE TWO OWED LINES ARE ALREADY ON THE PAGE, AND HAVE
+   BEEN SINCE IT WAS WRITTEN.** This was re-read rather than assumed.
+   `apps/web/app/privacy/page.tsx:31-33` says, verbatim:
+
+   > *"We keep track of what happens on the platform — like **when you sign in**
+   > and **what you do within your organization** — to keep things running
+   > smoothly and to help keep your account safe."*
+
+   That is phase 1 (authentication events) and phase 2 (per-org activity), in the
+   plain-language register the founder asked for, describing the MECHANISM and
+   naming no org. **So neither line is owed; the debt was discharged by
+   `6033ae9` at the moment the page was created, and both this file and
+   CLAUDE.md went on asserting it for two and a half weeks afterwards.**
+   **The lesson is the one docs/03 already records in another form: a claim that
+   something is MISSING needs re-reading before it is repeated, exactly like a
+   claim that something is present.** A stale "still owed" is as misleading as a
+   stale "done" — it sends a future session to do work that exists, and it
+   discredits the rest of the list.
+   **What the page genuinely does NOT say is anything about what OTHER MEMBERS
+   can see of you.** That is not part of this debt (it is a visibility statement,
+   not a data-collection disclosure), but it is now a true and concrete sentence
+   thanks to docs/22, and is tracked separately.
+   **The THIRD line — the pending-invite address of a person with NO account —
+   remains genuinely owed, and only once ad-hoc groups ship.**
+ Exposure today remains nil for the same
    reason as phase 1 — the one real captured phase-2 event is a demo account
    (`dana@demo.local`), and prod otherwise holds only the 12 demo/founder accounts already
    described above. **This is the single most concrete "must happen before a real customer"

@@ -7,7 +7,7 @@
 // detailed version covering the same facts is kept at
 // docs/privacy-detailed-draft.md for later — an audit, a legal review, or a
 // larger/more regulated client that needs it.
-const LAST_UPDATED = 'September 3, 2026'
+const LAST_UPDATED = 'September 22, 2026'
 
 export default function PrivacyPage() {
   // Platform identity — filled in via .env.deploy (see scripts/dev.ts
@@ -31,6 +31,12 @@ export default function PrivacyPage() {
           We keep track of what happens on the platform — like when you sign in and what you do
           within your organization — to keep things running smoothly and to help keep your
           account safe.
+        </p>
+        <p>
+          Other members of an organization you belong to can see your display name. They cannot
+          see your email address. Your address is only ever shared where you'd expect it — with
+          your organization's administrators, and where a feature exists to put two people in
+          touch and you've both opted in.
         </p>
         <p>
           If anyone on our staff ever needs to look at your account (for example, to help with a
