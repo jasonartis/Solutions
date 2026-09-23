@@ -19,9 +19,8 @@ list** — #3 below, plus the items that section records: speed dating's role
 conjunct (a FOUNDER DECISION — no audience/mentor role exists),
 `cls_set_preferred_name`'s unenrolled-student half, and §5's `sd_in_event`
 status filter. **The vm/conversation last-admin floor was the fourth and is now
-FIXED IN THE REPO (2026-09-22, `20260922030000`) but NOT ON PRODUCTION** — a
-migration is not closed until `migrate:prod` has run AND its prod verification
-passes, so it is neither open nor shipped; see the 2026-09-22 section.
+SHIPPED, ON PRODUCTION AND PROD-VERIFIED** (built 2026-09-22, deployed and
+verified 2026-09-23, `20260922030000`) — see the 2026-09-22 section.
 **Read the dated sections at the END of this doc, not just this one.**
 
 1. **The MODULE-ROLE half — SHIPPED, ON PRODUCTION AND PROD-VERIFIED
@@ -848,12 +847,12 @@ accepts either refusal shape and asserts the row does not move.
    seat — a new role per seat type, "any speed-dating role", or does the seat
    genuinely stand alone for observers?** Answering it is a prerequisite for the
    audience/mentor observer surface, which is already on module 6's list.
-2. ~~**The vm/conversation last-admin floor**~~ **FIXED IN THE REPO 2026-09-22
-   (`20260922030000_vm_admin_floor_requires_org_membership.sql`) — NOT YET ON
-   PRODUCTION.** `migrate:prod` has not run, so this is CLOSED IN THE REPO ONLY;
-   see the 2026-09-22 section at the end of this doc for what shipped, the
-   pre-flight measurement, and what is still owed before it can be called
-   SHIPPED. The original entry is kept verbatim below because the mechanism is
+2. ~~**The vm/conversation last-admin floor**~~ **FIXED, ON PRODUCTION AND
+   PROD-VERIFIED 2026-09-23** (`20260922030000_vm_admin_floor_requires_org_membership.sql`;
+   `prod-verify-vm-admin-floor.mts` 32/32, `prod-verify-migration.ts` 0
+   failures). See the 2026-09-22 section at the end of this doc for the
+   pre-flight measurement, the design and the deploy evidence. The original
+   entry is kept verbatim below because the mechanism is
    the durable part. Original: handed over by the Public Square
    session. **RE-VERIFIED STILL OPEN 2026-09-22**: neither
    `public.vm_pin_member` nor `public.vm_guard_last_conversation_admin` (the
@@ -938,11 +937,13 @@ Verified in CI's exact order on one database with no reset: **db 217/217 → e2e
 
 ---
 
-## 2026-09-22 — STILL-OPEN item 2 CLOSED IN THE REPO: the last-admin floor now counts only seats that confer adminship
+## 2026-09-22 — STILL-OPEN item 2 CLOSED: the last-admin floor now counts only seats that confer adminship
 
-**`20260922030000_vm_admin_floor_requires_org_membership.sql`. IN THE REPO ONLY
-— `migrate:prod` has NOT run.** Do not write SHIPPED/CLOSED for this until it
-has AND `scripts/prod-verify-vm-admin-floor.mts` passes against prod.
+**`20260922030000_vm_admin_floor_requires_org_membership.sql` — SHIPPED, ON
+PRODUCTION AND PROD-VERIFIED 2026-09-23** (`migrate:prod` applied, then
+`prod-verify-vm-admin-floor.mts` **32/32** and `prod-verify-migration.ts`
+**0 failures**, all three bodies matching). Evidence and one operational gotcha
+are in the SHIPPED section at the end of this entry.
 
 ### What was wrong
 
@@ -1125,11 +1126,39 @@ in miniature.
   trigger functions' ACLs are restated unchanged rather than tightened (a trigger
   function cannot be usefully invoked directly, so the residual grant is inert).
 
-### Owed before this can be called SHIPPED
+### SHIPPED AND PROD-VERIFIED 2026-09-23
 
-1. `pnpm migrate:prod` (confirm the pending list with `--dry-run` first).
-2. `pnpm exec tsx scripts/prod-verify-vm-admin-floor.mts` (no `--local`) — expect
-   the live-data section to still declare itself VACUOUS until real conversations
-   exist on prod.
-3. `pnpm exec tsx scripts/prod-verify-migration.ts supabase/migrations/20260922030000_vm_admin_floor_requires_org_membership.sql`
-   — expect 0 failures once pushed.
+Backup taken first (`backups/2026-09-23T14-59-52`, 1.7 MB data + 383 KB schema).
+`--dry-run` listed exactly one pending migration — this one. Then `migrate:prod`,
+then both verifiers:
+
+- **`scripts/prod-verify-vm-admin-floor.mts` against PROD: 32/32, 0 failed.**
+  Both triggers BOUND and ENABLED with the right timing bits, both guards calling
+  the helper twice, the raw predicate gone, self-block and both escapes intact,
+  both guards VOLATILE.
+- **`prod-verify-migration.ts`: 0 failures**, all three function bodies
+  `body=match` against prod. Its 3 warnings are the benign
+  no-api-role-EXECUTE class (the same one `handle_new_user` raises) — correct for
+  two trigger functions and an internal helper nothing calls directly.
+- **[4] live data on prod is still VACUOUS** — 0 conversations, 0 admin seats —
+  and the script says so rather than reporting "0 affected". The structural
+  guarantee is proven on prod; the behavioural one remains local-only until the
+  first real conversation exists.
+
+**THE `service_role` REVOKE WAS VINDICATED BY THE DEPLOY, and this is the part
+worth keeping.** On prod the new helper's ACL reads `postgres=X/postgres` —
+nothing else. Had the revoke named only `public, anon, authenticated` (which
+looks complete, and is what `20260914020000` did), prod's
+`ALTER DEFAULT PRIVILEGES` would have left `service_role=X/postgres` behind, and
+**local could never have shown it.** The proof it would have: prod's existing
+`vm_guard_last_conversation_admin` still reads
+`postgres=X/postgres | service_role=X/postgres` in the same run — the residual
+grant this migration deliberately did not tidy. Two functions, same file, same
+day, different ACLs, and the difference is exactly one word in a revoke list.
+
+**One operational note on `migrate:prod` itself:** it printed a loud
+`Failed to read certificate file ... pgdelta-target-ca.crt (ENOENT)` stack trace
+and then `Finished supabase db push.` **The push SUCCEEDED** — the error comes
+from a pgdelta preview step, not the apply. Confirmed by re-running `--dry-run`
+("Remote database is up to date") and by both verifiers above. Do not read that
+trace as a failed migration, and do not re-run the push on account of it.

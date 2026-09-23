@@ -5,8 +5,11 @@ section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every 
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
 - **2026-09-22 (THE VM LAST-ADMIN FLOOR now counts only seats that confer adminship —
-  docs/19's STILL-OPEN item 2; Opus, one migration `20260922030000`, IN THE REPO ONLY,
-  `migrate:prod` NOT run).** `vm_pin_member` (BEFORE UPDATE) and
+  docs/19's STILL-OPEN item 2; Opus, one migration `20260922030000`, **SHIPPED AND
+  PROD-VERIFIED 2026-09-23** — `migrate:prod` after a backup, then
+  `prod-verify-vm-admin-floor.mts` **32/32 on prod** and `prod-verify-migration.ts`
+  **0 failures**, all three bodies matching; prod's live-data section still VACUOUS at 0
+  conversations and says so).** `vm_pin_member` (BEFORE UPDATE) and
   `vm_guard_last_conversation_admin` (BEFORE DELETE) both counted the floor as
   `role='admin' and status='active' and id <> old.id`. Since `20260910040000` such a seat
   confers NOTHING once its holder leaves the org, so a departed admin propped the floor open
@@ -73,8 +76,17 @@ decision log, docs/03 conventions, docs/12 safeguards) — this is the chronolog
   helper's revoke names `service_role` deliberately, because prod's `ALTER DEFAULT PRIVILEGES`
   grants EXECUTE to it at CREATE; measured, not assumed, from prod's existing
   `vm_guard_last_conversation_admin` still showing `service_role=yes`.
-  **STILL OWED: `pnpm migrate:prod`, then `prod-verify-vm-admin-floor.mts` (no `--local`) and
-  `prod-verify-migration.ts` on the new file.** Full writeup: docs/19's 2026-09-22 section.
+  **THE DEPLOY (2026-09-23) ADDED TWO FACTS.** (a) **The `service_role` revoke was vindicated
+  on prod**: the new helper's ACL reads `postgres=X/postgres` alone, while the older
+  `vm_guard_last_conversation_admin` in the SAME verifier run still reads
+  `service_role=X/postgres` — because `20260914020000` revoked only three roles and prod's
+  `ALTER DEFAULT PRIVILEGES` grants the fourth at CREATE. Two functions, one file, one day,
+  different ACLs, and the difference is one word in a revoke list that local can never
+  surface. (b) **`migrate:prod` printed a loud `Failed to read certificate file ...
+  pgdelta-target-ca.crt` ENOENT stack trace and then `Finished supabase db push` — the push
+  SUCCEEDED.** That is a pgdelta PREVIEW step, not the apply; confirmed by a follow-up
+  `--dry-run` ("Remote database is up to date") and by both verifiers. Do not read it as a
+  failed migration. Full writeup: docs/19's 2026-09-22 section.
 - **2026-09-20 (VIEW-AS MODE 1 FOR SPEED-DATING'S `participant` — the voluntary blindfold;
   Opus, one migration `20260920010000`, no RLS change).** Founder question: can an admin who
   joins his own speed-dating event actually get the participant *experience*? Answer was no,

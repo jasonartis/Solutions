@@ -507,8 +507,13 @@ empty everywhere so their mapping rests on code-reading.
 `participant` would revoke those seats outright; nothing breaks today (table empty everywhere,
 no app code sets `seat_type`) but it blocks the audience/mentor observer surface.
 (2) `cls_set_preferred_name`'s unenrolled-student half. (3) §5's `sd_in_event` status filter.
-~~(4) the vm/conversation last-admin floor~~ **FIXED IN THE REPO 2026-09-22
-(`20260922030000`) — NOT ON PRODUCTION; `migrate:prod` has NOT run.** Both floors counted
+~~(4) the vm/conversation last-admin floor~~ **SHIPPED, ON PRODUCTION AND PROD-VERIFIED
+2026-09-23 (`20260922030000`)** — `migrate:prod` applied after a backup, then
+**`prod-verify-vm-admin-floor.mts` 32/32 on prod** and `prod-verify-migration.ts`
+**0 failures** (3 warnings, all the benign no-api-role-EXECUTE class, correct for two
+trigger functions and an internal helper). Prod's [4] live-data section is still
+**VACUOUS** (0 conversations) and says so — the STRUCTURAL guarantee is proven on prod, the
+behavioural one stays local-only until a real conversation exists. Both floors counted
 `admin`+`active` with no `is_org_member`, so a departed member held the floor open and the
 only EFFECTIVE admin could leave. Now both call ONE helper, `vm_seat_holds_admin_floor`.
 **Pre-flight measured first because this guard fires MORE often: prod has 0 conversations
@@ -517,9 +522,15 @@ and 0 seats, and the script calls that VACUOUS, not "zero affected."** db 248/24
 SYNAGOGUE-SCHEDULES week render, untouched by this diff, passing in isolation in 8.8s;
 **the `myzmanim` API now returns `NotAuthorized` for every date and falls back to hebcal,
 which is worth its own look**); ratchet 227 → 237; new `scripts/prod-verify-vm-admin-floor.mts` 34/34
-local (the function-only verifier cannot see a trigger BINDING). **Owed: `migrate:prod`,
-then that script without `--local` + `prod-verify-migration.ts`.** Full story: docs/19's
-2026-09-22 section. **Three durable rules came out of it — docs/03 #29 (a caller-relative
+local (the function-only verifier cannot see a trigger BINDING). Full story: docs/19's
+2026-09-22 section. **TWO DEPLOY FACTS WORTH KEEPING: (a) the `service_role` revoke was
+VINDICATED ON PROD** — the helper reads `postgres=X/postgres` only, while the older
+`vm_guard_last_conversation_admin` in the SAME run still reads `service_role=X/postgres`
+because `20260914020000` revoked just three roles; local can never show that difference.
+**(b) `migrate:prod` printed a loud `Failed to read certificate file ... pgdelta-target-ca.crt`
+stack trace and then "Finished supabase db push" — THE PUSH SUCCEEDED** (confirmed by a
+follow-up `--dry-run` saying "Remote database is up to date" plus both verifiers). That trace
+is a pgdelta PREVIEW step failing, not the apply; do not re-run the push over it. **Three durable rules came out of it — docs/03 #29 (a caller-relative
 helper like `is_org_member` CANNOT answer about a third party), #30 (a trigger function's
 VOLATILITY is load-bearing: `stable` stops it seeing in-statement deletes, so a multi-row
 DELETE silently breaks a quorum guard), #31 (the two halves of one guard must share one
