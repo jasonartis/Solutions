@@ -271,3 +271,81 @@ module's schema that are worth recording here, because both are easy to re-deriv
   rather than onboarded. The clean fix, if this ever needs closing, is to let a salon **link**
   an existing walk-in record to an account when that person signs up (a one-time claim), not
   to demand one at the counter. Recorded as a known gap in the data browser's declaration.
+
+  **2026-09-23 — safety analysis of the linking fix, PARKED, nothing built (Sonnet session,
+  founder-directed design review).** Two modes were considered; the founder's own question
+  ("is self-serve safe? does the same concern apply to staff-driven?") is what surfaced the
+  real issue in both, so recording the reasoning, not just the conclusion.
+
+  **Self-serve (customer claims their own walk-in row) is NOT safe as a bare
+  type-your-phone-or-email-to-match flow** — a phone/email is knowable by someone who isn't
+  the account holder (a coworker, family member, ex), so a naive match-and-claim is a real
+  account-takeover vector onto someone else's appointment/notes/spend history. **The fix if
+  this is ever built: match only against the caller's own Supabase-auth-VERIFIED signup
+  email, never free-text input she types** — she's shown a candidate only when the walk-in
+  row's email already equals the email her account proved ownership of at signup, so there's
+  nothing to guess. **This also can't be built as pure app code**: `sal_customers`'s only
+  UPDATE policy (`sal_customers_write_operate`) is staff-scoped
+  (`sal_can_operate_location`) — an ordinary customer has no RLS grant to write this table at
+  all today, linked or not. A real self-serve claim needs a new narrowly-scoped SECURITY
+  DEFINER function doing the verified-email match and the write server-side. That's
+  RLS/migration work (docs/03 #12 rhythm, Opus tier) — **parked here specifically so a
+  future session picks up this design, not a weaker one**, when it's actually prioritized.
+
+  **Staff-driven (a manager/cashier links an existing customer) needs no new SQL** — the
+  existing `for all` policy already lets operating staff write `user_id` on any row at their
+  location — but carries a real concern the founder asked about directly, worth separating
+  into two kinds because they need different answers. **(a) Honest mismatch** (two Janes,
+  a mistyped digit, a shared family email) — a staff visual driver's-license check
+  genuinely helps here, confirming name-on-ID against name-on-file. **(b) A malicious
+  staff member** — this is NOT stopped by an ID check (a bad actor doesn't need to lie about
+  checking one, they just link it), and it is a DIFFERENT threat than staff simply reading
+  customer data on shift, which they already can: linking makes a target's history
+  **portable** — viewable from an account off-site, indefinitely, even after the staff
+  member's shift or employment ends. **Explicitly do NOT have the app capture or store ID
+  data** to "prove" a check happened — a stored license number/scan is a bigger privacy
+  liability than the appointment history being protected; if a salon wants an ID-check step,
+  it's an operational SOP outside the app, not a feature to build.
+  **What the software CAN structurally enforce, if this is built:** restrict the picker to
+  `user_id IS NULL` rows only (never let this flow re-point an already-linked row, even
+  though the raw policy would technically permit it); log every link action (who linked what
+  to what, when) for an audit trail; optionally narrow WHO can link to manager rank rather
+  than any operating staff, which would need its own RLS change (separable Opus follow-on,
+  not required for a first version).
+
+  **2026-09-23 (cont.) — the audit-trail idea (founder: track who linked, when, and allow
+  staff discretion to unlink if it's found wrong), worked through further.**
+  **`activity_events` (the existing engagement-monitoring table, already migrated) does NOT
+  fit and was deliberately not reused** — checked its actual columns
+  (`org_id, module_key, action, scope_ref`, no field for a specific target row or account)
+  and its access model (superadmin/hierarchy-gated reads, built to answer "is this org going
+  quiet", not to let a cashier look up a specific past decision). Recording a link there would
+  say "someone linked something at this salon on this date" — not enough to find or review
+  the specific pair. **This still needs new SQL**: a small append-only log (actor, target
+  `sal_customers.id`, target account, link/unlink, timestamp) — same shape the platform
+  already uses for sensitive reversible actions (`superadmin_lookup_log`). Opus tier
+  regardless of how small it looks (new table ⇒ docs/03 #27's revoke-before-grant rhythm
+  applies).
+  **On "unlink so prior-to-link data reverts but later real activity doesn't" — the
+  mechanics make this two different features, not one.** Appointments/bills reference
+  `sal_customers.id` directly, never the linked account — linking only points that SAME row's
+  `user_id` at an account, so nothing about individual appointments is dated or moved. A plain
+  unlink therefore reverts the row's WHOLE history, including anything genuinely hers that
+  happened after a mistaken link. Getting precisely "only the pre-link data unlinks" needs
+  SPLITTING the identity at the link timestamp — minting a fresh `sal_customers` row for her
+  going forward and re-pointing every post-link appointment/bill/ledger row to it. That is
+  real, separate data-migration logic (which tables, transactional safety, automated vs.
+  manual), not a column flip — its own Opus-tier design question if ever wanted.
+  **Recommendation (not decided, no code changed): build the simple version first** — full
+  unlink (reverts the whole row) plus the log recording who/when/which-pair for both link and
+  unlink. That already delivers both things actually asked for — accountability, and
+  reversibility — and matches "allow the cashier... the discretion": if a customer genuinely
+  had real visits after a bad link, staff re-links her correctly by hand afterward, a rare
+  enough case that automating the split is likely solving for more than has actually happened.
+  The log's value stands on its own even without the split: it gives the exact EXPOSURE WINDOW
+  (`link_at` → `unlink_at`) for incident response, i.e. precisely what a wrongly-linked account
+  could see and for how long.
+  **Status: still parked, nothing built, no code changed.** The founder's 2026-08-03
+  rejection of forced-account-at-intake stands unless revisited — this analysis doesn't
+  change that call, it's here so a future decision to build either mode starts from the real
+  risk, not a re-derivation of it.

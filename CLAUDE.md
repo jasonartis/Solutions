@@ -863,7 +863,14 @@ Everything below is open but unranked:
 - ~~**The per-person data browser.**~~ **DONE 2026-08-03.** One known gap is still open and
   is the only reason this line survives: **walk-in salon customers have no account, so they are
   not findable** — the fix, if ever wanted, is letting a salon LINK a walk-in to an account when
-  they sign up, not requiring accounts up front. (Its other recorded gap, the view-as session
+  they sign up, not requiring accounts up front. **2026-09-23: real safety analysis done,
+  nothing built — module-5-nail-salon.md's 2026-08-03 finding has the full writeup.**
+  Self-serve needs a new SECURITY DEFINER function (verified-signup-email match only, never
+  free-text — Opus tier); staff-driven needs no new SQL but the founder's own question
+  surfaced a real distinction between honest mismatch (a driver's-license check helps) and a
+  malicious staff member (it doesn't — linking makes data portable off-site in a way plain
+  on-shift access isn't). Do not re-derive this reasoning; read it before building either
+  mode. (Its other recorded gap, the view-as session
   log's whole-org admin read, was promoted to its own bullet above on 2026-08-09.)
 - **Founder-raised 2026-08-02, parked in docs/13** (its pair-grid viewer and rank/tier-wrapper
   halves are both DONE, 2026-08-06 / 08-09). What REMAINS is the original larger idea:
