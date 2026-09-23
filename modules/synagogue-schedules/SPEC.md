@@ -28,4 +28,51 @@ The authoritative specification lives at [docs/modules/module-3-synagogue-schedu
   - Founder to check: (a) does the Google Sheet's `MyZmanim → Get Zmanim` still work (if yes → IP/origin restriction in their dashboard); (b) API dashboard key status/restrictions; (c) key value vs Script Properties.
   - When creds work: run `pnpm exec tsx apps/worker/scripts/test-myzmanim.ts` (compares live API vs the founder's December dump — expects 7/7). Then add `MYZMANIM_USER`/`MYZMANIM_KEY` to Vercel env (project `prj_reUQNNvf0XcjS6YcRGEYRXBC8XYM`) and redeploy — zero code changes needed.
   - Debug helpers: `apps/worker/scripts/debug-myzmanim{,2,3}.ts`.
-- **Still open:** myzmanim connector (waiting on founder's API key) · acceptance validation against the founder's real schedule + Sheets rules (waiting on materials) · line edit-in-place (currently delete+recreate) · Hebrew rendering polish on exports.
+- **⚠ 2026-09-23 — THE 2026-07-07 ENTRY ABOVE IS HALF WRONG, AND THE WRONG HALF
+  WOULD HAVE COST A DAY.** Its conclusion ("account-side") is correct and still
+  correct. But its supporting claim — *"Request format PROVEN correct 3 ways (GET
+  querystring works; doc-exact POST … both parse fine)"* — is **false**, and so
+  is the promise on the pickup line that *"zero code changes needed"* once the
+  key works. Two real bugs were found and fixed today; **restoring the
+  subscription alone would have produced visibly wrong schedules.**
+  1. **CREDENTIALS WERE BEING SENT WHERE THE API IGNORES THEM.** The connector
+     sent `user`/`key` as GET **query parameters**. The documentation is explicit
+     — *"Credentials are not accepted via URL path or query parameters"* — so
+     they arrived BLANK and the API answered
+     `NotAuthorizedSeeApiDashboardForDetails`, which reads exactly like a dead
+     subscription. **"Both parse fine" measured the wrong thing:** a clean JSON
+     response proves the request was well-formed, NOT that the credentials were
+     read. The distinguishing oracle is myzmanim's own published demo
+     credentials (pre-filled on their public demo form), which return
+     **`DoNotUseDemoCredentials` over POST form-urlencoded** but the generic
+     **`NotAuthorized…` over GET query params** — same key, same account, two
+     different errors, so the difference is the SHAPE. Fixed to
+     `POST application/x-www-form-urlencoded`, which is what the founder's
+     original Apps Script did and what their demo form posts. (The 2026-07-07
+     note that "form-POST trips the WCF backend" is true only of a JSON *body*,
+     which still 401s with a WCF stack trace — not of form-urlencoded.)
+     Re-runnable: **`pnpm exec tsx scripts/verify-myzmanim-request-shape.mts`**,
+     which needs no subscription of ours.
+  2. **THE MISSING-VALUE SENTINEL FILTER NEVER MATCHED.** The parser skipped
+     `'0001-01-01T00:00:00Z'`; the API sends it **without the trailing `Z`**. So
+     every absent time became a valid **year-1 `Date`** and flowed into the
+     schedule as real. Measured against a live response: the old filter kept
+     **81 of 89 fields as year-1 dates**, the new one keeps 0. Worse than the
+     stray times: `buildWeek` only falls back to hebcal when the parsed map is
+     EMPTY, so a sentinel-filled response **suppressed the fallback entirely**.
+     Masked today only because `ErrMsg` throws first — it would have fired on the
+     first successful call. Now filtered by YEAR, robust to either spelling, with
+     6 unit tests (`src/myzmanim.test.ts`) built from the real field names.
+  **Account status is unchanged and still the blocker:** with the shape proved
+  correct, our key is still refused. Dashboard: https://www.myzmanim.com/apidemo.aspx.
+  Endpoint `api.myzmanim.com/engine1.json.aspx` is NOT deprecated (verified
+  live); `core.myzmanim.com` is the docs portal, not a new API host.
+  **Also captured while probing:** the error stub is a full schema skeleton, so
+  the complete field inventory is known without a subscription — `Place` 20
+  fields, `Time` 42 (DafYomi, DateJewish, Parsha, Holiday, Omer, Is* flags),
+  `Zman` 89. The connector currently keeps **only `Zman`** and discards `Place`
+  and `Time`, which arrive in the same paid call.
+- **Still open:** myzmanim **account** authorization (the connector itself is now
+  correct — see above) · acceptance validation against the founder's real schedule
+  + Sheets rules (waiting on materials) · line edit-in-place (currently
+  delete+recreate) · Hebrew rendering polish on exports.

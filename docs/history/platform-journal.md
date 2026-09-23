@@ -41,6 +41,50 @@ decision log, docs/03 conventions, docs/12 safeguards) — this is the chronolog
   (VM last-admin floor) sits just below this one — a live confirmation that the "another Claude
   session may be working in this repo" warning is not hypothetical. Committed with an explicit
   pathspec throughout, per that standing rule.
+- **2026-09-23 (MYZMANIM: TWO REAL BUGS IN THE CONNECTOR, found while costing a zmanim cache;
+  Opus, no migration).** The synagogue module has been silently serving hebcal fallback times
+  since at least 2026-07-07, and the module spec had parked it as "account-side, zero code
+  changes needed once the key works." **The conclusion was right; the supporting claim was
+  wrong, and acting on it would have shipped visibly wrong schedules.**
+  **(1) CREDENTIALS WERE SENT WHERE THE API IGNORES THEM.** The connector passed `user`/`key`
+  as GET query parameters; the docs say plainly *"Credentials are not accepted via URL path or
+  query parameters."* They arrived BLANK, and the API answered
+  `NotAuthorizedSeeApiDashboardForDetails` — indistinguishable from a dead subscription.
+  **The 2026-07-07 note "request format PROVEN correct 3 ways … both parse fine" measured the
+  wrong thing: a clean JSON response proves the request was well-formed, not that the
+  credentials were READ.** The oracle that separates the two is myzmanim's own published demo
+  credentials (pre-filled on their public demo form): **`DoNotUseDemoCredentials` over POST
+  form-urlencoded, but the generic `NotAuthorized…` over GET query params** — same key, same
+  account, two different errors, so the variable is the SHAPE. Fixed to
+  `POST application/x-www-form-urlencoded` (what the founder's original Apps Script did). The
+  old "form-POST trips the WCF backend" note is true only of a JSON *body*, which still 401s
+  with a WCF stack trace. Re-runnable without any subscription of ours:
+  **`scripts/verify-myzmanim-request-shape.mts`** (4 pass / 1 fail today, the fail being the
+  real account state).
+  **(2) THE MISSING-VALUE SENTINEL FILTER NEVER MATCHED — the worse of the two.** The parser
+  skipped `'0001-01-01T00:00:00Z'`; the live API sends it **without the trailing `Z`**. So
+  absent times became valid **year-1 Dates**. Measured against a real response: the old filter
+  kept **81 of 89 fields** as year-1 dates, the new one keeps 0. And because `buildWeek` only
+  reaches for hebcal when the parsed map is EMPTY, a sentinel-filled response **suppressed the
+  fallback entirely** — so the failure mode was not "a stray odd time" but "a whole week of
+  year-1 times, with the fallback disabled." Masked today only because `ErrMsg` throws first;
+  it would have fired on the first successful call. Now filtered by YEAR, robust to either
+  spelling, with 6 unit tests built from the real field names (module suite 49 → 55).
+  **GENERALISES, and it is the durable part: the same error string had two causes** — a
+  refused key and a request the server could not read a key out of — **and no amount of staring
+  at the error distinguishes them. Find an oracle that varies ONE thing** (here, a published
+  demo credential that fails differently depending only on request shape). *"The response
+  parsed"* is not evidence the server accepted your input.
+  **Account status unchanged and still the blocker:** with the shape proved correct, our key is
+  still refused. Endpoint `api.myzmanim.com/engine1.json.aspx` is NOT deprecated (verified);
+  `core.myzmanim.com` is the docs portal, not a new API host.
+  **Captured for the caching slice that prompted all this:** the error stub is a full schema
+  skeleton, so the complete field inventory is known WITHOUT a subscription — `Place` 20 fields,
+  `Time` 42 (DafYomi, DateJewish, Parsha, Holiday, Omer, Is* flags), `Zman` 89 — and the
+  connector currently keeps only `Zman`, discarding `Place` and `Time` which arrive in the same
+  paid call. Also confirmed from the docs: `getDay`'s InputDate range is **"Current date +/- 1
+  year"** and there is **no bulk endpoint**, so a year's prefetch is 365 single calls per
+  location. Design + founder decisions for the cache: docs/23.
 - **2026-09-22 (THE VM LAST-ADMIN FLOOR now counts only seats that confer adminship —
   docs/19's STILL-OPEN item 2; Opus, one migration `20260922030000`, **SHIPPED AND
   PROD-VERIFIED 2026-09-23** — `migrate:prod` after a backup, then

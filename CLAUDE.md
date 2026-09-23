@@ -925,6 +925,28 @@ Everything below is open but unranked:
   monitoring are DONE; 2FA is a deliberate founder deferral until a real client signs; privacy/
   terms wording and custom SMTP remain genuinely open.
 
+**MYZMANIM IS DOWN AND THE SYNAGOGUE MODULE HAS BEEN SILENTLY ON HEBCAL FALLBACK (found
+2026-09-23; two connector bugs FIXED, the ACCOUNT is still the blocker).** The module spec had
+parked this on 2026-07-07 as "account-side, zero code changes needed" — **the conclusion was
+right and the supporting claim was wrong.** (1) credentials were sent as GET **query params**,
+which the API ignores (*"Credentials are not accepted via URL path or query parameters"*), so
+they arrived BLANK and returned `NotAuthorized…` — indistinguishable from a dead subscription;
+the 2026-07-07 note "request format PROVEN correct, both parse fine" **measured the wrong
+thing** (a clean JSON response proves the request was well-formed, NOT that credentials were
+read). Now `POST application/x-www-form-urlencoded`. (2) the missing-value sentinel filter
+compared against `'0001-01-01T00:00:00Z'` but the API omits the `Z`, so **81 of 89 fields
+became year-1 Dates** — and since `buildWeek` only falls back when the parsed map is EMPTY,
+that **suppressed the hebcal fallback entirely**. Both would have fired on the first
+successful call, so **fixing the subscription alone would have shipped wrong schedules.**
+**THE ORACLE, worth reusing: the same error string had two causes, and only a control that
+varies ONE thing separates them** — myzmanim's published demo credential returns
+`DoNotUseDemoCredentials` over POST but the generic `NotAuthorized…` over GET. Re-run
+`pnpm exec tsx scripts/verify-myzmanim-request-shape.mts` (no subscription needed; 4/1 today,
+the 1 fail being the real account state). **Founder action: the API dashboard**
+(https://www.myzmanim.com/apidemo.aspx). Endpoint is NOT deprecated. **The zmanim CACHE that
+prompted this is DESIGNED, NOT BUILT — [docs/23](docs/23-zmanim-cache-and-global-batches.md),
+six founder decisions recorded there; do not re-litigate them.**
+
 **Standing rules:** never start a slice/module build without the founder initiating; every
 migration/RLS/trigger change runs the docs/03 #12 rhythm (draft → adversarial review →
 live-verify as real users → RLS tests → docs); model-choice + subagent + fresh-chat guidance
