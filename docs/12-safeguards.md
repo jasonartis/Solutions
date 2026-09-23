@@ -41,24 +41,30 @@ rot; pipelines don't.
    `DROP TABLE` / `TRUNCATE` / `DROP SCHEMA` unless the file carries the
    marker `DESTRUCTIVE-CHANGE-APPROVED` — which may only be added after the
    founder explicitly approves that specific change.
-3. **Branch protection on master.** Force-pushes and branch deletion are
+3. ~~**Branch protection on master.** Force-pushes and branch deletion are
    configured as blocked at GitHub; history cannot be rewritten away **by a
-   non-admin**.
-   **VERIFIED 2026-08-28 (item 10 investigation) — confirms and RESOLVES the
-   2026-08-07 "unverified" flag, in the direction the flag feared.** Read via
-   the GitHub REST API using Git Credential Manager's cached OAuth token (the
-   same technique CLAUDE.md documents for reading Action logs —
-   `printf 'protocol=https\nhost=github.com\n' | git credential fill`), no `gh`
-   or dedicated PAT needed. `GET /repos/.../branches/master/protection` shows
-   `allow_force_pushes.enabled: false`, `allow_deletions.enabled: false` —
-   AND `enforce_admins.enabled: false`. Classic branch protection ties every
-   configured rule to that ONE exemption flag: since it's off, an account with
-   admin on the repo is exempt from ALL of them, not just the required status
-   check that was already known to bypass. So yes — the same account that
-   bypasses the status check can also force-push and delete the branch; it is
-   one hole, not two. See item 10 for the full picture (which API is actually
-   in play, who holds admin, and what pushes through Claude Code authenticate
-   as).
+   non-admin**.~~
+   **⚠ FALSE AS OF 2026-09-23 — THIS ITEM NO LONGER DESCRIBES REALITY.**
+   Branch protection isn't merely bypassed for admins any more; it is **gone
+   entirely.** `GET /repos/.../branches/master/protection` now 404s "Branch
+   not protected," and `GET /repos/.../branches/master` shows
+   `"protected": false` — confirmed non-vacuous with a control (the same
+   token reads `admin: true` on the repo and holds the `repo` OAuth scope, so
+   the 404 is real absence, not a permission artifact). So there is currently
+   **no** force-push/deletion block for anyone, admin or not — not the
+   admin-only hole this item originally described. Likely cause (inference,
+   not confirmed): GitHub Free drops branch protection on a private→public
+   round trip, and CLAUDE.md's incident log shows this repo made exactly that
+   round trip around 2026-09-02, five weeks after the 2026-08-28 verification
+   below was current. **Full account and the decision that follows from it:
+   item 10.**
+   Original 2026-08-28 verification, kept for the record (was true then):
+   Read via the GitHub REST API using Git Credential Manager's cached OAuth
+   token (`printf 'protocol=https\nhost=github.com\n' | git credential
+   fill`), no `gh` or dedicated PAT needed. `allow_force_pushes.enabled:
+   false`, `allow_deletions.enabled: false` — AND `enforce_admins.enabled:
+   false`, so an admin account was exempt from all three, not just the
+   required status check.
 4. **RLS is the tenancy floor.** 7 isolation tests + per-module guard-trigger
    verifications; the web app has no service-role key to leak (worker only).
 5. **Prod seeding is demo-scoped.** The seed's deletes are keyed to the demo
@@ -182,24 +188,26 @@ are the acceptance tests: after any significant change, the affected
 walkthrough must still be followable step-by-step — and updated in the same
 commit when the UI changes.
 
+**One-time per clone: `git config core.hooksPath .githooks`.** Wires up the
+pre-push hook (item 10, decided 2026-09-23) that runs the test-count ratchet
++ typecheck before a push leaves the machine — the only thing catching a bad
+push locally today, since master currently has no branch protection at all
+(item 3). Not automatic: git does not pick up a tracked hooks directory on
+its own, and this setting is per-clone local config, not something a commit
+can carry for you.
+
 ## Known risks & pre-launch checklist (2026-07-10 review)
 
 Found in a deliberate "what haven't we thought of" pass; ordered by urgency.
 
-0. **Branch protection is configured but NOT blocking (observed 2026-08-03).**
-   Every push to `master` reports
-   `remote: Bypassed rule violations for refs/heads/master: - Required status
-   check "check" is expected.` — GitHub wants CI green before the push lands, and
-   lets it through anyway because the pusher can bypass. So the rule is currently
-   advisory, not a gate. **This has not caused a problem and may be exactly what
-   the founder wants** (a one-person team pushing straight to `master`, with the
-   real gate being that Vercel's `deploy` job has `needs: check`, so a broken
-   commit deploys nothing and prod keeps serving the previous build). Recorded
-   because the failure mode is non-obvious: the protection LOOKS enforced in the
-   GitHub UI, so a future session — or a second contributor who cannot bypass —
-   could reasonably assume a green `master` is guaranteed. Decide deliberately:
-   either enforce it (uncheck "allow bypass" / include administrators) or drop the
-   rule so it stops implying a guarantee it does not give.
+0. ~~**Branch protection is configured but NOT blocking (observed 2026-08-03).**~~
+   **CLOSED 2026-09-23 — item 10 has the decision and the reasoning; nothing
+   left open here.** Turns out to be moot in the way this item feared, not the
+   way it hoped: by the time the decision was made, the rule wasn't advisory
+   any more, it was **gone** (item 3's correction). Decided: stay dropped for
+   solo work, with a local pre-push hook (`.githooks/pre-push`) as the real
+   substitute, and a recorded trigger for when to revisit (a second
+   collaborator joining) — full account in item 10.
 
 1. **Supabase free-tier auto-pause (availability landmine) — MITIGATED, UptimeRobot has been
    live since 2026-08-31** (predates this note being updated; docs/18 item 1 has the detail).
@@ -671,6 +679,51 @@ Found in a deliberate "what haven't we thought of" pass; ordered by urgency.
     inference every session relies on ("READY proves CI was green"). Not Fable:
     no novel RLS/trigger mechanism is involved. The mechanical follow-through
     once the decision is made (workflow edit, hook, docs) is Sonnet work.
+
+    **DECIDED AND SHIPPED 2026-09-23 (Sonnet session, founder-approved
+    scenario-by-scenario before any change was made).** Before implementing,
+    re-checked the GitHub API rather than trusting the 2026-08-28 facts above
+    as still current — good thing: **branch protection on master is gone
+    entirely**, not merely bypassed for admins (item 3's correction has the
+    measurement). That changed the question: "drop the required-check rule"
+    (option A below) was already true with nothing to do, and the founder's
+    original "2+ people" framing ("the bypassed rule doesn't protect a second
+    person either") turned out to understate it — there currently isn't even
+    a bypassed rule for anyone, admin or not, to protect against.
+    **Decision: stay on the cheap end for solo (A, already true, nothing
+    to configure) + add a real LOCAL substitute (D)** — a tracked pre-push
+    hook (`.githooks/pre-push`, wired via `git config core.hooksPath
+    .githooks`) running the same test-count ratchet + typecheck CI runs,
+    so a bad push is caught before it lands on master even though nothing
+    on GitHub's side does that today. **Explicitly rejected for now:** B
+    (`enforce_admins` on) — as configured today it would block every direct
+    push including trivial ones, since the required check structurally can
+    never have a result before a push lands (fact (b) above); C (migrate to
+    a Ruleset scoping PRs to `supabase/migrations/` + add a review
+    requirement) — the real safety net for migrations is already the
+    docs/03 #12 adversarial-review rhythm, and a solo founder reviewing
+    their own PR wouldn't add much on top of that.
+    **THE TRIGGER TO REVISIT, recorded so a future session doesn't have to
+    re-derive the reasoning: a second collaborator joining.** Two things
+    stop being true the moment that happens: (1) the pre-push hook only
+    protects pushes made from a machine that has it installed and configured
+    — it is not enforcement on anyone else, so it needs to move back into a
+    real GitHub-side gate; (2) PR review stops being theater — a second
+    engineer's review of a migration is a genuinely independent check (the
+    kind that would have caught, not just detected after the fact, the
+    docs/03 #27 privilege escalation), unlike self-review. At that point
+    option C — a Ruleset with a real review requirement, scoped at least to
+    `supabase/migrations/` — is very likely correct; it wasn't built now on
+    purpose (extract-don't-speculate: there's no second collaborator to
+    build it against or verify it with yet, same shape as the deferred
+    second-superadmin item above). **Do not build a "solo vs. team" switch/
+    config flag speculatively ahead of that trigger** — the founder raised
+    this option directly and it was talked through: the "team" side isn't a
+    boolean, it's a different GitHub mechanism (Ruleset vs. classic
+    protection) that can't be meaningfully verified without a real second
+    collaborator to exercise it against, so building it now would be
+    unverified scaffolding, not a working switch. The only thing worth
+    persisting ahead of time is this paragraph.
 
 ## Low-context assistant protections (2026-07-10)
 

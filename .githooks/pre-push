@@ -1,0 +1,80 @@
+#!/bin/sh
+# Pre-push hook — formalizes the ratchet + typecheck verification sessions
+# already ran by hand before pushing (docs/12 item 10, decided 2026-09-23).
+#
+# WHY THIS EXISTS NOW SPECIFICALLY: master currently has NO branch protection
+# at all (measured 2026-09-23 via the GitHub API, with controls — see docs/12
+# item 10). For a solo founder that's fine (CI's `deploy` job still needs
+# `check` to pass, so nothing red reaches production either way), but it does
+# mean nothing catches a bad push locally before it lands on master. This
+# hook is that local catch — see docs/12 item 10 for why it stops being
+# sufficient the moment a second collaborator joins (a hook only runs on
+# whoever's machine has it installed).
+#
+# NOT a substitute for CI: no Supabase, no DB-backed suites (@platform/db's
+# RLS tests, the db-suite-dependent e2e flows), no build. It only runs the
+# two checks that are both fast AND need no live database — the test-count
+# ratchet and typecheck — mirroring ci.yml's "Test-count ratchet" step and
+# `pnpm typecheck` step exactly, so this and CI can't quietly drift apart.
+#
+# Install once per clone (git does not auto-detect this directory):
+#   git config core.hooksPath .githooks
+#
+# Deliberate bypass: git push --no-verify
+
+set -e
+cd "$(git rev-parse --show-toplevel)"
+
+echo "pre-push: test-count ratchet..."
+
+# Both counters are ANCHORED — see ci.yml's own comment on why a loose
+# counter (e.g. bare `grep -c "it("`) is worse than none (docs/12).
+e2e=$(grep -c "^test(" apps/web/e2e/platform.spec.ts)
+rls=$(grep -cE "^[[:space:]]+it\(" packages/db/src/rls.test.ts)
+floor_e2e=$(node -p "require('./tests-floor.json').e2e")
+floor_rls=$(node -p "require('./tests-floor.json').rls")
+echo "  e2e $e2e (floor $floor_e2e) · rls $rls (floor $floor_rls)"
+if [ "$e2e" -lt "$floor_e2e" ] || [ "$rls" -lt "$floor_rls" ]; then
+  echo "Test count fell below the recorded floor (tests-floor.json)."
+  echo "Deleting tests to get green is never the fix. If a removal is truly intended, the founder approves lowering the floor."
+  exit 1
+fi
+
+missing=0
+for f in $(node -p "require('./tests-floor.json').requiredFiles.join('\n')"); do
+  if ! git ls-files --error-unmatch "$f" > /dev/null 2>&1; then
+    echo "MISSING or UNTRACKED: $f"
+    missing=1
+  fi
+done
+if [ "$missing" -ne 0 ]; then
+  echo "A required schema-coverage file is gone or untracked (tests-floor.json requiredFiles)."
+  exit 1
+fi
+
+# A git hook runs in a minimal shell that does not source the profile, so
+# `pnpm` is off PATH here (measured 2026-09-23 — same root cause as the
+# CLAUDE.md "pnpm MAY NOT be on PATH, while corepack is" gotcha). Bare
+# `corepack pnpm exec turbo ...` is NOT enough either: turbo's own internal
+# binary lookup needs a real `pnpm` executable on PATH, not just corepack's
+# wrapper — it fails with the unrecognisable "Unable to find package manager
+# binary: cannot find binary path", the exact symptom CLAUDE.md documents.
+# Fix (same one CLAUDE.md's turbo gotcha names): materialise a real shim
+# OUTSIDE the repo (inside it would show up as an untracked dir a careless
+# `git add` could commit) and prepend it to PATH for this command only.
+if ! command -v corepack > /dev/null 2>&1; then
+  echo "corepack not found on PATH — cannot run typecheck. See CLAUDE.md's"
+  echo "pnpm/corepack PATH gotcha, or bypass with: git push --no-verify"
+  exit 1
+fi
+shim_dir="$HOME/.cache/solutions-platform-pnpm-shim"
+mkdir -p "$shim_dir"
+corepack enable --install-directory "$shim_dir" > /dev/null 2>&1
+
+# --force: turbo's cache cannot see edits to modules/nail-salon or
+# modules/visual-messaging (docs/12/CLAUDE.md gotcha — neither has a
+# package.json, so turbo keys nothing on their directories). A pre-push
+# safety gate that can silently skip two of eight modules is worse than a
+# slower one that never does.
+echo "pre-push: typecheck..."
+PATH="$shim_dir:$PATH" pnpm exec turbo run typecheck --concurrency=1 --force

@@ -4,6 +4,43 @@ The running, dated build journal that used to live in `CLAUDE.md`'s "## Current 
 section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every session)
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
+- **2026-09-23 (CI: replaced the second, drifting Supabase CLI with the lockfile-pinned one;
+  and docs/12 item 10 — the master-gating decision — DECIDED AND SHIPPED, Sonnet session, no
+  migration.)** Two small, unrelated pieces of hygiene, both founder-directed.
+  **(1) `ci.yml`'s `supabase/setup-cli@v1` (`version: latest`) step deleted** — it installed a
+  SECOND Supabase CLI that CI actually ran, ignoring the one already pinned by
+  `package.json`/the lockfile and installed via `pnpm install --frozen-lockfile`. The two had
+  measurably drifted (local Postgres `17.6.1.141` vs. a recent CI run's `17.6.1.167` — different
+  default ACLs baked into the image, the same class of gap behind the docs/03 #27 privilege
+  escalation) and the extra action periodically failed CI outright on GitHub's release-API rate
+  limit. `supabase start`/`status` now run via `pnpm exec supabase`. Also documented
+  `verify-console-view-as.mts`'s three `VERIFY_*` env vars (CLAUDE.md had flagged them as "in no
+  env file") into `.env.accounts.example` + the gitignored `.env.deploy`/`.env.accounts` — NOT
+  auto-loaded by the script itself, since a plain local run must never silently prefer the real
+  prod superadmin credentials those files hold.
+  **(2) Master-gating decision.** Before acting on the founder's choice (drop the
+  required-check rule, add a local pre-push hook), re-verified the 2026-08-28 facts rather than
+  trusting them as still current — good thing: **branch protection on master had gone from
+  "bypassed for admins" to gone entirely**, confirmed non-vacuously (control: same token reads
+  `admin: true` + `repo` scope, so the protection endpoint's 404 is real absence, not a
+  permission gap). Likely cause, not confirmed: the private→public round trip in early
+  September, a known way GitHub Free drops protection on private repos. Shipped: a tracked
+  `.githooks/pre-push` hook (test-count ratchet + typecheck, wired via
+  `git config core.hooksPath .githooks`) as the real local substitute, dry-run verified
+  end-to-end before relying on it (hit and fixed the documented turbo/pnpm PATH gotcha along the
+  way — a bare git hook's shell doesn't source the profile, so even `corepack pnpm exec turbo`
+  wasn't enough; needed the full shim-dir-outside-the-repo workaround CLAUDE.md already
+  documents for this class of problem). **Founder explicitly declined building a "solo vs. team"
+  switch ahead of time** when offered the option — the team-side mechanism (a GitHub Ruleset
+  with a real PR-review requirement) isn't a boolean flip and can't be meaningfully verified
+  without a real second collaborator to exercise it against, so it would have been unverified
+  scaffolding, not a working switch (extract-don't-speculate, same shape as the deferred
+  second-superadmin item). The trigger to revisit is recorded in docs/12 item 10 instead: a
+  second collaborator joining.
+  **Also noticed, not investigated further:** another session's own 2026-09-23 journal entry
+  (VM last-admin floor) sits just below this one — a live confirmation that the "another Claude
+  session may be working in this repo" warning is not hypothetical. Committed with an explicit
+  pathspec throughout, per that standing rule.
 - **2026-09-22 (THE VM LAST-ADMIN FLOOR now counts only seats that confer adminship —
   docs/19's STILL-OPEN item 2; Opus, one migration `20260922030000`, **SHIPPED AND
   PROD-VERIFIED 2026-09-23** — `migrate:prod` after a backup, then

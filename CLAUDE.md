@@ -886,21 +886,16 @@ Everything below is open but unranked:
   locked not dropped; `service_role`'s retained TRUNCATE. Plus: generic scope-wrappers deriving
   org from the entity row; generalize coarse `<prefix>_can_manage(org)`; per-class storage
   scoping; per-module scoped-assignment UIs.
-- **What should actually gate `master`? — INVESTIGATION DONE 2026-08-28, the decision itself
-  still OPEN. Full facts in docs/12 item 10.** Read live via the GitHub API using Git
-  Credential Manager's cached token (no `gh`, no PAT needed — same technique as the CI-log
-  trick below). **Corrects a prior assumption:** this is CLASSIC branch protection, not the
-  newer Rulesets feature (`/rulesets` is empty; `/branches/master/protection` is not) — which
-  matters because classic protection can't do path-scoped rules (e.g. "PRs only for
-  `supabase/migrations/`") without migrating to a Ruleset first. **Confirmed: one single flag,
-  `enforce_admins: false`, is the whole mechanism** — it exempts an admin from the required
-  status check AND force-push AND deletion protection alike, resolving docs/12 guard 3's
-  "UNVERIFIED" flag (yes, same hole, not a second one). **There is exactly one collaborator on
-  the repo — the founder, admin role — and Claude Code pushes authenticate as that same
-  credential**, so "should an AI hold bypass rights" is concretely "should Claude Code's pushes
-  bypass CI the same way my own do," since no separate, narrower credential exists today. No PR
-  review requirement is configured at all, even hypothetically. Options now costed against
-  these corrected facts in docs/12 item 10. Ends in a founder decision.
+- ~~**What should actually gate `master`?**~~ **DECIDED AND SHIPPED 2026-09-23 (Sonnet
+  session).** Re-checking before acting found the premise had gone stale: master's branch
+  protection wasn't merely bypassed any more, it was **gone entirely** (private→public round
+  trip likely dropped it, unconfirmed). Kept it dropped for solo work; added a tracked
+  `.githooks/pre-push` (test-count ratchet + typecheck, wired via `git config core.hooksPath
+  .githooks` — one-time per clone) as the real local substitute. Founder explicitly declined
+  building a "solo vs. team" switch ahead of time — the team-side mechanism (a GitHub Ruleset
+  with real PR review) can't be verified without a real second collaborator, so it'd be
+  unverified scaffolding, not a working switch. **Trigger to revisit: a second collaborator
+  joining** — full reasoning in docs/12 item 10.
 - **THE PRIVACY-POLICY LINE — ⚠ NOT OUTSTANDING AFTER ALL; SEE THE 2026-09-22 CORRECTION BELOW
   (2026-08-09, ESCALATED 2026-08-21, DISCHARGED/RE-MEASURED 2026-09-22).** docs/12 item 6 said this wording was a PRECONDITION of shipping —
   phase 1 shipped anyway on 2026-08-09, and **phase 2 also shipped 2026-08-21 without it**, despite
