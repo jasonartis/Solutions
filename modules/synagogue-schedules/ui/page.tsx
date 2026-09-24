@@ -5,6 +5,7 @@ import {
   generateWeek,
   lineRuleSchema,
   myzmanimCredsFromEnv,
+  zmanimCacheReader,
   type ScheduleTypeConfig,
 } from '@modules/synagogue-schedules'
 import { createClient } from '@/lib/supabase/server'
@@ -49,6 +50,9 @@ export default async function SchedulesPage(props: {
     israel: settings.israel,
     myzmanimLocationId: settings.myzmanimLocationId,
     credentials: myzmanimCredsFromEnv(),
+    // Read-through cache (docs/23): a warm week costs one query and
+    // ZERO API calls, where this used to make 7 serial paid ones.
+    cache: zmanimCacheReader(supabase),
   })
 
   // Load config (RLS scopes everything to this member's org).

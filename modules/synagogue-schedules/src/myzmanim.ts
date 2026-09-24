@@ -216,6 +216,50 @@ export type ZmanimCacheReader = (
   toISO: string,
 ) => Promise<Map<string, MyzmanimResponse>>
 
+/** The narrow slice of a Supabase client this module needs.
+ *
+ * Structural rather than imported so the module keeps no dependency on
+ * `@supabase/supabase-js` — the web app hands in an RLS-scoped client, the
+ * worker a service-role one, and a test can hand in a literal object. */
+// `PromiseLike`, not `Promise`: supabase-js returns a chainable builder that is
+// merely thenable, so a `Promise` return type rejects the real client while
+// looking correct.
+export type RpcClient = {
+  rpc: (
+    fn: string,
+    args: Record<string, unknown>,
+  ) => PromiseLike<{ data: unknown; error: { message: string } | null }>
+}
+
+type CachedRow = { zman_date: string; zman_source: string; zman_payload: MyzmanimResponse }
+
+/** A `ZmanimCacheReader` backed by the `syn_zmanim_cached` definer.
+ *
+ * The cache table is service_role-only by design and the service-role key lives
+ * only in the worker, so every caller — including the anonymous public schedule
+ * viewer — reads through the definer instead. One round trip per week.
+ *
+ * Only `myzmanim` rows are returned. `source` is part of the cache's primary
+ * key so other sources can coexist per date, but a hebcal row is not a cache
+ * HIT: the local fallback can always recompute it, and treating it as a hit
+ * would mean a day that once fell back never gets upgraded to real data. */
+export function zmanimCacheReader(client: RpcClient): ZmanimCacheReader {
+  return async (locationId, fromISO, toISO) => {
+    const { data, error } = await client.rpc('syn_zmanim_cached', {
+      check_location_key: locationId,
+      from_day: fromISO,
+      to_day: toISO,
+    })
+    if (error) throw new Error(`zmanim cache read failed: ${error.message}`)
+    const out = new Map<string, MyzmanimResponse>()
+    for (const row of (data as CachedRow[] | null) ?? []) {
+      if (row.zman_source !== 'myzmanim') continue
+      out.set(row.zman_date, row.zman_payload)
+    }
+    return out
+  }
+}
+
 export type WeekSourceOptions = {
   latitude?: number
   longitude?: number

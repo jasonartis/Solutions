@@ -5,6 +5,7 @@ import {
   generateWeek,
   lineRuleSchema,
   myzmanimCredsFromEnv,
+  zmanimCacheReader,
   renderScheduleHtml,
   type ScheduleTypeConfig,
 } from '../../../../modules/synagogue-schedules/src/index'
@@ -53,6 +54,9 @@ export async function runSynagogueRender(admin: SupabaseClient, job: Job) {
     israel: settings.israel,
     myzmanimLocationId: settings.myzmanimLocationId,
     credentials: myzmanimCredsFromEnv(),
+    // Read-through cache (docs/23): a warm week costs one query and
+    // ZERO API calls, where this used to make 7 serial paid ones.
+    cache: zmanimCacheReader(admin),
   })
   const sunday = new Date(`${weekStart}T12:00:00`)
 

@@ -21,6 +21,8 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import postgres from 'postgres'
 import { runZmanimPrefetch } from '../apps/worker/src/jobs/zmanim-prefetch'
+import { createClient } from '@supabase/supabase-js'
+import { buildWeekWithProvenance, zmanimCacheReader } from '../modules/synagogue-schedules/src/myzmanim'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const root = resolve(here, '..')
@@ -187,6 +189,103 @@ try {
   check('the origin-gated breaker still sees the sweep as dead',
     breaker[0]?.gated == null || Number(breaker[0]!.gated) > 3,
     breaker[0]?.gated == null ? 'no sweep success at all' : `${Number(breaker[0]!.gated).toFixed(1)} days`)
+
+  // -----------------------------------------------------------------------
+  // [5] END TO END — the question "will a credential change be all it takes?"
+  //
+  // Everything above tests the WRITE side. This tests the READ side through the
+  // exact path a page uses: the definer, the reader, and buildWeek. The API is
+  // stubbed to THROW, so if any day resolves from the network instead of the
+  // cache the assertion fails loudly rather than passing on a live call.
+  console.log('\n[5] END TO END — a page serves the cached week with ZERO API calls')
+
+  const webEnv = (() => {
+    for (const f of ['apps/web/.env.local', '.env']) {
+      try { return readFileSync(resolve(root, f), 'utf8') } catch { /* next */ }
+    }
+    return ''
+  })()
+  const envGet = (k: string) => new RegExp(`^${k}=(.*)$`, 'm').exec(webEnv)?.[1]?.trim() ?? ''
+  const supaUrl = envGet('NEXT_PUBLIC_SUPABASE_URL') || envGet('SUPABASE_URL') || 'http://127.0.0.1:54321'
+  const supaKey = envGet('SUPABASE_SERVICE_ROLE_KEY') || envGet('NEXT_PUBLIC_SUPABASE_ANON_KEY') || envGet('SUPABASE_ANON_KEY')
+
+  if (!supaKey) {
+    check('CONTROL: a Supabase key is available for the end-to-end check', false, 'none found')
+  } else {
+    // A FULLY warm week is the claim worth testing ("zero API calls"), and the
+    // sweep cannot produce one on demand: it fills forward from today, so the
+    // week containing its first row always has past days it will never reach.
+    //
+    // So one REAL payload is copied across a future week. That is not a
+    // shortcut around the thing under test — section [2b] already proved the
+    // WRITE path against the live API; this section tests the READ path, and a
+    // genuine payload replayed over seven dates exercises it exactly.
+    const sample = await sql<{ payload: unknown }[]>`
+      select payload from public.syn_zmanim_cache
+      where location_key = ${LOC} and source = 'myzmanim' limit 1`
+    check('CONTROL: a real payload exists to read back', !!sample[0]?.payload)
+
+    if (sample[0]?.payload) {
+      // A Sunday comfortably in the future, so nothing collides with [2b].
+      const sun = new Date()
+      sun.setDate(sun.getDate() + 60)
+      sun.setDate(sun.getDate() - sun.getDay())
+      const sundayISO = sun.toISOString().slice(0, 10)
+
+      for (let i = 0; i < 7; i++) {
+        const day = new Date(`${sundayISO}T12:00:00`)
+        day.setDate(day.getDate() + i)
+        await sql`
+          insert into public.syn_zmanim_cache (location_key, date, source, payload)
+          values (${LOC}, ${day.toISOString().slice(0, 10)}, 'myzmanim', ${sql.json(sample[0]!.payload as never)})
+          on conflict (location_key, date, source) do nothing`
+      }
+
+      const client = createClient(supaUrl, supaKey, { auth: { persistSession: false } })
+
+      const realFetch = globalThis.fetch
+      let apiCalls = 0
+      globalThis.fetch = (async (...args: Parameters<typeof fetch>) => {
+        const target = String(args[0])
+        if (target.includes('myzmanim')) { apiCalls++; throw new Error('the page reached the API') }
+        return realFetch(...args)
+      }) as typeof fetch
+
+      let provenance: Record<string, string> = {}
+      try {
+        const res = await buildWeekWithProvenance(sundayISO, {
+          latitude: 40.7128, longitude: -73.9497, timeZone: 'America/New_York',
+          myzmanimLocationId: LOC,
+          credentials: { user: process.env.MYZMANIM_USER ?? '', key: process.env.MYZMANIM_KEY ?? '' },
+          cache: zmanimCacheReader(client),
+        })
+        provenance = res.provenance
+      } finally {
+        globalThis.fetch = realFetch
+      }
+
+      const sources = Object.values(provenance)
+      check('ALL SEVEN days served FROM CACHE', sources.every((v) => v === 'cache'),
+        JSON.stringify(provenance))
+      check('THE CLAIM: a fully warm week costs ZERO API calls', apiCalls === 0,
+        `${apiCalls} call(s) — this page used to make 7`)
+
+      // NON-VACUITY: the reader must not simply answer everything. A week it was
+      // NOT given must resolve some other way, or the assertion above would pass
+      // for a reader that returns a hit for any date at all.
+      const far = new Date()
+      far.setDate(far.getDate() + 300)
+      far.setDate(far.getDate() - far.getDay())
+      const cold = await buildWeekWithProvenance(far.toISOString().slice(0, 10), {
+        latitude: 40.7128, longitude: -73.9497, timeZone: 'America/New_York',
+        myzmanimLocationId: LOC, credentials: null,
+        cache: zmanimCacheReader(client),
+      })
+      check('CONTROL: an UNFILLED week is not reported as cached',
+        Object.values(cold.provenance).every((v) => v !== 'cache'),
+        JSON.stringify(Object.values(cold.provenance).slice(0, 3)))
+    }
+  }
 
   console.log(`\n${pass} checks passed, ${fail} failed`)
 } finally {

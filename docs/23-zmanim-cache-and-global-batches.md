@@ -7,14 +7,27 @@ prod-verified; the two UIs are not built.** Founder decisions are recorded in §
 |---|---|
 | Connector bugs that this work uncovered | **SHIPPED** (module spec, 2026-09-23) |
 | Migration `20260923010000` — cache `payload`, `platform_settings`, `syn_zmanim_fetch_log`, `syn_zmanim_cached()` | **ON PRODUCTION 2026-09-24**, two adversarial reviews, prod-verified 33/33 |
-| Read-through cache in `buildWeek` | **BUILT**, 12 unit tests |
+| Read-through cache in `buildWeek` | **BUILT AND WIRED** to all three call sites (member page, public page, worker render), 12 unit tests + an end-to-end check |
 | The sweep (`synagogue.zmanim-prefetch`) with gap-fill + 3-day breaker | **BUILT**, 24/24 — both an induced failure AND the real happy path |
 | Owner Console screen (`/console/zmanim`) | **NOT BUILT** |
 | Maker panel + degraded badge | **NOT BUILT** |
+| Production cache populated | **367 days, 2026-09-23 .. 2027-09-24**, for `US11210` (2026-09-24) |
 | `migrate:prod` + prod verification | **DONE 2026-09-24** — `prod-verify-zmanim-schema.mts` **33/33** on prod, `prod-verify-migration.ts` **0 failures** |
 
-The sweep is registered but **seeded OFF**, and should STAY off for now: the key
-we have is a **TRIAL**, and its terms forbid production use (§7).
+The sweep is registered but **seeded OFF** on production, and stays off until a
+paid plan exists (§7). **It does not need to run for a year**: production already
+holds 367 days of real data, copied from the dev fill on 2026-09-24, so every
+schedule renders from cache with **no myzmanim credentials on production at
+all**. The credentials are deliberately NOT in Vercel.
+
+**FOUNDER'S READING OF THE TRIAL LICENCE (2026-09-24), recorded because it is a
+judgement call and not a fact:** the clause is *"the API may not be used in a
+production enviroment"*, and the API was used from the DEVELOPMENT environment —
+only the resulting rows were copied to production. Zmanim for a (location, date)
+are a fixed astronomical fact, so a copied row is the same answer the API would
+give again. `scripts/zmanim-backfill.mts` implements exactly that split, and
+production never holds a credential. A paid plan is intended before a real
+client (§7).
 
 **The two scripts that tell you the truth about all of this**, neither of which
 needs a working subscription:

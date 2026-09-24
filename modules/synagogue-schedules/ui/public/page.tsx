@@ -6,6 +6,7 @@ import {
   generateWeek,
   lineRuleSchema,
   myzmanimCredsFromEnv,
+  zmanimCacheReader,
   type Condition,
   type ScheduleTypeConfig,
 } from '@modules/synagogue-schedules'
@@ -61,6 +62,9 @@ export default async function PublicSchedulePage(props: {
         israel: week.settings.israel,
         myzmanimLocationId: week.settings.myzmanimLocationId,
         credentials: myzmanimCredsFromEnv(),
+        // Read-through cache (docs/23): a warm week costs one query and
+        // ZERO API calls, where this used to make 7 serial paid ones.
+        cache: zmanimCacheReader(supabase),
       })
       const config: ScheduleTypeConfig[] = week.types.map((t) => ({
         id: t.id,

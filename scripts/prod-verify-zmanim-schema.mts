@@ -138,6 +138,46 @@ try {
   check('platform_setting_merge is NOT callable by anon',
     !(merge?.proacl ?? '').includes('anon=X/'), merge?.proacl ?? '-')
 
+  // -------------------------------------------------------------------------
+  console.log('\n[6] LIVE DATA — can production actually serve a week from cache?')
+  const held = await sql<{ location_key: string; n: number; lo: string; hi: string }[]>`
+    select location_key, count(*)::int as n,
+           to_char(min(date), 'YYYY-MM-DD') as lo, to_char(max(date), 'YYYY-MM-DD') as hi
+    from public.syn_zmanim_cache where source = 'myzmanim'
+    group by location_key order by location_key`
+  if (held.length === 0) {
+    console.log('      cache is EMPTY — this section is VACUOUS and proves nothing about serving.')
+  } else {
+    for (const h of held) console.log(`      ${h.location_key}: ${h.n} days, ${h.lo} .. ${h.hi}`)
+    check('every configured location has a populated cache',
+      (await sql<{ missing: number }[]>`
+        select count(*)::int as missing from (
+          select distinct settings ->> 'myzmanimLocationId' as loc
+          from public.org_modules
+          where module_key = 'synagogue-schedules' and enabled
+            and coalesce(settings ->> 'myzmanimLocationId', '') <> ''
+        ) l
+        where not exists (
+          select 1 from public.syn_zmanim_cache c
+          where c.location_key = l.loc and c.source = 'myzmanim')`)[0]!.missing === 0)
+
+    // The definer is the ONLY read path the app has, so exercise it rather than
+    // the table — a populated table nobody can read through is not "working".
+    const loc = held[0]!.location_key
+    const week = await sql<{ n: number }[]>`
+      select count(*)::int as n from public.syn_zmanim_cached(${loc}, ${held[0]!.lo}::date, (${held[0]!.lo}::date + 6))`
+    check('the definer returns a full week for a cached location', (week[0]?.n ?? 0) === 7,
+      `${week[0]?.n} of 7 days`)
+
+    // THE CLAIM WORTH CHECKING: with a year cached, production renders real
+    // zmanim WITHOUT any myzmanim credentials at all.
+    const horizon = await sql<{ days: number }[]>`
+      select (max(date) - current_date)::int as days
+      from public.syn_zmanim_cache where source = 'myzmanim'`
+    check('the cache reaches far enough forward that no API call is needed for a year',
+      (horizon[0]?.days ?? 0) > 300, `${horizon[0]?.days} days of headroom`)
+  }
+
   console.log(`\n${pass} checks passed, ${fail} failed`)
 } finally {
   await sql.end()
