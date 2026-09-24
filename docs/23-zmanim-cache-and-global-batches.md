@@ -302,14 +302,23 @@ Candle-lighting is unavailable from the backup source.
 5. A maker opens their schedule: warning gone, and the page makes **zero** API
    calls because everything is served from cache.
 
-## 6. Where the on/off switch lives — OPEN
+## 6. Where the on/off switch lives — DECIDED AND BUILT (2026-09-23)
 
-There is **no platform-global settings store**: settings exist only on `orgs`,
-`org_modules` and `user_private`. Founder's steer is a superadmin-level settings
-area, possibly general enough to hold future globally-shared API batches rather
-than being zmanim-specific.
+**`public.platform_settings` exists** (migration `20260923010000`), seeded with
+one `zmanim.prefetch` row holding `enabled`, `horizonDays`, `budgetPerRun` and
+`pauseAfterDays`. Written through `platform_setting_merge()`, which merges in a
+single statement so the console and the circuit breaker cannot clobber each
+other. Read booleans with `->>`, never a `::boolean` cast.
 
-Recommendation, splitting the cheap half from the speculative half:
+The reasoning is kept below because it is the part that generalises to the next
+global switch — which should cost a ROW in this table, not a migration.
+
+Before it was built, the context was: there is **no platform-global settings
+store** — settings exist only on `orgs`, `org_modules` and `user_private`. The
+founder's steer was a superadmin-level settings area, possibly general enough to
+hold future globally-shared API batches rather than being zmanim-specific.
+
+Recommendation as given, splitting the cheap half from the speculative half:
 
 - **Build** a small generic superadmin-only key/value store (namespaced keys such
   as `zmanim.prefetch.enabled`). A key/value table is not a speculative
@@ -340,6 +349,19 @@ request-shape fix automatically. **It has a shelf life:** its fixture date falls
 outside the API's rolling "current date +/- 1 year" window on **2026-12-12**,
 after which it will fail for a reason that has nothing to do with the connector.
 Move the fixture forward, or re-dump against a current date, before then.
+
+**⚠ A SECOND PREREQUISITE NOBODY WOULD THINK TO CHECK: THE WORKER DOES NOT RUN
+ON PRODUCTION.** The sweep is a pg-boss cron job registered in
+`apps/worker/src/index.ts`, and production has no continuously-running worker —
+`pnpm worker:prod` is still the stopgap, which is the same reason docs/17's
+retention prunes have never enforced anything on prod. **So even with a working
+key AND `migrate:prod` applied, the nightly sweep will not fire on production
+until the worker runs there.** The cache would stay empty and every render would
+keep paying live API calls, with no error anywhere to explain it — a feature that
+is structurally perfect and functionally dead, which is precisely the failure
+docs/17 exists to catch. The Owner Console's "Run sweep now" button is the
+mitigation in the meantime: it goes through `job_requests`, which the prod worker
+does drain when it is run by hand.
 
 **HOLD `migrate:prod` UNTIL THE CONSOLE EXISTS.** The migration is safe and CI
 is green, but on its own it creates a global switch with no way to turn it on
