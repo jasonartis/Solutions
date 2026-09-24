@@ -17,6 +17,14 @@ The sweep is registered but **seeded OFF**, so deploying it changes nothing unti
 a superadmin enables it — which is deliberate, because the myzmanim key is
 currently unauthorized (§7).
 
+**The two scripts that tell you the truth about all of this**, neither of which
+needs a working subscription:
+
+| script | answers |
+|---|---|
+| `pnpm exec tsx scripts/verify-myzmanim-request-shape.mts` | is our REQUEST right, and is the ACCOUNT alive? (separates two causes of one error string; 4/1 today, 5/5 when the key works) |
+| `pnpm exec tsx scripts/verify-zmanim-prefetch.mts` | does the sweep behave against a REAL failing API? 18/18 — cache stays empty, failure logged, budget not burned, breaker trips. LOCAL ONLY: it mutates the switch and the log, and restores both in a `finally`. |
+
 ## 0. Why this exists
 
 The synagogue module calls myzmanim once per date, per page render — **7 serial
