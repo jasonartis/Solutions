@@ -13,7 +13,14 @@
 // exactly like "the thing is absent", so each negative is paired with a positive
 // that proves the query can see anything at all.
 //
-// READ-ONLY: every statement is a SELECT.
+// READ-ONLY: every statement is a SELECT (plus one GET to the Vercel API in
+// section [7], which reads env var NAMES only, never values).
+//
+// HARMLESS NOISE ON WINDOWS: after the final line this may print
+// `Assertion failed: !(handle->flags & UV_HANDLE_CLOSING) ... async.c`. That is
+// Node tearing down an undici keepalive socket during process.exit, it happens
+// AFTER every check has run and printed, and the exit code is still correct
+// (measured). Do not read it as a failure.
 import { readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -176,6 +183,57 @@ try {
       from public.syn_zmanim_cache where source = 'myzmanim'`
     check('the cache reaches far enough forward that no API call is needed for a year',
       (horizon[0]?.days ?? 0) > 300, `${horizon[0]?.days} days of headroom`)
+  }
+
+  // -------------------------------------------------------------------------
+  // [7] GO-LIVE READINESS — what is still between here and "fully live"?
+  //
+  // Reported rather than asserted: none of this is a FAILURE today, because the
+  // deliberate position is that production runs from cache with no credential
+  // (docs/23 §7). The point is that when a paid plan arrives, the remaining
+  // steps are visible and few.
+  if (!LOCAL) {
+    console.log('\n[7] GO-LIVE READINESS (reported, not asserted)')
+    const token = get('VERCEL_TOKEN')
+    const project = get('VERCEL_PROJECT_ID') || 'prj_reUQNNvf0XcjS6YcRGEYRXBC8XYM'
+    let vercelKeys: string[] | null = null
+    if (token) {
+      try {
+        const res = await fetch(`https://api.vercel.com/v9/projects/${project}/env`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        const body = (await res.json()) as { envs?: { key: string }[]; error?: { message: string } }
+        vercelKeys = body.error ? null : (body.envs ?? []).map((e) => e.key)
+      } catch { vercelKeys = null }
+    }
+
+    const hasCreds = !!vercelKeys?.includes('MYZMANIM_USER') && !!vercelKeys?.includes('MYZMANIM_KEY')
+    const enabled = setting[0]?.enabled === 'true'
+    const cacheDays = held[0]?.n ?? 0
+
+    console.log(`      schema on production .................. yes (verified above)`)
+    console.log(`      cache populated ...................... ${cacheDays > 0 ? `yes (${cacheDays} days)` : 'NO'}`)
+    console.log(`      myzmanim creds in Vercel ............. ${vercelKeys === null ? 'UNKNOWN (no VERCEL_TOKEN)' : hasCreds ? 'yes' : 'no'}`)
+    console.log(`      prefetch switch ...................... ${enabled ? 'ON' : 'OFF'}`)
+    console.log('')
+    if (!hasCreds && cacheDays > 0) {
+      console.log('      => Production serves real zmanim FROM CACHE with no credential.')
+      console.log('         That is the intended state while the account is on trial.')
+    }
+    if (!hasCreds) {
+      console.log('      => WHEN A PAID PLAN EXISTS, to go fully live:')
+      console.log('         1. Add MYZMANIM_USER and MYZMANIM_KEY to Vercel (production),')
+      console.log('            then redeploy. Only needed so a cache MISS can fall back to')
+      console.log('            the API — with a warm cache the pages never call it.')
+      console.log('         2. Turn the prefetch switch on, so the rolling horizon is')
+      console.log('            topped up: select public.platform_setting_merge(')
+      console.log(`              'zmanim.prefetch', '{"enabled":true}'::jsonb);`)
+      console.log('            (as a superadmin — or from the console screen once built)')
+      console.log('         3. Make sure the worker RUNS (docs/23 §7): prod has no')
+      console.log('            continuously-running worker, so the nightly sweep fires only')
+      console.log('            while `pnpm worker:prod` is up. Until then, top up with')
+      console.log('            `pnpm exec tsx scripts/zmanim-backfill.mts --to-prod`.')
+    }
   }
 
   console.log(`\n${pass} checks passed, ${fail} failed`)

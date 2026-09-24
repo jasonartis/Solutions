@@ -395,6 +395,31 @@ Recommendation as given, splitting the cheap half from the speculative half:
 
 Per docs/03 #27, the new table must `revoke` before it `grant`s.
 
+## 6a. GO LIVE — what changes when a paid plan exists
+
+**Do not maintain a checklist here that can rot.** The live answer is
+`pnpm exec tsx scripts/prod-verify-zmanim-schema.mts`, whose section [7] reads
+the actual state (schema, cache days, whether Vercel holds the credentials,
+whether the switch is on) and prints the remaining steps. As of 2026-09-24 it
+reports: schema yes, cache 367 days, **creds in Vercel no**, switch **OFF**.
+
+The shape of it, so the size of the job is known:
+
+1. **Add `MYZMANIM_USER` and `MYZMANIM_KEY` to Vercel (production), redeploy.**
+   Two variables. Production currently holds only three env vars in total and
+   none of them is a myzmanim credential — **so production has never once called
+   myzmanim**, which means it has been on hebcal fallback since the module
+   shipped, independently of the two connector bugs. These are needed only so a
+   cache MISS can fall back to the API; with a warm cache the pages never call it.
+2. **Turn the switch on** — `platform_setting_merge('zmanim.prefetch',
+   '{"enabled":true}')` as a superadmin, or one click once the console exists.
+3. **Make sure the worker runs** (§7). Until it does, top up production with
+   `pnpm exec tsx scripts/zmanim-backfill.mts --to-prod`, which calls the API
+   from dev and copies rows.
+
+**Nothing else.** The schema, the read path and a year of data are already on
+production, so the credential really is the only moving part.
+
 ## 7. Prerequisite
 
 **⚠ RESOLVED, BUT THE NEW KEY IS A TRIAL AND TRIALS FORBID PRODUCTION USE.**
