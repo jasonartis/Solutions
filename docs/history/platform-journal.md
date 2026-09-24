@@ -41,6 +41,61 @@ decision log, docs/03 conventions, docs/12 safeguards) — this is the chronolog
   (VM last-admin floor) sits just below this one — a live confirmation that the "another Claude
   session may be working in this repo" warning is not hypothetical. Committed with an explicit
   pathspec throughout, per that standing rule.
+- **2026-09-23/24 (THE ZMANIM CACHE — schema, read-through and sweep; Opus, one migration
+  `20260923010000`, IN THE REPO ONLY, `migrate:prod` NOT run. CI green `74c2776`).** Founder
+  asked for a batch that grabs and stores a year of myzmanim JSONs so renders read locally.
+  Full design + NINE founder decisions: **docs/23**. Half the slice is built; the two UIs are
+  not, and their agreed shape is docs/23 §5c.
+  **THE TABLE ALREADY EXISTED AND HAD NEVER BEEN USED.** `syn_zmanim_cache` was created in the
+  module's FIRST migration (20260707030000) with the comment *"one myzmanim call per (location,
+  date), shared across orgs"* — 0 TypeScript references, ever. Founder decision 1 (STORE RAW)
+  repurposed its `times` column to `payload`, guarded by an assertion that refuses to run if the
+  table has rows, because a row under the old meaning would be parsed times masquerading as a
+  raw response. Measured 0 rows on prod and locally first. **Storing raw recovers `Place` (20
+  fields) and `Time` (42: DafYomi, DateJewish, Parsha, Holiday, Omer) which arrive in the same
+  paid call and were being discarded.**
+  **THE REVIEW FINDING THAT MATTERED — a health check reset by the wrong source.** The 3-day
+  circuit breaker was going to ask *"has any call succeeded in 3 days?"*. But a MAKER's manual
+  fetch also writes `ok = true`, so it resets the same `max(fetched_at)` — the sweep could be
+  dead for a month and the breaker would never trip, which is exactly the case it exists to
+  catch. Demonstrated on live rows: `max(fetched_at) where ok` = **0 seconds ("healthy")**;
+  the same rows gated on `origin='sweep'` = **5 days (trips)**. So the log carries `origin`
+  (`not null` + CHECK: sweep/maker/backfill) and the breaker counts sweep calls only. It also
+  makes the cost counter answer the question that actually worried the founder — *who* spent
+  the money. **Generalises: an aggregate over mixed-origin events cannot answer a question
+  about ONE origin, and the failure is silent in the safe-looking direction.**
+  **NEVER CACHE A FAILURE, proved against the REAL failing API rather than a mock** —
+  `scripts/verify-zmanim-prefetch.mts` **18/18** with our currently-unauthorized key. myzmanim
+  answers a bad key with **HTTP 200**, no error status, and a full skeleton of `0001-01-01`
+  sentinels, so a sweep trusting the status writes 365 poisoned rows per location that the
+  read-through then serves forever **without ever calling the API again** — silent in both
+  directions, because pages still render and the cache looks full. Verified: cache stays empty,
+  the failure is logged verbatim, the run stops after the FIRST failure instead of burning the
+  budget, and the breaker then flips the same switch a human uses.
+  **Three more things the two adversarial reviews changed:** the switch is **seeded OFF** (a
+  sweep defaulting ON would hammer a dead API from the first deploy); `syn_zmanim_cached()`
+  returns `source` and `fetched_at`, without which founder decision 3 is unanswerable and a
+  later signature change costs a second function plus a full ACL restatement; and the read range
+  is capped at 400 days so anon cannot dump a cache we pay for. The ACL review came back SOUND,
+  measured against the live DB — anon holds nothing, and even `service_role` is denied DELETE on
+  the append-only log (enforced by GRANT, not a trigger, which would collide with FK cascades).
+  **ONE QUERY SERVES ALL THREE OF FOUNDER DECISION 4's CASES** — horizon advance, catch-up after
+  an outage, and random holes — nearest-date-first. Two subtleties worth keeping:
+  `source='myzmanim'` belongs in the **JOIN**, not the WHERE, or the anti-join inverts and
+  hebcal-covered dates vanish from "missing"; and the window starts at `current_date - 1`
+  because `date` is a LOCAL CIVIL date while the database's `current_date` is UTC, so after
+  ~19:00 New York time it would otherwise skip today forever.
+  **TWO RATCHETS FIRED AND BOTH WERE RIGHT.** The data-browser catalog test caught both new
+  `auth.users` FK columns: `requested_by` is now a declared lookup (a durable record of
+  something a person DID), `updated_by` omitted with a reason (it is OVERWRITTEN on every
+  change, so it is a config stamp, not a history). The view-as coverage ratchet stayed quiet
+  only because synagogue-schedules is not rank-mapped — noted in docs/23 §5b so it reads as an
+  expected two-line edit later rather than a mystery failure.
+  **STILL OWED:** the two UIs, then `migrate:prod` (deliberately held — the migration alone
+  creates a switch with no way to turn it on except SQL). **And two prerequisites before any of
+  it can do anything: the myzmanim account, and the fact that PROD HAS NO CONTINUOUSLY-RUNNING
+  WORKER**, so the cron sweep will not fire there any more than docs/17's prunes do.
+  db 248/248, module suite 61/61, typecheck 9/9.
 - **2026-09-23 (MYZMANIM: TWO REAL BUGS IN THE CONNECTOR, found while costing a zmanim cache;
   Opus, no migration).** The synagogue module has been silently serving hebcal fallback times
   since at least 2026-07-07, and the module spec had parked it as "account-side, zero code

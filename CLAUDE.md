@@ -956,9 +956,21 @@ varies ONE thing separates them** — myzmanim's published demo credential retur
 `DoNotUseDemoCredentials` over POST but the generic `NotAuthorized…` over GET. Re-run
 `pnpm exec tsx scripts/verify-myzmanim-request-shape.mts` (no subscription needed; 4/1 today,
 the 1 fail being the real account state). **Founder action: the API dashboard**
-(https://www.myzmanim.com/apidemo.aspx). Endpoint is NOT deprecated. **The zmanim CACHE that
-prompted this is DESIGNED, NOT BUILT — [docs/23](docs/23-zmanim-cache-and-global-batches.md),
-six founder decisions recorded there; do not re-litigate them.**
+(https://www.myzmanim.com/apidemo.aspx). Endpoint is NOT deprecated.
+**THE ZMANIM CACHE IS HALF BUILT (2026-09-23/24) — IN THE REPO ONLY, `migrate:prod` HAS NOT
+RUN. Live doc [docs/23](docs/23-zmanim-cache-and-global-batches.md); NINE founder decisions
+are recorded there — do not re-litigate them, and read its status table first.** BUILT and
+CI-green (`74c2776`): migration `20260923010000` (cache stores the RAW payload,
+`platform_settings`, the append-only `syn_zmanim_fetch_log`, `syn_zmanim_cached()`), the
+read-through (a warm week = ZERO API calls, 12 tests), and the nightly sweep with gap-fill +
+a 3-day circuit breaker (18/18 against the LIVE failing API — **the poisoning test is the
+point: myzmanim answers a bad key with HTTP 200 and a full skeleton of sentinels, so a naive
+sweep would write 365 rows the read-through would then serve forever**). NOT BUILT: the two
+UIs (the console screen and the maker panel — **their agreed shape is docs/23 §5c**).
+**TWO PREREQUISITES BEFORE IT CAN DO ANYTHING, and the second is easy to miss:** the
+myzmanim account (above), **and the fact that PROD HAS NO CONTINUOUSLY-RUNNING WORKER** — the
+sweep is a pg-boss cron job, so like docs/17's prunes it will not fire on prod until the
+worker runs there, leaving the cache empty with nothing erroring to explain it.
 
 **Standing rules:** never start a slice/module build without the founder initiating; every
 migration/RLS/trigger change runs the docs/03 #12 rhythm (draft → adversarial review →
