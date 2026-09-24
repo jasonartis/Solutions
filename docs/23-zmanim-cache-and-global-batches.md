@@ -346,8 +346,29 @@ orgs. Three honest options:
     switch and waits for the nightly sweep. Cheapest, and weakest exactly when it
     matters: with no worker on prod (§7), the switch alone does nothing visible.
 
-  **Recommendation: (b)**, because the same problem will recur for every future
-  global batch, and (a) writes something untrue into a table people read.
+  **⚠ RECOMMENDATION REVISED 2026-09-24, and the reason changes the whole scope
+  of v1.** The first recommendation here was (b), argued on semantics alone. That
+  ignored what the buttons would actually DO on production today.
+
+  **BOTH action buttons are INERT on prod until the worker runs.** `job_requests`
+  is drained by the worker's poller, and prod has no continuously-running worker
+  (§7). So the superadmin's "Backfill year" AND the maker's "Fetch this week"
+  would both enqueue a row that nothing picks up — a button that appears to work
+  and silently does nothing, which is worse than no button.
+
+  **So the honest v1 is READ-ONLY surfaces:**
+  - **Console:** status, coverage strip, API health, the counter, the switch and
+    the three knobs. No "run now", no "backfill".
+  - **Maker panel:** the degraded badge and what is cached. No fetch buttons.
+  - **Filling stays `scripts/zmanim-backfill.mts`**, which is how production's
+    367 days got there and works without a worker.
+
+  That v1 needs **no migration at all**, so this decision is DEFERRED rather than
+  made — and it should be revisited together with standing the worker up, since
+  that is the event that makes action buttons meaningful. When it is,
+  **(b) is still the right answer** for the reason first given: the same problem
+  recurs for every future global batch, and (a) writes something untrue into a
+  table people read.
 
 **3. `origin` must be set correctly by whoever enqueues.** `sweep` for the cron,
 `maker` for the module button, `backfill` for the console. The circuit breaker
