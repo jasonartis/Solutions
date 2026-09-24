@@ -317,6 +317,47 @@ Candle-lighting is unavailable from the backup source.
   button, so the panel shows *Queued… → Updated* and re-renders. A maker's
   action can only ADD cache rows for their own location.
 
+### What the UI build still has to WIRE — and one decision it must make
+
+Everything above is settled design. These are the integration points that do not
+exist yet, listed because an implementer will hit them in the first hour.
+
+**1. There is no job kind for a user-triggered fetch.** `runZmanimPrefetch` is
+called only by the pg-boss cron. The worker's `jobHandlers` map
+(`apps/worker/src/index.ts:66`) contains exactly one entry, `RENDER_KIND`. Both
+buttons need a new kind — say `synagogue-schedules.zmanim-fetch` — registered
+there and dispatching to `runZmanimPrefetch` with `{origin, locationKey, from,
+to}`. Copy `synagogue-render.ts`'s shape; the export button
+(`ui/export-actions.ts`) is the worked example of the whole path.
+
+**2. THE DECISION: `job_requests.org_id` is NOT NULL, and the console's actions
+are not org-scoped.** The maker's "Fetch this week" is fine — it belongs to their
+org, and `syn_can_write` gates it. But the superadmin's "Backfill year" and "Run
+sweep now" are per-LOCATION or platform-wide, and a location serves one-or-many
+orgs. Three honest options:
+
+  - **(a) Attribute to one org that uses the location.** No migration. It is a
+    fudge, and the row then reads as if that org asked for something it did not.
+  - **(b) Make `org_id` nullable for platform-level jobs.** A migration plus an
+    RLS arm for superadmin-owned rows — `job_requests` is org-scoped today, so a
+    NULL-org row needs a policy that lets exactly a superadmin insert and read it.
+    Cleanest semantically, and it generalises to the next platform-level job.
+  - **(c) No "run now" from the console at all** — the superadmin flips the
+    switch and waits for the nightly sweep. Cheapest, and weakest exactly when it
+    matters: with no worker on prod (§7), the switch alone does nothing visible.
+
+  **Recommendation: (b)**, because the same problem will recur for every future
+  global batch, and (a) writes something untrue into a table people read.
+
+**3. `origin` must be set correctly by whoever enqueues.** `sweep` for the cron,
+`maker` for the module button, `backfill` for the console. The circuit breaker
+counts ONLY `origin = 'sweep'` (§5a), so mislabelling a maker's fetch as a sweep
+silently disables the breaker — the exact defect the adversarial review caught.
+
+**4. The console writes settings through `platform_setting_merge(key, patch)`,
+never a direct UPDATE** (§6), or a console save will clobber an auto-pause that
+happened in between.
+
 ### The walkthrough this is designed to produce
 
 1. The key is fixed; `verify-myzmanim-request-shape.mts` goes 5/5.
