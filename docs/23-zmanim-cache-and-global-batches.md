@@ -221,6 +221,87 @@ are platform-wide operational data rather than anything a position can "see", an
 the log is superadmin-only. Recorded here so it reads as an expected two-line
 edit rather than a mystery failure.
 
+## 5c. THE UI SHAPE — agreed with the founder 2026-09-23, not yet built
+
+Recorded here because it existed only in conversation, which is the state most
+likely to be lost at a handoff. §3 settles WHO; this settles WHAT THEY SEE.
+
+### The Owner Console screen (`/console/zmanim`, superadmin)
+
+The question this page exists to answer is *"is the next year covered, and if
+not, where are the holes?"*
+
+```
+Zmanim prefetch                                    [ Daily prefetch: ●ON  ]
+─────────────────────────────────────────────────────────────────────────
+API health   ✕ NOT AUTHORIZED — last success: never
+             ErrMsg: NotAuthorizedSeeApiDashboardForDetails
+             Request shape verified OK · check the myzmanim dashboard
+             Every schedule is serving hebcal fallback (no candle-lighting).
+
+Horizon [365] days · budget [40] calls/run · auto-pause after [3] days
+Calls this month: 412  (sweep 380 · maker 28 · backfill 4)
+Last sweep 04:40, 0 written, 7 failed
+
+LOCATION    ORGS                  COVERAGE            FIRST GAP    ACTIONS
+─────────────────────────────────────────────────────────────────────────
+US11210     Pozna, Demo Shul      0 / 366   ▱▱▱▱▱▱▱▱  today        [Fill gaps] [Backfill year]
+IL-Jeru…    Demo Synagogue      181 / 366   ▰▰▰▰▱▱▱▱  2027-03-22   [Fill gaps] [Backfill year]
+                                                      ↑ 12 months →
+                                            [ Run sweep for all locations now ]
+```
+
+- **The coverage strip earns its place.** Founder decision 4's scenario — *"it
+  failed to collect 1 month out and 2.5 months out on random days"* — is
+  invisible as a number (`363/366` reads as fine) and obvious as two gaps in a
+  bar. One segment per week; the title attribute names the dates.
+- **Horizon, budget and pause-after-days are INPUTS**, not constants (founder,
+  2026-09-23). They live in the `zmanim.prefetch` settings row, so changing them
+  needs no migration. Write them through `platform_setting_merge()`.
+- **The three counters are split by `origin`**, which is the only way to answer
+  the question §3 actually worries about: who spent the money.
+- **`Backfill year` states its cost before it runs** — *"This will make up to 366
+  API calls for US11210"* — and disables itself while a backfill for that
+  location is already queued.
+- **API health is read from `syn_zmanim_fetch_log`**, latest `not ok` row, so the
+  vendor's own error string appears verbatim rather than being paraphrased.
+
+### The maker panel (in the module, `maker` and above)
+
+Makers think in *the week I am publishing*, not in years. This sits beside the
+existing Export panel on `/o/<slug>/m/synagogue-schedules`.
+
+```
+Times source                                        ⚠ Backup source in use
+─────────────────────────────────────────────────────────────────────────
+This week (Sep 21–27) is using hebcal, not myzmanim.
+Candle-lighting is unavailable from the backup source.
+
+              [ Fetch this week ]  [ Fetch next 4 weeks ]
+```
+
+- **Healthy state is a quiet one-liner** — *"Times from myzmanim, cached
+  2026-09-23"* — and the warning simply does not render. Ordinary members see
+  neither (founder decision 3).
+- **Presets, not a date-range picker** (founder, 2026-09-23): they bound the cost
+  naturally and match how makers think.
+- **Founder decision 8 is a UI rule, not just a backend one.** If the week is
+  already complete, say so and do not offer to re-fetch; if it is partial, the
+  button must name exactly what it would do — *"Fetch 2 missing days"*. Never
+  render a button that would spend money re-fetching data we already hold.
+- Both buttons go through `job_requests` → worker, exactly like the Export
+  button, so the panel shows *Queued… → Updated* and re-renders. A maker's
+  action can only ADD cache rows for their own location.
+
+### The walkthrough this is designed to produce
+
+1. The key is fixed; `verify-myzmanim-request-shape.mts` goes 5/5.
+2. `/console/zmanim` — API health flips to green.
+3. **Backfill year** on US11210: ~366 calls, the strip fills.
+4. The daily sweep takes over — one new day at the horizon, plus any holes.
+5. A maker opens their schedule: warning gone, and the page makes **zero** API
+   calls because everything is served from cache.
+
 ## 6. Where the on/off switch lives — OPEN
 
 There is **no platform-global settings store**: settings exist only on `orgs`,
@@ -247,4 +328,22 @@ Per docs/03 #27, the new table must `revoke` before it `grant`s.
 myzmanim's published demo credential, but our key is still refused. Nothing can
 be prefetched until that is resolved — though the whole mechanism can be built
 and tested against an empty cache, and will fill on the first tick once the key
-works. Re-check with `pnpm exec tsx scripts/verify-myzmanim-request-shape.mts`.
+works. Re-check with `pnpm exec tsx scripts/verify-myzmanim-request-shape.mts`
+(4 pass / 1 fail today; the fail IS the account state, and it goes 5/5 when the
+key works).
+
+**The end-to-end acceptance step already exists**, and is better than anything
+written from scratch: `apps/worker/scripts/test-myzmanim.ts` holds **seven real
+values from the founder's own December sheet** (2025-12-12, US11210) and checks
+them against a live call. It imports `fetchMyzmanimDay`, so it inherited the
+request-shape fix automatically. **It has a shelf life:** its fixture date falls
+outside the API's rolling "current date +/- 1 year" window on **2026-12-12**,
+after which it will fail for a reason that has nothing to do with the connector.
+Move the fixture forward, or re-dump against a current date, before then.
+
+**HOLD `migrate:prod` UNTIL THE CONSOLE EXISTS.** The migration is safe and CI
+is green, but on its own it creates a global switch with no way to turn it on
+except hand-written SQL, and a sweep that is seeded OFF. Deploying the screen and
+the schema together is what makes the feature operable; there is no benefit to
+landing the schema early, and docs/03 #28 means the migration cannot be amended
+once pushed anyway.
