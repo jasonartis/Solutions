@@ -4,6 +4,48 @@ The running, dated build journal that used to live in `CLAUDE.md`'s "## Current 
 section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every session)
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
+- **2026-09-23/24 (FULL DOCS-TREE STALENESS AUDIT, two rounds, Sonnet session, no code/schema
+  touched — docs only.)** Prompted by finding two real staleness bugs by accident while doing
+  unrelated work the same session (branch protection had silently disappeared; an "org
+  self-management has no UI" claim was already false). Rather than let that be luck, ran a
+  systematic pass. **Round 1** (4 parallel agents): CLAUDE.md's email-slice/profile-visibility
+  claims, its seat-authority/module-role claims, its "Next/open" backlog list, and docs/12's
+  checklist — 1 real fix (docs/12 item 6 + CLAUDE.md both said "terms wording... genuinely
+  open"; a full DRAFT Terms of Service already existed on `/privacy`, undocumented), 1 agent
+  false positive caught by direct re-verification before touching anything (the VM last-admin
+  floor was already correctly marked shipped). **Round 2** (10 parallel agents, deliberately
+  pointed at the LESS-touched docs — CLAUDE.md/docs/12 get edited by nearly every session,
+  which is why round 1 found so little there): docs/00-03, 04-06, 07-11, 14, 15, 16-17, 18, 19,
+  20, and 21-22-plus-every-module-spec. **7 more real fixes**, each personally re-verified
+  against the live repo (a migration file, a live GitHub API call, an actual `.env.accounts`
+  field) before editing, never on an agent's say-so alone: docs/01+02 claimed `packages/ui`
+  (shadcn/ui) exists — it was never built, no directory, no dependency, nothing imports it;
+  docs/04 said Sentry/UptimeRobot were "not yet wired" (both live since late Aug/early Sept);
+  docs/14 said UptimeRobot credentials were "never recorded" (they're filled) and that the repo
+  is "private" (verified live — it's public, matching CLAUDE.md's own incident log); docs/15
+  said speed-dating's view-as pairs "still await" review (all six resolved weeks/days ago);
+  docs/18's privacy/terms section still read as wording "owed" (same debt round 1 had already
+  discharged elsewhere — this was docs/18's own un-synced copy of that status); docs/20 said
+  `find_module_peer` was "NOT built" (a function by that name shipped in the email slice — fixed
+  precisely, noting it's a different, simpler 2-arg version than what docs/20 designed, not the
+  same mechanism). **Also fixed while cleaning up, unrelated to either round:** CLAUDE.md's own
+  residual note that the `verify-console-view-as.mts` `VERIFY_*` env vars were "in NO env file"
+  — stale since this same session filled them in earlier (see the CI/master-gating entry above).
+  **Everything else audited came back clean**: docs 03, 05, 06, 07-11, 16, 17, 19, 21, 22, and
+  module specs 1/2/4/6/7/8 — recorded here specifically so a future session does NOT
+  redundantly re-run the same sweep without a reason to suspect drift; treat 2026-09-24 as the
+  as-of date for that assurance, not a permanent guarantee.
+  **One flagged, deliberately NOT touched:** module-3's spec hasn't been updated to reference a
+  concurrent session's own in-flight zmanim-cache work (docs/23, migration `20260923010000`) —
+  editing another session's active feature's spec mid-flight was judged higher-risk than leaving
+  a temporary gap for them to close themselves.
+  **One operational discovery, worth a gotcha, not a fix:** a `git push` can report `cannot lock
+  ref 'refs/heads/master': is at X but expected Y` even when the push actually SUCCEEDED — this
+  repo's `.git` directory is shared by concurrent sessions (not separate clones), so a
+  concurrent session's own git operation can win a transient local lock race and produce a
+  misleading error on an otherwise-successful push. Always `git fetch` + compare
+  `rev-parse HEAD` against `rev-parse origin/master` before assuming a push failed and retrying
+  — don't force anything on the strength of the error text alone.
 - **2026-09-23 (CI: replaced the second, drifting Supabase CLI with the lockfile-pinned one;
   and docs/12 item 10 — the master-gating decision — DECIDED AND SHIPPED, Sonnet session, no
   migration.)** Two small, unrelated pieces of hygiene, both founder-directed.

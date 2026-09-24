@@ -444,8 +444,13 @@ open:**
   file** (checked 2026-08-09: `.env.deploy` and `.env.accounts` both carry `PROD_DEMO_PASSWORD`
   instead), so a prod run needs them exported by hand — the fallback to
   `owner@demo.local`/`password123` is silent, and that account is not a superadmin on prod.
-  Tidy-up, founder's call because it touches credential files: add them to `.env.accounts.example`
-  + `.env.deploy`, or just document the export line. Full story → journal.
+  ~~Tidy-up, founder's call because it touches credential files: add them to
+  `.env.accounts.example` + `.env.deploy`, or just document the export line.~~ **DONE
+  2026-09-23** — all three added to `.env.deploy`/`.env.accounts` (real values) and
+  `.env.accounts.example` (blank template); NOT auto-loaded by the script itself (that file
+  also holds the real prod superadmin login, and a plain local run must never silently prefer
+  it), so the export-by-hand line is documented in the script's own header comment instead.
+  Full story → journal.
 **SEAT AUTHORITY — THE ORG-MEMBERSHIP HALF IS FIXED (2026-09-10, `cf63e77`,
 `20260910040000`). A SECOND, NARROWER HALF IS OPEN.** docs/19's class is closed for all four
 remaining modules: 8 functions + 5 inline policy arms gained the `is_org_member(<roster>.org_id)`
@@ -982,6 +987,20 @@ in the sections below.
 
 ## Hard-won local-dev gotchas (Windows host)
 
+- **A `git push` reporting `cannot lock ref 'refs/heads/master': is at X but expected Y` can
+  mean the push actually SUCCEEDED (2026-09-23)** — this repo's `.git` directory is SHARED by
+  concurrent sessions (not separate clones), so another session's own git operation can win a
+  transient local lock race and produce a misleading error on an otherwise-successful push.
+  Don't force-push or retry on the strength of the error text alone: `git fetch` then compare
+  `git rev-parse HEAD` against `git rev-parse origin/master` — if they match, it already went
+  through. Full story → journal.
+- **A file made executable with `chmod +x` can still land in a commit as mode `100644`
+  (non-executable) on this host (2026-09-23), even after `git update-index --chmod=+x`.**
+  `core.fileMode=false` here means `git commit <pathspec>` re-reads the working tree for a NEW
+  file rather than trusting an already-staged index mode change — the chmod silently doesn't
+  survive. Harmless for a hook Git for Windows invokes via its own shebang-detection (doesn't
+  check the bit), but would matter on a real Linux/Mac clone. Not worth fighting
+  `core.fileMode` repo-wide over one file; know it's cosmetic here and move on.
 - Node module compile cache corruption makes pnpm OOM-crash at tiny heaps → delete `%TEMP%\node-compile-cache`.
 - PowerShell 5.1 `-Encoding utf8` writes a BOM; the Supabase CLI refuses BOM'd `.env` files. Write env files from Node (scripts/dev.ts) or with BOM-less UTF8.
 - After `supabase db reset`, Kong can hold a stale route to the recreated auth container (502 on `/auth/v1/*` while `rest` works) → `docker restart supabase_kong_Solutions_Platform`.

@@ -95,11 +95,13 @@ next runs.
    curl -fsSL https://get.docker.com | sh
    ```
 
-3. **Get the code.** The repo is private, so create a GitHub fine-grained PAT
-   with read-only Contents access to `jasonartis/Solutions`, then:
+3. **Get the code.** **⚠ CORRECTED 2026-09-23 (staleness audit): the repo is PUBLIC, not
+   private** — deliberately, since 2026-09-02 (CLAUDE.md's incident log has the why: private
+   repos meter Actions minutes and this account already got charged for overage). No PAT
+   needed for a plain read-only clone:
 
    ```bash
-   git clone https://<PAT>@github.com/jasonartis/Solutions.git solutions
+   git clone https://github.com/jasonartis/Solutions.git solutions
    cd solutions
    ```
 

@@ -99,9 +99,14 @@ Every choice evaluated against: least cost, least maintenance, most expandable, 
 
 - Sentry for error tracking in web + worker; UptimeRobot pings prod + a worker heartbeat endpoint. Structured console logs (JSON) retained by the host. Enough until real scale.
 
-## CI/CD: GitHub (private repo) + GitHub Actions
+## CI/CD: GitHub (public repo, was decided private) + GitHub Actions
 
-- Decided 2026-07-06. Push → Actions: typecheck, lint, tests, build; on main: apply migrations to cloud, deploy web + worker. Vercel auto-deploys previews per PR.
+- Decided 2026-07-06 as **private**. **⚠ CORRECTED 2026-09-23 (staleness audit): the repo has
+  been deliberately PUBLIC since 2026-09-02** — private repos meter Actions minutes and this
+  account got charged for overage; see CLAUDE.md's incident log and docs/12 for the full
+  decision (revisit going private only alongside real Actions-usage discipline, not casually).
+  Push → Actions: typecheck, lint, tests, build; on main: apply migrations to cloud, deploy web
+  + worker. Vercel auto-deploys previews per PR.
 
 ## Hosting (phased — decided 2026-07-06, "managed-first, VPS later")
 

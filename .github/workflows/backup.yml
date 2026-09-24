@@ -40,10 +40,19 @@ jobs:
         run: echo "dir=$(ls -d backups/*/ | tail -1)" >> "$GITHUB_OUTPUT"
 
       # Durable storage off Supabase, off the dev PC, off Vercel. Retention
-      # is bounded (GitHub's own ceiling on a personal-account private repo)
-      # — this is the "protects against a bad day between deploys" net, not
-      # a permanent archive. docs/14 already earmarks Backblaze B2 for
+      # is bounded to 90 days (Actions' own per-artifact maximum) — this is
+      # the "protects against a bad day between deploys" net, not a
+      # permanent archive. docs/14 already earmarks Backblaze B2 for
       # unbounded off-site retention once that's worth the extra account.
+      # ⚠ CORRECTED 2026-09-23 (staleness audit): this comment previously
+      # attributed the bound to "GitHub's own ceiling on a personal-account
+      # PRIVATE repo" — the repo has been deliberately PUBLIC since
+      # 2026-09-02 (CLAUDE.md's incident log), so if the original reasoning
+      # was about private-repo storage metering rather than the flat
+      # 90-day artifact-retention cap, that premise no longer holds. Not
+      # changing `retention-days` itself — a real policy call, founder's,
+      # not a factual correction — just flagging that the stated reason may
+      # be stale even though the value may still be exactly right.
       - uses: actions/upload-artifact@v4
         with:
           name: prod-backup-${{ github.run_id }}
