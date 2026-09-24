@@ -929,8 +929,14 @@ Everything below is open but unranked:
   and no deletion route (detail: docs/modules/module-4's "TWO PRIVACY OBLIGATIONS" section).
   Full detail: docs/12 item 6.
 - Pre-launch before real customers (docs/12 checklist, docs/18 full detail): backups and
-  monitoring are DONE; 2FA is a deliberate founder deferral until a real client signs; privacy/
-  terms wording and custom SMTP remain genuinely open.
+  monitoring are DONE; 2FA is a deliberate founder deferral until a real client signs; custom
+  SMTP remains genuinely open. **⚠ CORRECTED 2026-09-23 (staleness audit) — "privacy/terms
+  wording" is NOT accurately "genuinely open."** `apps/web/app/privacy/page.tsx` already
+  carries a full DRAFT Terms of Service (short version, acceptable use, no-warranty/liability,
+  changes clause) below the privacy content, on the same page — Claude's first pass, explicitly
+  marked not founder-reviewed and not linked from any nav (docs/18 item 3). What's actually
+  open: founder review/edit of the drafted wording, and linking the page once approved — not
+  "nothing has been written."
 
 **MYZMANIM IS DOWN AND THE SYNAGOGUE MODULE HAS BEEN SILENTLY ON HEBCAL FALLBACK (found
 2026-09-23; two connector bugs FIXED, the ACCOUNT is still the blocker).** The module spec had

@@ -463,6 +463,18 @@ Found in a deliberate "what haven't we thought of" pass; ordered by urgency.
    **Raised again 2026-08-10 and explicitly DEFERRED, not forgotten:** offered as a candidate
    quick win (draft a minimal real page now, or just record the wording), the founder chose to
    skip it for this session. Still open, same exposure as stated above (nil today).
+   **⚠ CORRECTED 2026-09-23 (staleness audit) — "a privacy policy + terms page" at the top of
+   this item, and CLAUDE.md's "terms wording... genuinely open," both read as if nothing has
+   been drafted. Not true.** `apps/web/app/privacy/page.tsx` already carries a full DRAFT Terms
+   of Service section (short version, acceptable use, no-warranty/limitation of liability,
+   changes clause) below the privacy content, on the same page — same status class as the
+   privacy wording above it: a prior session's first pass, explicitly not founder-reviewed. Its
+   own file header still says "not linked from any nav yet," which is the same stale-banner
+   situation already recorded above for the privacy half (the footer DOES link `/privacy` per
+   the mechanical-guards section) — left alone for the same reason: fixing it unilaterally would
+   read as declaring the terms final, and that is the founder's call. **What's actually open for
+   terms: founder review/edit of the drafted wording, then removing the stale banner once
+   approved — not "nothing has been written."**
 6a. **PRODUCTION POSTGRES TIMEOUTS — measured read-only 2026-08-09, recorded
    because they bound every query the app makes and are invisible locally.** The
    local stack sets none of these, so a query that is merely slow here can FAIL
