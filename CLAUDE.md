@@ -846,8 +846,11 @@ Everything below is open but unranked:
   `profiles-public-columns.test.ts` AND in `prod-verify-profile-visibility.mts` against real
   production — which is the only environment that matters, and which neither local nor CI
   matches anyway (Supabase chooses prod's version).
-  **STATUS: founder is deciding (asked 2026-09-17, still open 2026-09-22). Shared-pipeline
-  change, so do not do it unprompted. Nothing depends on it.**
+  ~~**STATUS: founder is deciding (asked 2026-09-17, still open 2026-09-22). Shared-pipeline
+  change, so do not do it unprompted. Nothing depends on it.**~~ **DECIDED AND SHIPPED
+  2026-09-23 (`d8a7a5f`) — the fix above (delete `setup-cli`, use `pnpm exec supabase`
+  everywhere) is live in `ci.yml`.** Do not re-open this question or re-run this analysis;
+  the whole gotcha above is kept for the reasoning trail, not as an open decision.
 - **Diagnosing a CI job that fails INSTANTLY with an EMPTY steps array (2026-09-02)** — this is
   never a code/test failure; the job never started. The tell: `GET /repos/<owner>/<repo>/actions/
   runs/<id>/jobs` shows `"steps": []` and `completed_at` within 1-2 seconds of `started_at`. The
