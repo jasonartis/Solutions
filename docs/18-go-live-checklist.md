@@ -182,6 +182,16 @@ design, and *an audit log a deletion request can empty is not an audit log*.
 **The founder owns this wording.** Claude drafts; do not ship words about what the platform
 collects without the founder reading them.
 
+**⚠ CORRECTED 2026-09-23 (staleness audit) — this section still reads as pending; it isn't.**
+`apps/web/app/privacy/page.tsx` already carries both owed engagement lines ("when you sign
+in and what you do within your organization") and a deletion-request answer that resolves
+the append-only-audit-log tension above (the staff-access record stays on file, de-identified,
+after deletion — same shape docs/12 predicted). CLAUDE.md's own "THE PRIVACY-POLICY LINE"
+entry already discharged this debt on 2026-09-22; this file's own copy of the same status was
+never updated to match. What's still genuinely open is only the TERMS half's founder review
+(docs/12 item 6's 2026-09-23 correction) and the page's stale "DRAFT, not linked" banner
+(the footer does link it) — neither of those is "the wording doesn't exist yet."
+
 ## 4. Worker on a real host
 
 docs/10 holds the deploy runbook (~30 minutes, a small VPS). Until it runs somewhere real,

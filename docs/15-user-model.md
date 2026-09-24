@@ -334,11 +334,15 @@ Implementation notes:
   "auto-enrolled, nobody has reviewed them yet" queue — and the column is needed for
   audit anyway, so the feature is nearly free.
 
-## 8. View-as and audit — **[BUILT 2026-07-31; classroom + nail-salon reviewed]**
+## 8. View-as and audit — **[BUILT 2026-07-31; classroom + nail-salon + speed-dating reviewed]**
 
-*(Declarations exist for all 8 modules. Edges are ON for **classroom** (2026-07-31)
-and **nail-salon** (2026-08-04, its own surface review); speed-dating's six pairs
-are enumerated and still await theirs. See the 2026-07-31 decisions entry for what
+*(Declarations exist for all 8 modules. Edges are ON for **classroom** (2026-07-31),
+**nail-salon** (2026-08-04, its own surface review), and **speed-dating** — its three
+staff-to-staff pairs since 2026-08-28 (`packages/platform/src/view-as-modules.ts`) and
+its three into-`participant` pairs' mode 1 since 2026-09-20/22 (§8's own later entry
+below). **Corrected 2026-09-23 (staleness audit): this line previously said speed-dating's
+pairs "are enumerated and still await theirs" — that stopped being true weeks ago and was
+never updated here, only in CLAUDE.md and the code.** See the 2026-07-31 decisions entry for what
 was resolved at build time — including professor→student, which point 11 below left
 open, and a correction to the "personal layer" vocabulary — and the 2026-08-04 entry
 for the distinction the salon review added: mode 1 answers "what can this POSITION

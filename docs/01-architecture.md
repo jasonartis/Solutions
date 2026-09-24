@@ -36,8 +36,13 @@ One multi-tenant web application + one background worker, sharing one Postgres d
 ├── packages/
 │   ├── db/                   # Drizzle type-only schema mirror, seed script, RLS tests
 │   │                         #   (migrations live in supabase/migrations — see docs/02)
-│   ├── platform/             # Shared primitives (see catalog below)
-│   └── ui/                   # Shared components (shadcn/ui based)
+│   └── platform/             # Shared primitives (see catalog below)
+│       # ⚠ CORRECTED 2026-09-23 (staleness audit): this used to also list a
+│       # `packages/ui/` (shadcn/ui components) — it was never built.
+│       # `packages/` today holds only `db` and `platform`; no @platform/ui
+│       # import exists anywhere, no shadcn dependency exists. Tailwind is
+│       # real and in use (docs/02); the shadcn/packages/ui half of that
+│       # plan never happened. See docs/02's matching correction.
 ├── modules/
 │   ├── matchmaking/          # each module: one package, strict anatomy (docs/03)
 │   ├── classroom/

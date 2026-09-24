@@ -26,9 +26,18 @@ guard; and the app-side fix so self-block no longer leaks through `addMember`.
 Verified db 204/204 → e2e 52/52 in CI's order, and 15/15 by
 `scripts/prod-verify-vm-policy-split.mts`.
 
-**What is NOT built:** the Public Square org, `orgs.kind`, `find_module_peer`,
+**What is NOT built:** the Public Square org, `orgs.kind`,
 the auto-invite trigger (deliberately — the founder chose invite-only, §16.3),
 and `join_module`, which is **unbuildable as specified** (§17.6).
+**⚠ CORRECTED 2026-09-23 (staleness audit): `find_module_peer` removed from this list — it now
+exists**, `supabase/migrations/20260917010000_email_definers.sql:221`, shipped as part of the
+email slice, prod-verified (docs/22 §3, F2's naming decision applied to it). **But not the
+mechanism this doc designed for it below** — the shipped signature is
+`find_module_peer(check_org_id, target_email)`, two args, no `check_module_key` scoping and no
+throttle table (§12.4 still correctly describes those as missing). It was built to replace the
+three module resolvers' stale `profiles.email` reads (classroom/matchmaking/visual-messaging),
+not yet wired to `join_module`/self-service-seat throttling. Don't read this correction as "the
+join-module design is done" — only the differently-scoped function sharing its name is.
 
 **Review state, stated honestly:** v1 (2026-09-06) was reviewed by four agents
 and abandoned. v2 (2026-09-08) was sent to six; three returned and three died on

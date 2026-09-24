@@ -42,6 +42,12 @@ Every choice evaluated against: least cost, least maintenance, most expandable, 
 ## UI kit: Tailwind CSS + shadcn/ui
 
 - **Why:** shadcn components are copied into `packages/ui` (we own the code, no dependency treadmill); Tailwind is the ecosystem default AI tools write fluently. Free, MIT.
+- **⚠ CORRECTED 2026-09-23 (staleness audit): the shadcn/`packages/ui` half of this never
+  happened.** No `packages/ui` directory exists, no shadcn dependency exists anywhere in the
+  repo, and nothing imports `@platform/ui`. Tailwind alone is real and in active use
+  (`apps/web/package.json`). Every module apparently hand-rolled its own Tailwind classes
+  rather than drawing from a shared shadcn-based kit — worth knowing before assuming a shared
+  component exists anywhere.
 
 ## Job queue: pg-boss
 

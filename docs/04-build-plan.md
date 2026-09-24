@@ -20,7 +20,7 @@ Includes the **dev-script harness** (docs/01 dev-mode matrix): named start/stop 
 
 **Explicitly excluded:** dashboard builders, ingestion frameworks, any primitive no module needs yet.
 
-**Status: DONE (2026-07-07).** Live in production at solutions-platform.vercel.app (Vercel + GitHub Actions, prod Supabase migrated); RLS isolation proven by test; CI green with e2e. Sentry/UptimeRobot are not yet wired (tracked as a founder action, docs/12).
+**Status: DONE (2026-07-07).** Live in production at solutions-platform.vercel.app (Vercel + GitHub Actions, prod Supabase migrated); RLS isolation proven by test; CI green with e2e. ~~Sentry/UptimeRobot are not yet wired (tracked as a founder action, docs/12).~~ **CORRECTED 2026-09-23 (staleness audit): both are wired and live** — UptimeRobot since 2026-08-31, Sentry since 2026-09-06 (docs/18 item 1). This line was never updated when they shipped.
 
 ## M1 — Module 3: Synagogue Schedules (first real module)
 
