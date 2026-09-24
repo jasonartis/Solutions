@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { parseZmanim } from './myzmanim'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { buildWeekWithProvenance, parseZmanim, type MyzmanimResponse } from './myzmanim'
 
 // Guards for the two bugs fixed 2026-09-23. Both were invisible until the live
 // API was probed directly, and both are pure-function testable, which is why
@@ -60,5 +60,117 @@ describe('parseZmanim — the missing-value sentinel', () => {
   it('tolerates a response with no Zman section at all', () => {
     expect(parseZmanim({})).toEqual({})
     expect(parseZmanim({ ErrMsg: 'NotAuthorizedSeeApiDashboardForDetails' })).toEqual({})
+  })
+})
+
+// ---------------------------------------------------------------------------
+// THE READ-THROUGH CACHE (docs/23). The point of the whole slice is that a warm
+// week costs ZERO API calls where today it costs seven serial paid ones, so the
+// call count is asserted directly rather than inferred from the output.
+// ---------------------------------------------------------------------------
+
+const SUNDAY = '2026-09-20'
+const WEEK = ['2026-09-20', '2026-09-21', '2026-09-22', '2026-09-23', '2026-09-24', '2026-09-25', '2026-09-26']
+
+/** A cached response carrying one real time, so parseZmanim yields something. */
+const payloadFor = (iso: string): MyzmanimResponse => ({
+  Zman: { SunriseDefault: `${iso}T06:47:00`, Candles: '0001-01-01T00:00:00' },
+})
+
+const BROOKLYN = { latitude: 40.7128, longitude: -73.9497, timeZone: 'America/New_York' }
+
+afterEach(() => { vi.unstubAllGlobals() })
+
+/** Counts fetches so "no API call" is measured, not assumed. */
+function stubFetch() {
+  const calls: string[] = []
+  vi.stubGlobal('fetch', async (...args: unknown[]) => {
+    calls.push(String(args[0]))
+    throw new Error('the test made a real API call')
+  })
+  return calls
+}
+
+describe('buildWeekWithProvenance — cache first', () => {
+  it('a fully warm week makes ZERO api calls and reports every day as cached', async () => {
+    const calls = stubFetch()
+    const cache = async () => new Map(WEEK.map((iso) => [iso, payloadFor(iso)]))
+
+    const { days, provenance } = await buildWeekWithProvenance(SUNDAY, {
+      ...BROOKLYN,
+      myzmanimLocationId: 'US11210',
+      credentials: { user: 'u', key: 'k' },
+      cache,
+    })
+
+    expect(calls, 'the cache was warm but the API was still called').toEqual([])
+    expect(days).toHaveLength(7)
+    expect(Object.values(provenance)).toEqual(Array(7).fill('cache'))
+    expect(days[0]!.zmanim.SunriseDefault).toBeInstanceOf(Date)
+  })
+
+  it('reads the whole week in ONE round trip, not one per day', async () => {
+    stubFetch()
+    const ranges: string[] = []
+    const cache = async (loc: string, from: string, to: string) => {
+      ranges.push(`${loc}:${from}..${to}`)
+      return new Map(WEEK.map((iso) => [iso, payloadFor(iso)]))
+    }
+    await buildWeekWithProvenance(SUNDAY, {
+      ...BROOKLYN, myzmanimLocationId: 'US11210', credentials: { user: 'u', key: 'k' }, cache,
+    })
+    expect(ranges).toEqual(['US11210:2026-09-20..2026-09-26'])
+  })
+
+  it('a PARTIAL cache falls back per-day without re-fetching the days it has', async () => {
+    // The gap-fill case: some days cached, the rest must still resolve. The
+    // credentials are omitted so the API path is unavailable and uncached days
+    // land on hebcal — which is what a maker would see mid-backfill.
+    const calls = stubFetch()
+    const cache = async () => new Map([['2026-09-20', payloadFor('2026-09-20')]])
+
+    const { provenance } = await buildWeekWithProvenance(SUNDAY, {
+      ...BROOKLYN, myzmanimLocationId: 'US11210', credentials: null, cache,
+    })
+
+    expect(calls).toEqual([])
+    expect(provenance['2026-09-20']).toBe('cache')
+    expect(provenance['2026-09-21'], 'an uncached day should have fallen back').toBe('fallback')
+  })
+
+  it('a POISONED cache row (all sentinels) does not count as cached', async () => {
+    // docs/23 section 5: never cache a failure. If one ever slips in, it must
+    // not masquerade as real data — it parses to nothing, so the day falls back
+    // rather than rendering year-1 times.
+    stubFetch()
+    const poisoned: MyzmanimResponse = {
+      ErrMsg: 'NotAuthorizedSeeApiDashboardForDetails',
+      Zman: { SunriseDefault: '0001-01-01T00:00:00', Candles: '0001-01-01T00:00:00' },
+    }
+    const cache = async () => new Map(WEEK.map((iso) => [iso, poisoned]))
+
+    const { provenance } = await buildWeekWithProvenance(SUNDAY, {
+      ...BROOKLYN, myzmanimLocationId: 'US11210', credentials: null, cache,
+    })
+    expect(Object.values(provenance)).toEqual(Array(7).fill('fallback'))
+  })
+
+  it('a cache that THROWS degrades to the old behaviour instead of breaking the page', async () => {
+    stubFetch()
+    const cache = async () => { throw new Error('database unavailable') }
+    const { days, provenance } = await buildWeekWithProvenance(SUNDAY, {
+      ...BROOKLYN, myzmanimLocationId: 'US11210', credentials: null, cache,
+    })
+    expect(days).toHaveLength(7)
+    expect(Object.values(provenance)).toEqual(Array(7).fill('fallback'))
+  })
+
+  it('CONTROL: with no cache supplied at all, behaviour is exactly as before', async () => {
+    stubFetch()
+    const { days, provenance } = await buildWeekWithProvenance(SUNDAY, {
+      ...BROOKLYN, myzmanimLocationId: 'US11210', credentials: null,
+    })
+    expect(days).toHaveLength(7)
+    expect(Object.values(provenance)).toEqual(Array(7).fill('fallback'))
   })
 })

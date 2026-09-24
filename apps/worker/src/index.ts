@@ -10,6 +10,7 @@ import { runOrchestratorTick } from './jobs/speed-dating-orchestrator'
 import { runRescoreTick } from './jobs/matchmaking-rescore'
 import { runLoginEventsPrune } from './jobs/login-events-prune'
 import { runActivityEventsPrune } from './jobs/activity-events-prune'
+import { runZmanimPrefetch } from './jobs/zmanim-prefetch'
 
 // import.meta.dirname is undefined under tsx — derive it from the module URL.
 const here = dirname(fileURLToPath(import.meta.url))
@@ -175,6 +176,24 @@ async function main() {
   await boss.schedule('platform.activity-events-prune', '35 4 * * *')
   await boss.work('platform.activity-events-prune', async () => {
     await runActivityEventsPrune(connectionString)
+  })
+
+  // Zmanim prefetch (docs/23): keep a rolling one-year window of myzmanim
+  // responses so a schedule render costs zero API calls. 04:40 — after both
+  // prunes, and nothing about it is latency-sensitive.
+  //
+  // IT IS SEEDED OFF and stays off until a superadmin enables it in the Owner
+  // Console, so deploying this job changes nothing by itself. That is
+  // deliberate: the myzmanim key is currently unauthorized (docs/23 section 7),
+  // and a sweep defaulting ON would fail every run from the first deploy.
+  //
+  // Direct connection rather than the service-role client, like the two prunes
+  // above — the gap query is a generate_series anti-join that PostgREST cannot
+  // express. See the job's own header.
+  await boss.createQueue('synagogue.zmanim-prefetch')
+  await boss.schedule('synagogue.zmanim-prefetch', '40 4 * * *')
+  await boss.work('synagogue.zmanim-prefetch', async () => {
+    await runZmanimPrefetch(connectionString)
   })
 
   const admin = makeAdminClient()

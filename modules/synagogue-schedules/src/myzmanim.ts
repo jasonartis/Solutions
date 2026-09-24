@@ -118,6 +118,22 @@ export function parseZmanim(data: MyzmanimResponse): Partial<Record<string, Date
   return out
 }
 
+/** Where a day's times actually came from. Founder decision 3 (docs/23): a maker
+ * must be told when a schedule is running on the backup source, because hebcal
+ * has no candle-lighting at all. */
+export type ZmanimSource = 'cache' | 'api' | 'fallback' | 'none'
+
+/** Reads already-cached responses for a whole date range in ONE round trip.
+ *
+ * Injected rather than imported so this module keeps no database dependency —
+ * the web app supplies an RLS-scoped reader, the worker a service-role one, and
+ * a test supplies a literal Map. Keyed by `YYYY-MM-DD`. */
+export type ZmanimCacheReader = (
+  locationId: string,
+  fromISO: string,
+  toISO: string,
+) => Promise<Map<string, MyzmanimResponse>>
+
 export type WeekSourceOptions = {
   latitude?: number
   longitude?: number
@@ -126,34 +142,83 @@ export type WeekSourceOptions = {
   /** myzmanim location id, e.g. 'US11210'. */
   myzmanimLocationId?: string
   credentials?: MyzmanimCredentials | null
+  /** Optional read-through cache. When it covers a day, NO API call is made. */
+  cache?: ZmanimCacheReader
 }
 
 /** Build the seven DayContexts for the week starting at sundayISO.
- * myzmanim primary when location id + credentials are available;
- * hebcal fallback otherwise or on API failure. */
+ * Cache first, then myzmanim, then the hebcal fallback. */
 export async function buildWeek(sundayISO: string, opts: WeekSourceOptions): Promise<DayContext[]> {
+  return (await buildWeekWithProvenance(sundayISO, opts)).days
+}
+
+/** `buildWeek`, plus WHERE each day's times came from.
+ *
+ * Kept as a separate export so the three existing `buildWeek` call sites do not
+ * have to change; provenance is only needed by the surfaces that show founder
+ * decision 3's badge. */
+export async function buildWeekWithProvenance(
+  sundayISO: string,
+  opts: WeekSourceOptions,
+): Promise<{ days: DayContext[]; provenance: Record<string, ZmanimSource> }> {
   const sunday = new Date(`${sundayISO}T12:00:00`)
-  const days: DayContext[] = []
+  const dates: { d: Date; iso: string }[] = []
   for (let i = 0; i < 7; i++) {
     const d = new Date(sunday)
     d.setDate(sunday.getDate() + i)
-    const dateISO = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    dates.push({
+      d,
+      iso: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`,
+    })
+  }
 
+  // ONE round trip for the whole week, not one per day. This is the entire
+  // point of the cache: a warm week costs a single query and zero API calls,
+  // where today it costs seven serial paid requests on every render.
+  let cached = new Map<string, MyzmanimResponse>()
+  if (opts.cache && opts.myzmanimLocationId) {
+    try {
+      cached = await opts.cache(opts.myzmanimLocationId, dates[0]!.iso, dates[6]!.iso)
+    } catch (err) {
+      // A cache failure must never take the schedule down — it degrades to the
+      // pre-cache behaviour, which is the live API and then hebcal.
+      console.warn('zmanim cache read failed, continuing without it:', err)
+    }
+  }
+
+  const days: DayContext[] = []
+  const provenance: Record<string, ZmanimSource> = {}
+
+  for (const { d, iso } of dates) {
     let zmanim: Partial<Record<string, Date>> = {}
-    if (opts.myzmanimLocationId && opts.credentials?.user && opts.credentials?.key) {
+    let source: ZmanimSource = 'none'
+
+    const hit = cached.get(iso)
+    if (hit) {
+      zmanim = parseZmanim(hit)
+      if (Object.keys(zmanim).length > 0) source = 'cache'
+    }
+
+    // Only reach for the API when the cache did not answer.
+    if (source === 'none' && opts.myzmanimLocationId && opts.credentials?.user && opts.credentials?.key) {
       try {
-        zmanim = await fetchMyzmanimDay(dateISO, opts.myzmanimLocationId, opts.credentials)
+        zmanim = await fetchMyzmanimDay(iso, opts.myzmanimLocationId, opts.credentials)
+        if (Object.keys(zmanim).length > 0) source = 'api'
       } catch (err) {
-        console.warn(`myzmanim failed for ${dateISO}, falling back to hebcal:`, err)
+        console.warn(`myzmanim failed for ${iso}, falling back to hebcal:`, err)
       }
     }
+
     if (Object.keys(zmanim).length === 0 && opts.latitude != null && opts.longitude != null) {
       zmanim = getZmanimFallback(d, opts.latitude, opts.longitude, opts.timeZone)
+      source = 'fallback'
     }
 
+    provenance[iso] = source
     days.push({ facts: getDayFacts(d, opts.israel ?? false), zmanim })
   }
-  return days
+
+  return { days, provenance }
 }
 
 /** Read credentials from process env (web server / worker). */

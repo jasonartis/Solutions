@@ -226,7 +226,20 @@ export const platformDataBrowser = declareDataBrowser({
         'rather than a gap.',
     },
   ],
-  omitted: [],
+  omitted: [
+    {
+      table: 'platform_settings',
+      columns: ['updated_by'],
+      why:
+        'A config audit stamp, not a record ABOUT a person. `platform_settings` holds one row ' +
+        'per global setting (docs/23) and `updated_by` is OVERWRITTEN on every change, so it ' +
+        'is not a history of anything — it names only whoever touched a switch most recently. ' +
+        'Rendering it under "what do you hold about me?" would show a subject one row saying ' +
+        'they last changed a platform toggle, while telling the previous editor nothing at ' +
+        'all, because their name is already gone. The durable record of who ran what lives in ' +
+        'syn_zmanim_fetch_log, which IS declared (synagogue-schedules, below).',
+    },
+  ],
   neverReadable: [],
 })
 
@@ -848,7 +861,36 @@ const EMPTY: DataBrowserDeclaration = declareDataBrowser({
   neverReadable: [],
 })
 
-export const synagogueSchedulesDataBrowser = EMPTY
+// Synagogue schedules named no person at all until 2026-09-23, when the zmanim
+// prefetch (docs/23) added a log of who triggered a fetch. That is exactly the
+// transition EMPTY's comment above predicted, and the catalog test caught it.
+export const synagogueSchedulesDataBrowser = declareDataBrowser({
+  lookups: [
+    {
+      table: 'syn_zmanim_fetch_log',
+      activity: true,
+      label: 'Zmanim fetches they triggered',
+      personColumns: ['requested_by'],
+      // NO org column, and the absence is a fact about the data rather than an
+      // oversight: the zmanim cache is keyed by LOCATION and shared across every
+      // org at that address (founder decision 2, docs/23), so a fetch cannot be
+      // attributed to one org. Same shape, and the same reasoning, as
+      // login_events above.
+      orgColumn: null,
+      orderBy: { column: 'fetched_at', ascending: false },
+      limit: 200,
+      note:
+        'Every myzmanim fetch this person asked for by hand, with the outcome. DECLARED ' +
+        'RATHER THAN OMITTED because it is a durable record of something the person DID — ' +
+        'the same reasoning that puts the superadmin lookup log and activity events on this ' +
+        'page. Rows written by the nightly sweep carry no person (origin = sweep, ' +
+        'requested_by NULL) and so never appear here, which is correct: nobody asked for them.',
+    },
+  ],
+  omitted: [],
+  neverReadable: [],
+})
+
 export const stubDataBrowser = EMPTY
 
 /** Every module declaration, for the platform-wide completeness assertions. */
