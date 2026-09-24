@@ -969,20 +969,29 @@ varies ONE thing separates them** — myzmanim's published demo credential retur
 `pnpm exec tsx scripts/verify-myzmanim-request-shape.mts` (no subscription needed; 4/1 today,
 the 1 fail being the real account state). **Founder action: the API dashboard**
 (https://www.myzmanim.com/apidemo.aspx). Endpoint is NOT deprecated.
-**THE ZMANIM CACHE IS HALF BUILT (2026-09-23/24) — IN THE REPO ONLY, `migrate:prod` HAS NOT
-RUN. Live doc [docs/23](docs/23-zmanim-cache-and-global-batches.md); NINE founder decisions
-are recorded there — do not re-litigate them, and read its status table first.** BUILT and
-CI-green (`74c2776`): migration `20260923010000` (cache stores the RAW payload,
-`platform_settings`, the append-only `syn_zmanim_fetch_log`, `syn_zmanim_cached()`), the
-read-through (a warm week = ZERO API calls, 12 tests), and the nightly sweep with gap-fill +
-a 3-day circuit breaker (18/18 against the LIVE failing API — **the poisoning test is the
-point: myzmanim answers a bad key with HTTP 200 and a full skeleton of sentinels, so a naive
-sweep would write 365 rows the read-through would then serve forever**). NOT BUILT: the two
-UIs (the console screen and the maker panel — **their agreed shape is docs/23 §5c**).
-**TWO PREREQUISITES BEFORE IT CAN DO ANYTHING, and the second is easy to miss:** the
-myzmanim account (above), **and the fact that PROD HAS NO CONTINUOUSLY-RUNNING WORKER** — the
-sweep is a pg-boss cron job, so like docs/17's prunes it will not fire on prod until the
-worker runs there, leaving the cache empty with nothing erroring to explain it.
+**THE ZMANIM CACHE: SCHEMA AND A YEAR OF DATA ARE ON PRODUCTION (2026-09-24); ONLY THE TWO
+UIs REMAIN. Live doc [docs/23](docs/23-zmanim-cache-and-global-batches.md) — NINE founder
+decisions, do not re-litigate them; read its status table first.** On prod and prod-verified
+(`prod-verify-zmanim-schema.mts` **36/36**): migration `20260923010000` (cache stores the RAW
+payload, `platform_settings`, the append-only `syn_zmanim_fetch_log`, `syn_zmanim_cached()`),
+the read-through **wired to all three call sites** (a warm week = ZERO API calls, proven end
+to end), the sweep with gap-fill + a 3-day breaker, and **367 days of real zmanim for
+`US11210` (2026-09-23 → 2027-09-24)**.
+**PRODUCTION HOLDS NO MYZMANIM CREDENTIAL AND DOES NOT NEED ONE** — it serves from cache.
+Measured: prod Vercel has THREE env vars and none is myzmanim, so **production has never once
+called that API** and has been on hebcal fallback since the module shipped, independently of
+the two connector bugs. Going live later is two Vercel vars + the switch; **do not maintain a
+checklist — run `prod-verify-zmanim-schema.mts`, whose §[7] reads the real state and prints
+what remains.** The key we have is a **TRIAL** (ends 2026-10-24) and the sweep is seeded
+**OFF**; the founder's reading is that the API is used from DEV and only rows are copied to
+prod (`scripts/zmanim-backfill.mts` enforces that split).
+**NOT BUILT: the two UIs** — console screen + maker panel. **Shape is docs/23 §5c, and §5c
+also lists the integration points they hit in the first hour, including ONE FOUNDER DECISION:
+`job_requests.org_id` is NOT NULL but the console's actions are per-LOCATION, so a
+platform-level job has no org to belong to (three options costed, recommendation given).**
+**STILL TRUE AND EASY TO MISS: PROD HAS NO CONTINUOUSLY-RUNNING WORKER** — the sweep is a
+pg-boss cron job, so like docs/17's prunes it fires only while `pnpm worker:prod` is up. That
+is why the year was loaded by script rather than by the sweep.
 
 **Standing rules:** never start a slice/module build without the founder initiating; every
 migration/RLS/trigger change runs the docs/03 #12 rhythm (draft → adversarial review →

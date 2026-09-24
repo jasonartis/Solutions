@@ -4,6 +4,72 @@ The running, dated build journal that used to live in `CLAUDE.md`'s "## Current 
 section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every session)
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
+- **2026-09-24 (MYZMANIM WORKS, AND THE FIRST REAL RESPONSE BROKE EVERY TIME IN IT; schema +
+  a year of data now on PRODUCTION. Opus, no new migration — `20260923010000` deployed).**
+  The founder supplied new credentials (user `0018345559`) and
+  `verify-myzmanim-request-shape.mts` went **4/1 → 5/5** on the first try, confirming the
+  previous day's request-shape fix.
+  **THEN THE ACCEPTANCE TEST SCORED 0/7.** `apps/worker/scripts/test-myzmanim.ts` has held
+  seven real values from the founder's own December sheet since 2026-07-07, and every one was
+  out by **exactly five hours** — EST's offset that December day.
+  **THE `Z` ON A MYZMANIM TIMESTAMP IS A LIE.** It sends Brooklyn sunrise as
+  `"2025-12-12T07:10:24Z"`, but sunrise there is 7:10 AM LOCAL — confirmed by physics and by
+  the founder's printed sheet. It is wall-clock time wearing a UTC suffix, so `new Date()`
+  read it as 07:10 UTC = 02:10 in New York. **Not an edge case: every time in every response,
+  five hours out in winter and six in summer.** Fixed by parsing the string as a naive wall
+  clock and re-anchoring it in the LOCATION's timezone, which also keeps myzmanim and the
+  hebcal fallback in one representation (hebcal already returns true instants), so
+  `wallMinutes()` and the week aggregates behave identically whichever source a day came from.
+  **Acceptance went 0/7 → 7/7 against the founder's real sheet.** Plus 5 unit tests, including
+  both sides of a DST boundary and two locations resolving the same wall string to different
+  instants.
+  **THE LESSON: this is the one class of bug that no amount of schema reading could reach.**
+  The day before, the complete field inventory was recovered from the error skeleton and used
+  to argue the build could proceed without a key — which was true for the WRITE path and false
+  for the semantics of a value. An error response tells you the SHAPE; only a real one tells
+  you what the numbers MEAN.
+  **IT ALSO CORRECTED A CLAIM OF MY OWN FROM THE DAY BEFORE.** The connector header said the
+  API sends the missing-value sentinel WITHOUT a trailing `Z`. That was measured against the
+  unauthorized-error skeleton only. A real response uses the `Z` form and the error skeleton
+  does not — **both spellings genuinely occur**, so neither exact-match guard would have been
+  right. Filtering by YEAR was defensive when written and turns out to have been necessary.
+  **AND A TEST THAT WAS PASSING FOR THE WRONG REASON.** `verify-zmanim-prefetch.mts` proved
+  "never cache a failure" by relying on our key being broken — so it passed for a reason
+  unrelated to the code, and broke the moment a valid key arrived. The failure is now INDUCED
+  with a deliberately invalid key, and a happy-path section asserts real rows land with all 89
+  `Zman` fields plus `Place` and `Time`. **A test that passes because the environment happens
+  to be broken is not a test of anything.**
+  **THE READ-THROUGH WAS INERT.** `buildWeek` accepted a cache reader and **no call site
+  passed one** — the feature existed and did nothing. Now wired at all three (member page,
+  public page, worker render) via `zmanimCacheReader()` through the definer. End to end: **a
+  fully warm week serves all 7 days FROM CACHE with ZERO API calls**, with a control proving
+  an unfilled week is not reported as cached. (`RpcClient` is typed `PromiseLike`, not
+  `Promise` — supabase-js returns a chainable builder that is merely thenable, and a `Promise`
+  return type rejects the real client while looking correct.)
+  **ON PRODUCTION NOW:** migration applied after a backup (**33/33**, later **36/36** with a
+  live-data section), and **367 days of real zmanim for `US11210`, 2026-09-23 → 2027-09-24**.
+  The founder's reading of the TRIAL licence — the clause governs where the API is *used*, and
+  the calls originate in DEV — is recorded in docs/23 as a judgement call rather than a fact;
+  `scripts/zmanim-backfill.mts` enforces that split structurally (phase 1 calls from dev,
+  phase 2 copies rows), so production never holds a credential.
+  **MEASURED AND IT REFRAMES THE MODULE'S HISTORY: prod Vercel holds THREE env vars and none
+  is a myzmanim credential — production has NEVER once called that API**, and has been on
+  hebcal fallback since the module shipped, independently of both connector bugs. With the
+  cache populated it will render real zmanim for the first time.
+  **TWO PRICING FACTS THAT CHANGE THE RATIONALE, not just the budget:** billing is **per
+  LOCATION per month, not per call** ($15 Starter, 10 locations; prod uses one), so the cache
+  does NOT reduce the bill for a location we look up anyway. What it buys is **latency and
+  resilience** — one query instead of 7 serial paid calls per render, and correct schedules
+  when the API is unreachable, which is the failure this module just spent two months in.
+  docs/23 §0 now says so rather than letting "it saves money" propagate.
+  **GO-LIVE IS NOW CHECKABLE RATHER THAN DOCUMENTED:** `prod-verify-zmanim-schema.mts` §[7]
+  reads the real state (schema, cache days, whether Vercel holds the credentials, the switch)
+  and prints what remains. Today: schema yes, cache 367 days, creds no, switch OFF.
+  **STILL TO BUILD: the two UIs.** docs/23 §5c carries their agreed shape AND the integration
+  points they hit immediately — including one founder decision: `job_requests.org_id` is NOT
+  NULL while the console's actions are per-LOCATION, so a platform-level job has no org to
+  belong to (three options costed, recommendation: make it nullable with a superadmin RLS arm).
+  Module suite 66/66, db 248/248, typecheck 9/9, CI green.
 - **2026-09-23/24 (FULL DOCS-TREE STALENESS AUDIT, two rounds, Sonnet session, no code/schema
   touched — docs only.)** Prompted by finding two real staleness bugs by accident while doing
   unrelated work the same session (branch protection had silently disappeared; an "org
