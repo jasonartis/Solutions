@@ -46,6 +46,26 @@ decision log, docs/03 conventions, docs/12 safeguards) — this is the chronolog
   misleading error on an otherwise-successful push. Always `git fetch` + compare
   `rev-parse HEAD` against `rev-parse origin/master` before assuming a push failed and retrying
   — don't force anything on the strength of the error text alone.
+  **One discovery found and deliberately NOT acted on, recorded here because the founder said
+  not to touch the files themselves, not to say nothing about it:** `founder-todo.md` and
+  `founder-feedback.md` (repo root, gitignored — "personal/session scratch" per `.gitignore`'s
+  own comment) hold real content, not just the July history already cited elsewhere in this
+  journal. Most of `founder-feedback.md`'s design discussion (the module-role hierarchy
+  proposal, Coordinator/Lead/scope model) has clearly been absorbed into docs/15 since — that
+  part is safe. **What has NO visible resolution marker and doesn't appear addressed anywhere
+  in the (now fully audited) docs/ tree:** porting or sharing a person's data across two orgs
+  where they hold the same module role a second time; broader platform-scale/usage monitoring
+  (memory per org, user counts, an expandable metrics tree, alert thresholds — a materially
+  bigger ask than what docs/17's engagement monitoring covers); and payment/access-timeout
+  planning for when there are paying clients ("do not implement, but this requires serious
+  discussion and planning"). **Possibly the source of CLAUDE.md's own "role-clarity labels,
+  founder testing-round items 31-42" reference** — that exact numbered list could not be found
+  anywhere in docs/ despite a dedicated search, and `founder-feedback.md`'s numbered/dated
+  Q&A format is a plausible match, though this is a hypothesis, not confirmed. **Founder's
+  explicit instruction when this was raised: don't touch anything not backed up in git — these
+  files are his own workflow, not something to reorganize unprompted.** Recorded here only so
+  the discovery itself — which files, what looks unresolved, the 31-42 hypothesis — survives
+  losing this chat; the files' actual content is unaffected and still lives only on disk.
 - **2026-09-23 (CI: replaced the second, drifting Supabase CLI with the lockfile-pinned one;
   and docs/12 item 10 — the master-gating decision — DECIDED AND SHIPPED, Sonnet session, no
   migration.)** Two small, unrelated pieces of hygiene, both founder-directed.

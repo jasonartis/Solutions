@@ -886,7 +886,11 @@ Everything below is open but unranked:
   Carries the rule: *anything that WIDENS reach belongs in code; anything that only NARROWS it can
   be a runtime switch.*
 - Everywhere role-clarity labels (founder testing-round items 31–42) — high value; the
-  view-as half of that item is now built.
+  view-as half of that item is now built. **That numbered list is NOT anywhere in docs/**
+  (searched directly, 2026-09-23) — before re-searching, check `founder-todo.md` /
+  `founder-feedback.md` (gitignored, repo root) first; their tail items are a plausible match,
+  unconfirmed. Do not open/edit those files unless the founder asks — full context: journal's
+  2026-09-23/24 staleness-audit entry.
 - Deferred platform hardening — the `revoke PUBLIC`/anon-table items are **DONE and pushed**
   (see Previously). Still open, all recorded with rationale in docs/15's 2026-07-29 entry:
   **`storage`-schema grants** (prod grants anon the full set incl. TRUNCATE; buckets private,
