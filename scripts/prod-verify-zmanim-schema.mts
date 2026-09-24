@@ -1,0 +1,145 @@
+// Prod verification for `20260923010000_zmanim_cache_and_platform_settings.sql`.
+//
+//   pnpm exec tsx scripts/prod-verify-zmanim-schema.mts
+//   pnpm exec tsx scripts/prod-verify-zmanim-schema.mts --local
+//
+// WHY THIS FILE EXISTS. `prod-verify-migration.ts` parses `create function`
+// blocks only. This migration is mostly TABLES, GRANTS, POLICIES and a seeded
+// row, so a function-only run would report "0 failures" while asserting nothing
+// about any of it — the vacuity trap docs/03 names. Copied from
+// `prod-verify-superadmin-log.mts`, the worked template for table work.
+//
+// EVERY ASSERTION CARRIES A CONTROL: a catalog query returning zero rows looks
+// exactly like "the thing is absent", so each negative is paired with a positive
+// that proves the query can see anything at all.
+//
+// READ-ONLY: every statement is a SELECT.
+import { readFileSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import postgres from 'postgres'
+
+const here = dirname(fileURLToPath(import.meta.url))
+const root = resolve(here, '..')
+const env = readFileSync(resolve(root, '.env.deploy'), 'utf8')
+const get = (k: string) => new RegExp(`^${k}=(.*)$`, 'm').exec(env)?.[1]?.trim() ?? ''
+
+const LOCAL = process.argv.includes('--local')
+let ref = '(local)'
+let sql: ReturnType<typeof postgres>
+if (LOCAL) {
+  sql = postgres(process.env.DATABASE_URL || 'postgresql://postgres:postgres@127.0.0.1:54322/postgres', { max: 1 })
+} else {
+  ref = get('SUPABASE_PROJECT_REF')
+  const pw = get('SUPABASE_DB_PASSWORD')
+  if (!ref || !pw) throw new Error('Missing SUPABASE_PROJECT_REF / SUPABASE_DB_PASSWORD in .env.deploy')
+  sql = postgres(
+    `postgresql://postgres.${ref}:${encodeURIComponent(pw)}@aws-1-us-west-2.pooler.supabase.com:5432/postgres`,
+    { ssl: 'require', max: 1 },
+  )
+}
+
+let pass = 0
+let fail = 0
+const check = (name: string, ok: boolean, detail = '') => {
+  if (ok) { pass++; console.log(`  ok    ${name}${detail ? '  ' + detail : ''}`) }
+  else { fail++; console.log(`  FAIL  ${name}${detail ? '  ' + detail : ''}`) }
+}
+const priv = async (role: string, table: string, p: string) =>
+  (await sql<{ p: boolean }[]>`select has_table_privilege(${role}, ${table}, ${p}) as p`)[0]!.p
+
+console.log(`\nProd verification — zmanim cache + platform settings  (project ${ref})\n`)
+
+try {
+  // -------------------------------------------------------------------------
+  console.log('[1] the cache column rename (founder decision 1: STORE RAW)')
+  const cols = await sql<{ column_name: string }[]>`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'syn_zmanim_cache'`
+  const names = cols.map((c) => c.column_name)
+  check('CONTROL: syn_zmanim_cache is readable and has columns', names.length > 0, names.join(', '))
+  check('`payload` exists', names.includes('payload'))
+  check('`times` is gone', !names.includes('times'))
+
+  // -------------------------------------------------------------------------
+  console.log('\n[2] platform_settings — superadmin-only, every verb')
+  const tables = await sql<{ relname: string; relrowsecurity: boolean }[]>`
+    select c.relname, c.relrowsecurity
+    from pg_class c join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public' and c.relname in ('platform_settings', 'syn_zmanim_fetch_log')`
+  check('CONTROL: both new tables exist', tables.length === 2, tables.map((t) => t.relname).join(', '))
+  check('platform_settings has RLS ENABLED',
+    tables.find((t) => t.relname === 'platform_settings')?.relrowsecurity === true)
+
+  const pol = await sql<{ polname: string; cmd: string; qual: string | null; withcheck: string | null }[]>`
+    select p.polname, p.polcmd::text as cmd,
+           pg_get_expr(p.polqual, p.polrelid) as qual,
+           pg_get_expr(p.polwithcheck, p.polrelid) as withcheck
+    from pg_policy p where p.polrelid = 'public.platform_settings'::regclass`
+  check('exactly one policy, covering ALL verbs', pol.length === 1 && pol[0]?.cmd === '*',
+    pol.map((p) => `${p.polname}:${p.cmd}`).join(', '))
+  check('its USING is is_superadmin()', (pol[0]?.qual ?? '').includes('is_superadmin'), pol[0]?.qual ?? '-')
+  check('its WITH CHECK is is_superadmin() too — or an ordinary user could INSERT',
+    (pol[0]?.withcheck ?? '').includes('is_superadmin'), pol[0]?.withcheck ?? '(none)')
+
+  check('anon holds NOTHING on platform_settings', !(await priv('anon', 'public.platform_settings', 'select')))
+  // authenticated legitimately holds the verbs; RLS is what restricts it, and
+  // that dependency is why the policy above is asserted so carefully.
+  check('CONTROL: authenticated DOES hold select (RLS is the gate, not the grant)',
+    await priv('authenticated', 'public.platform_settings', 'select'))
+
+  // -------------------------------------------------------------------------
+  console.log('\n[3] syn_zmanim_fetch_log — append-only BY GRANT, superadmin reads')
+  for (const role of ['authenticated', 'service_role', 'anon']) {
+    for (const verb of ['update', 'delete', 'truncate']) {
+      check(`${role} cannot ${verb} the log`, !(await priv(role, 'public.syn_zmanim_fetch_log', verb)))
+    }
+  }
+  check('anon cannot even read it', !(await priv('anon', 'public.syn_zmanim_fetch_log', 'select')))
+  check('CONTROL: service_role CAN insert (the worker writes the log)',
+    await priv('service_role', 'public.syn_zmanim_fetch_log', 'insert'))
+  check('authenticated cannot insert', !(await priv('authenticated', 'public.syn_zmanim_fetch_log', 'insert')))
+
+  const origin = await sql<{ is_nullable: string }[]>`
+    select is_nullable from information_schema.columns
+    where table_schema = 'public' and table_name = 'syn_zmanim_fetch_log' and column_name = 'origin'`
+  check('`origin` exists and is NOT NULL — the breaker depends on it',
+    origin[0]?.is_nullable === 'NO', origin[0]?.is_nullable ?? 'missing')
+
+  // -------------------------------------------------------------------------
+  console.log('\n[4] the seeded switch — OFF, and readable the safe way')
+  const setting = await sql<{ enabled: string | null; pause: string | null; horizon: string | null }[]>`
+    select value ->> 'enabled' as enabled,
+           value ->> 'pauseAfterDays' as pause,
+           value ->> 'horizonDays' as horizon
+    from public.platform_settings where key = 'zmanim.prefetch'`
+  check('the zmanim.prefetch row exists', setting.length === 1)
+  check('it is seeded OFF — a sweep defaulting ON would hammer the API from deploy',
+    setting[0]?.enabled === 'false', `enabled=${setting[0]?.enabled}`)
+  check('the founder-configurable knobs are present',
+    setting[0]?.pause === '3' && !!setting[0]?.horizon,
+    `pauseAfterDays=${setting[0]?.pause} horizonDays=${setting[0]?.horizon}`)
+
+  // -------------------------------------------------------------------------
+  console.log('\n[5] the two functions')
+  const fns = await sql<{ proname: string; prosecdef: boolean; proconfig: string[] | null; proacl: string | null }[]>`
+    select p.proname, p.prosecdef, p.proconfig, p.proacl::text as proacl
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public' and p.proname in ('syn_zmanim_cached', 'platform_setting_merge')`
+  check('CONTROL: both functions exist', fns.length === 2, fns.map((f) => f.proname).join(', '))
+  for (const f of fns) {
+    check(`${f.proname} is SECURITY DEFINER`, f.prosecdef === true)
+    check(`${f.proname} pins search_path`, (f.proconfig ?? []).includes('search_path=public'))
+  }
+  const cached = fns.find((f) => f.proname === 'syn_zmanim_cached')
+  check('syn_zmanim_cached IS callable by anon (the public viewer is anonymous by design)',
+    (cached?.proacl ?? '').includes('anon=X/'), cached?.proacl ?? '-')
+  const merge = fns.find((f) => f.proname === 'platform_setting_merge')
+  check('platform_setting_merge is NOT callable by anon',
+    !(merge?.proacl ?? '').includes('anon=X/'), merge?.proacl ?? '-')
+
+  console.log(`\n${pass} checks passed, ${fail} failed`)
+} finally {
+  await sql.end()
+}
+process.exit(fail === 0 ? 0 : 1)

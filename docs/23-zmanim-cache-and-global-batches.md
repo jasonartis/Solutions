@@ -1,29 +1,29 @@
 # Zmanim cache and globally-shared API batches
 
-**Status: HALF BUILT (2026-09-23) — IN THE REPO ONLY, `migrate:prod` has NOT
-run.** Founder decisions are recorded in §1 and are not to be re-litigated.
+**Status: HALF BUILT (2026-09-23/24). The SCHEMA IS ON PRODUCTION and
+prod-verified; the two UIs are not built.** Founder decisions are recorded in §1 and are not to be re-litigated.
 
 | Piece | State |
 |---|---|
 | Connector bugs that this work uncovered | **SHIPPED** (module spec, 2026-09-23) |
-| Migration `20260923010000` — cache `payload`, `platform_settings`, `syn_zmanim_fetch_log`, `syn_zmanim_cached()` | **BUILT**, two adversarial reviews, applied locally |
+| Migration `20260923010000` — cache `payload`, `platform_settings`, `syn_zmanim_fetch_log`, `syn_zmanim_cached()` | **ON PRODUCTION 2026-09-24**, two adversarial reviews, prod-verified 33/33 |
 | Read-through cache in `buildWeek` | **BUILT**, 12 unit tests |
-| The sweep (`synagogue.zmanim-prefetch`) with gap-fill + 3-day breaker | **BUILT**, 18/18 against the LIVE failing API |
+| The sweep (`synagogue.zmanim-prefetch`) with gap-fill + 3-day breaker | **BUILT**, 24/24 — both an induced failure AND the real happy path |
 | Owner Console screen (`/console/zmanim`) | **NOT BUILT** |
 | Maker panel + degraded badge | **NOT BUILT** |
-| `migrate:prod` + prod verification | **NOT DONE** |
+| `migrate:prod` + prod verification | **DONE 2026-09-24** — `prod-verify-zmanim-schema.mts` **33/33** on prod, `prod-verify-migration.ts` **0 failures** |
 
-The sweep is registered but **seeded OFF**, so deploying it changes nothing until
-a superadmin enables it — which is deliberate, because the myzmanim key is
-currently unauthorized (§7).
+The sweep is registered but **seeded OFF**, and should STAY off for now: the key
+we have is a **TRIAL**, and its terms forbid production use (§7).
 
 **The two scripts that tell you the truth about all of this**, neither of which
 needs a working subscription:
 
 | script | answers |
 |---|---|
-| `pnpm exec tsx scripts/verify-myzmanim-request-shape.mts` | is our REQUEST right, and is the ACCOUNT alive? (separates two causes of one error string; 4/1 today, 5/5 when the key works) |
-| `pnpm exec tsx scripts/verify-zmanim-prefetch.mts` | does the sweep behave against a REAL failing API? 18/18 — cache stays empty, failure logged, budget not burned, breaker trips. LOCAL ONLY: it mutates the switch and the log, and restores both in a `finally`. |
+| `pnpm exec tsx scripts/verify-myzmanim-request-shape.mts` | is our REQUEST right, and is the ACCOUNT alive? Separates two causes of one error string. **5/5 since 2026-09-24.** |
+| `pnpm exec tsx scripts/verify-zmanim-prefetch.mts` | **24/24.** Both paths: an INDUCED failure writes nothing, and a real fetch stores whole payloads (89 `Zman` fields + `Place` + `Time`) and advances to the next gaps on a second run. LOCAL ONLY — it mutates the switch and the log, restoring both in a `finally`. |
+| `pnpm exec tsx scripts/prod-verify-zmanim-schema.mts` | the tables, grants, RLS policies, the seeded row and both functions, on PROD (33/33). `prod-verify-migration.ts` is function-only and would pass this migration vacuously. |
 
 ## 0. Why this exists
 
@@ -36,8 +36,11 @@ myzmanim returns **one large JSON per date containing everything** (`Place` 20
 fields, `Time` 42, `Zman` 89). The API's `getDay` accepts an `InputDate` in the
 range **"Current date +/- 1 year"** (their documentation) and there is **no bulk
 endpoint** — so a year costs 365 single calls per location. That combination is
-the whole opportunity: even temporary API access can be converted into a year of
-locally-held data.
+the whole opportunity for LATENCY and RESILIENCE. **It is not a cost saving** —
+billing is per LOCATION per month, not per call (§7), so a location we look up
+at all costs the same whether we call once or ten thousand times. And note the
+"convert temporary access into a year of data" framing this doc started with
+is exactly what a TRIAL licence forbids: see §7 before acting on it.
 
 ## 1. Founder decisions (2026-09-23) — settled
 
@@ -340,14 +343,43 @@ Per docs/03 #27, the new table must `revoke` before it `grant`s.
 
 ## 7. Prerequisite
 
-**The myzmanim account is not authorized.** The connector's own bugs are fixed
-(module spec, 2026-09-23) and the request shape is now proven correct against
-myzmanim's published demo credential, but our key is still refused. Nothing can
-be prefetched until that is resolved — though the whole mechanism can be built
-and tested against an empty cache, and will fill on the first tick once the key
-works. Re-check with `pnpm exec tsx scripts/verify-myzmanim-request-shape.mts`
-(4 pass / 1 fail today; the fail IS the account state, and it goes 5/5 when the
-key works).
+**⚠ RESOLVED, BUT THE NEW KEY IS A TRIAL AND TRIALS FORBID PRODUCTION USE.**
+
+The founder supplied working credentials on **2026-09-24** (user `0018345559`).
+`verify-myzmanim-request-shape.mts` is **5/5**, and the acceptance script went
+**0/7 → 7/7** against his own printed sheet. Everything works.
+
+But the dashboard says, verbatim:
+
+> Account status: **Trial** (as of 9/24/2026) · Trial period ends: **10/24/2026**
+> Note: Trial period is granted for evaluation purposes only. **During this
+> period the API may not be used in a production enviroment.**
+
+**This bears directly on the whole point of the cache.** The design's own pitch
+in §0 is that *"even temporary API access can be converted into a year of
+locally-held data"* — and doing that on a trial key, for production schedules, is
+precisely what that sentence forbids. So:
+
+- **Do NOT enable the sweep or run a backfill against production while the
+  account is on trial**, and do not put the trial key in Vercel. Local
+  development and testing are evaluation use and are fine — that is what the
+  trial is for.
+- A paid plan removes the restriction. **Starter is $15/month and includes 10
+  locations**; extras are $1/location/month. Production uses ONE location
+  (`US11210`, shared by both synagogue orgs).
+- **Worth re-reading their Terms of Service even on a paid plan**, since the
+  "bank a year then stop paying" strategy is the thing this restriction exists to
+  discourage, and the docs are silent on storage/redistribution.
+
+**THE PRICING MODEL CHANGES THE COST ARGUMENT, and it is worth being honest about
+this.** Billing is **per LOCATION per month, not per call** — "if you lookup
+zmanim for 13 locations during October you will be charged 15 + 3 = $18". So
+caching does **not** reduce the bill for a location we look up anyway: one call
+and ten thousand calls cost the same. What the cache actually buys is **latency
+and resilience** — one database query instead of 7 serial paid HTTP calls per
+render, and correct schedules when the API is unreachable or the subscription
+lapses, which is exactly the failure the module just spent two months in. Those
+are good reasons. "It saves money" is not, and should not be repeated.
 
 **The end-to-end acceptance step already exists**, and is better than anything
 written from scratch: `apps/worker/scripts/test-myzmanim.ts` holds **seven real
