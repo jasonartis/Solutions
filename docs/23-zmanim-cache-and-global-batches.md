@@ -371,6 +371,15 @@ docs/17 exists to catch. The Owner Console's "Run sweep now" button is the
 mitigation in the meantime: it goes through `job_requests`, which the prod worker
 does drain when it is run by hand.
 
+**FOUNDER DECISION 2026-09-24: KEEP THE MANUAL STOPGAP, do not stand up the VPS
+for this.** Same trigger as the paused go-live items — real cost for a problem
+that only bites with a real client. It is the right call here specifically
+because **this feature does not need a 24/7 worker**: one 366-call backfill, then
+roughly one call per location per day, so running `pnpm worker:prod` occasionally
+is genuinely adequate. The cases that WILL force a VPS are speed dating (its
+orchestrator advances rounds every 10 seconds, so a live event on prod cannot run
+unattended) and enforcing the retention windows — not this.
+
 **HOLD `migrate:prod` UNTIL THE CONSOLE EXISTS.** The migration is safe and CI
 is green, but on its own it creates a global switch with no way to turn it on
 except hand-written SQL, and a sweep that is seeded OFF. Deploying the screen and
