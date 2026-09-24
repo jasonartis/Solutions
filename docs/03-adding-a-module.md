@@ -683,6 +683,37 @@ The shared shape: **absence is only evidence when presence was demonstrated unde
 same conditions.** Whenever a test asserts something is missing, ask what would have to be
 true for it to pass on an empty universe — and then assert that the universe is not empty.
 
+**A NEW SHAPE OF THE SAME FAMILY (2026-09-24): A TEST THAT PASSES BECAUSE THE ENVIRONMENT
+HAPPENS TO BE BROKEN IS NOT A TEST OF ANYTHING.** `scripts/verify-zmanim-prefetch.mts`
+asserted the most important rule in its slice — *never cache a failed API response* — by
+running the real sweep against the real API while our myzmanim key was unauthorized. It
+passed, 18/18, and the passing had nothing to do with the code: any implementation at all
+would have written nothing, because every call failed. **The tell arrived the day a valid key
+landed and five assertions flipped to red at once** — not because anything regressed, but
+because the condition they silently depended on had gone away.
+- → **Ask what would have to be true for this test to fail.** If the answer is "the outside
+  world would have to change", the test is measuring the world, not the code.
+- → **INDUCE the failure instead of borrowing one.** The fix was to override the credential
+  with a deliberately invalid value for that section, which makes the assertion permanent and
+  independent of account state, and to add the happy path that only became assertable once
+  the key worked.
+- This is the vacuity rule pointed outwards: the earlier cases are assertions that cannot
+  fail because the DATA is empty; this is an assertion that cannot fail because the
+  ENVIRONMENT is down. Both report a guarantee nobody is providing.
+
+**AND ITS COUSIN, FOR ANYTHING BEHIND A THIRD-PARTY API: AN ERROR RESPONSE TELLS YOU THE
+SHAPE OF A PAYLOAD; ONLY A REAL ONE TELLS YOU WHAT THE NUMBERS MEAN (2026-09-24).** myzmanim's
+unauthorized-error response is a complete schema skeleton — every field present, values
+nulled — and it was used, reasonably, to recover the full field inventory and argue a build
+could proceed without a working key. That was true for the write path and **false for the
+semantics of a value**: the first real response revealed that its timestamps carry a `Z`
+suffix while holding LOCAL wall time, so every time in every response was out by the
+location's UTC offset. No amount of reading the skeleton could have shown it. → Structure
+work so the parts that need only SHAPE can proceed, but **do not mark anything verified until
+a real response has been through it** — and keep an acceptance fixture of real values
+(`apps/worker/scripts/test-myzmanim.ts` holds seven from the client's own printed sheet) so
+that moment is one command rather than a judgement call.
+
 Related, and the reason this keeps mattering: a vacuous test does not merely fail to catch
 a bug, it actively reports that the bug is absent. That is worse than having no test, which
 **And it extends to the TALLIES YOU WRITE ABOUT YOUR OWN WORK (2026-08-07).** A count in a

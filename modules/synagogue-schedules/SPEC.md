@@ -72,7 +72,38 @@ The authoritative specification lives at [docs/modules/module-3-synagogue-schedu
   fields, `Time` 42 (DafYomi, DateJewish, Parsha, Holiday, Omer, Is* flags),
   `Zman` 89. The connector currently keeps **only `Zman`** and discards `Place`
   and `Time`, which arrive in the same paid call.
-- **Still open:** myzmanim **account** authorization (the connector itself is now
-  correct — see above) · acceptance validation against the founder's real schedule
+- **2026-09-24 — THE ACCOUNT IS FIXED, AND THE FIRST REAL RESPONSE EXPOSED A THIRD
+  BUG. The entry above says "the connector itself is now correct"; that was
+  premature, and this is what it missed.** New credentials (user `0018345559`)
+  took `verify-myzmanim-request-shape.mts` to **5/5** on the first try — then
+  `test-myzmanim.ts` scored **0/7**, every value out by exactly five hours.
+  - **THE `Z` IS A LIE.** myzmanim sends Brooklyn sunrise as
+    `"2025-12-12T07:10:24Z"`, but sunrise there is 7:10 AM LOCAL — confirmed by
+    physics and by the founder's own printed sheet. It is wall-clock time wearing
+    a UTC suffix, so `new Date()` read it as 07:10 UTC = 02:10 in New York.
+    **Every time in every response**, five hours out in winter and six in summer.
+    Fixed by parsing the string as a naive wall clock and re-anchoring it in the
+    LOCATION's timezone, which also keeps myzmanim and hebcal in one
+    representation. **Acceptance: 0/7 → 7/7 against the founder's sheet.**
+  - **SO THE 2026-07-07 PICKUP LINE'S "zero code changes needed" WAS FALSE TWICE
+    OVER** — once for the request shape, once for this. Do not trust a
+    "just add the key" note again without running the acceptance script.
+  - **THE GENERAL LESSON: an error response tells you the SHAPE of a payload;
+    only a real one tells you what the numbers MEAN.** The day before, the full
+    field inventory was recovered from the unauthorized-error skeleton and used
+    to argue the build could proceed without a key. That was true for the write
+    path and false for the semantics of a value.
+  - Also corrected: the sentinel is sent **both** with and without the trailing
+    `Z` (real responses use `Z`, the error skeleton does not), so neither
+    exact-match guard would have been right. Filtering by YEAR was necessary,
+    not merely defensive.
+  - **ACCOUNT STATUS: TRIAL until 2026-10-24**, and trials forbid production use.
+    Production therefore holds NO myzmanim credential and serves from the zmanim
+    cache instead — see **[docs/23](../../docs/23-zmanim-cache-and-global-batches.md)**,
+    which also carries the go-live steps and the per-LOCATION (not per-call)
+    pricing model.
+- **Still open:** the myzmanim **paid plan** (trial expires 2026-10-24; go-live is
+  two Vercel vars plus a switch — run `scripts/prod-verify-zmanim-schema.mts`,
+  §[7], for the live state) · the zmanim cache's two UIs (docs/23 §5c) · acceptance validation against the founder's real schedule
   + Sheets rules (waiting on materials) · line edit-in-place (currently
   delete+recreate) · Hebrew rendering polish on exports.
