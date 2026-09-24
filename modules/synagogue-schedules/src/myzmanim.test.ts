@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { buildWeekWithProvenance, parseZmanim, type MyzmanimResponse } from './myzmanim'
+import { wallMinutes } from './evaluator'
+
+const TZ = 'America/New_York'
 
 // Guards for the two bugs fixed 2026-09-23. Both were invisible until the live
 // API was probed directly, and both are pure-function testable, which is why
@@ -15,7 +18,7 @@ describe('parseZmanim — the missing-value sentinel', () => {
     // THE BUG: the old guard compared against '0001-01-01T00:00:00Z'. The API
     // sends it WITHOUT the Z, so the guard never matched and every absent time
     // became a valid year-1 Date that flowed into the schedule as a real time.
-    const out = parseZmanim({ Zman: { Candles: '0001-01-01T00:00:00' } })
+    const out = parseZmanim({ Zman: { Candles: '0001-01-01T00:00:00' } }, TZ)
     expect(out.Candles, 'the sentinel was parsed as a real time').toBeUndefined()
   })
 
@@ -23,12 +26,12 @@ describe('parseZmanim — the missing-value sentinel', () => {
     // The two spellings disagree and only one can be right, so neither is
     // trusted — the filter is on the YEAR. If this ever regresses to a string
     // compare, one of these two tests fails whichever spelling is chosen.
-    const out = parseZmanim({ Zman: { Candles: '0001-01-01T00:00:00Z' } })
+    const out = parseZmanim({ Zman: { Candles: '0001-01-01T00:00:00Z' } }, TZ)
     expect(out.Candles).toBeUndefined()
   })
 
   it('CONTROL: a real time survives — the filter is not simply dropping everything', () => {
-    const out = parseZmanim({ Zman: { SunriseDefault: '2026-09-23T06:47:00' } })
+    const out = parseZmanim({ Zman: { SunriseDefault: '2026-09-23T06:47:00' } }, TZ)
     expect(out.SunriseDefault, 'a genuine time was discarded').toBeInstanceOf(Date)
     expect(out.SunriseDefault?.getUTCFullYear()).toBe(2026)
   })
@@ -37,7 +40,7 @@ describe('parseZmanim — the missing-value sentinel', () => {
     // Measured: PropGra and its siblings come back as the NUMBER 0, not a
     // string. `new Date(0)` would be a valid 1970 Date, so a parser that did
     // not check the type would publish eight bogus times per day.
-    const out = parseZmanim({ Zman: { PropGra: 0, PropMA72: 0, SunriseDefault: '2026-09-23T06:47:00' } })
+    const out = parseZmanim({ Zman: { PropGra: 0, PropMA72: 0, SunriseDefault: '2026-09-23T06:47:00' } }, TZ)
     expect(out.PropGra).toBeUndefined()
     expect(out.PropMA72).toBeUndefined()
     expect(Object.keys(out)).toEqual(['SunriseDefault'])
@@ -54,12 +57,12 @@ describe('parseZmanim — the missing-value sentinel', () => {
         '0001-01-01T00:00:00',
       ]),
     )
-    expect(parseZmanim({ Zman: allSentinel })).toEqual({})
+    expect(parseZmanim({ Zman: allSentinel }, TZ)).toEqual({})
   })
 
   it('tolerates a response with no Zman section at all', () => {
-    expect(parseZmanim({})).toEqual({})
-    expect(parseZmanim({ ErrMsg: 'NotAuthorizedSeeApiDashboardForDetails' })).toEqual({})
+    expect(parseZmanim({}, TZ)).toEqual({})
+    expect(parseZmanim({ ErrMsg: 'NotAuthorizedSeeApiDashboardForDetails' }, TZ)).toEqual({})
   })
 })
 
@@ -172,5 +175,59 @@ describe('buildWeekWithProvenance — cache first', () => {
     })
     expect(days).toHaveLength(7)
     expect(Object.values(provenance)).toEqual(Array(7).fill('fallback'))
+  })
+})
+
+// ---------------------------------------------------------------------------
+// THE `Z` IS A LIE (found 2026-09-24, the first day a working key existed).
+//
+// myzmanim stamps LOCAL WALL TIME with a UTC suffix. Believing it shifts every
+// time in every response by the location's offset — five hours in winter, six
+// in summer — which is not an edge case but the entire schedule, every day.
+// These assert against the founder's OWN PRINTED SHEET for 2025-12-12, the same
+// seven values apps/worker/scripts/test-myzmanim.ts checks live.
+// ---------------------------------------------------------------------------
+describe('parseZmanim — wall-clock re-anchoring', () => {
+  const at = (raw: string) => {
+    const out = parseZmanim({ Zman: { X: raw } }, TZ)
+    return out.X ? wallMinutes(out.X, TZ) : null
+  }
+  const hhmm = (h: number, m: number) => h * 60 + m
+
+  it('reads 07:10:24Z on a December day in Brooklyn as 7:10 AM, not 2:10 AM', () => {
+    // The founder's sheet says sunrise 7:10 AM. Before this fix the schedule
+    // rendered 2:10 AM and nothing anywhere complained.
+    expect(at('2025-12-12T07:10:24Z')).toBe(hhmm(7, 10))
+  })
+
+  it('handles the afternoon values from the same sheet', () => {
+    expect(at('2025-12-12T16:28:00Z')).toBe(hhmm(16, 28)) // sunset 4:28 PM
+    expect(at('2025-12-12T16:10:00Z')).toBe(hhmm(16, 10)) // candles 4:10 PM
+    expect(at('2025-12-12T17:15:00Z')).toBe(hhmm(17, 15)) // NightShabbos 5:15 PM
+  })
+
+  it('holds across the DST boundary, where a naive offset would slip an hour', () => {
+    // EDT (-4) in July, EST (-5) in January. A single hard-coded offset, or a
+    // one-pass conversion, gets one of these wrong.
+    expect(at('2026-07-04T05:30:00Z')).toBe(hhmm(5, 30))
+    expect(at('2026-01-04T05:30:00Z')).toBe(hhmm(5, 30))
+  })
+
+  it('re-anchors in the LOCATION timezone, not the server one', () => {
+    // The same wall-clock string is a different instant in each zone, but reads
+    // back as the same wall time in its own zone — which is the property the
+    // schedule actually depends on.
+    const jlm = parseZmanim({ Zman: { X: '2026-01-04T06:30:00Z' } }, 'Asia/Jerusalem')
+    const nyc = parseZmanim({ Zman: { X: '2026-01-04T06:30:00Z' } }, 'America/New_York')
+    expect(wallMinutes(jlm.X!, 'Asia/Jerusalem')).toBe(hhmm(6, 30))
+    expect(wallMinutes(nyc.X!, 'America/New_York')).toBe(hhmm(6, 30))
+    expect(jlm.X!.getTime()).not.toBe(nyc.X!.getTime())
+  })
+
+  it('CONTROL: the sentinel is still rejected in BOTH spellings', () => {
+    // Real responses use the Z form, the unauthorized-error skeleton does not.
+    // Both occur, so neither exact-match guard would have been correct.
+    expect(parseZmanim({ Zman: { X: '0001-01-01T00:00:00Z' } }, TZ).X).toBeUndefined()
+    expect(parseZmanim({ Zman: { X: '0001-01-01T00:00:00' } }, TZ).X).toBeUndefined()
   })
 })

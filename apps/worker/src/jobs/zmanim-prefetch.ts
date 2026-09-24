@@ -1,7 +1,7 @@
 import postgres from 'postgres'
 import {
+  hasUsableTimes,
   myzmanimCredsFromEnv,
-  parseZmanim,
   requestMyzmanimDay,
 } from '../../../../modules/synagogue-schedules/src/myzmanim'
 
@@ -230,7 +230,7 @@ export async function runZmanimPrefetch(
           payload = res
           if (res.ErrMsg) {
             errMsg = res.ErrMsg
-          } else if (Object.keys(parseZmanim(res)).length === 0) {
+          } else if (!hasUsableTimes(res)) {
             // A response with no ErrMsg but nothing but sentinels is still not
             // usable data, and caching it would be indistinguishable from a
             // successful fill. Treat it as a failure rather than poisoning the

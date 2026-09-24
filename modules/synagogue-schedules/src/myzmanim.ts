@@ -31,15 +31,25 @@ import { getDayFacts, getZmanimFallback } from './calendar'
 //    `application/x-www-form-urlencoded` that works — what their demo form posts.
 //
 // 2. THE "MISSING VALUE" SENTINEL NEVER MATCHED, so absent times became year-1
-//    dates. The sentinel was compared against '0001-01-01T00:00:00Z', but the
-//    API sends it WITHOUT the trailing Z ('0001-01-01T00:00:00'), so the guard
-//    was dead and `new Date(...)` produced a valid year-1 Date that flowed into
-//    the schedule as if it were a real time.
+//    dates. The sentinel was compared against '0001-01-01T00:00:00Z' by exact
+//    string equality, and the guard was dead, so `new Date(...)` produced a
+//    valid year-1 Date that flowed into the schedule as if it were a real time.
 //    Two consequences, the second worse than the first: a genuinely empty field
 //    (`Candles` on a Tuesday) renders a year-1 time instead of nothing; and
 //    because `buildWeek` only falls back to hebcal when the parsed map is EMPTY,
 //    a mostly-sentinel response would suppress the fallback entirely.
-//    Now filtered by YEAR, which is robust to either spelling.
+//    Now filtered by YEAR.
+//
+//    CORRECTED 2026-09-24, once a working key existed: this comment used to say
+//    "the API sends it WITHOUT the trailing Z". That was measured against the
+//    UNAUTHORIZED-error skeleton only. A real response uses the Z spelling, and
+//    the error skeleton does not — **both forms genuinely occur**, so neither
+//    exact-match guard would have been correct. Filtering by year was defensive
+//    when it was written and turns out to have been necessary.
+//
+// 3. THE `Z` IS A LIE — found 2026-09-24, see parseZmanim's own header. This is
+//    the one that could not have been found without a working key, and it made
+//    every single time in every response wrong by the location's UTC offset.
 
 export type MyzmanimCredentials = { user: string; key: string }
 
@@ -61,15 +71,16 @@ export async function fetchMyzmanimDay(
   dateISO: string,
   locationId: string,
   creds: MyzmanimCredentials,
+  timeZone: string,
 ): Promise<Partial<Record<string, Date>>> {
-  const memoKey = `${locationId}|${dateISO}`
+  const memoKey = `${locationId}|${dateISO}|${timeZone}`
   const cached = memo.get(memoKey)
   if (cached) return cached
 
   const data = await requestMyzmanimDay(dateISO, locationId, creds)
   if (data.ErrMsg) throw new Error(`myzmanim: ${data.ErrMsg}`)
 
-  const out = parseZmanim(data)
+  const out = parseZmanim(data, timeZone)
   memo.set(memoKey, out)
   return out
 }
@@ -99,21 +110,92 @@ export async function requestMyzmanimDay(
   return (await res.json()) as MyzmanimResponse
 }
 
+/** Does this response carry at least one REAL time?
+ *
+ * Deliberately separate from `parseZmanim`, and deliberately timezone-free. The
+ * prefetch sweep has to answer "is this worth caching?" for a location whose
+ * timezone it does not know — the cache is keyed by location and shared across
+ * orgs, while the timezone lives in each org's settings. Conversion is not
+ * needed to answer that question, and requiring one would have meant either
+ * threading a timezone the sweep cannot know or passing a fake one.
+ *
+ * This is the gate in front of every cache write: docs/23 section 5 — a response
+ * with no ErrMsg but nothing except sentinels is still not usable data, and
+ * caching it is indistinguishable from a successful fill. */
+export function hasUsableTimes(data: MyzmanimResponse): boolean {
+  for (const value of Object.values(data.Zman ?? {})) {
+    if (typeof value !== 'string') continue
+    const m = /^(\d{4})-/.exec(value)
+    if (m && Number(m[1]) >= 1900) return true
+  }
+  return false
+}
+
+/** The zone's UTC offset in milliseconds at a given instant. */
+function zoneOffsetMs(at: Date, timeZone: string): number {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    hourCycle: 'h23',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+  }).formatToParts(at)
+  const get = (t: string) => Number(parts.find((p) => p.type === t)?.value ?? 0)
+  const asIfUtc = Date.UTC(get('year'), get('month') - 1, get('day'), get('hour'), get('minute'), get('second'))
+  return asIfUtc - at.getTime()
+}
+
+/** Turn a WALL-CLOCK time in `timeZone` into a true instant.
+ *
+ * Two passes, which matters only near a DST boundary: the first guess uses the
+ * offset at the wrong instant, the second uses the offset at (approximately) the
+ * right one. */
+function wallTimeToInstant(y: number, mo: number, d: number, h: number, mi: number, s: number, timeZone: string): Date {
+  const asIfUtc = Date.UTC(y, mo - 1, d, h, mi, s)
+  let instant = new Date(asIfUtc - zoneOffsetMs(new Date(asIfUtc), timeZone))
+  instant = new Date(asIfUtc - zoneOffsetMs(instant, timeZone))
+  return instant
+}
+
 /** Pull the usable times out of a getDay response.
  *
- * A field is ABSENT when the API sends its missing-value sentinel. Detected by
- * YEAR rather than by string equality: the sentinel is documented in the
- * founder's Apps Script as '0001-01-01T00:00:00Z' but the live API sends
- * '0001-01-01T00:00:00' with no trailing Z, and an exact-match guard on either
- * spelling silently lets the other through as a real year-1 Date. */
-export function parseZmanim(data: MyzmanimResponse): Partial<Record<string, Date>> {
+ * ===========================================================================
+ * THE `Z` ON A MYZMANIM TIMESTAMP IS A LIE, and believing it shifts every time
+ * by the location's UTC offset (found 2026-09-24, the first day we had a
+ * working key — no amount of schema reading could have revealed it).
+ * ===========================================================================
+ * A real response sends sunrise in Brooklyn on 2025-12-12 as
+ * `"2025-12-12T07:10:24Z"`. Sunrise there is 7:10 AM local, and the founder's
+ * own printed sheet says 7:10 AM — so the value is LOCAL WALL TIME wearing a
+ * UTC suffix. `new Date(...)` dutifully reads it as 07:10 UTC, which is 02:10 in
+ * New York, and the whole schedule renders five hours early. It is not a
+ * rounding error or an edge case: every single time in every response is wrong
+ * by the offset, and in summer it is six.
+ *
+ * So the string is parsed as a NAIVE wall clock and re-anchored in the
+ * location's timezone, producing a true instant. That keeps myzmanim and the
+ * hebcal fallback in ONE representation — hebcal returns real instants — so
+ * `wallMinutes()` and the week aggregates work identically whichever source a
+ * day came from. Mixing representations would work until the first week that
+ * drew from both.
+ *
+ * ABSENT FIELDS are detected by YEAR rather than by string equality, and that
+ * defensiveness turned out to be necessary rather than merely tidy: the live API
+ * uses BOTH spellings of the sentinel — `0001-01-01T00:00:00Z` inside a real
+ * response, and `0001-01-01T00:00:00` with no `Z` in the unauthorized-error
+ * skeleton. An exact-match guard on either one silently admits the other as a
+ * real year-1 Date. */
+export function parseZmanim(data: MyzmanimResponse, timeZone: string): Partial<Record<string, Date>> {
   const out: Partial<Record<string, Date>> = {}
   for (const [field, value] of Object.entries(data.Zman ?? {})) {
     if (typeof value !== 'string') continue
-    const d = new Date(value)
-    if (Number.isNaN(d.getTime())) continue
-    if (d.getUTCFullYear() < 1900) continue // the sentinel, however it is spelled
-    out[field] = d
+    // Deliberately NOT `new Date(value)`: see the header. Read the wall-clock
+    // fields out of the string and re-anchor them in the location's zone.
+    const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/.exec(value)
+    if (!m) continue
+    const [y, mo, d, h, mi, s] = m.slice(1, 7).map(Number) as [number, number, number, number, number, number]
+    if (y < 1900) continue // the sentinel, in either of its two spellings
+    const instant = wallTimeToInstant(y, mo, d, h, mi, s, timeZone)
+    if (!Number.isNaN(instant.getTime())) out[field] = instant
   }
   return out
 }
@@ -195,14 +277,14 @@ export async function buildWeekWithProvenance(
 
     const hit = cached.get(iso)
     if (hit) {
-      zmanim = parseZmanim(hit)
+      zmanim = parseZmanim(hit, opts.timeZone)
       if (Object.keys(zmanim).length > 0) source = 'cache'
     }
 
     // Only reach for the API when the cache did not answer.
     if (source === 'none' && opts.myzmanimLocationId && opts.credentials?.user && opts.credentials?.key) {
       try {
-        zmanim = await fetchMyzmanimDay(iso, opts.myzmanimLocationId, opts.credentials)
+        zmanim = await fetchMyzmanimDay(iso, opts.myzmanimLocationId, opts.credentials, opts.timeZone)
         if (Object.keys(zmanim).length > 0) source = 'api'
       } catch (err) {
         console.warn(`myzmanim failed for ${iso}, falling back to hebcal:`, err)

@@ -30,7 +30,7 @@ const expected: Record<string, string> = {
 }
 
 async function main() {
-  const zmanim = await fetchMyzmanimDay('2025-12-12', 'US11210', creds)
+  const zmanim = await fetchMyzmanimDay('2025-12-12', 'US11210', creds, 'America/New_York')
   console.log(`fields returned: ${Object.keys(zmanim).length}`)
   let pass = 0
   let fail = 0

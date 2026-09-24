@@ -79,13 +79,25 @@ try {
   check('...and makes no API calls at all', (afterOff[0]?.n ?? 0) === 0, `${afterOff[0]?.n} log rows`)
 
   // -----------------------------------------------------------------------
-  console.log('\n[2] ENABLED against the REAL failing API — the poisoning test')
+  // THE POISONING TEST, forced rather than borrowed.
+  //
+  // This used to depend on OUR key being broken, which meant it passed for a
+  // reason that had nothing to do with the code — and it stopped working the
+  // moment a valid key arrived (2026-09-24). The failure is now INDUCED with a
+  // deliberately invalid key, so the assertion is permanent and independent of
+  // account state. The lesson generalises: a test that passes because the
+  // environment happens to be broken is not a test of anything.
+  console.log('\n[2] POISONING TEST — an induced failure must write NOTHING')
   await sql`
     update public.platform_settings
     set value = value || ${sql.json({ enabled: true, budgetPerRun: 3 })}
     where key = 'zmanim.prefetch'`
 
+  const realKey = process.env.MYZMANIM_KEY
+  process.env.MYZMANIM_KEY = 'deliberately-invalid-key-for-this-test'
   const run = await runZmanimPrefetch(url, { locationKey: LOC })
+  process.env.MYZMANIM_KEY = realKey
+
   check('the sweep ran', run.ran === true, JSON.stringify(run))
   check('it wrote NOTHING to the cache', run.written === 0, `${run.written} written`)
 
@@ -108,6 +120,41 @@ try {
   check("the row is attributed to origin='sweep'", logged[0]?.origin === 'sweep', logged[0]?.origin ?? '-')
   check('it STOPPED after the first failure rather than burning the whole budget',
     (logged[0]?.n ?? 0) === 1, `${logged[0]?.n} call(s) for a budget of 3`)
+
+  // -----------------------------------------------------------------------
+  // [2b] THE HAPPY PATH — only assertable since a working key arrived
+  //      (2026-09-24). Makes a small number of REAL calls.
+  console.log('\n[2b] HAPPY PATH — a real fetch fills the cache with real data')
+  await sql`delete from public.syn_zmanim_fetch_log where location_key = ${LOC}`
+
+  const good = await runZmanimPrefetch(url, { locationKey: LOC, budgetOverride: 2 })
+  check('the sweep wrote rows', good.written === 2, `${good.written} written, ${good.failed} failed`)
+
+  const stored = await sql<{ n: number; zman_fields: number; src: string }[]>`
+    select count(*)::int as n,
+           min((select count(*) from jsonb_object_keys(payload -> 'Zman')))::int as zman_fields,
+           max(source) as src
+    from public.syn_zmanim_cache where location_key = ${LOC}`
+  check('the cache now holds real rows', (stored[0]?.n ?? 0) === 2, `${stored[0]?.n} row(s)`)
+  check("they are tagged source='myzmanim'", stored[0]?.src === 'myzmanim', stored[0]?.src ?? '-')
+  check('each payload is the WHOLE response, not a parsed subset (founder decision 1)',
+    (stored[0]?.zman_fields ?? 0) > 50, `${stored[0]?.zman_fields} Zman fields stored`)
+
+  const sections = await sql<{ has_place: boolean; has_time: boolean }[]>`
+    select (payload ? 'Place') as has_place, (payload ? 'Time') as has_time
+    from public.syn_zmanim_cache where location_key = ${LOC} limit 1`
+  check('Place and Time were kept too — the sections the connector used to discard',
+    sections[0]?.has_place === true && sections[0]?.has_time === true,
+    `Place=${sections[0]?.has_place} Time=${sections[0]?.has_time}`)
+
+  // Gap-fill correctness: the dates just written must now count as covered, so
+  // a second run advances instead of paying for the same days again.
+  const second = await runZmanimPrefetch(url, { locationKey: LOC, budgetOverride: 2 })
+  const afterTwo = await sql<{ n: number }[]>`
+    select count(*)::int as n from public.syn_zmanim_cache where location_key = ${LOC}`
+  check('a second run fills the NEXT gaps rather than refetching the same dates',
+    (afterTwo[0]?.n ?? 0) === 4 && second.written === 2,
+    `${afterTwo[0]?.n} rows after two runs of 2 (second wrote ${second.written})`)
 
   // -----------------------------------------------------------------------
   console.log('\n[3] THE 3-DAY BREAKER flips the same switch a human uses')
