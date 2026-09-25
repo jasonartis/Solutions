@@ -228,6 +228,68 @@ like everything else in this doc.
    rows use the old value, but it is schema, so it waits on the Opus switch like the rest of
    this brief. Display label in any future UI: "Conversation Moderator."
 
+## 4b. BUILT 2026-09-25 — the rank-mapping half (`20260925030000`)
+
+**IN THE REPO, NOT ON PRODUCTION.** `migrate:prod` has NOT run. Per the 2026-09-11
+correction, nothing here is "SHIPPED" until it has, and until a prod verification passes.
+
+**What landed.** One migration, `20260925030000_rank_map_three_modules.sql`: a single
+`create or replace` of `module_position_rank(module_key, role)` adding three `case` arms —
+matchmaking (`admin` 3, `matchmaker` 1), synagogue-schedules (`maker` 1), visual-messaging
+(`admin` 3, `moderator` 1). Everything else falls through to 0 exactly as before. No table,
+column, policy or trigger. Plus the seven view-as pair declarations and six new RLS tests.
+
+**One rank was decided here, not by the founder: visual-messaging `moderator` = 1, not the
+3 this doc originally proposed in §2.** Its authority is `vm_can_moderate_org()`, a role-NAME
+check that never reads rank, so 3 would have handed a content-moderation role
+grants-administration it has never needed. At 1 it stays out of `module_has_manager_grant`
+while the admin (3) can still appoint and remove it. It also matches the convention every
+already-mapped module follows — operational staff 1, end users 0.
+
+**The measured effect, complete.** Exactly one widening: `module_has_manager_grant` becomes
+true for the matchmaking and visual-messaging `admin` roles, so they can administer grants in
+their own module without being an org admin — which is what unblocks §4.5. Nothing else
+gained anything, and **nothing was narrowed**: every comparison that could have revoked
+something was uniformly false beforehand (`0 > 0`), so no rank moved down.
+
+**Verification.** Parse- and behaviour-checked in a rolled-back transaction with controls
+before applying. `docs/rank-admission-map.md` regenerated — its diff shows `maker` and
+`moderator` correctly ABSENT from `module_has_manager_grant`, which is the founder's decision
+and the least-privilege choice visible in machine-generated output rather than prose.
+Typecheck 9/9; 257/257 across the six in-scope db suites. The amendment's teeth were proven by
+deleting a pair entry and observing `TS2741`, and the new tests' teeth by reverting the
+function body and observing 3 of 5 fail.
+
+**WHAT THE TWO ADVERSARIAL REVIEWS CAUGHT — all three findings were real and all are fixed:**
+
+1. **A FIFTH rank consumer the migration header missed: `view_as_guard_session`.** It is
+   generic (module_key comes from the inserted row), bound and enabled, and it is the ONLY
+   authority gate on `view_as_sessions` (the insert policy checks just
+   `actor_user_id = auth.uid() AND is_org_member`). Its rank arm flipped false→true for all
+   seven new pairs. **Outcome unchanged** — the edge arm still denies all seven — **but the
+   depth changed: two independent conjuncts became one**, and that one denies by the ABSENCE
+   of a case arm via `coalesce(..., false)`. So adding an edge arm in future is now
+   sufficient on its own to open a session for these modules. Documented in the header, and
+   **pinned by a new regression test whose tripwire was proven** by temporarily adding the
+   hazardous arm and watching the test fail by name. *Why it was missed: the four-item list
+   was read off the rank map's PER-MODULE sections, and a generic gate appears in that file's
+   first table instead. Read both tables.*
+2. **A false claim in a view-as note:** "a matchmaker's whole reach is
+   `mm_matchmaker_assignments`." Refuted against the live policy —
+   `mm_questions_select_participant` is `(mm_is_single OR mm_is_matchmaker) AND (status =
+   'approved' OR submitted_by = auth.uid())`, with no assignment term. Her reach is SPLIT;
+   the note now says so.
+3. **A false implication in another:** that a vm moderator sees conversations the admin does
+   not, "exactly the kind of absence mode 1 exists to show." The opposite is true —
+   `vm_can_moderate_org` is `vm_can_manage(org) OR has_module_role(...,'moderator')`, and
+   `vm_can_manage` is a disjunct of it, so **the admin's reach is a strict superset and the
+   `moderator` grant confers nothing an admin lacks.** Corrected, with the finding kept
+   because it is genuinely surprising.
+
+A fourth item was flagged as vague rather than false (a count cannot prove "never granted"),
+and that note now states exactly what was measured: a point-in-time local count, with its
+control.
+
 ## 5. Scenarios as originally framed (kept for the reasoning, now answered above)
 
 ### 5.1 Speed dating's audience/mentor — what grant justifies the seat?
@@ -314,7 +376,25 @@ Dana. That is the intended outcome, not a side effect to correct.
 - `cls_set_preferred_name`'s remaining half and docs/19 §5's `sd_in_event` status filter
   (unrelated to this slice, still open).
 
-**Next step:** manual switch to Opus (Fable unavailable this session), then the full docs/03
-#12 rhythm — draft the migration, two narrow adversarial reviewers, live-verify as real seeded
-users, RLS tests, prod deploy per the docs/03 #27/#28 lessons already paid for once this
-session.
+**Status of the three remaining pieces, after the 2026-09-25 Opus session:**
+
+| piece | state |
+|---|---|
+| Rank-mapping the three modules (§2) | **BUILT, in the repo — §4b.** Not on prod. |
+| The `module_roles` census-leak fix (§4.5) | **UNBLOCKED, NOT BUILT.** See below. |
+| The roster fold (§3) + `conversation_moderator` rename (§4 item 4) | **NOT BUILT.** Its own slice. |
+
+**The census-leak fix is no longer blocked, but it is not a one-line policy narrowing either,
+and the reason is worth recording before someone tries.** Narrowing
+`module_roles_select_member` to self-plus-managers breaks the view-as target picker, which
+reads `module_roles` through the caller's ordinary RLS client
+(`apps/web/lib/view-as.ts:151-156`) to enumerate holders of a position. A rank-1 caller with a
+live mode-1 edge needs that read and would fail `module_has_manager_grant` (>= 2) — and
+speed-dating's `host` (rank 1) has exactly such an edge into `participant`, ON since the
+2026-09-20 founder decision. **The SQL edge mirror cannot rescue it either: it carries mode 2
+only**, so a mode-1-only edge is invisible to the database. So the fix needs a deliberate read
+path for that picker (an edge-aware definer is the obvious candidate), not just a narrower
+policy. Also note §1.6's correction: whatever replaces it must keep `is_org_admin` in the OR,
+or org admins who hold no module grant lose the table entirely.
+
+**Next step:** the census-leak slice, at Opus tier, with the picker read path designed first.

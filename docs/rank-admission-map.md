@@ -185,13 +185,13 @@ _Relative gates (`module_caller_can_manage_seat`, `view_as_guard_session`) read 
 
 ### matchmaking
 
-Ladder: **4** director · **3** coordinator · **2** lead · **1** position · **0** admin, matchmaker, single
+Ladder: **4** director · **3** admin, coordinator · **2** lead · **1** matchmaker, position · **0** single
 
 | gate | rank test | positions satisfying it | which lets them at |
 | --- | --- | --- | --- |
-| `module_caller_can_manage_seat` | rank = 3 | coordinator | _no policy names it — reached through triggers/functions_ |
-| `module_has_manager_grant` | rank >= 2 | coordinator, director, lead | module_roles |
-| `module_roles_guard_hierarchy` | rank = 3 | coordinator | _no policy names it — reached through triggers/functions_ |
+| `module_caller_can_manage_seat` | rank = 3 | admin, coordinator | _no policy names it — reached through triggers/functions_ |
+| `module_has_manager_grant` | rank >= 2 | admin, coordinator, director, lead | module_roles |
+| `module_roles_guard_hierarchy` | rank = 3 | admin, coordinator | _no policy names it — reached through triggers/functions_ |
 | `module_roles_guard_last_director` | rank < 4 | admin, coordinator, lead, matchmaker, position, single | _no policy names it — reached through triggers/functions_ |
 | `module_roles_guard_last_director` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
 
@@ -272,7 +272,7 @@ _Relative gates (`module_caller_can_manage_seat`, `view_as_guard_session`) read 
 
 ### synagogue-schedules
 
-Ladder: **4** director · **3** coordinator · **2** lead · **1** position · **0** maker, viewer
+Ladder: **4** director · **3** coordinator · **2** lead · **1** maker, position · **0** viewer
 
 | gate | rank test | positions satisfying it | which lets them at |
 | --- | --- | --- | --- |
@@ -286,13 +286,13 @@ _Relative gates (`module_caller_can_manage_seat`, `view_as_guard_session`) read 
 
 ### visual-messaging
 
-Ladder: **4** director · **3** coordinator · **2** lead · **1** position · **0** admin, member, moderator
+Ladder: **4** director · **3** admin, coordinator · **2** lead · **1** moderator, position · **0** member
 
 | gate | rank test | positions satisfying it | which lets them at |
 | --- | --- | --- | --- |
-| `module_caller_can_manage_seat` | rank = 3 | coordinator | _no policy names it — reached through triggers/functions_ |
-| `module_has_manager_grant` | rank >= 2 | coordinator, director, lead | module_roles |
-| `module_roles_guard_hierarchy` | rank = 3 | coordinator | _no policy names it — reached through triggers/functions_ |
+| `module_caller_can_manage_seat` | rank = 3 | admin, coordinator | _no policy names it — reached through triggers/functions_ |
+| `module_has_manager_grant` | rank >= 2 | admin, coordinator, director, lead | module_roles |
+| `module_roles_guard_hierarchy` | rank = 3 | admin, coordinator | _no policy names it — reached through triggers/functions_ |
 | `module_roles_guard_last_director` | rank < 4 | admin, coordinator, lead, member, moderator, position | _no policy names it — reached through triggers/functions_ |
 | `module_roles_guard_last_director` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
 

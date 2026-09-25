@@ -21,8 +21,12 @@
 //                  pairs into `participant` stay permanently OFF (§8.1 point 7's
 //                  end-user ban). Reviewed 2026-08-28 — see the block above that
 //                  declaration.
-//   The rank-0 vocabularies (matchmaking, synagogue-schedules, visual-messaging) —
-//   every pair explicitly OFF (they have none to turn on until rank-mapped).
+//   matchmaking, synagogue-schedules, visual-messaging — RANK-MAPPED 2026-09-25,
+//                  which gave them seven rank-differential pairs between them.
+//                  Every one is explicitly OFF: mode 2 into an end user is banned
+//                  permanently (§8.1 point 7), mode 1 awaits each module's own
+//                  point 9 surface review, which none of the three has had.
+//   sample, stub — still entirely rank 0, so still no pairs to answer.
 //
 // The line is principled, not arbitrary: §8.1 point 9 says a position's surface
 // classification is "decided in each module's security review." An edge may
@@ -32,13 +36,17 @@
 // `module_view_as_edge()` — never inventing a mechanism (neither nail-salon's nor
 // speed-dating's review needed a new one, and each says so where it came closest).
 //
-// A pleasant consequence of ranks being what they are today: only classroom
-// (2 pairs), nail-salon (9) and speed-dating (6) have ANY rank-differential
-// pairs at all. The other five vocabularies are entirely rank 0 in SQL's
-// `module_position_rank()`, so they require no entries — and the moment anyone
-// rank-maps matchmaking / synagogue-schedules / visual-messaging (the
-// "optional, undone" work in CLAUDE.md), the build breaks until every
-// newly-implied pair is consciously answered. That is the amendment working.
+// THE AMENDMENT ALREADY FIRED ONCE, ON PURPOSE (2026-09-25). This header used to
+// end by predicting that rank-mapping matchmaking / synagogue-schedules /
+// visual-messaging would break the build until every newly-implied pair was
+// answered. It did exactly that: the mapped type went red with seven missing
+// entries, and the seven answers below are what cleared it. Kept as a worked
+// example rather than a prediction — the mechanism is cheap to doubt until you
+// have watched it refuse to compile.
+//
+// Current pair counts: classroom 2, nail-salon 9, speed-dating 6, matchmaking 3,
+// visual-messaging 3, synagogue-schedules 1. Only `sample` and `stub` are still
+// entirely rank 0 in `module_position_rank()` and so still require no entries.
 
 import { declareViewAs, type ViewAsDeclaration } from './view-as'
 
@@ -1789,30 +1797,165 @@ export const speedDatingViewAs = declareViewAs({
 })
 
 // ---------------------------------------------------------------------------
-// The five vocabularies SQL has not rank-mapped. `module_position_rank()`
-// returns 0 for every one of these role strings, so there is no ordered pair
-// with a rank gap and the completeness check requires no entries. Declaring
-// them anyway keeps the check total over the registry — and makes the eventual
-// rank-mapping of these modules break the build until each newly-implied pair
-// is answered, which is the whole point of the 2026-07-30 amendment.
+// RANK-MAPPED 2026-09-25 (`20260925030000_rank_map_three_modules.sql`, docs/24).
+// These three were the last real modules whose vocabulary was entirely rank 0.
+// Mapping them made the 2026-07-30 amendment fire exactly as designed: seven
+// ordered pairs acquired a rank gap, and the build stayed red until each one
+// carried a conscious on/off answer. Every one of the seven is answered OFF.
 //
-// Matchmaking specifically: §8.1 point 7's ban applies to `single`. Nothing to
-// express yet (no pairs exist), so the ban is recorded here in prose and
-// becomes real edge entries the moment matchmaking is rank-mapped.
+// WHY ALL SEVEN ARE OFF — two different reasons, and the distinction matters:
+//
+//   * MODE 2 into an end user (`single`, `member`, `viewer`) is off
+//     PERMANENTLY, not pending anything. That is §8.1 point 7's ban on
+//     impersonating an end user, the same answer speed-dating's `participant`
+//     carries. Note point 7 bans IMPERSONATION and ends "Mode 1 stays available
+//     everywhere" — reading it as a mode-1 ban is the specific misreading the
+//     2026-09-20 founder decision corrected, so it is not repeated here.
+//
+//   * MODE 1 on all seven is off PENDING each module's own §8.1 point 9 surface
+//     review. Turning mode 1 on means declaring a per-position data surface and
+//     proving the personal/excluded split is honest against live RLS — the work
+//     nail-salon did on 2026-08-04 and speed-dating on 2026-08-28. None of these
+//     three has had it. An OFF pair needs no surface (view-as.ts:331-337), which
+//     is what keeps this honest: nothing here claims a review that did not
+//     happen.
+//
+// So this block is not "nothing to see". It is the ladder going in and the
+// visibility graph deliberately staying where it was — docs/15 §5's two-graphs
+// principle, with the second graph left for its own reviews.
 // ---------------------------------------------------------------------------
+
+/** Shared reasoning for every mode-2-into-an-end-user ban below. */
+const END_USER_MODE2_BAN =
+  'MODE 2 OFF PERMANENTLY — §8.1 point 7 bans impersonating an end user, so this half is ' +
+  'not pending a review and no review can turn it on. (Point 7 bans impersonation and ends ' +
+  '"Mode 1 stays available everywhere"; the 2026-09-20 founder decision corrected an earlier ' +
+  'reading of it as a mode-1 ban, which is why mode 1 below is deferred rather than banned.) '
+
+/** Shared reasoning for every mode-1 deferral below. */
+const AWAITS_SURFACE_REVIEW =
+  'MODE 1 OFF PENDING this module\'s own §8.1 point 9 surface review, which has never been ' +
+  'done — no per-position surface is declared, so there is nothing to render and nothing ' +
+  'proven about the personal/excluded split. Rank-mapping (2026-09-25) deliberately changed ' +
+  'the management ladder only, never the visibility graph (docs/15 §5).'
+
 export const matchmakingViewAs = declareViewAs({
-  positions: { single: 0, matchmaker: 0, admin: 0 },
-  edges: {},
+  positions: { single: 0, matchmaker: 1, admin: 3 },
+  edges: {
+    admin: {
+      matchmaker: {
+        mode1: false,
+        mode2: false,
+        note:
+          AWAITS_SURFACE_REVIEW +
+          ' Specifically unresolved for this pair: a matchmaker\'s reach is SPLIT, and a ' +
+          'mode-1 tab has to render both halves honestly. The per-person half really is ' +
+          'assignment-scoped (mm_matchmaker_assignments — she reads the singles ASSIGNED to ' +
+          'her and no others), so a tab would have to answer "assigned to which matchmaker?" ' +
+          'before it could render anything. But the OTHER half is not assignment-scoped at ' +
+          'all: mm_questions_select_participant is ' +
+          '"(mm_is_single OR mm_is_matchmaker) AND (status = \'approved\' OR submitted_by = ' +
+          'auth.uid())" — pure role membership, no assignment term. (CORRECTED 2026-09-25: ' +
+          'an earlier draft of this note claimed her "whole reach" was the assignment table. ' +
+          'Adversarial review refuted it against the live policy — measured, mel reads 3 ' +
+          'mm_questions holding only the role. The narrower claim above is the true one.)',
+      },
+      single: {
+        mode1: false,
+        mode2: false,
+        note:
+          END_USER_MODE2_BAN +
+          'A `single` is an end user whose surface is their own intimate questionnaire ' +
+          '(mm_answers) and their own compatibility scores — the most sensitive personal ' +
+          'layer on the platform. ' +
+          AWAITS_SURFACE_REVIEW,
+      },
+    },
+    matchmaker: {
+      single: {
+        mode1: false,
+        mode2: false,
+        note:
+          END_USER_MODE2_BAN +
+          'Note this pair exists at all only because matchmaker is rank 1 and single is ' +
+          'rank 0; the founder decision of 2026-09-25 (docs/24 §4.2) put matchmaker BELOW ' +
+          'the manager threshold precisely so she administers and enumerates nobody. ' +
+          AWAITS_SURFACE_REVIEW,
+      },
+    },
+  },
 })
 
 export const synagogueSchedulesViewAs = declareViewAs({
-  positions: { maker: 0, viewer: 0 },
-  edges: {},
+  positions: { maker: 1, viewer: 0 },
+  edges: {
+    maker: {
+      viewer: {
+        mode1: false,
+        mode2: false,
+        note:
+          END_USER_MODE2_BAN +
+          'This pair is additionally VACUOUS in practice today: `viewer` is implicit — org ' +
+          'members read the schedule without any grant, and a COUNT taken 2026-09-25 found ' +
+          'zero module_roles rows with role `viewer` in any module, against a control of one ' +
+          '`maker` row. Stated as what it is: a point-in-time count on the LOCAL database, ' +
+          'which shows none exists now, not that none ever existed or exists on prod. ' +
+          'Do not confuse this `viewer` with vm_conversation_members.role\'s own `viewer` ' +
+          'value (20260709100000_visual_messaging.sql:158) — different table, different ' +
+          'vocabulary, unrelated meaning. ' +
+          AWAITS_SURFACE_REVIEW,
+      },
+    },
+  },
 })
 
 export const visualMessagingViewAs = declareViewAs({
-  positions: { admin: 0, moderator: 0, member: 0 },
-  edges: {},
+  positions: { admin: 3, moderator: 1, member: 0 },
+  edges: {
+    admin: {
+      moderator: {
+        mode1: false,
+        mode2: false,
+        note:
+          AWAITS_SURFACE_REVIEW +
+          ' One thing WORTH KNOWING before that review happens, because it is the opposite ' +
+          'of what it looks like: the admin\'s reach is a strict SUPERSET of the ' +
+          'moderator\'s, so this pair has no "absence" for mode 1 to reveal. ' +
+          'vm_can_moderate_org() is "vm_can_manage(org) OR has_module_role(org, ' +
+          '\'visual-messaging\', \'moderator\')", and vm_can_manage is itself ' +
+          '"is_org_admin OR has_module_role(...,\'admin\')" — so every vm admin already ' +
+          'satisfies vm_can_moderate_org, and the `moderator` grant confers nothing an admin ' +
+          'lacks. Mode 1 here would show a NARROWER view of what the caller already sees, ' +
+          'which is still a legitimate thing to offer but is not the usual justification. ' +
+          '(CORRECTED 2026-09-25: an earlier draft asserted the moderator "spans every ' +
+          'conversation including ones the admin is not a member of… exactly the kind of ' +
+          'absence mode 1 exists to show." Adversarial review refuted it from the function ' +
+          'bodies; measured, alice the vm admin returns TRUE for vm_can_moderate_org, ' +
+          'control charlie the member returns FALSE.)',
+      },
+      member: {
+        mode1: false,
+        mode2: false,
+        note:
+          END_USER_MODE2_BAN +
+          'A vm `member`\'s surface is per-conversation and governed by seat rows ' +
+          '(vm_conversation_members), not by the module grant — so a truthful mode-1 tab ' +
+          'depends on the sd/vm roster fold that docs/24 §3 proposes and which is NOT built. ' +
+          AWAITS_SURFACE_REVIEW,
+      },
+    },
+    moderator: {
+      member: {
+        mode1: false,
+        mode2: false,
+        note:
+          END_USER_MODE2_BAN +
+          'Same per-conversation caveat as admin -> member: the seat row, not the module ' +
+          'grant, is what decides what a member can see today. ' +
+          AWAITS_SURFACE_REVIEW,
+      },
+    },
+  },
 })
 
 export const sampleViewAs = declareViewAs({

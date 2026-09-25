@@ -1086,8 +1086,33 @@ matchmaking's `matchmaker` = rank 1 (assignee, not manager); synagogue-schedules
 rank 1 (org-admin grants makers); visual-messaging's per-conversation `moderator` — which
 collides with a real, unrelated module-wide `moderator` grant — gets renamed to
 `conversation_moderator` (a migration, since it's schema, even though 0 live rows use the old
-value). **Next: manual switch to Opus (Fable tier unavailable this session), then the full
-docs/03 #12 build rhythm** — nothing left to decide for this slice, only to build.
+value).
+**THE RANK-MAPPING HALF IS NOW BUILT — IN THE REPO, NOT ON PROD (2026-09-25, Opus,
+`20260925030000_rank_map_three_modules.sql`). `migrate:prod` HAS NOT RUN; do not call it
+shipped.** docs/15 slice 2 is finally complete, 6 of 6 modules. One `create or replace` of
+`module_position_rank` — no table, column, policy or trigger. matchmaking admin 3/matchmaker 1,
+synagogue maker 1, visual-messaging admin 3/**moderator 1 (decided in-session, NOT by the
+founder — docs/24 §4b has the reasoning; say so if you want 3)**. **Exactly one widening:
+`module_has_manager_grant` becomes true for the two admins, which is what unblocks the census
+leak; nothing was narrowed** (every comparison that could revoke was `0 > 0` before). Typecheck
+9/9, **257/257** across the six in-scope db suites; `docs/rank-admission-map.md` regenerated.
+**The 2026-07-30 amendment fired as designed** — seven newly-implied view-as pairs, all
+answered OFF, teeth proven by deleting an entry (`TS2741`) and by reverting the function body
+(3 of 5 new tests fail).
+**BOTH ADVERSARIAL REVIEWS FOUND REAL DEFECTS, all fixed — the durable one:
+`view_as_guard_session` IS A FIFTH RANK CONSUMER the migration header missed.** It is generic
+and is the ONLY authority gate on `view_as_sessions`. Its rank arm flipped false→true for all
+seven pairs; the outcome is unchanged (the edge arm still denies) **but two independent
+conjuncts became one, and that one denies by the ABSENCE of a case arm** — so adding an edge
+arm is now sufficient on its own to open a session in these modules. Pinned by a regression
+test whose tripwire was proven by adding the hazardous arm. *Why it was missed: generic gates
+live in the rank map's FIRST table, not the per-module sections.* The other two findings were
+false claims in view-as notes (a matchmaker's reach is split, not all assignment-scoped; and a
+vm admin's reach is a strict SUPERSET of a moderator's, so that pair has no "absence" to show).
+**NEXT: the census-leak fix is UNBLOCKED but is NOT a one-line policy narrowing** — it breaks
+the view-as target picker, which reads `module_roles` through the caller's own client and whose
+rank-1 callers (speed-dating `host`) hold a live mode-1 edge the SQL mirror cannot see (it
+carries mode 2 only). Design that read path first; docs/24 §6.
 
 **Standing rules:** never start a slice/module build without the founder initiating; every
 migration/RLS/trigger change runs the docs/03 #12 rhythm (draft → adversarial review →

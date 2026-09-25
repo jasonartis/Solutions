@@ -564,11 +564,23 @@ All of this is RLS/trigger territory ⇒ **Opus + full docs/03 #12 rhythm**, sli
    are entirely rank 0, so nothing is blocked by this, but this slice is not "done," only
    started. Corrects a doc contradiction found 2026-08-29: CLAUDE.md's "Next / open" list calls
    slice 4 "the only unbuilt slice left," which is true only in the narrow sense that no OTHER
-   slice is entirely zero-progress — slice 2 itself is genuinely partial, not finished.
-   PICKED UP 2026-09-25 — see [docs/24](24-cross-module-position-model.md), a GATHERED BRIEF
-   (measured, not built) proposing concrete ranks for all three plus folding sd_participants
-   and vm_conversation_members into scoped module_roles grants, the same shape as classroom's
-   own fold — which is what unblocks docs/19's module_roles census leak.]**
+   slice is entirely zero-progress — slice 2 itself is genuinely partial, not finished.]**
+   **[NOW COMPLETE — 6 of 6 modules rank-mapped, 2026-09-25,
+   `20260925030000_rank_map_three_modules.sql`.** matchmaking (admin 3 /
+   matchmaker 1 / single 0), synagogue-schedules (maker 1 / viewer 0) and
+   visual-messaging (admin 3 / moderator 1 / member 0) joined the three mapped in
+   July. Only `sample` and `stub` remain entirely rank 0, and those are the demo
+   and placeholder vocabularies, not client modules. Design, measurements and the
+   founder decisions behind each number:
+   [docs/24](24-cross-module-position-model.md). **The 2026-07-30 amendment fired
+   exactly as designed and is now a worked example rather than a prediction:** the
+   mapping made seven ordered pairs rank-differential, the mapped type went red
+   with `TS2741` until all seven carried an explicit answer, and all seven are
+   answered OFF (mode 2 into an end user banned permanently per §8.1 point 7;
+   mode 1 pending each module's own point 9 surface review, which none of the
+   three has had). Verified by deliberately deleting one entry and watching the
+   build refuse it. **The ladder moved; the visibility graph did not** — §5's
+   two-graphs principle, held on purpose.]**
 3. **Join policies + invite-accept** — entity-level joinPolicy everywhere; org-level
    invite-accept (touches `is_org_member()` — the most sensitive slice).
    **[org-level invite-accept BUILT 2026-07-27 — `20260727010000_org_invite_accept.sql`

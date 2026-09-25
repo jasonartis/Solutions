@@ -8048,3 +8048,308 @@ describe('view-as mode 1: the participant self-mask blinds an admin without blin
     }
   })
 })
+
+// ---------------------------------------------------------------------------
+// RANK-MAPPING THE LAST THREE MODULES (20260925030000, docs/24).
+//
+// matchmaking, synagogue-schedules and visual-messaging had every role at rank
+// 0 until 2026-09-25, because module_position_rank(module_key, role) carried no
+// `case` arm for them and the generic fallback only recognises the literal
+// words director/coordinator/lead/position, which no module ever grants.
+//
+// WHY THESE EXIST, over the parity test in the view-as block above. That test
+// asserts TS `positions` == SQL module_position_rank(), which is the right
+// check for DRIFT — but it passes if someone edits BOTH sides together, which
+// is exactly what a deliberate re-rank looks like. These pin the NUMBERS as
+// literals and, more importantly, pin the AUTHORITY CONSEQUENCES the founder
+// decided, which no parity check can see.
+//
+// TEETH, MEASURED BY ACTUALLY REVERTING THE FUNCTION BODY AND RE-RUNNING —
+// not predicted. Pre-migration: 3 of the 5 FAIL and 2 PASS.
+//   1. the eight ranks .................. FAILS ("expected +0 to be 3")
+//   2. CONTROL, already-mapped modules .. PASSES — it is a control; passing on
+//      both sides is the point, and it failing would mean this migration had
+//      moved a ladder it must not touch.
+//   3. module_has_manager_grant ......... FAILS ("expected false to be true")
+//   4. admin may manage below / not peer  FAILS its FIRST half. An earlier
+//      draft of this comment called it a pure PIN that passes both sides. That
+//      was WRONG and the revert caught it: pre-migration `admin` is rank 0, so
+//      it cannot manage a `single` seat either. Only its SECOND half is a pin —
+//      and note it passes pre-migration for a DIFFERENT REASON (0 > 0 is false)
+//      than post-migration (3 > 3 is false, plus strictly_contains(null,null)).
+//      Same verdict, different mechanism, which is exactly the kind of thing a
+//      predicted-not-measured label hides.
+//   5. rank-1 holder gains no write ..... PASSES both sides. A genuine PIN: it
+//      guards a bound this migration must not have widened.
+// ---------------------------------------------------------------------------
+describe('rank-mapping the last three modules (20260925030000)', () => {
+  const svcKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
+
+  async function orgIdBySlug(slug: string): Promise<string> {
+    const svc = createClient(url, svcKey, { auth: { persistSession: false } })
+    const { data, error } = await svc.from('orgs').select('id').eq('slug', slug).single()
+    expect(error, `resolving org ${slug}: ${JSON.stringify(error)}`).toBeNull()
+    return data!.id as string
+  }
+
+  it('the eight newly-mapped (module, role) ranks are exactly what was decided', async () => {
+    const alice = await signIn('alice@demo.local')
+    const expected: [string, string, number][] = [
+      // matchmaking — admin is Coordinator tier; matchmaker is an ASSIGNEE,
+      // deliberately BELOW the rank-2 manager threshold (founder, docs/24 4.2).
+      ['matchmaking', 'admin', 3],
+      ['matchmaking', 'matchmaker', 1],
+      ['matchmaking', 'single', 0],
+      // synagogue-schedules — a maker may NOT mint another maker (founder, 4.3).
+      ['synagogue-schedules', 'maker', 1],
+      ['synagogue-schedules', 'viewer', 0],
+      // visual-messaging — moderator authority is vm_can_moderate_org()'s
+      // role-NAME check, which never reads rank, so rank 1 hands it no
+      // grants-administration it never needed.
+      ['visual-messaging', 'admin', 3],
+      ['visual-messaging', 'moderator', 1],
+      ['visual-messaging', 'member', 0],
+    ]
+    for (const [moduleKey, role, rank] of expected) {
+      const { data, error } = await alice.rpc('module_position_rank', { module_key: moduleKey, role })
+      expect(error, `${moduleKey}/${role}: ${JSON.stringify(error)}`).toBeNull()
+      expect(data, `${moduleKey}/${role}`).toBe(rank)
+    }
+  })
+
+  it('CONTROL: the three already-mapped modules are untouched by this migration', async () => {
+    const alice = await signIn('alice@demo.local')
+    const unchanged: [string, string, number][] = [
+      ['classroom', 'professor', 2],
+      ['classroom', 'ga', 1],
+      ['classroom', 'student', 1],
+      ['nail-salon', 'admin', 3],
+      ['nail-salon', 'manager', 2],
+      ['nail-salon', 'worker', 1],
+      ['nail-salon', 'customer', 0],
+      ['speed-dating', 'organizer', 2],
+      ['speed-dating', 'host', 1],
+      ['speed-dating', 'participant', 0],
+      // and the generic fallback still answers for the unmapped vocabularies
+      ['sample', 'lead', 2],
+      ['sample', 'director', 4],
+      ['stub', 'admin', 0],
+    ]
+    for (const [moduleKey, role, rank] of unchanged) {
+      const { data } = await alice.rpc('module_position_rank', { module_key: moduleKey, role })
+      expect(data, `${moduleKey}/${role} moved — this migration must not touch it`).toBe(rank)
+    }
+  })
+
+  it('module_has_manager_grant: the two admins now cross rank 2, and NOBODY else does', async () => {
+    // THE UNBLOCK. This predicate gates module_roles_{insert,update,delete}_
+    // module_manager, which were DEAD POLICIES for these modules while every
+    // role sat at rank 0 — the reason docs/19's census leak could not be closed
+    // (no replacement read path existed for the people who legitimately
+    // administer grants). It does NOT consult is_org_admin, so Alice being an
+    // org owner does not contaminate the result: it measures her module grant.
+    const alice = await signIn('alice@demo.local')
+    const mel = await signIn('mel@demo.local')
+    const charlie = await signIn('charlie@demo.local')
+
+    const match = await orgIdBySlug('demo-match')
+    const shul = await orgIdBySlug('demo-shul')
+    const visual = await orgIdBySlug('demo-visual')
+
+    // TRUE — the widening, and the whole point of the migration.
+    for (const [client, org, moduleKey, who] of [
+      [alice, match, 'matchmaking', 'alice/matchmaking-admin'],
+      [alice, visual, 'visual-messaging', 'alice/vm-admin'],
+    ] as const) {
+      const { data, error } = await client.rpc('module_has_manager_grant', {
+        check_org_id: org,
+        check_module_key: moduleKey,
+      })
+      expect(error, `${who}: ${JSON.stringify(error)}`).toBeNull()
+      expect(data, `${who} should now hold a manager grant`).toBe(true)
+    }
+
+    // FALSE — the founder's two rank decisions, asserted exactly where they bite.
+    for (const [client, org, moduleKey, who] of [
+      [alice, shul, 'synagogue-schedules', 'alice/synagogue-maker (rank 1)'],
+      [mel, match, 'matchmaking', 'mel/matchmaker (rank 1)'],
+      [charlie, match, 'matchmaking', 'charlie/single (rank 0)'],
+      [charlie, visual, 'visual-messaging', 'charlie/vm-member (rank 0)'],
+    ] as const) {
+      const { data, error } = await client.rpc('module_has_manager_grant', {
+        check_org_id: org,
+        check_module_key: moduleKey,
+      })
+      expect(error, `${who}: ${JSON.stringify(error)}`).toBeNull()
+      expect(data, `${who} must NOT hold a manager grant`).toBe(false)
+    }
+  })
+
+  it('an admin (3) may manage seats below, but may NOT mint another admin (teeth + pin)', async () => {
+    // The bound on the widening, and it is not luck. rank(3) > rank(3) is
+    // false, and the same-role escape branch additionally requires
+    // module_scope_strictly_contains(caller_scope, seat_scope), which is FALSE
+    // for (null, null). All three of these modules are single-global-entity
+    // with zero module_scope_nodes rows, so every grant is global and that
+    // branch can never fire. Minting a second module admin therefore stays an
+    // ORG-ADMIN act, exactly as it already is in nail-salon and speed-dating.
+    const alice = await signIn('alice@demo.local')
+    const match = await orgIdBySlug('demo-match')
+
+    const below = await alice.rpc('module_caller_can_manage_seat', {
+      check_org_id: match,
+      check_module_key: 'matchmaking',
+      seat_role: 'single',
+      seat_scope: null,
+    })
+    expect(below.error, JSON.stringify(below.error)).toBeNull()
+    expect(below.data, 'admin(3) should be able to manage a single(0) seat').toBe(true)
+
+    const peer = await alice.rpc('module_caller_can_manage_seat', {
+      check_org_id: match,
+      check_module_key: 'matchmaking',
+      seat_role: 'admin',
+      seat_scope: null,
+    })
+    expect(peer.error, JSON.stringify(peer.error)).toBeNull()
+    expect(peer.data, 'admin(3) must NOT be able to mint another admin(3)').toBe(false)
+  })
+
+  it('PIN: a rank-1 holder gains no write power — no module_roles policy admits them', async () => {
+    // The reason matchmaker/maker/moderator at rank 1 is safe. Every
+    // module_roles write policy requires module_has_manager_grant (>= 2),
+    // is_org_admin, or is_superadmin. So module_caller_can_manage_seat being
+    // permissive at rank 1 (1 > 0 holds for a `single` seat) is UNREACHABLE:
+    // the trigger that calls it is never reached, because no policy lets the
+    // statement in at all. This turns that reasoning into a measured fact, and
+    // it would fail loudly if a future policy were ever keyed directly on
+    // module_caller_can_manage_seat without a rank floor.
+    const mel = await signIn('mel@demo.local')
+    const charlieClient = await signIn('charlie@demo.local')
+    const charlieId = (await charlieClient.auth.getUser()).data.user!.id
+    const match = await orgIdBySlug('demo-match')
+    const svc = createClient(url, svcKey, { auth: { persistSession: false } })
+
+    const attempt = await mel.from('module_roles').insert({
+      org_id: match,
+      user_id: charlieId,
+      module_key: 'matchmaking',
+      role: 'single',
+      scope_ref: null,
+    })
+    try {
+      expect(attempt.error, 'a matchmaker (rank 1) must not be able to mint any grant').not.toBeNull()
+    } finally {
+      // Defensive: if that assertion ever fails, the row is real and e2e runs
+      // next in CI on this same database with no reset. Never leave it behind.
+      if (attempt.error === null) {
+        await svc
+          .from('module_roles')
+          .delete()
+          .eq('org_id', match)
+          .eq('user_id', charlieId)
+          .eq('module_key', 'matchmaking')
+          .eq('role', 'single')
+      }
+    }
+
+    // NON-VACUITY CONTROL (docs/03): the same shape of insert, by someone who
+    // IS entitled, really does succeed — so Mel's refusal is about her rank,
+    // not a malformed row, the wrong org, or a unique-constraint clash.
+    const alice = await signIn('alice@demo.local')
+    const control = await alice.from('module_roles').insert({
+      org_id: match,
+      user_id: charlieId,
+      module_key: 'matchmaking',
+      role: 'matchmaker',
+      scope_ref: null,
+    })
+    try {
+      expect(control.error, `control insert should succeed: ${JSON.stringify(control.error)}`).toBeNull()
+    } finally {
+      const cleanup = await svc
+        .from('module_roles')
+        .delete()
+        .eq('org_id', match)
+        .eq('user_id', charlieId)
+        .eq('module_key', 'matchmaking')
+        .eq('role', 'matchmaker')
+      expect(cleanup.error, `control cleanup failed — CI-order hazard: ${JSON.stringify(cleanup.error)}`).toBeNull()
+    }
+  })
+
+  it('none of the SEVEN newly rank-differential pairs can open a view-as session', async () => {
+    // EARNED BY ADVERSARIAL REVIEW, 2026-09-25. The migration header originally
+    // listed four rank consumers and missed this one: view_as_guard_session is
+    // GENERIC (its module_key comes from the inserted row), it is bound and
+    // enabled, and view_as_sessions_insert_actor's WITH CHECK is only
+    // "actor_user_id = auth.uid() AND is_org_member(org_id)" — so ANY org member
+    // may attempt an insert and this trigger is the whole authority gate.
+    //
+    // Rank-mapping flipped that trigger's RANK arm from false to true for all
+    // seven of these pairs. They are still refused, by the EDGE arm alone. So
+    // where they used to be blocked by two independent conjuncts, they are now
+    // blocked by one — and that one denies through coalesce(..., false), i.e.
+    // the ABSENCE of a case arm rather than an explicit rule. That is a correct
+    // and intended consequence of having ranks at all, but it means a future
+    // edit to module_view_as_edge() is now sufficient on its own to open a
+    // session here. This test is the tripwire for that.
+    const alice = await signIn('alice@demo.local')
+    const aliceId = (await alice.auth.getUser()).data.user!.id
+    const match = await orgIdBySlug('demo-match')
+    const shul = await orgIdBySlug('demo-shul')
+    const visual = await orgIdBySlug('demo-visual')
+
+    const svc = createClient(url, svcKey, { auth: { persistSession: false } })
+    const someoneElse = async (org: string, moduleKey: string, role: string) => {
+      const { data } = await svc
+        .from('module_roles')
+        .select('user_id')
+        .eq('org_id', org)
+        .eq('module_key', moduleKey)
+        .eq('role', role)
+        .limit(1)
+      return (data?.[0]?.user_id as string | undefined) ?? aliceId
+    }
+
+    const pairs: [string, string, string, string][] = [
+      [match, 'matchmaking', 'admin', 'matchmaker'],
+      [match, 'matchmaking', 'admin', 'single'],
+      [match, 'matchmaking', 'matchmaker', 'single'],
+      [shul, 'synagogue-schedules', 'maker', 'viewer'],
+      [visual, 'visual-messaging', 'admin', 'moderator'],
+      [visual, 'visual-messaging', 'admin', 'member'],
+      [visual, 'visual-messaging', 'moderator', 'member'],
+    ]
+
+    for (const [org, moduleKey, , targetRole] of pairs) {
+      const target = await someoneElse(org, moduleKey, targetRole)
+      const { error } = await alice.from('view_as_sessions').insert({
+        org_id: org,
+        module_key: moduleKey,
+        actor_user_id: aliceId,
+        target_user_id: target,
+        target_role: targetRole,
+        target_scope_ref: null,
+      })
+      expect(error, `${moduleKey} -> ${targetRole} must NOT open a session`).not.toBeNull()
+    }
+
+    // NON-VACUITY CONTROL (docs/03). Every refusal above must be the GUARD
+    // refusing, not the table rejecting the row shape, the org being wrong, or
+    // a NOT NULL violation. The SQL edge mirror is the thing doing the denying,
+    // so assert it can say YES — for a pair that is genuinely declared ON.
+    for (const [moduleKey, from, to, expected] of [
+      ['classroom', 'professor', 'ga', true],
+      ['nail-salon', 'admin', 'worker', true],
+      ['matchmaking', 'admin', 'single', false],
+    ] as const) {
+      const { data } = await alice.rpc('module_view_as_edge', {
+        module_key: moduleKey,
+        from_role: from,
+        to_role: to,
+      })
+      expect(data, `module_view_as_edge(${moduleKey}, ${from}, ${to})`).toBe(expected)
+    }
+  })
+})

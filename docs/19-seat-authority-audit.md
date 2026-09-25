@@ -565,6 +565,26 @@ question (docs/20), which is being designed separately.
 **Do not attempt this as a one-line policy narrowing.** Either rank-map first, or
 design a per-module manage predicate deliberately.
 
+**UPDATE 2026-09-25 — THE RANK-MAPPING PREREQUISITE IS DONE; THIS IS NOW UNBLOCKED
+BUT STILL NOT A ONE-LINE NARROWING.** `20260925030000_rank_map_three_modules.sql`
+mapped all three modules (in the repo, NOT yet on prod), so point 2's objection is
+answered: `module_has_manager_grant` is now TRUE for a matchmaking admin and a
+visual-messaging admin, which is the replacement read path this section said did
+not exist. Point 1 still stands unchanged.
+**A THIRD OBSTACLE, not previously recorded, found while building the above:** the
+view-as TARGET PICKER reads `module_roles` through the caller's ordinary RLS client
+(`apps/web/lib/view-as.ts:151-156`) to enumerate the holders of a position. Narrowing
+the select policy to self-plus-managers breaks it for any caller below rank 2 who
+holds a live mode-1 edge — and speed-dating's `host` (rank 1) has exactly that into
+`participant`, ON since the 2026-09-20 founder decision. **The SQL edge mirror cannot
+be used to authorise that read, because `module_view_as_edge` carries MODE 2 ONLY**,
+so a mode-1-only edge is invisible to the database. The fix therefore needs a
+deliberate read path for the picker (an edge-aware definer is the obvious candidate).
+Also: whatever replaces the policy must keep `is_org_admin(org_id)` in the OR —
+`module_has_manager_grant` does NOT consult it, and org admins hold module authority
+today WITHOUT ever holding a `module_roles` row, so a bare manager-grant replacement
+would strip their access to the table. Full write-up: docs/24 §1.6, §4b, §6.
+
 ## POST-MIGRATION PROD MEASUREMENT, 2026-09-11 — nobody lost access
 
 Run AFTER `migrate:prod` applied `20260910040000` (it should have been run
