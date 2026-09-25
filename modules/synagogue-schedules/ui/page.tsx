@@ -1,12 +1,13 @@
 import Link from 'next/link'
 import {
-  buildWeek,
+  buildWeekWithProvenance,
   formatMinutes,
   generateWeek,
   lineRuleSchema,
   myzmanimCredsFromEnv,
   zmanimCacheReader,
   type ScheduleTypeConfig,
+  type ZmanimSource,
 } from '@modules/synagogue-schedules'
 import { createClient } from '@/lib/supabase/server'
 import { requireOrgModule } from '@/lib/module-gate'
@@ -42,8 +43,11 @@ export default async function SchedulesPage(props: {
   sunday.setHours(12, 0, 0, 0)
   const weekStart = toDateOnly(sunday)
 
-  // myzmanim primary, hebcal fallback (spec).
-  const weekDays = await buildWeek(weekStart, {
+  // myzmanim primary, hebcal fallback (spec). Provenance (not just the days) is
+  // kept so the maker panel below can tell them when a week is running on the
+  // backup source (founder decision 3, docs/23 §5c) — hebcal has no
+  // candle-lighting at all.
+  const { days: weekDays, provenance } = await buildWeekWithProvenance(weekStart, {
     latitude: settings.latitude,
     longitude: settings.longitude,
     timeZone,
@@ -222,13 +226,51 @@ export default async function SchedulesPage(props: {
         ))}
       </div>
 
-      <ExportPanel orgId={org.id} orgSlug={orgSlug} weekStart={weekStart} />
+      <TimesSourcePanel
+        configured={Boolean(settings.myzmanimLocationId)}
+        provenance={Object.values(provenance)}
+        fmt={fmt}
+        weekStart={sunday}
+      />
 
-      <p className="mt-6 text-xs text-gray-400">
-        Times computed locally (hebcal) — myzmanim becomes the primary source when the connector
-        lands.
-      </p>
+      <ExportPanel orgId={org.id} orgSlug={orgSlug} weekStart={weekStart} />
     </div>
+  )
+}
+
+// Times source (docs/23 §5c) — founder decision 3: a maker must be told when a
+// week is running on the backup source, because hebcal has no candle-lighting.
+// Healthy is a quiet one-liner; degraded is a warning. Neither shows to an
+// ordinary member (this panel only renders on the maker's own schedule page).
+// If myzmanim isn't configured for this org at all, say nothing — there is no
+// "backup source" story to tell for an org that never intended to use it.
+function TimesSourcePanel(props: {
+  configured: boolean
+  provenance: ZmanimSource[]
+  fmt: Intl.DateTimeFormat
+  weekStart: Date
+}) {
+  if (!props.configured) return null
+  const degraded = props.provenance.some((s) => s === 'fallback' || s === 'none')
+  const weekEnd = new Date(props.weekStart)
+  weekEnd.setDate(weekEnd.getDate() + 6)
+
+  if (!degraded) {
+    return (
+      <p className="mt-6 text-xs text-gray-400">
+        Times from myzmanim for the week of {props.fmt.format(props.weekStart)}.
+      </p>
+    )
+  }
+
+  return (
+    <section className="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm">
+      <p className="font-medium text-amber-800">⚠ Backup source in use</p>
+      <p className="mt-1 text-amber-700">
+        This week ({props.fmt.format(props.weekStart)}–{props.fmt.format(weekEnd)}) is using
+        hebcal, not myzmanim. Candle-lighting is unavailable from the backup source.
+      </p>
+    </section>
   )
 }
 

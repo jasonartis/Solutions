@@ -1,7 +1,8 @@
 # Zmanim cache and globally-shared API batches
 
-**Status: HALF BUILT (2026-09-23/24). The SCHEMA IS ON PRODUCTION and
-prod-verified; the two UIs are not built.** Founder decisions are recorded in §1 and are not to be re-litigated.
+**Status: SCHEMA + READ-THROUGH + SWEEP ON PRODUCTION, both UIs now BUILT as read-only v1
+(2026-09-23/24) — but the UI build is IN THE REPO ONLY, not yet deployed.** Founder decisions
+are recorded in §1 and are not to be re-litigated.
 
 | Piece | State |
 |---|---|
@@ -9,8 +10,8 @@ prod-verified; the two UIs are not built.** Founder decisions are recorded in §
 | Migration `20260923010000` — cache `payload`, `platform_settings`, `syn_zmanim_fetch_log`, `syn_zmanim_cached()` | **ON PRODUCTION 2026-09-24**, two adversarial reviews, prod-verified 33/33 |
 | Read-through cache in `buildWeek` | **BUILT AND WIRED** to all three call sites (member page, public page, worker render), 12 unit tests + an end-to-end check |
 | The sweep (`synagogue.zmanim-prefetch`) with gap-fill + 3-day breaker | **BUILT**, 24/24 — both an induced failure AND the real happy path |
-| Owner Console screen (`/console/zmanim`) | **NOT BUILT** |
-| Maker panel + degraded badge | **NOT BUILT** |
+| Owner Console screen (`/console/zmanim`) | **BUILT, read-only v1 (2026-09-24, no migration)** — status, API health, month-to-date call counter, per-location coverage strip; the switch/knobs ARE editable (a pure `platform_setting_merge` write, no worker needed). No "Fill gaps"/"Backfill year"/"Run sweep now" — see §5c's revised recommendation below. NOT YET DEPLOYED. |
+| Maker panel + degraded badge | **BUILT, read-only v1 (2026-09-24, no migration)** — quiet one-liner when healthy, warning banner on hebcal fallback, reusing `buildWeekWithProvenance`. No fetch buttons. NOT YET DEPLOYED. |
 | Production cache populated | **367 days, 2026-09-23 .. 2027-09-24**, for `US11210` (2026-09-24) |
 | `migrate:prod` + prod verification | **DONE 2026-09-24** — `prod-verify-zmanim-schema.mts` **33/33** on prod, `prod-verify-migration.ts` **0 failures** |
 
@@ -245,7 +246,16 @@ are platform-wide operational data rather than anything a position can "see", an
 the log is superadmin-only. Recorded here so it reads as an expected two-line
 edit rather than a mystery failure.
 
-## 5c. THE UI SHAPE — agreed with the founder 2026-09-23, not yet built
+## 5c. THE UI SHAPE — agreed with the founder 2026-09-23, BUILT as read-only v1 2026-09-24
+
+**v1 is built** (`apps/web/app/(app)/console/zmanim/page.tsx`,
+`apps/web/lib/zmanim-console.ts`, and the `TimesSourcePanel` in
+`modules/synagogue-schedules/ui/page.tsx`) — exactly the scope the "revised recommendation"
+below settles: everything except the per-location/per-week action buttons. In the repo, not
+yet deployed. Verified with real local data: the exact queries this code issues (settings
+read + write round-trip, `syn_zmanim_cached`) run correctly signed in as the real superadmin,
+and both pages were loaded in an actual browser (Playwright, ad hoc — owner@demo.local on the
+console screen, alice@demo.local on the maker panel) with zero page errors.
 
 Recorded here because it existed only in conversation, which is the state most
 likely to be lost at a handoff. §3 settles WHO; this settles WHAT THEY SEE.

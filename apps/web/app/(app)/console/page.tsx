@@ -77,6 +77,13 @@ export default async function ConsolePage() {
         <span className="text-gray-400" title="Who has gone quiet, and who to reach out to">
           who is using the platform
         </span>
+        <span className="text-gray-300">·</span>
+        <Link href="/console/zmanim" className="text-blue-600 hover:underline">
+          Zmanim
+        </Link>
+        <span className="text-gray-400" title="Is the next year of myzmanim data covered, and where are the holes">
+          zmanim prefetch coverage
+        </span>
       </nav>
 
       <section className="mb-8 rounded-lg border border-gray-200 bg-white p-5">

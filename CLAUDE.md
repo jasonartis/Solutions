@@ -969,9 +969,10 @@ varies ONE thing separates them** — myzmanim's published demo credential retur
 `pnpm exec tsx scripts/verify-myzmanim-request-shape.mts` (no subscription needed; 4/1 today,
 the 1 fail being the real account state). **Founder action: the API dashboard**
 (https://www.myzmanim.com/apidemo.aspx). Endpoint is NOT deprecated.
-**THE ZMANIM CACHE: SCHEMA AND A YEAR OF DATA ARE ON PRODUCTION (2026-09-24); ONLY THE TWO
-UIs REMAIN. Live doc [docs/23](docs/23-zmanim-cache-and-global-batches.md) — NINE founder
-decisions, do not re-litigate them; read its status table first.** On prod and prod-verified
+**THE ZMANIM CACHE: SCHEMA AND A YEAR OF DATA ARE ON PRODUCTION (2026-09-24); BOTH UIs ARE NOW
+BUILT TOO (read-only v1, in the repo, not yet deployed — see below).** Live doc
+[docs/23](docs/23-zmanim-cache-and-global-batches.md) — NINE founder decisions, do not
+re-litigate them; read its status table first. On prod and prod-verified
 (`prod-verify-zmanim-schema.mts` **36/36**): migration `20260923010000` (cache stores the RAW
 payload, `platform_settings`, the append-only `syn_zmanim_fetch_log`, `syn_zmanim_cached()`),
 the read-through **wired to all three call sites** (a warm week = ZERO API calls, proven end
@@ -985,13 +986,26 @@ checklist — run `prod-verify-zmanim-schema.mts`, whose §[7] reads the real st
 what remains.** The key we have is a **TRIAL** (ends 2026-10-24) and the sweep is seeded
 **OFF**; the founder's reading is that the API is used from DEV and only rows are copied to
 prod (`scripts/zmanim-backfill.mts` enforces that split).
-**NOT BUILT: the two UIs** — console screen + maker panel. **Shape is docs/23 §5c, and §5c
-also lists the integration points they hit in the first hour, including ONE FOUNDER DECISION:
-`job_requests.org_id` is NOT NULL but the console's actions are per-LOCATION, so a
-platform-level job has no org to belong to (three options costed, recommendation given).**
+**BOTH UIs ARE NOW BUILT, READ-ONLY v1 (2026-09-24, Sonnet, no migration).**
+`/console/zmanim` (superadmin: switch/knobs — editable, API health, month-to-date call counter
+by origin, per-location coverage strip) and the maker panel on
+`/o/<slug>/m/synagogue-schedules` (a quiet one-liner when healthy, a warning banner when the
+week is on hebcal fallback — reuses `buildWeekWithProvenance`, already shipped, rather than
+inventing a second source-of-truth check). **The `job_requests.org_id` question in §5c is NOT
+a blocker — docs/23 itself revised the recommendation on 2026-09-24 to DEFER it**, because
+both actions (superadmin "Backfill year"/"Run sweep now", maker "Fetch this week") would be
+inert on prod anyway with no running worker to drain `job_requests` — a button that appears to
+work and silently does nothing. So v1 ships everything BUT those action buttons: no migration,
+no org_id decision needed. Verified for real, not just by typecheck: local DB queries exercised
+signed in as the real superadmin (settings read/write round-trip, `syn_zmanim_cached` RPC), then
+both pages loaded in an actual browser via Playwright (owner@demo.local on the console screen,
+alice@demo.local on the maker panel — the healthy one-liner rendered, zero page errors). Filling
+coverage still goes through `scripts/zmanim-backfill.mts`; the action buttons wait on the same
+worker prerequisite as the sweep.
 **STILL TRUE AND EASY TO MISS: PROD HAS NO CONTINUOUSLY-RUNNING WORKER** — the sweep is a
 pg-boss cron job, so like docs/17's prunes it fires only while `pnpm worker:prod` is up. That
-is why the year was loaded by script rather than by the sweep.
+is why the year was loaded by script rather than by the sweep, and why the action buttons stay
+out of v1.
 
 **Standing rules:** never start a slice/module build without the founder initiating; every
 migration/RLS/trigger change runs the docs/03 #12 rhythm (draft → adversarial review →

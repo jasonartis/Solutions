@@ -4,6 +4,39 @@ The running, dated build journal that used to live in `CLAUDE.md`'s "## Current 
 section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every session)
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
+- **2026-09-24 (THE ZMANIM UIs — read-only v1, docs/23 §5c. Sonnet, no migration).** Picked up
+  unprompted after the founder asked for decision-free work to chug away at: docs/23 §5c had
+  already resolved its own one blocking decision (whether `job_requests.org_id` can be NULL for
+  a platform-level job) by DEFERRING it — both action buttons would be inert on prod with no
+  running worker to drain `job_requests`, so the honest v1 is everything BUT those buttons, and
+  that needs no migration and no decision. Built exactly that: `/console/zmanim`
+  (`apps/web/lib/zmanim-console.ts` + `.../console/zmanim/page.tsx` + `actions.ts`) — API
+  health, month-to-date call counter split by origin, a per-location coverage strip read
+  entirely through `syn_zmanim_cached()` (never the raw service-role-only table), and an
+  editable switch/knobs form (a pure `platform_setting_merge` write, no worker dependency, so
+  it stayed in scope even though the action buttons didn't). And the maker panel on
+  `modules/synagogue-schedules/ui/page.tsx`, which reuses `buildWeekWithProvenance` (already
+  shipped, unmodified) rather than inventing a second "is this week healthy" check — a quiet
+  one-liner when every day's source is cache/api, a warning banner when any day fell back to
+  hebcal.
+  **Verified for real, not just by typecheck.** typecheck 9/9 (forced, not cached — the known
+  turbo-cache-blindness gotcha for edits inside a module directory); the synagogue-schedules
+  module suite 66/66 unaffected. Then two layers of real verification: a scratch script signed
+  in as the actual local superadmin exercised every query this code issues against the live
+  local database (settings read, the `syn_zmanim_cached` RPC, and a real
+  `platform_setting_merge` write-then-readback) — all matched what the UI code assumes; then an
+  ad hoc Playwright script (not a committed spec) loaded both real pages in a real browser
+  against a running dev server — owner@demo.local on the console screen, alice@demo.local on
+  the maker panel — and both rendered with **zero page errors**, the maker panel correctly
+  showing the healthy one-liner given local's real cached data for the current week. Both
+  scratch artifacts (the verify script, the Playwright spec) were deleted after use, per the
+  "one-off `tsx` scripts must live inside the repo" gotcha (ran from repo root, removed
+  afterward) — nothing scratch survives in the commit.
+  **Docs updated to match**: CLAUDE.md's zmanim paragraph and docs/23's status table both said
+  "NOT BUILT" for both UIs; both now say built, read-only v1, in the repo but not yet deployed.
+  **Still not built, on purpose**: the per-location/per-week action buttons (Fill gaps /
+  Backfill year / Run sweep now / the maker's Fetch buttons) — those need the worker actually
+  running somewhere (go-live item 4) before a button that enqueues a job means anything.
 - **2026-09-24 (MYZMANIM WORKS, AND THE FIRST REAL RESPONSE BROKE EVERY TIME IN IT; schema +
   a year of data now on PRODUCTION. Opus, no new migration — `20260923010000` deployed).**
   The founder supplied new credentials (user `0018345559`) and
