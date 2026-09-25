@@ -1,7 +1,7 @@
 # Zmanim cache and globally-shared API batches
 
 **Status: SCHEMA + READ-THROUGH + SWEEP ON PRODUCTION, both UIs now BUILT as read-only v1
-(2026-09-23/24) — but the UI build is IN THE REPO ONLY, not yet deployed.** Founder decisions
+(2026-09-23/24), AND THE UI BUILD IS DEPLOYED (2026-09-25, `b0b360a`).** Founder decisions
 are recorded in §1 and are not to be re-litigated.
 
 | Piece | State |
@@ -10,8 +10,8 @@ are recorded in §1 and are not to be re-litigated.
 | Migration `20260923010000` — cache `payload`, `platform_settings`, `syn_zmanim_fetch_log`, `syn_zmanim_cached()` | **ON PRODUCTION 2026-09-24**, two adversarial reviews, prod-verified 33/33 |
 | Read-through cache in `buildWeek` | **BUILT AND WIRED** to all three call sites (member page, public page, worker render), 12 unit tests + an end-to-end check |
 | The sweep (`synagogue.zmanim-prefetch`) with gap-fill + 3-day breaker | **BUILT**, 24/24 — both an induced failure AND the real happy path |
-| Owner Console screen (`/console/zmanim`) | **BUILT, read-only v1 (2026-09-24, no migration)** — status, API health, month-to-date call counter, per-location coverage strip; the switch/knobs ARE editable (a pure `platform_setting_merge` write, no worker needed). No "Fill gaps"/"Backfill year"/"Run sweep now" — see §5c's revised recommendation below. NOT YET DEPLOYED. |
-| Maker panel + degraded badge | **BUILT, read-only v1 (2026-09-24, no migration)** — quiet one-liner when healthy, warning banner on hebcal fallback, reusing `buildWeekWithProvenance`. No fetch buttons. NOT YET DEPLOYED. |
+| Owner Console screen (`/console/zmanim`) | **BUILT, read-only v1 (2026-09-24, no migration)** — status, API health, month-to-date call counter, per-location coverage strip; the switch/knobs ARE editable (a pure `platform_setting_merge` write, no worker needed). No "Fill gaps"/"Backfill year"/"Run sweep now" — see §5c's revised recommendation below. **LIVE on prod 2026-09-25**: `/console/zmanim` returns 307 (gated) where a missing route 404s. |
+| Maker panel + degraded badge | **BUILT, read-only v1 (2026-09-24, no migration)** — quiet one-liner when healthy, warning banner on hebcal fallback, reusing `buildWeekWithProvenance`. No fetch buttons. **LIVE on prod 2026-09-25** (`b0b360a`, CI green, deployment READY). |
 | Production cache populated | **367 days, 2026-09-23 .. 2027-09-24**, for `US11210` (2026-09-24) |
 | `migrate:prod` + prod verification | **DONE 2026-09-24** — `prod-verify-zmanim-schema.mts` **33/33** on prod, `prod-verify-migration.ts` **0 failures** |
 
