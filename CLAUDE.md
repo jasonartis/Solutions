@@ -1072,18 +1072,22 @@ Fable is the right tier per the third criterion — a platform primitive touchin
 where a wrong abstraction is expensive to unwind. **Budget for rank-mapping FAILING THE BUILD
 until every newly-implied view-as pair is answered; that is the 2026-07-30 amendment working
 as designed.**
-**MEASUREMENT + DESIGN PASS DONE 2026-09-25 (session started Fable, reseated to Sonnet
-mid-session — Fable unavailable, confirmed by founder — so no migration/RLS was written,
-per the standing model-switch protocol).** Full gathered brief, not yet built:
+**MEASUREMENT + DESIGN PASS DONE, AND ALL FOUR OPEN CALLS DECIDED, 2026-09-25 (session
+started Fable, reseated to Sonnet mid-session — Fable unavailable, confirmed by founder — so
+NO migration/RLS has been written, per the standing model-switch protocol).** Full brief:
 [docs/24-cross-module-position-model.md](docs/24-cross-module-position-model.md) — measured
 ranks/grants/scope-nodes live, found the vocabulary-collision pattern generalizes beyond
 speed-dating to visual-messaging (worse: the word `moderator` collides across two unrelated
-tiers there), found matchmaking/visual-messaging's real app write paths never mint a
-`module_roles` grant at all (only `seed.ts` does — a new finding), proposes concrete ranks for
-the three unmapped modules and folding `sd_participants`/`vm_conversation_members` into scoped
-`module_roles` grants (classroom's already-shipped pattern), and frames every open call as a
-named-user scenario for the founder rather than deciding unilaterally. **Next: manual switch
-to Opus (Fable tier unavailable this session), then the full docs/03 #12 build rhythm.**
+tiers there), found matchmaking/speed-dating/visual-messaging's real app write paths never
+mint a `module_roles` grant at all (only `seed.ts` does — a new finding). **Decided, not
+built:** speed-dating's audience/mentor seat becomes the grant itself (scoped `module_roles`
+row alongside the roster row, confirmed to match classroom's shipped fold exactly);
+matchmaking's `matchmaker` = rank 1 (assignee, not manager); synagogue-schedules' `maker` =
+rank 1 (org-admin grants makers); visual-messaging's per-conversation `moderator` — which
+collides with a real, unrelated module-wide `moderator` grant — gets renamed to
+`conversation_moderator` (a migration, since it's schema, even though 0 live rows use the old
+value). **Next: manual switch to Opus (Fable tier unavailable this session), then the full
+docs/03 #12 build rhythm** — nothing left to decide for this slice, only to build.
 
 **Standing rules:** never start a slice/module build without the founder initiating; every
 migration/RLS/trigger change runs the docs/03 #12 rhythm (draft → adversarial review →

@@ -163,9 +163,9 @@ Same shape as how classroom/nail-salon/speed-dating were mapped: real, already-u
 | module | role | proposed rank | reasoning |
 |---|---|---|---|
 | matchmaking | `admin` | **3** | matches nail-salon/speed-dating's `admin` = 3 |
-| matchmaking | `matchmaker` | **1** (see §4.2) | assignee, not a manager — see scenario |
+| matchmaking | `matchmaker` | **1 — DECIDED §4.2** | assignee, not a manager |
 | matchmaking | `single` | 0 (unchanged) | end user |
-| synagogue-schedules | `maker` | **1 or 2** (see §4.3) | founder scenario, not unilaterally decided |
+| synagogue-schedules | `maker` | **1 — DECIDED §4.3** | org-admin grants makers, no self-administration |
 | synagogue-schedules | `viewer` | 0 (unchanged) | implicit, never granted |
 | visual-messaging | `admin` | **3** | matches nail-salon/speed-dating's `admin` = 3 |
 | visual-messaging | `moderator` (module-level) | **3** | peer tier to admin — org-wide disclosed oversight, docs/20 |
@@ -198,9 +198,39 @@ This is the part of the slice that actually closes docs/19's persistence-after-r
 hole for these two modules, the same way it is already closed for classroom — not new
 mechanism, replication of a shipped, reviewed one.
 
-## 4. Scenarios for founder decisions (named users, real consequences)
+## 4. Founder decisions, 2026-09-25 — DECIDED, NOT YET BUILT
 
-### 4.1 Speed dating's audience/mentor — what grant justifies the seat?
+Answered the same session this brief was written, in-chat, framed as the scenarios below.
+Recorded here so they survive the chat being abandoned. **None of these four decisions has
+been built** — no migration, no CHECK-constraint change, no RLS. They wait on the Opus switch
+like everything else in this doc.
+
+1. **§4.1 — seat = grant, confirmed.** Answer: *"Confirm that this matches how the other
+   modules do it, like classroom."* **Confirmed, verified live (§1.4 above), not merely
+   asserted:** `enrollClassMember` (`modules/classroom/ui/manage/actions.ts:91-97`) inserts a
+   scoped `module_roles` row (`role`, `scope_ref` = the class's scope node) **and** the
+   `cls_class_members` roster row in the same action, with the code comment stating the
+   roster "no longer drives authority" — the grant is the sole source, the roster is a synced
+   name/badge store. The proposed speed-dating/visual-messaging fold (§3) is the identical
+   shape: mint both rows together, roster becomes decorative. No divergence to flag.
+2. **§4.2 — matchmaking `matchmaker` = rank 1.** Assignee only; does not administer other
+   matchmakers; after the census-leak fix (§4.5), reads only her own `module_roles` row.
+3. **§4.3 — synagogue-schedules `maker` = rank 1.** Org-admin grants makers; a maker cannot
+   self-administer other makers. Matches extract-don't-speculate — one maker exists platform-wide.
+4. **§4.4 — visual-messaging's per-conversation `moderator` — RENAME, not just document.**
+   Founder: *"Call her a Chat Moderator or a Conversation Moderator."* **Picked
+   `conversation_moderator`** (not `chat_moderator`): the module's own vocabulary already says
+   "conversation" everywhere (`vm_conversations`, `vm_conversation_members`, the
+   `conversationId` route param, docs/15 §9's "conversation admin (per-conv role, built)") and
+   never says "chat" anywhere in the schema or code — matching the existing noun keeps one
+   vocabulary instead of introducing a second. **Still a migration** (the CHECK constraint's
+   allowed value changes from `moderator` to `conversation_moderator`) — low-risk since 0 live
+   rows use the old value, but it is schema, so it waits on the Opus switch like the rest of
+   this brief. Display label in any future UI: "Conversation Moderator."
+
+## 5. Scenarios as originally framed (kept for the reasoning, now answered above)
+
+### 5.1 Speed dating's audience/mentor — what grant justifies the seat?
 
 **Scenario, seat = grant (recommended).** Organizer Alice marks Charlie `mentor` for the
 March event. This mints an `sd_participants` row (`seat_type='mentor'`) **and**, in the same
@@ -223,20 +253,20 @@ mint an audience/mentor seat for literally any uuid today, and it never expires 
 membership — that is docs/19's still-live gap. Keeping this is a real option but it is the
 one this whole slice exists to close.
 
-### 4.2 Matchmaking's `matchmaker` — assignee or manager?
+### 5.2 Matchmaking's `matchmaker` — assignee or manager?
 
 Proposed rank 1 (below the `>= 2` manager-grant threshold). **Consequence for Mel**, the
 seeded matchmaker: she can still see everyone assigned to her via
 `mm_matchmaker_assignments`/`mm_matchmaker_can_see` (unaffected either way), but at rank 1 she
 **cannot** grant or revoke other matchmakers' seats, and — once the census-leak fix lands
-(§5) — she does **not** get broad `module_roles` read access to the whole dating pool through
+(§5.5) — she does **not** get broad `module_roles` read access to the whole dating pool through
 `module_has_manager_grant`, only her own row. That is almost certainly correct: her console
 reads assignments, not raw `module_roles`, so she doesn't need the broader grant, and keeping
 her at rank 1 is the more privacy-preserving choice — the entire point of this slice. Rank 2
 (manager-tier) is the alternative if matchmakers are meant to administer each other; nothing
 measured today suggests that's wanted.
 
-### 4.3 Synagogue-schedules' `maker` — operational or manager-tier?
+### 5.3 Synagogue-schedules' `maker` — operational or manager-tier?
 
 **Scenario A, rank 1.** Only Alice holds `maker` today, added by an org admin. At rank 1 she
 cannot grant/revoke other makers herself — only an org admin can. Matches extract-don't-
@@ -252,17 +282,17 @@ no live need for it yet.
 Recommend A on extract-don't-speculate grounds, flagged as a real choice rather than decided
 unilaterally.
 
-### 4.4 Visual-messaging's `moderator` collision — rename, or just document it?
+### 5.4 Visual-messaging's `moderator` collision — rename, or just document it?
 
-Given 0 live rows use the per-conversation `moderator` value, the lowest-risk move is:
-**leave the CHECK constraint as-is** (removing an unused allowed value is a migration with no
-functional payoff) but **add an explicit comment at both definitions** stating the two
-`moderator`s are unrelated grants at different scopes, so a future builder doesn't conflate
-them the way this brief's own measurement (§1.4) initially had to untangle. Renaming the
-per-conversation value is only worth doing if/when a real per-conversation moderation feature
-is actually built — not speculatively now.
+**SUPERSEDED — see §4 item 4. Founder picked rename, not document-only**, and named
+`conversation_moderator`. Original scenario kept for the reasoning: given 0 live rows use the
+per-conversation `moderator` value, the lowest-risk move would have been to leave the CHECK
+constraint as-is and add an explicit comment at both definitions stating the two `moderator`s
+are unrelated grants at different scopes. The founder judged the permanent fix worth a
+low-risk migration now rather than deferring it — reasonable, since nothing is live to migrate
+around.
 
-### 4.5 The census leak fix itself
+### 5.5 The census leak fix itself
 
 Proposed: narrow `module_roles_select_member` to
 `user_id = auth.uid() OR is_org_admin(org_id) OR module_has_manager_grant(org_id, module_key)
@@ -272,16 +302,17 @@ already names this shape; §1.6 above is the correction that keeps `is_org_admin
 **Scenario.** Today, ordinary `demo-match` member Dana can query `module_roles` directly and
 enumerate the whole dating pool — who else holds `single`. Under the fix: Dana's read narrows
 to her own row; admin Alice keeps full read via `is_org_admin`; matchmaker Mel, at the
-proposed rank 1, does **not** get broad read (see §4.2) — she sees her own row only, same as
+proposed rank 1, does **not** get broad read (see §5.2) — she sees her own row only, same as
 Dana. That is the intended outcome, not a side effect to correct.
 
-## 5. What this brief does NOT decide
+## 6. What this brief does NOT decide
 
-- The exact migration shape for the two folds (§3) — scope-node creation for conversations,
-  trigger wiring, the RLS policy diffs themselves.
+- The exact migration shape for the two folds (§3) and the `conversation_moderator` rename
+  (§4 item 4) — scope-node creation for conversations, trigger wiring, the RLS policy diffs,
+  the CHECK-constraint edit themselves.
 - The view-as pair review that rank-mapping these three modules will force open (§2).
-- `cls_set_preferred_name`'s remaining half and §5's `sd_in_event` status filter (docs/19,
-  unrelated to this slice, still open).
+- `cls_set_preferred_name`'s remaining half and docs/19 §5's `sd_in_event` status filter
+  (unrelated to this slice, still open).
 
 **Next step:** manual switch to Opus (Fable unavailable this session), then the full docs/03
 #12 rhythm — draft the migration, two narrow adversarial reviewers, live-verify as real seeded

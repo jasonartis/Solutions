@@ -869,15 +869,18 @@ accepts either refusal shape and asserts the row does not move.
    genuinely stand alone for observers?** Answering it is a prerequisite for the
    audience/mentor observer surface, which is already on module 6's list.
 
-   **PICKED UP 2026-09-25 as part of the broader cross-module position model —
-   see [docs/24](24-cross-module-position-model.md).** GATHERED BRIEF, not yet
-   built: proposes the seat itself become the grant (mint a scoped `module_roles`
-   row alongside the `sd_participants` row, same shape as classroom's shipped
-   fold), which answers this question without inventing a new mechanism. Also
-   generalizes this exact vocabulary-collision pattern to visual-messaging,
-   where it is worse (the word `moderator` is used, unrelated, at both a
-   module-wide and a per-conversation tier). Not built — read docs/24 before
-   re-deriving any of this.
+   **DECIDED 2026-09-25 as part of the broader cross-module position model —
+   see [docs/24](24-cross-module-position-model.md) §4.** Founder confirmed:
+   the seat itself becomes the grant — mint a scoped `module_roles` row
+   alongside the `sd_participants` row, same shape as classroom's shipped fold,
+   verified to actually match (`enrollClassMember` does exactly this). Answers
+   this question with no new mechanism: audience/mentor sit at rank 0 like
+   participant, distinct data surfaces, and the grant (not the seat_type value)
+   is what ties access to active org membership. **Decided, NOT YET BUILT** —
+   docs/24 also generalizes this exact vocabulary-collision pattern to
+   visual-messaging, worse there (the word `moderator` is used, unrelated, at
+   both a module-wide and a per-conversation tier — also decided, also not
+   built). Read docs/24 before re-deriving any of this.
 2. ~~**The vm/conversation last-admin floor**~~ **FIXED, ON PRODUCTION AND
    PROD-VERIFIED 2026-09-23** (`20260922030000_vm_admin_floor_requires_org_membership.sql`;
    `prod-verify-vm-admin-floor.mts` 32/32, `prod-verify-migration.ts` 0
