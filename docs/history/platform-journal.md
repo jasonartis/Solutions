@@ -77,8 +77,30 @@ decision log, docs/03 conventions, docs/12 safeguards) — this is the chronolog
   RECREATING the prod condition in a rolled-back transaction — grant service_role EXECUTE,
   watch assertion 1 raise, apply the revokes, watch it pass. Local was NOT reset for a full
   replay (a concurrent session may be using it), so fresh-replay coverage comes from CI.
-  **`migrate:prod` NOT RUN — awaiting founder authorization**, per the standing rule that the
-  irreversible step is his.
+  **`migrate:prod` NOT RUN — AND THEN THE WHOLE JUSTIFICATION COLLAPSED UNDER A FOUNDER
+  QUESTION, WHICH IS THE MOST USEFUL THING IN THIS ENTRY.** Asked "are you sure this change is
+  correct and needed?", the answer turned out to be **correct but NOT needed**, and the
+  headline reason given for it was **false**. The claim was that this migration is the last
+  thing between `verify-acl-hardening.ts` and running in CI. **CI runs against a FRESH LOCAL
+  database, where the defect cannot exist** — local's function default is `postgres=X`, so
+  those functions are never granted anything to leak, and the script is **already 17/17 on
+  local**. It can be wired into CI today with no migration at all. Nobody caught this in two
+  adversarial reviews, because neither was asked "is this worth doing" — both were asked "is
+  this safe" and "is this complete". **A review that only audits the HOW cannot tell you the
+  WHY is wrong.**
+  What actually survives: the grant is **not exploitable** (a `returns trigger` function cannot
+  be called directly whatever the ACL, and `service_role` already bypasses RLS, so it confers
+  nothing), leaving only the thin argument that the prod-side checker stays red at 16/17 and a
+  permanently-red checker stops being read.
+  **DECIDED: hold the migration, bundle it with the post-2026-10-30 default-privileges work** —
+  one prod push closing the whole ACL story instead of two.
+  **AND A CONSEQUENCE WORTH KEEPING: the migration's own header still states the false reason,
+  and CANNOT BE FIXED.** It was already pushed, and ci.yml's append-only guard blocks `M` and
+  `D` on anything under `supabase/migrations/` (docs/03 #28) — so a wrong comment in a migration
+  is permanent the moment it lands. The correction lives in CLAUDE.md and here instead.
+  **The generalisable lesson: a migration header is as unfixable as the SQL, so its REASONING
+  deserves the same scrutiny as its statements — and "why are we doing this at all" is a
+  question to ask BEFORE pushing, not after.**
   **THEN THE VERIFIER WAS MADE ACCURATE, AND ITS LAST REMAINING FAILURE TURNED OUT TO BE THE
   TRAP ITSELF, ALREADY SPRUNG ON PRODUCTION.** `verify-acl-hardening.ts` was reporting 5
   failures on prod / 4 on local, all of which were its own 2026-07-28-era blanket assumptions

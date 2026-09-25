@@ -907,18 +907,33 @@ Everything below is open but unranked:
   EXISTING projects automatically — do not assume it self-resolves; **after that date just
   re-run `scripts/acl-audit.ts` and read its `[default privileges]` block rather than
   reasoning about it.**
-  **⚠⚠ ONE MIGRATION IS PENDING ON PROD AND NOTHING ELSE SHOULD RIDE ALONG WITH IT:
-  `20260925010000_trigger_fn_execute_completes_revoke.sql` (2026-09-25).** It completes the
-  revoke on the only two trigger functions that hold `service_role` EXECUTE nobody granted
-  (`view_as_guard_session`, `vm_guard_last_conversation_admin`) — prod's default privileges
-  granted it at CREATE and their own migrations revoked only 3 of 4 roles. **`migrate:prod`
-  applies EVERY pending migration, so know this is there before running it for any other
-  reason.** Drafted, two adversarial reviews (both found real defects, all fixed), and verified
-  by RECREATING the prod defect in a rolled-back transaction — it is a **no-op on local**, so a
-  local pass proves nothing. **Verify on prod with `scripts/verify-acl-hardening.ts` going
-  16/17 → 17/17, NOT with `prod-verify-migration.ts`, which defines-no-functions and would pass
-  it vacuously.** Once applied, that script can go into CI (the forcing function that stops it
-  rotting again). Full story: journal 2026-09-25.
+  **⚠ AN UNAPPLIED MIGRATION IS SITTING IN THE REPO — DELIBERATELY HELD, NOT WAITING ON A
+  DECISION: `20260925010000_trigger_fn_execute_completes_revoke.sql` (2026-09-25).**
+  **`migrate:prod` applies EVERY pending migration, so know it is there before running that
+  command for any other reason** — that is the only urgent thing about it.
+  It removes `service_role` EXECUTE from two trigger functions (`view_as_guard_session`,
+  `vm_guard_last_conversation_admin`) that prod's default privileges granted at CREATE and
+  whose own migrations revoked only 3 of the 4 roles. **On prod the entire delta is:
+  service_role loses EXECUTE on two functions. Nothing else.**
+  **IT IS NOT NEEDED, AND THE ORIGINAL CASE FOR IT WAS WRONG (corrected 2026-09-25 when the
+  founder pushed back — good challenge, it does not survive scrutiny).** The grant is **not
+  exploitable at all**: a trigger function cannot be invoked directly whatever the ACL
+  (Postgres refuses a `returns trigger` call), and `service_role` already bypasses RLS, so it
+  confers nothing. **⚠ THE MIGRATION'S OWN HEADER CLAIMS IT IS "the last thing between
+  `verify-acl-hardening.ts` and running in CI" — THAT IS FALSE.** CI runs against a FRESH LOCAL
+  database, where the defect cannot exist (local's function default is `postgres=X`), and that
+  script is **already 17/17 on local today** — so it can be wired into CI right now with no
+  migration at all. The header cannot be fixed: the file is pushed and CI's append-only guard
+  blocks any edit or delete (docs/03 #28), so this note is the correction.
+  **What survives as a reason is thin**: `verify-acl-hardening.ts` run *against prod* stays red
+  at 16/17, and a permanently-red checker is one people stop reading.
+  **PLAN: hold it and bundle it with the post-2026-10-30 default-privileges work**, so one prod
+  push closes the whole ACL story instead of two. Verify it then with
+  `scripts/verify-acl-hardening.ts` going 16/17 → **17/17** on prod — NOT with
+  `prod-verify-migration.ts`, which defines no functions here and would pass it **vacuously**.
+  It was still drafted properly (two adversarial reviews, both found real defects, all fixed;
+  verified by RECREATING the prod defect in a rolled-back transaction since it is a **no-op on
+  local**). Full story: journal 2026-09-25.
   **⚠ BUT THE PRACTICAL RISK IS NOW GUARDED (2026-09-25, Opus):
   `packages/db/src/table-grants-ratchet.test.ts` runs IN CI** and fails on any table in
   `public` where anon holds anything or authenticated holds TRUNCATE/REFERENCES/TRIGGER/
