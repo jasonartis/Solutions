@@ -1099,6 +1099,17 @@ leak; nothing was narrowed** (every comparison that could revoke was `0 > 0` bef
 **The 2026-07-30 amendment fired as designed** — seven newly-implied view-as pairs, all
 answered OFF, teeth proven by deleting an entry (`TS2741`) and by reverting the function body
 (3 of 5 new tests fail).
+**CI GREEN IN ITS EXACT ORDER on `643daec` — db 257/257 → e2e 52/52, same database, no reset;
+`check` and `deploy` both success.** Note the PREVIOUS commit (`84ca43e`, DOCS-ONLY) failed
+e2e on `platform.spec.ts:146 › org settings` with a second test flaky-but-passing — a
+docs-only diff cannot cause that, so it is the known flake family, and it did NOT recur.
+**Prod now serves the new TS rank table while prod's DATABASE still returns 0 for these
+roles** (the migration is not applied). That divergence is harmless and fail-safe — the ranks
+are read only for DISPLAY on the superadmin view-as console, every new pair is OFF, and the
+prod DB is the STRICTER of the two — but it should be closed by applying the migration.
+**For once `scripts/prod-verify-migration.ts` is exactly the right verifier and its result
+will NOT be vacuous**: that script is function-only, and this migration defines exactly one
+function (contrast the policy-heavy migrations that each needed a bespoke script).
 **BOTH ADVERSARIAL REVIEWS FOUND REAL DEFECTS, all fixed — the durable one:
 `view_as_guard_session` IS A FIFTH RANK CONSUMER the migration header missed.** It is generic
 and is the ONLY authority gate on `view_as_sessions`. Its rank arm flipped false→true for all
