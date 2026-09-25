@@ -833,7 +833,28 @@ accepts either refusal shape and asserts the row does not move.
 ### STILL OPEN after this migration
 
 1. **FOUNDER DECISION — speed dating's role conjunct.**
-   `sd_participants.seat_type` is `participant | audience | mentor`, and **there
+
+   **⚠ READ THIS FIRST: TWO DIFFERENT VOCABULARIES USE THE SAME WORDS, and the
+   founder and I both misread it on 2026-09-25 before measuring.** "audience" and
+   "mentor" DO exist — as SEAT TYPES. They do NOT exist as MODULE ROLES. The
+   whole item turns on that difference:
+
+   | | `sd_participants.seat_type` | `module_roles.role` |
+   |---|---|---|
+   | what it means | what kind of seat you hold AT AN EVENT | your granted authority IN THE MODULE |
+   | values | `participant`, `audience`, `mentor` | `admin`(3), `organizer`(2), `host`(1), `participant`(0) |
+   | enforced by | a live CHECK constraint | **nothing** — the column is free text; `module_position_rank` gives the words meaning |
+   | measured 2026-09-25 | 6 rows locally, ALL `participant`; **0 on prod** | only `organizer` and `participant` ever granted |
+
+   Because `module_roles.role` is unconstrained you COULD grant `'audience'`
+   tomorrow with no migration — but it would fall through `module_position_rank`
+   to rank 0, and nothing issues or recognises it. Also measured: **no code ever
+   WRITES `seat_type`**; it is only read, and `video/authorize.ts` requires it to
+   be exactly `'participant'`. So the two extra seat types are schema-only and
+   have never been used by anything.
+
+   With that established: `sd_participants.seat_type` is
+   `participant | audience | mentor`, and **there
    is no audience or mentor module role** (speed-dating has only `organizer` and
    `participant`). So requiring `sd_is_participant` on `sd_owns_participant` /
    `sd_in_event` / `sd_paired_with` would revoke every audience and mentor seat,
