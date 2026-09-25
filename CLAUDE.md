@@ -1072,6 +1072,18 @@ Fable is the right tier per the third criterion — a platform primitive touchin
 where a wrong abstraction is expensive to unwind. **Budget for rank-mapping FAILING THE BUILD
 until every newly-implied view-as pair is answered; that is the 2026-07-30 amendment working
 as designed.**
+**MEASUREMENT + DESIGN PASS DONE 2026-09-25 (session started Fable, reseated to Sonnet
+mid-session — Fable unavailable, confirmed by founder — so no migration/RLS was written,
+per the standing model-switch protocol).** Full gathered brief, not yet built:
+[docs/24-cross-module-position-model.md](docs/24-cross-module-position-model.md) — measured
+ranks/grants/scope-nodes live, found the vocabulary-collision pattern generalizes beyond
+speed-dating to visual-messaging (worse: the word `moderator` collides across two unrelated
+tiers there), found matchmaking/visual-messaging's real app write paths never mint a
+`module_roles` grant at all (only `seed.ts` does — a new finding), proposes concrete ranks for
+the three unmapped modules and folding `sd_participants`/`vm_conversation_members` into scoped
+`module_roles` grants (classroom's already-shipped pattern), and frames every open call as a
+named-user scenario for the founder rather than deciding unilaterally. **Next: manual switch
+to Opus (Fable tier unavailable this session), then the full docs/03 #12 build rhythm.**
 
 **Standing rules:** never start a slice/module build without the founder initiating; every
 migration/RLS/trigger change runs the docs/03 #12 rhythm (draft → adversarial review →

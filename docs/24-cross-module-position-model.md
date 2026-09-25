@@ -1,0 +1,289 @@
+# Cross-module position model — rank-mapping the last three modules, and the seat/role vocabulary collision
+
+**STATUS: GATHERED BRIEF, NOT APPROVED TO BUILD.** Measured and drafted 2026-09-25 by a
+session that started as Fable 5.1 and was reseated to Sonnet 5 mid-conversation (confirmed by
+Jason in-chat: Fable unavailable this session). Per the standing model-switch protocol, no
+migration/RLS/trigger SQL has been written — this doc is the full "gather" half of
+gather-then-switch, so the actual build starts productive the moment the session is manually
+switched to **Opus** (the CLAUDE.md baseline tier for this class of work; Fable is the
+extra-credit tier on top of that and isn't available right now — see
+[[fable-via-subagent-and-model-provenance]] in memory). Nothing here has been reviewed
+adversarially or tested. Read [docs/19 §"STILL OPEN" item 1](19-seat-authority-audit.md) and
+[docs/15 §4, §9, §11](15-user-model.md) first — this doc builds directly on both.
+
+## 0. Scope
+
+Founder-picked 2026-09-25 (broad option): settle what an audience/mentor seat means in speed
+dating, **and** rank-map matchmaking, synagogue-schedules and visual-messaging — which today
+sit entirely at rank 0 and are what blocks docs/19's `module_roles` census leak from being
+fixed.
+
+## 1. MEASURED, with controls
+
+### 1.1 The rank ladder today — confirmed against the live function body
+
+```sql
+CREATE OR REPLACE FUNCTION public.module_position_rank(module_key text, role text)
+  ...
+   select coalesce(
+     case module_key
+       when 'classroom' then case role
+         when 'professor' then 2  when 'ga' then 1  when 'student' then 1  else null end
+       when 'nail-salon' then case role
+         when 'admin' then 3  when 'manager' then 2  when 'cashier' then 1  when 'worker' then 1  else null end
+       when 'speed-dating' then case role
+         when 'admin' then 3  when 'organizer' then 2  when 'host' then 1  else null end
+       else null
+     end,
+     public.module_position_rank(role)  -- generic fallback: director=4/coordinator=3/lead=2/position=1, else 0
+   );
+```
+
+**matchmaking, synagogue-schedules and visual-messaging have no `case module_key` arm at
+all**, so every one of their real role strings (`admin`, `matchmaker`, `single`, `maker`,
+`member`, `moderator`) falls through to the generic fallback, which only recognizes the
+literal words `director`/`coordinator`/`lead`/`position` — none of which any module actually
+grants. **Every real grant in these three modules is rank 0**, confirmed against
+[docs/rank-admission-map.md](rank-admission-map.md) (machine-generated from this same live
+function, so this is not a second, divergent reading).
+
+**Control:** classroom/nail-salon/speed-dating DO have real case arms and their real staff
+roles (professor, manager, organizer, admin) resolve to ranks 1–3 — proving the fallback-to-0
+for the other three is an *absence* of a case arm, not the function being broken.
+
+### 1.2 `module_roles.role` has no CHECK constraint — re-verified live
+
+```
+module_roles_granted_by_fkey | FK granted_by -> auth.users, ON DELETE SET NULL
+module_roles_org_id_fkey     | FK org_id -> orgs, ON DELETE CASCADE
+module_roles_pkey            | PRIMARY KEY (id)
+module_roles_scope_ref_fkey  | FK scope_ref -> module_scope_nodes, ON DELETE CASCADE
+module_roles_user_id_fkey    | FK user_id -> auth.users, ON DELETE CASCADE
+```
+
+No CHECK on `role`. `module_position_rank` is the only thing that gives the words meaning —
+confirming docs/19's claim rather than just repeating it.
+
+### 1.3 Live `module_roles` grants, by module/role/global-vs-scoped (queried 2026-09-25)
+
+```
+classroom            ga          global   1      matchmaking   admin       global   1
+classroom             professor  global   1      matchmaking   matchmaker  global   1
+classroom             student    scoped   2      matchmaking   single      global   4
+nail-salon            admin      global   1      speed-dating  organizer   global   1
+nail-salon             cashier   global   1      speed-dating  participant global   4
+nail-salon             customer  global   1      synagogue-sch maker       global   1
+nail-salon             manager   1 global+1 scoped              visual-msg admin    global   1
+                                                                 visual-msg member   global   2
+```
+(`visual-messaging` has 0 live `moderator` grants.)
+
+### 1.4 THREE MODULES, THREE DIFFERENT SPLITS between "module-wide role" and "entity seat" — two of them reuse the SAME WORDS for both meanings
+
+This generalizes docs/19's speed-dating finding into the actual pattern across the platform,
+and finds it is worse in one case than docs/19 knew.
+
+**classroom — the fold is ALREADY SHIPPED (2026-07-24), and is the template.**
+`cls_class_members.role` ∈ {`student`, `professor`} live. Per the code comment at
+`modules/classroom/ui/manage/actions.ts:33-39`: *"Enrollment is now a SCOPED `module_roles`
+grant... The `cls_class_members` row is kept in sync purely as a name/badge store (it no
+longer drives authority)."* `enrollClassMember` writes **both** rows in one action: a scoped
+`module_roles` grant (`scope_ref` = the class's scope node) *and* the roster row. The roster
+can never disagree with authority because it never decides it. **This is exactly the "fold"
+docs/15 §4 describes as the intended destination for the docs/19 security class** — already
+built, reviewed, and live for one module.
+
+**speed-dating — no fold, and the vocabularies don't even share live data.**
+`sd_participants.seat_type` ∈ {`participant`, `audience`, `mentor`} (live CHECK constraint).
+**Zero** `module_roles` counterpart. `registerForEvent`
+(`modules/speed-dating/ui/actions.ts:124-131`) inserts **only** `sd_participants` — never
+touches `module_roles`. The four live `speed-dating`/`participant` `module_roles` rows come
+**exclusively** from `packages/db/src/seed.ts`'s direct service-role inserts
+(`packages/db/src/seed.ts:973-979`); grepping every non-seed, non-test caller of
+`upsertModuleRoles` for `module_key: 'speed-dating'` returns nothing. **So today the
+`module_roles` rows that exist for speed-dating are demo decoration, disconnected from the
+real registration flow** — a finding docs/19 did not make. This sharpens, not just repeats,
+docs/19's item: it isn't only that `seat_type` has no module-role equivalent — the module-role
+column that *shares its name* isn't wired to the real write path either.
+
+**visual-messaging — the same disconnection, plus a genuine word collision.**
+`vm_conversation_members.role` has a live CHECK constraint allowing **four** values —
+`participant`, `viewer`, `moderator`, `admin` — though only the first three have ever been
+used (0 live `moderator` rows in the roster table). **`moderator` is *also* a live
+module-level `module_roles.role`** (org-wide, gates `vm_can_moderate_org`, and per docs/20 "a
+delegated moderator sees everything and it is disclosed"). Confirmed live: `vm_can_moderate`
+(per-conversation) and `vm_can_moderate_org` (module-wide) are two separate functions. So the
+literal string `moderator` means an unrelated thing depending on which table it's read from —
+a worse version of speed-dating's problem, because there the words at least differ
+(`seat_type` vs `role`); here the *word itself* collides. `addMember`
+(`modules/visual-messaging/ui/actions.ts:191-196`) shows the identical disconnection pattern:
+inserts only `vm_conversation_members`, never `module_roles`.
+
+### 1.5 `module_scope_nodes` usage confirms the single-global-entity classification
+
+`classroom`=4, `nail-salon`=2, `speed-dating`=14, **`matchmaking`/`synagogue-schedules`/
+`visual-messaging`=0**. Consistent with docs/15 §3.1's founder decision that the latter three
+are single-global-entity modules — not merely unmapped, genuinely entity-less today.
+
+### 1.6 The census leak, confirmed at the exact live policy text
+
+```
+module_roles_select_member         SELECT  USING (is_org_member(org_id) OR is_superadmin())
+module_roles_write_org_admin       ALL     USING/CHECK is_org_admin(org_id)   -- governs SELECT too
+module_has_manager_grant(org_id, module_key) =
+  is_org_member(org_id) AND EXISTS (... module_position_rank(module_key, role) >= 2 ...)
+```
+
+**Correctness point found while grounding docs/19's proposed fix, not previously recorded:**
+`module_has_manager_grant` does **not** OR in `is_org_admin`. Every live `_can_manage`-style
+function (`mm_can_manage`, `syn_can_write`, `vm_can_manage`) reads
+`is_org_admin(...) OR has_module_role(...)` directly — **org admins hold module authority
+without ever getting a `module_roles` row** (docs/15 §9's "legacy to unwind" note, confirmed
+live). A naive fix that replaces the SELECT/write-FOR-ALL policies with bare
+`module_has_manager_grant(...)` would silently strip an org admin's ability to see or manage
+the `module_roles` table itself, even though they'd keep domain authority through the
+separate `_can_manage` path. **Any fix must read
+`is_org_admin(org_id) OR module_has_manager_grant(org_id, module_key)`, not
+`module_has_manager_grant` alone.**
+
+### 1.7 Who reads `module_roles` directly today (breakage check for the census-leak fix)
+
+`modules/matchmaking/ui/manage/page.tsx` is the one load-bearing case: it lists `module_roles`
+rows for the manage console. Once matchmaking's `admin` reaches rank ≥ 2 (proposed §2), that
+caller passes `module_has_manager_grant` and the page keeps working under a narrowed policy.
+The other readers (`classroom/ui/manage/actions.ts`, `apps/web/lib/{platform,org-members,
+view-as,console-view-as,help-visibility}.ts`, the members/console/stub pages) either already
+gate on staff status or read only the caller's own rows.
+
+## 2. PROPOSED — rank-mapping, existing vocabulary only
+
+Same shape as how classroom/nail-salon/speed-dating were mapped: real, already-used role
+**names** get a case arm; no new grant mechanism, no new words invented.
+
+| module | role | proposed rank | reasoning |
+|---|---|---|---|
+| matchmaking | `admin` | **3** | matches nail-salon/speed-dating's `admin` = 3 |
+| matchmaking | `matchmaker` | **1** (see §4.2) | assignee, not a manager — see scenario |
+| matchmaking | `single` | 0 (unchanged) | end user |
+| synagogue-schedules | `maker` | **1 or 2** (see §4.3) | founder scenario, not unilaterally decided |
+| synagogue-schedules | `viewer` | 0 (unchanged) | implicit, never granted |
+| visual-messaging | `admin` | **3** | matches nail-salon/speed-dating's `admin` = 3 |
+| visual-messaging | `moderator` (module-level) | **3** | peer tier to admin — org-wide disclosed oversight, docs/20 |
+| visual-messaging | `member` | 0 (unchanged) | end user |
+
+**Consequence flagged, not solved here:** rank-mapping any of these three modules **will FAIL
+THE BUILD** until every newly-implied view-as pair is explicitly answered (the 2026-07-30
+amendment) — matching the treatment nail-salon and speed-dating already went through. That
+review is in-scope for the eventual Opus-tier slice, not a separate ask.
+
+## 3. PROPOSED — fold the two disconnected entity rosters into scoped `module_roles` grants
+
+Mirrors the classroom pattern exactly (§1.4): the seat *is* the grant, scoped to the entity's
+scope node, and the roster row becomes a synced name/badge store — same division of labor
+`enrollClassMember` already uses. Concretely:
+
+- **speed-dating:** `registerForEvent` / the organizer's seat-mint action write **both**
+  `sd_participants` (`seat_type` = the chosen value) **and** a scoped `module_roles` grant
+  (`role` = the same value, `scope_ref` = the event's scope node). `sd_owns_participant` /
+  `sd_in_event` / `sd_paired_with` (docs/19's remediation list) then conjoin **scope-aware
+  role coverage**, not a literal `sd_is_participant` check — which is what makes this correct
+  for `audience` and `mentor` too, see §4.1.
+- **visual-messaging:** `addMember` writes both `vm_conversation_members` and a scoped
+  `module_roles` grant at the conversation's scope node (conversations don't have scope
+  nodes today — `module_scope_nodes` showed 0 for visual-messaging — so this also means
+  minting one scope node per conversation, the same mechanical step classroom already does
+  per class).
+
+This is the part of the slice that actually closes docs/19's persistence-after-revocation
+hole for these two modules, the same way it is already closed for classroom — not new
+mechanism, replication of a shipped, reviewed one.
+
+## 4. Scenarios for founder decisions (named users, real consequences)
+
+### 4.1 Speed dating's audience/mentor — what grant justifies the seat?
+
+**Scenario, seat = grant (recommended).** Organizer Alice marks Charlie `mentor` for the
+March event. This mints an `sd_participants` row (`seat_type='mentor'`) **and**, in the same
+action, a scoped `module_roles` grant (`role='mentor'`, `scope_ref` = the March event's node).
+If Alice later removes Charlie from the org, **both go inert together** — exactly the
+protection classroom's professor/GA/student grants already have. No separate "which role
+justifies it" question, because the seat *is* the grant; audience/mentor sit at rank 0, same
+as participant, each a distinct data surface per docs/15 §5's own principle (peers in rank,
+disjoint surfaces — this is the same relationship GA/student already have under a professor).
+This closes the hole docs/19 flagged with no new mechanism.
+
+**Scenario, seat requires an existing role (rejected, recorded so it isn't re-proposed).**
+Mentor/audience could instead require the holder to already carry some other speed-dating
+role (organizer/host/participant) as a prerequisite. No code today treats mentor as "an
+upgraded participant," and it would block the real case of an outside mentor — e.g. a guest
+speaker who was never registered as a participant at all. Not recommended.
+
+**Scenario, leave it as-is (status quo, named so the cost is visible).** An organizer can
+mint an audience/mentor seat for literally any uuid today, and it never expires with org
+membership — that is docs/19's still-live gap. Keeping this is a real option but it is the
+one this whole slice exists to close.
+
+### 4.2 Matchmaking's `matchmaker` — assignee or manager?
+
+Proposed rank 1 (below the `>= 2` manager-grant threshold). **Consequence for Mel**, the
+seeded matchmaker: she can still see everyone assigned to her via
+`mm_matchmaker_assignments`/`mm_matchmaker_can_see` (unaffected either way), but at rank 1 she
+**cannot** grant or revoke other matchmakers' seats, and — once the census-leak fix lands
+(§5) — she does **not** get broad `module_roles` read access to the whole dating pool through
+`module_has_manager_grant`, only her own row. That is almost certainly correct: her console
+reads assignments, not raw `module_roles`, so she doesn't need the broader grant, and keeping
+her at rank 1 is the more privacy-preserving choice — the entire point of this slice. Rank 2
+(manager-tier) is the alternative if matchmakers are meant to administer each other; nothing
+measured today suggests that's wanted.
+
+### 4.3 Synagogue-schedules' `maker` — operational or manager-tier?
+
+**Scenario A, rank 1.** Only Alice holds `maker` today, added by an org admin. At rank 1 she
+cannot grant/revoke other makers herself — only an org admin can. Matches extract-don't-
+speculate: nothing today needs self-service maker-granting, and there's exactly one maker on
+the whole platform.
+
+**Scenario B, rank 2 (docs/15 §9's original vocabulary table placed `maker` under "Entity
+Lead," i.e. this tier).** Alice could add a second maker herself without going through an org
+admin. Since synagogue-schedules is single-global-entity, `maker` effectively plays both the
+"coordinator" and "entity lead" role at once — there's design precedent for this being 2, but
+no live need for it yet.
+
+Recommend A on extract-don't-speculate grounds, flagged as a real choice rather than decided
+unilaterally.
+
+### 4.4 Visual-messaging's `moderator` collision — rename, or just document it?
+
+Given 0 live rows use the per-conversation `moderator` value, the lowest-risk move is:
+**leave the CHECK constraint as-is** (removing an unused allowed value is a migration with no
+functional payoff) but **add an explicit comment at both definitions** stating the two
+`moderator`s are unrelated grants at different scopes, so a future builder doesn't conflate
+them the way this brief's own measurement (§1.4) initially had to untangle. Renaming the
+per-conversation value is only worth doing if/when a real per-conversation moderation feature
+is actually built — not speculatively now.
+
+### 4.5 The census leak fix itself
+
+Proposed: narrow `module_roles_select_member` to
+`user_id = auth.uid() OR is_org_admin(org_id) OR module_has_manager_grant(org_id, module_key)
+OR is_superadmin()`, and narrow `module_roles_write_org_admin`'s FOR ALL the same way (docs/19
+already names this shape; §1.6 above is the correction that keeps `is_org_admin` in the OR).
+
+**Scenario.** Today, ordinary `demo-match` member Dana can query `module_roles` directly and
+enumerate the whole dating pool — who else holds `single`. Under the fix: Dana's read narrows
+to her own row; admin Alice keeps full read via `is_org_admin`; matchmaker Mel, at the
+proposed rank 1, does **not** get broad read (see §4.2) — she sees her own row only, same as
+Dana. That is the intended outcome, not a side effect to correct.
+
+## 5. What this brief does NOT decide
+
+- The exact migration shape for the two folds (§3) — scope-node creation for conversations,
+  trigger wiring, the RLS policy diffs themselves.
+- The view-as pair review that rank-mapping these three modules will force open (§2).
+- `cls_set_preferred_name`'s remaining half and §5's `sd_in_event` status filter (docs/19,
+  unrelated to this slice, still open).
+
+**Next step:** manual switch to Opus (Fable unavailable this session), then the full docs/03
+#12 rhythm — draft the migration, two narrow adversarial reviewers, live-verify as real seeded
+users, RLS tests, prod deploy per the docs/03 #27/#28 lessons already paid for once this
+session.

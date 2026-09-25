@@ -564,7 +564,11 @@ All of this is RLS/trigger territory ⇒ **Opus + full docs/03 #12 rhythm**, sli
    are entirely rank 0, so nothing is blocked by this, but this slice is not "done," only
    started. Corrects a doc contradiction found 2026-08-29: CLAUDE.md's "Next / open" list calls
    slice 4 "the only unbuilt slice left," which is true only in the narrow sense that no OTHER
-   slice is entirely zero-progress — slice 2 itself is genuinely partial, not finished.]**
+   slice is entirely zero-progress — slice 2 itself is genuinely partial, not finished.
+   PICKED UP 2026-09-25 — see [docs/24](24-cross-module-position-model.md), a GATHERED BRIEF
+   (measured, not built) proposing concrete ranks for all three plus folding sd_participants
+   and vm_conversation_members into scoped module_roles grants, the same shape as classroom's
+   own fold — which is what unblocks docs/19's module_roles census leak.]**
 3. **Join policies + invite-accept** — entity-level joinPolicy everywhere; org-level
    invite-accept (touches `is_org_member()` — the most sensitive slice).
    **[org-level invite-accept BUILT 2026-07-27 — `20260727010000_org_invite_accept.sql`
