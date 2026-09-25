@@ -903,7 +903,21 @@ Everything below is open but unranked:
   `scripts/acl-audit.ts` moments before this note): full privileges still auto-grant to
   anon/authenticated/service_role on any new `public`/`storage` object. Supabase removes the
   legacy behavior 2026-10-30 (~5 weeks out) but it is not established whether that flips
-  EXISTING projects automatically — do not assume it self-resolves. **`storage`-schema
+  EXISTING projects automatically — do not assume it self-resolves; **after that date just
+  re-run `scripts/acl-audit.ts` and read its `[default privileges]` block rather than
+  reasoning about it.**
+  **⚠ BUT THE PRACTICAL RISK IS NOW GUARDED (2026-09-25, Opus):
+  `packages/db/src/table-grants-ratchet.test.ts` runs IN CI** and fails on any table in
+  `public` where anon holds anything or authenticated holds TRUNCATE/REFERENCES/TRIGGER/
+  MAINTAIN — i.e. on the forgotten `revoke` that is the actual failure mode. **LOCAL IS A
+  WORKING DETECTOR even though it cannot audit prod**: both environments auto-grant, just
+  differently (**prod `arwdDxtm`, local `Dxtm`**), so local under-represents the blast radius
+  but still catches the omission before it can be pushed. docs/15 item 2's old line saying a
+  local check "structurally cannot catch prod drift" is corrected there — it is true of
+  auditing prod, not of gating the migration. Teeth verified by deliberately breaking it.
+  **Also measured, and it is what makes stripping prod's defaults safe to consider later:
+  `ALTER DEFAULT PRIVILEGES ... REVOKE` does NOT touch existing objects** (controlled
+  before/after on `profiles`). **`storage`-schema
   grants** (prod grants anon the full set incl. TRUNCATE; buckets private,
   policies key on `auth.uid()`; a `public`-schema sweep doesn't touch it); ~9
   internal-only helpers keeping `authenticated` EXECUTE they don't need; 3 provably dead functions

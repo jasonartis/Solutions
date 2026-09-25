@@ -1636,8 +1636,35 @@ vocabulary gets locked.
        sweep decays without a guard. Deliberately NOT combined with a 200-object privilege
        change. Supabase removes the legacy auto-expose behavior on **2026-10-30** (see the
        `auto_expose_new_tables` note in `supabase/config.toml`), so the durable fix is
-       likely a project-config change rather than SQL. **Needs a drift check in the
-       meantime** — and note a local-only check structurally cannot catch prod drift.
+       likely a project-config change rather than SQL. ~~**Needs a drift check in the
+       meantime** — and note a local-only check structurally cannot catch prod drift.~~
+       **⚠ THE DRIFT CHECK NOW EXISTS (2026-09-25), AND THE STRUCK-THROUGH CLAUSE IS THE
+       REASON IT TOOK SO LONG — IT IS TRUE OF THE WRONG THING.** A local check indeed cannot
+       AUDIT prod's existing grants. But the thing worth catching is not prod's current
+       state, it is **the forgotten `revoke` in a migration** — and that manifests on BOTH
+       environments, because both carry non-empty defaults. Measured 2026-09-25, with a
+       rolled-back probe creating a table exactly as a careless migration would:
+
+       | `create table` in `public`, no explicit revoke | anon / authenticated / service_role receive |
+       |---|---|
+       | **PROD** | `arwdDxtm` — everything, incl. SELECT/INSERT/UPDATE/DELETE |
+       | **LOCAL** | `Dxtm` — TRUNCATE, REFERENCES, TRIGGER, MAINTAIN |
+
+       So local under-represents the prod BLAST RADIUS but still reliably DETECTS the
+       omission — `D` (TRUNCATE) lands locally, and RLS cannot gate it. That is enough to
+       gate the migration before it is ever pushed.
+       `packages/db/src/table-grants-ratchet.test.ts` asserts two absolute invariants over
+       every table in `public` (anon holds nothing; authenticated holds none of the four
+       RLS-ungated privileges) and **runs in CI**, which the standalone scripts never did.
+       Its teeth were verified the way `view-as-coverage.test.ts`'s were: a table created
+       without a revoke made both ratchets fail, naming the table and the exact privileges;
+       dropping it restored green. It carries a control proving the environment really does
+       auto-grant, so it cannot pass vacuously in an environment where the trap is absent.
+       **What the ratchet does NOT do**: remove the trap, or see anything created on prod
+       outside the migration path (manual SQL, a dashboard action). Those still argue for
+       stripping the default privileges — see the 2026-09-25 journal entry for the measured
+       case, including the control showing an `ALTER DEFAULT PRIVILEGES ... REVOKE` leaves
+       EXISTING objects untouched.
     3. **~9 internal-only helpers** (`org_role_rank`, `org_caller_rank`, `module_caller_*`,
        both `module_position_rank` overloads, `vm_can_moderate_org`, `vm_layer_locked`) keep
        `authenticated` EXECUTE they don't strictly need — they're called only from inside

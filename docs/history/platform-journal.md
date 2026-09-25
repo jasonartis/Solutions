@@ -4,6 +4,56 @@ The running, dated build journal that used to live in `CLAUDE.md`'s "## Current 
 section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every session)
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
+- **2026-09-25, CONTINUED ON OPUS (THE FORGOTTEN-REVOKE RATCHET — docs/15 deferred item 2's
+  "needs a drift check", built. No migration, no prod change).** The founder switched tiers
+  for the ACL work; the first Opus move was to re-measure rather than draft SQL, and the
+  premise the Sonnet session was about to build on turned out to be **wrong**.
+  **THE PREMISE THAT FAILED: "local has no default privileges, so a local-vs-prod grant diff
+  isolates prod's auto-exposure."** Local has its own, and they are DIFFERENT, exactly as
+  docs/03 #27 warns (`pg_default_acl` differs by schema AND environment). A `create table` in
+  `public` with no explicit revoke gives anon/authenticated/service_role **`arwdDxtm` on PROD**
+  and **`Dxtm` on LOCAL**. Both non-empty; neither clean. Had the diff been run on the
+  assumption, the shared `Dxtm` exposure would have cancelled out and read as "no drift".
+  **A SECOND CONTROL CAUGHT SOMETHING ELSE FIRST.** Before diffing, the migration ledgers were
+  compared — without parity a grant diff is meaningless. **Local is missing `20260923010000`
+  from `schema_migrations` while holding every object that migration creates.** So local's
+  schema and its own ledger disagree, and `supabase migration up` would now fail there on that
+  migration's "table must be empty" assertion (local's cache holds 365+ rows). Recorded, not
+  fixed — local was NOT reset, because a concurrent session may be using it.
+  **THE FINDING THAT MATTERED, and it inverts docs/15's own note.** Item 2 ended *"a local-only
+  check structurally cannot catch prod drift"* — true of AUDITING prod, and the reason no guard
+  was ever built. But the thing worth catching is the forgotten `revoke` in a migration, which
+  lands on BOTH environments. Local under-represents the prod blast radius yet still reliably
+  DETECTS the omission, because `D` (TRUNCATE) lands locally and RLS cannot gate TRUNCATE. So
+  local is a working detector, and nothing was looking at it.
+  **BUILT: `packages/db/src/table-grants-ratchet.test.ts`** — two absolute invariants over every
+  table in `public` (anon holds nothing; authenticated holds none of
+  TRUNCATE/REFERENCES/TRIGGER/MAINTAIN), **running in CI**, which the standalone `acl-audit` /
+  `verify-acl-hardening` scripts never did. Deliberately absolute rather than allow-listed: an
+  exception here would be a design change, not a list edit — and an allow-list is precisely what
+  rotted on `verify-acl-hardening.ts`.
+  **TEETH VERIFIED, not assumed** (the `view-as-coverage.test.ts` standard): a table created
+  without a revoke made both ratchets fail, naming `_acl_teeth_probe(TRUNCATE/REFERENCES/
+  TRIGGER/MAINTAIN)`; dropping it restored green. It also carries an anti-vacuity control that
+  creates a table in a rolled-back transaction and asserts the environment's auto-grant
+  behaviour AGREES with `pg_default_acl` — so it cannot pass merely because the trap is absent,
+  and it proves revoke-then-grant produces exactly the intended ACL. The probe is transactional
+  and asserts its own rollback, which matters because CI runs this suite and then e2e against
+  the same database with no reset between.
+  **MEASURED AND WORTH KEEPING: `ALTER DEFAULT PRIVILEGES ... REVOKE` does NOT touch existing
+  objects.** `profiles`/authenticated read `SELECT/INSERT/DELETE` both before and after one, in
+  the same rolled-back transaction. That is the property that makes stripping prod's defaults
+  safe to consider — it cannot break anything currently working, only change what FUTURE objects
+  inherit. A naive table created after the strip received nothing at all.
+  **NOT DONE, deliberately, and now less urgent than it looked**: stripping prod's default
+  privileges. The ratchet removes the practical risk (a forgotten revoke can no longer reach
+  prod through the migration path), which converts an uncertain prod change into one that can
+  simply be MEASURED after Supabase's 2026-10-30 removal — re-run `scripts/acl-audit.ts` and
+  read the `[default privileges]` block. Still argues for stripping eventually: prod's blast
+  radius is wider than local's, and anything created outside the migration path bypasses CI
+  entirely. `storage`'s defaults stay untouched regardless (docs/15 item 1 — the Storage service
+  depends on them). db suite **251 passing** (6 files; `rls.test.ts` unchanged at 237, so the
+  ratchet floor is undisturbed).
 - **2026-09-25 (RE-CHECKING THE DEFERRED ACL-HARDENING ITEMS FROM 2026-07-29 — docs/15,
   Sonnet, no migration, no schema change).** Asked to find more decision-free work; went
   looking for anything real rather than repeating the same three blocked items. Found that
