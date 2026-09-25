@@ -18,8 +18,10 @@ are recorded in §1 and are not to be re-litigated.
 The sweep is registered but **seeded OFF** on production, and stays off until a
 paid plan exists (§7). **It does not need to run for a year**: production already
 holds 367 days of real data, copied from the dev fill on 2026-09-24, so every
-schedule renders from cache with **no myzmanim credentials on production at
-all**. The credentials are deliberately NOT in Vercel.
+schedule renders from cache with **no myzmanim credential in play on production
+at all**. The two Vercel variables exist but are **EMPTY placeholders** (added
+2026-09-24 so going live is typing two values, not knowing which to create); an
+empty value behaves exactly like an absent one.
 
 **FOUNDER'S READING OF THE TRIAL LICENCE (2026-09-24), recorded because it is a
 judgement call and not a fact:** the clause is *"the API may not be used in a
@@ -87,7 +89,12 @@ is exactly what a TRIAL licence forbids: see §7 before acting on it.
    already complete, say so and do not offer to re-fetch it; if it is partial,
    the button names exactly what it would do (*"Fetch 2 missing days"*). Never
    present a button that would spend money re-fetching data we already hold.
-9. **Count the calls.** No quota tracking exists anywhere today, so a
+9. **Buy the paid plan WHEN THE FIRST REAL CUSTOMER ARRIVES, not before**
+   (2026-09-24). Until then production runs from the cache with no credential,
+   and the trial is used for development only. Same extract-don't-speculate
+   trigger as the paused go-live items. Go-live is then two Vercel values plus
+   the switch (§6a).
+10. **Count the calls.** No quota tracking exists anywhere today, so a
    month-to-date call counter (successes and failures both — a refused call is
    still a call) goes on the console from the start. Cheap now, impossible to
    backfill later.

@@ -525,8 +525,9 @@ only EFFECTIVE admin could leave. Now both call ONE helper, `vm_seat_holds_admin
 and 0 seats, and the script calls that VACUOUS, not "zero affected."** db 248/248 → e2e
 52/52 in CI's order (a second identical run scored e2e 51/52 — the failure is the
 SYNAGOGUE-SCHEDULES week render, untouched by this diff, passing in isolation in 8.8s;
-**the `myzmanim` API now returns `NotAuthorized` for every date and falls back to hebcal,
-which is worth its own look**); ratchet 227 → 237; new `scripts/prod-verify-vm-admin-floor.mts` 34/34
+at the time the `myzmanim` API was returning `NotAuthorized` for every date and
+falling back to hebcal, which made that page slow — **RESOLVED 2026-09-24: the key works and
+the page now serves from cache**); ratchet 227 → 237; new `scripts/prod-verify-vm-admin-floor.mts` 34/34
 local (the function-only verifier cannot see a trigger BINDING). Full story: docs/19's
 2026-09-22 section. **TWO DEPLOY FACTS WORTH KEEPING: (a) the `service_role` revoke was
 VINDICATED ON PROD** — the helper reads `postgres=X/postgres` only, while the older
@@ -995,7 +996,7 @@ the 1 fail being the real account state). **Founder action: the API dashboard**
 (https://www.myzmanim.com/apidemo.aspx). Endpoint is NOT deprecated.
 **THE ZMANIM CACHE: SCHEMA AND A YEAR OF DATA ARE ON PRODUCTION (2026-09-24); BOTH UIs ARE NOW
 BUILT TOO (read-only v1, in the repo, not yet deployed — see below).** Live doc
-[docs/23](docs/23-zmanim-cache-and-global-batches.md) — NINE founder decisions, do not
+[docs/23](docs/23-zmanim-cache-and-global-batches.md) — TEN founder decisions, do not
 re-litigate them; read its status table first. On prod and prod-verified
 (`prod-verify-zmanim-schema.mts` **36/36**): migration `20260923010000` (cache stores the RAW
 payload, `platform_settings`, the append-only `syn_zmanim_fetch_log`, `syn_zmanim_cached()`),
@@ -1030,6 +1031,20 @@ worker prerequisite as the sweep.
 pg-boss cron job, so like docs/17's prunes it fires only while `pnpm worker:prod` is up. That
 is why the year was loaded by script rather than by the sweep, and why the action buttons stay
 out of v1.
+
+**FOUNDER PICKED THE NEXT WORK ITEM (2026-09-25): THE CROSS-MODULE USER/POSITION MODEL,
+at FABLE tier.** Broad scope, chosen deliberately over the narrow version: settle what an
+audience/mentor seat means in speed dating AND align the user model across all six modules,
+**including rank-mapping matchmaking, synagogue-schedules and visual-messaging** — which are
+unmapped today and which block the `module_roles` census leak. **Start at docs/19's
+STILL-OPEN item 1, whose table distinguishes `sd_participants.seat_type` (audience/mentor DO
+exist, CHECK-constrained) from `module_roles.role` (they do NOT; the column is free text and
+`module_position_rank` is what gives words meaning). Both the founder and a previous session
+misread that before measuring it.** Then docs/13, docs/15 §11, docs/rank-admission-map.md.
+Fable is the right tier per the third criterion — a platform primitive touching every module
+where a wrong abstraction is expensive to unwind. **Budget for rank-mapping FAILING THE BUILD
+until every newly-implied view-as pair is answered; that is the 2026-07-30 amendment working
+as designed.**
 
 **Standing rules:** never start a slice/module build without the founder initiating; every
 migration/RLS/trigger change runs the docs/03 #12 rhythm (draft → adversarial review →
