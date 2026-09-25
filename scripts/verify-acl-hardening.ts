@@ -43,18 +43,77 @@ const MIGRATION_PATH = resolve(
 const ANON_SIGNATURES = new Set([
   'syn_public_weeks(p_org_slug text)',
   'syn_public_week(p_org_slug text, p_week_start date)',
+  // The zmanim read path (20260923010000, docs/23 §4). anon is deliberate and
+  // is NOT new exposure: the module's PUBLIC schedule viewer (/s/<slug>) is
+  // anonymous by design and already renders these very times, so this is the
+  // same pattern as the two syn_public_* functions above. The rows carry a
+  // location key, a date and public astronomical values — no org data. The
+  // range is capped at 400 days so anon cannot bulk-dump a cache we pay for.
+  'syn_zmanim_cached(check_location_key text, from_day date, to_day date)',
 ])
 const ORACLE_SIGNATURES = new Set([
   'module_scope_covers(ancestor uuid, descendant uuid)',
   'module_scope_strictly_contains(ancestor uuid, descendant uuid)',
 ])
 // Tables whose authenticated grant is deliberately narrower than full CRUD.
+//
+// EVERY ENTRY BELOW WAS DERIVED FROM ITS DEFINING MIGRATION'S OWN grant/revoke
+// STATEMENTS, NOT FROM WHAT THE DATABASE CURRENTLY HOLDS (2026-09-25). That
+// distinction is the whole point: copying observed state would be circular and
+// would silently bless a leak as "intended". All eight tables added in this pass
+// were checked both ways and matched their migrations exactly.
 const TABLE_EXCEPTIONS: Record<string, string[]> = {
   job_requests: ['SELECT', 'INSERT'],
   vm_moderation_log: ['SELECT', 'INSERT'],
   mm_interests: ['SELECT', 'INSERT', 'DELETE'],
   profiles: ['SELECT', 'INSERT', 'DELETE'],
   syn_zmanim_cache: [],
+  // --- append-only / read-only-to-api-roles tables added after the sweep ---
+  // Engagement monitoring (docs/17): raw events are written by the capture path
+  // and pruned by an owner-only function; nothing may UPDATE or DELETE them.
+  activity_events: ['SELECT', 'INSERT'],
+  activity_rollup: ['SELECT'],
+  login_events: ['SELECT'],
+  login_rollup: ['SELECT'],
+  // The superadmin lookup log (docs/12 item 9) — append-only by GRANT, never by
+  // trigger, because a BEFORE trigger collides with FK cascades (docs/03).
+  superadmin_lookup_log: ['SELECT', 'INSERT'],
+  // The zmanim call log (docs/23 §5a) — append-only for the same reason; the
+  // worker writes it as service_role, so authenticated only ever reads.
+  syn_zmanim_fetch_log: ['SELECT'],
+  // The private companion to `profiles` (docs/22). Table-level UPDATE is
+  // deliberately ABSENT — it would cover is_superadmin, and a column grant
+  // cannot narrow a table grant. The settings column is granted separately and
+  // is asserted in packages/db/src/profiles-public-columns.test.ts.
+  user_private: ['SELECT'],
+  // View-as session log (20260731010000) — a session is opened and read, never
+  // edited or erased.
+  view_as_sessions: ['SELECT', 'INSERT'],
+}
+
+// Functions whose intended EXECUTE differs from the blanket
+// "authenticated + service_role" rule. Also derived from the migrations.
+//
+// WHY THIS MAP HAD TO EXIST: the blanket rule was true of the platform as it
+// stood on 2026-07-28 and stopped being true as newer functions were scoped
+// more precisely. Without it the checker reported four false failures, and a
+// checker that cries wolf gets ignored — which is how it came to be running
+// (and crashing) unnoticed for over a week.
+const FUNCTION_EXCEPTIONS: Record<string, { auth: boolean; svc: boolean }> = {
+  // The two retention pruners (docs/17). Revoked from all four api roles and
+  // never re-granted: they are SECURITY DEFINER and owner-only, called by the
+  // worker through pg-boss, so no api role needs EXECUTE.
+  'login_events_prune()': { auth: false, svc: false },
+  'activity_events_prune()': { auth: false, svc: false },
+  // Internal helper behind both halves of the conversation admin floor
+  // (20260922030000, docs/03 #31) — only ever called from inside other
+  // definers and a trigger, so it holds nothing.
+  'vm_seat_holds_admin_floor(check_member_id uuid)': { auth: false, svc: false },
+  // The ONE write path for platform_settings (20260923010000, docs/23 §6).
+  // authenticated only, and NOT service_role: the function re-checks
+  // is_superadmin(), which service_role is not — the worker writes its
+  // auto-pause directly instead. Granting it here would be meaningless at best.
+  'platform_setting_merge(setting_key text, patch jsonb)': { auth: true, svc: false },
 }
 const FULL_CRUD = ['SELECT', 'INSERT', 'UPDATE', 'DELETE']
 // `settings` moved to `public.user_private` with the email slice (2026-09-17,
@@ -295,11 +354,36 @@ async function main() {
   const members = fns.filter(
     (f) => !f.is_trigger && !ANON_SIGNATURES.has(sigOf(f)) && !ORACLE_SIGNATURES.has(sigOf(f)),
   )
-  const missing = members.filter((f) => !f.auth || !f.svc)
+  // Default intent is authenticated+service_role; FUNCTION_EXCEPTIONS overrides
+  // it per signature. Compared in BOTH directions — a function holding MORE than
+  // its declared intent is as much a defect as one holding less, and only the
+  // "less" direction was ever checked before.
+  const wrongExec = members.filter((f) => {
+    const want = FUNCTION_EXCEPTIONS[sigOf(f)] ?? { auth: true, svc: true }
+    return f.auth !== want.auth || f.svc !== want.svc
+  })
   expect(
-    missing.length === 0,
-    `all ${members.length} other non-trigger functions keep authenticated+service_role EXECUTE` +
-      (missing.length ? ` — missing: ${missing.map(sigOf).join(', ')}` : ''),
+    wrongExec.length === 0,
+    `all ${members.length} other non-trigger functions hold exactly their intended EXECUTE` +
+      (wrongExec.length
+        ? ` — ${wrongExec
+            .map((f) => {
+              const want = FUNCTION_EXCEPTIONS[sigOf(f)] ?? { auth: true, svc: true }
+              const fmt = (a: boolean, s: boolean) =>
+                `auth=${a ? 'y' : '-'},svc=${s ? 'y' : '-'}`
+              return `${sigOf(f)}: want ${fmt(want.auth, want.svc)} got ${fmt(f.auth, f.svc)}`
+            })
+            .join('; ')}`
+        : ''),
+  )
+  // The exception map must not rot either: an entry for a function that no
+  // longer exists is a stale claim, and this file already rotted once.
+  const presentSigs = new Set(fns.map(sigOf))
+  const deadExceptions = Object.keys(FUNCTION_EXCEPTIONS).filter((s) => !presentSigs.has(s))
+  expect(
+    deadExceptions.length === 0,
+    `every FUNCTION_EXCEPTIONS entry names a function that still exists` +
+      (deadExceptions.length ? ` — dead: ${deadExceptions.join(', ')}` : ''),
   )
   // The allowlisted public functions are exempt from the rule above, so assert
   // their service_role grant separately or its loss would be invisible forever.
@@ -380,7 +464,21 @@ async function main() {
   // that surplus is pre-existing and out of scope here. Only a LOSS is a defect.
   // mm_interests grants SELECT/INSERT/DELETE to BOTH roles — no UPDATE by design
   // (20260712040000:29), so full CRUD is the wrong bar for it.
-  const SVC_EXCEPTIONS: Record<string, string[]> = { mm_interests: ['SELECT', 'INSERT', 'DELETE'] }
+  // Same derivation rule as TABLE_EXCEPTIONS: read off each migration, not off
+  // the database. An empty array means the migration revoked service_role and
+  // deliberately never re-granted it — the engagement tables are reached only
+  // through owner-only definers, so the worker needs no direct grant.
+  const SVC_EXCEPTIONS: Record<string, string[]> = {
+    mm_interests: ['SELECT', 'INSERT', 'DELETE'],
+    activity_events: [],
+    activity_rollup: [],
+    login_events: [],
+    login_rollup: [],
+    superadmin_lookup_log: ['SELECT'],
+    syn_zmanim_fetch_log: ['SELECT', 'INSERT'],
+    view_as_sessions: ['SELECT'],
+    platform_settings: ['SELECT', 'INSERT', 'UPDATE'],
+  }
   const svcLost = tables.filter((t) => {
     const want = SVC_EXCEPTIONS[t.relname] ?? FULL_CRUD
     return !want.every((p) => t.svc.includes(p))

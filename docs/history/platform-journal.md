@@ -45,6 +45,36 @@ decision log, docs/03 conventions, docs/12 safeguards) — this is the chronolog
   the same rolled-back transaction. That is the property that makes stripping prod's defaults
   safe to consider — it cannot break anything currently working, only change what FUTURE objects
   inherit. A naive table created after the strip received nothing at all.
+  **THEN THE VERIFIER WAS MADE ACCURATE, AND ITS LAST REMAINING FAILURE TURNED OUT TO BE THE
+  TRAP ITSELF, ALREADY SPRUNG ON PRODUCTION.** `verify-acl-hardening.ts` was reporting 5
+  failures on prod / 4 on local, all of which were its own 2026-07-28-era blanket assumptions
+  meeting legitimately newer, more precisely-scoped objects. Every entry was re-derived **from
+  each defining migration's own grant/revoke statements, never from what the database currently
+  holds** — copying observed state would be circular and would bless a leak as "intended". All
+  eight tables and all five functions matched their migrations exactly. Added
+  `FUNCTION_EXCEPTIONS` (the blanket "every function keeps authenticated+service_role" rule
+  stopped being true once functions began being scoped precisely), filled in
+  `TABLE_EXCEPTIONS`/`SVC_EXCEPTIONS`, and made the function check compare in BOTH directions —
+  holding MORE than the declared intent is now a failure too, which it never was — plus a
+  rot check that fails on an exception naming a function that no longer exists.
+  **Result: LOCAL 17/17. PROD 16/17 — and the single remaining failure is real.**
+  `view_as_guard_session()` and `vm_guard_last_conversation_admin()` hold `service_role`
+  EXECUTE. **The split between the environments IS the diagnosis**: both migrations revoke from
+  `public, anon, authenticated` and stop short of `service_role`; local's FUNCTION default is
+  `postgres=X` alone so there was never anything to leak, while prod's default grants
+  `anon/authenticated/service_role`, so those two functions were BORN with it and the
+  incomplete revoke left it in place. Both were created after the 2026-07-28 sweep, which is
+  why the sweep's blanket revoke never covered them and why they are the only two of 60.
+  **So the default-privileges trap is not theoretical and has already fired twice on
+  production, in a way local structurally cannot reveal** — docs/03 #1's divergence, caught in
+  the wild rather than reasoned about. It landed harmlessly (a trigger function cannot be
+  invoked directly — the pseudo-return-type refuses, and EXECUTE is checked at `create trigger`
+  time, not fire time), so this is evidence, not an incident.
+  **That upgrades the trigger-function revoke from "cosmetic tidiness" to a change with three
+  reasons**: it removes a grant nobody intended, it is the proof-of-mechanism worth closing,
+  and it is the ONLY thing standing between this verifier and running in CI — which is the
+  forcing function that would stop it rotting a third time. Not applied: it is a prod
+  migration and the founder initiates those.
   **NOT DONE, deliberately, and now less urgent than it looked**: stripping prod's default
   privileges. The ratchet removes the practical risk (a forgotten revoke can no longer reach
   prod through the migration path), which converts an uncertain prod change into one that can
