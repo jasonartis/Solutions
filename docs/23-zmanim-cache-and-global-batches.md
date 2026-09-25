@@ -430,20 +430,27 @@ Per docs/03 #27, the new table must `revoke` before it `grant`s.
 
 **Do not maintain a checklist here that can rot.** The live answer is
 `pnpm exec tsx scripts/prod-verify-zmanim-schema.mts`, whose section [7] reads
-the actual state (schema, cache days, whether Vercel holds the credentials,
-whether the switch is on) and prints the remaining steps. As of 2026-09-24 it
-reports: schema yes, cache 367 days, **creds in Vercel no**, switch **OFF**.
+the actual state and prints the remaining steps. As of **2026-09-25** it reports:
+schema yes, cache 367 days, myzmanim vars **DECLARED** (present but the value is
+not readable through the API — see below), switch **OFF**.
 
 The shape of it, so the size of the job is known:
 
-1. **Add `MYZMANIM_USER` and `MYZMANIM_KEY` to Vercel (production), redeploy.**
-   Two variables. Production currently holds only three env vars in total and
-   none of them is a myzmanim credential — **so production has never once called
-   myzmanim**, which means it has been on hebcal fallback since the module
-   shipped, independently of the two connector bugs. These are needed only so a
-   cache MISS can fall back to the API; with a warm cache the pages never call it.
-2. **Turn the switch on** — `platform_setting_merge('zmanim.prefetch',
-   '{"enabled":true}')` as a superadmin, or one click once the console exists.
+1. **FILL IN the `MYZMANIM_USER` / `MYZMANIM_KEY` variables that ALREADY EXIST on
+   Vercel production, then redeploy.** They were added **empty** on 2026-09-24 so
+   that going live is typing two values rather than knowing which two to create;
+   an empty value behaves exactly like an absent one, because
+   `myzmanimCredsFromEnv()` returns null for an empty string.
+   **The readiness check cannot tell an empty placeholder from a real key** — the
+   Vercel API returns only the encrypted envelope — so it reports DECLARED rather
+   than claiming "yes" to the question it exists to answer.
+   They are needed ONLY so a cache MISS can fall back to the API; with a warm
+   cache the pages never call it. Note production had **never once called
+   myzmanim** before this, so the module has been on hebcal fallback since it
+   shipped, independently of the three connector bugs.
+2. **Turn the switch on** — one click on `/console/zmanim` (live since
+   2026-09-25), or `platform_setting_merge('zmanim.prefetch',
+   '{"enabled":true}')` as a superadmin.
 3. **Make sure the worker runs** (§7). Until it does, top up production with
    `pnpm exec tsx scripts/zmanim-backfill.mts --to-prod`, which calls the API
    from dev and copies rows.
