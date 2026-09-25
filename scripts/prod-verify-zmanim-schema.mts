@@ -207,24 +207,34 @@ try {
       } catch { vercelKeys = null }
     }
 
+    // DECLARED, not FILLED — and the difference is not observable from here.
+    // Both variables exist on Vercel as deliberately EMPTY placeholders
+    // (2026-09-24) so that going live is typing two values rather than knowing
+    // which two to create. The API returns only the encrypted envelope, never
+    // the plaintext, so this cannot tell an empty placeholder from a real key.
+    // Saying "yes" would therefore be a false positive on the very question it
+    // exists to answer; it reports DECLARED and says what that does and does
+    // not prove.
     const hasCreds = !!vercelKeys?.includes('MYZMANIM_USER') && !!vercelKeys?.includes('MYZMANIM_KEY')
     const enabled = setting[0]?.enabled === 'true'
     const cacheDays = held[0]?.n ?? 0
 
     console.log(`      schema on production .................. yes (verified above)`)
     console.log(`      cache populated ...................... ${cacheDays > 0 ? `yes (${cacheDays} days)` : 'NO'}`)
-    console.log(`      myzmanim creds in Vercel ............. ${vercelKeys === null ? 'UNKNOWN (no VERCEL_TOKEN)' : hasCreds ? 'yes' : 'no'}`)
+    console.log(`      myzmanim vars on Vercel .............. ${vercelKeys === null ? 'UNKNOWN (no VERCEL_TOKEN)' : hasCreds ? 'DECLARED (value not readable — may still be the empty placeholder)' : 'ABSENT'}`)
     console.log(`      prefetch switch ...................... ${enabled ? 'ON' : 'OFF'}`)
     console.log('')
-    if (!hasCreds && cacheDays > 0) {
+    if (cacheDays > 0) {
       console.log('      => Production serves real zmanim FROM CACHE with no credential.')
       console.log('         That is the intended state while the account is on trial.')
     }
-    if (!hasCreds) {
+    {
       console.log('      => WHEN A PAID PLAN EXISTS, to go fully live:')
-      console.log('         1. Add MYZMANIM_USER and MYZMANIM_KEY to Vercel (production),')
-      console.log('            then redeploy. Only needed so a cache MISS can fall back to')
-      console.log('            the API — with a warm cache the pages never call it.')
+      console.log('         1. FILL IN the MYZMANIM_USER / MYZMANIM_KEY variables that already')
+      console.log('            exist on Vercel as empty placeholders, then redeploy. Empty')
+      console.log('            behaves exactly like absent (myzmanimCredsFromEnv returns null),')
+      console.log('            and they are only needed so a cache MISS can fall back to the')
+      console.log('            API — with a warm cache the pages never call it.')
       console.log('         2. Turn the prefetch switch on, so the rolling horizon is')
       console.log('            topped up: select public.platform_setting_merge(')
       console.log(`              'zmanim.prefetch', '{"enabled":true}'::jsonb);`)
