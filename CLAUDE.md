@@ -907,6 +907,18 @@ Everything below is open but unranked:
   EXISTING projects automatically — do not assume it self-resolves; **after that date just
   re-run `scripts/acl-audit.ts` and read its `[default privileges]` block rather than
   reasoning about it.**
+  **⚠⚠ ONE MIGRATION IS PENDING ON PROD AND NOTHING ELSE SHOULD RIDE ALONG WITH IT:
+  `20260925010000_trigger_fn_execute_completes_revoke.sql` (2026-09-25).** It completes the
+  revoke on the only two trigger functions that hold `service_role` EXECUTE nobody granted
+  (`view_as_guard_session`, `vm_guard_last_conversation_admin`) — prod's default privileges
+  granted it at CREATE and their own migrations revoked only 3 of 4 roles. **`migrate:prod`
+  applies EVERY pending migration, so know this is there before running it for any other
+  reason.** Drafted, two adversarial reviews (both found real defects, all fixed), and verified
+  by RECREATING the prod defect in a rolled-back transaction — it is a **no-op on local**, so a
+  local pass proves nothing. **Verify on prod with `scripts/verify-acl-hardening.ts` going
+  16/17 → 17/17, NOT with `prod-verify-migration.ts`, which defines-no-functions and would pass
+  it vacuously.** Once applied, that script can go into CI (the forcing function that stops it
+  rotting again). Full story: journal 2026-09-25.
   **⚠ BUT THE PRACTICAL RISK IS NOW GUARDED (2026-09-25, Opus):
   `packages/db/src/table-grants-ratchet.test.ts` runs IN CI** and fails on any table in
   `public` where anon holds anything or authenticated holds TRUNCATE/REFERENCES/TRIGGER/

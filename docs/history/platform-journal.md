@@ -45,6 +45,40 @@ decision log, docs/03 conventions, docs/12 safeguards) — this is the chronolog
   the same rolled-back transaction. That is the property that makes stripping prod's defaults
   safe to consider — it cannot break anything currently working, only change what FUTURE objects
   inherit. A naive table created after the strip received nothing at all.
+  **THE FIX IS DRAFTED AND REVIEWED BUT NOT APPLIED — `20260925010000_trigger_fn_execute_
+  completes_revoke.sql` IS PENDING ON PROD.** Two `revoke execute` statements plus an
+  assertion block. Both adversarial reviews (Opus, narrow + capped, per the split-the-agent
+  lesson) came back usable and **each found real defects in the draft**:
+  **Safety review — SAFE WITH CAVEATS, could not break it.** Confirmed the central claim two
+  ways: Postgres checks EXECUTE in `CreateTrigger`, not in `ExecCallTriggerFunc` (unchanged in
+  PG17), AND this platform has run that way on prod since 2026-07-28 for 54 trigger functions.
+  Zero direct call sites — no `.rpc()`, no SQL function body, no policy. Its two live caveats
+  are now in the migration header: `prod-verify-migration.ts` would pass this **vacuously**
+  (function-only, and this defines no functions), so the real prod check is
+  `verify-acl-hardening.ts` going **16/17 → 17/17**; and assertion 1 polices all 61 trigger
+  functions, so a future unrevoked one applied in the same `db push` batch would fail HERE and
+  name the wrong migration.
+  **Correctness review — COMPLETE for the class, three defects in the draft.** (1) **The header
+  stated a FALSE reason** — it claimed these were the only trigger functions created after the
+  sweep. At least four others were (`superadmin_log_guard`, `capture_login`,
+  `activity_event_guard`, `activity_rollup_apply`); **verified independently before accepting
+  it**. They are clean because their migrations revoked all FOUR roles, so the real rule is
+  about the revoke, not the date — and the wrong sentence would have told the next reader there
+  was nothing to check. (2) The DO block **passed vacuously on local**, where the defect cannot
+  exist: its only control proved the population was real, never that
+  `has_function_privilege` can return TRUE. (3) Assertion 3 lumped `count(*) >= 2` across both
+  guards, so two triggers on one and none on the other would have passed.
+  **All three fixed, and each new assertion was then proven to have TEETH** by breaking it on
+  purpose in a rolled-back transaction: the positive control raises when `authenticated` loses
+  EXECUTE on `is_superadmin()`, and the per-function trigger check raises when a guard trigger
+  is disabled.
+  **VERIFICATION LIMIT, STATED RATHER THAN PAPERED OVER: this migration is a NO-OP ON LOCAL.**
+  The defect is prod-only, so applying it here proves nothing. It was instead verified by
+  RECREATING the prod condition in a rolled-back transaction — grant service_role EXECUTE,
+  watch assertion 1 raise, apply the revokes, watch it pass. Local was NOT reset for a full
+  replay (a concurrent session may be using it), so fresh-replay coverage comes from CI.
+  **`migrate:prod` NOT RUN — awaiting founder authorization**, per the standing rule that the
+  irreversible step is his.
   **THEN THE VERIFIER WAS MADE ACCURATE, AND ITS LAST REMAINING FAILURE TURNED OUT TO BE THE
   TRAP ITSELF, ALREADY SPRUNG ON PRODUCTION.** `verify-acl-hardening.ts` was reporting 5
   failures on prod / 4 on local, all of which were its own 2026-07-28-era blanket assumptions
