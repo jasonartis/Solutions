@@ -895,14 +895,24 @@ Everything below is open but unranked:
   unconfirmed. Do not open/edit those files unless the founder asks — full context: journal's
   2026-09-23/24 staleness-audit entry.
 - Deferred platform hardening — the `revoke PUBLIC`/anon-table items are **DONE and pushed**
-  (see Previously). Still open, all recorded with rationale in docs/15's 2026-07-29 entry:
-  **`storage`-schema grants** (prod grants anon the full set incl. TRUNCATE; buckets private,
-  policies key on `auth.uid()`; a `public`-schema sweep doesn't touch it); **prod's
-  `ALTER DEFAULT PRIVILEGES`**, which re-opens every FUTURE object so the sweep decays without a
-  drift check — Supabase removes the legacy auto-expose 2026-10-30, so the fix is likely project
-  config not SQL, and note a local-only check structurally CANNOT catch prod drift; ~9
+  (see Previously). Still open, all recorded with rationale in docs/15's 2026-07-29 entry.
+  **RE-CHECKED LIVE 2026-09-25 (journal), NOTHING NEW LEAKED, BUT THE CHECKING TOOL HAD
+  QUIETLY STOPPED RUNNING**: `scripts/verify-acl-hardening.ts` was crashing before its
+  summary line (a stale reference to `profiles.settings`, gone since the email slice) — fixed.
+  **`prod's ALTER DEFAULT PRIVILEGES` is CONFIRMED STILL LIVE** (queried via
+  `scripts/acl-audit.ts` moments before this note): full privileges still auto-grant to
+  anon/authenticated/service_role on any new `public`/`storage` object. Supabase removes the
+  legacy behavior 2026-10-30 (~5 weeks out) but it is not established whether that flips
+  EXISTING projects automatically — do not assume it self-resolves. **`storage`-schema
+  grants** (prod grants anon the full set incl. TRUNCATE; buckets private,
+  policies key on `auth.uid()`; a `public`-schema sweep doesn't touch it); ~9
   internal-only helpers keeping `authenticated` EXECUTE they don't need; 3 provably dead functions
-  locked not dropped; `service_role`'s retained TRUNCATE. Plus: generic scope-wrappers deriving
+  locked not dropped; `service_role`'s retained TRUNCATE; **and one small NEW finding**: 2
+  trigger functions (`view_as_guard_session`, `vm_guard_last_conversation_admin`) hold
+  `service_role` EXECUTE their own migrations never revoked (practically inert, but a real
+  drift from docs/03 #27's convention — needs a new migration, can't edit the pushed ones).
+  All of this is Opus-tier ACL/migration work per the model-choice rules — not started solo.
+  Plus: generic scope-wrappers deriving
   org from the entity row; generalize coarse `<prefix>_can_manage(org)`; per-class storage
   scoping; per-module scoped-assignment UIs.
 - ~~**What should actually gate `master`?**~~ **DECIDED AND SHIPPED 2026-09-23 (Sonnet

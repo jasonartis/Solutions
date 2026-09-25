@@ -57,7 +57,12 @@ const TABLE_EXCEPTIONS: Record<string, string[]> = {
   syn_zmanim_cache: [],
 }
 const FULL_CRUD = ['SELECT', 'INSERT', 'UPDATE', 'DELETE']
-const PROFILE_UPDATE_COLUMNS = ['display_name', 'settings']
+// `settings` moved to `public.user_private` with the email slice (2026-09-17,
+// docs/22) -- `profiles` no longer has that column at all, so checking it here
+// isn't just wrong, it CRASHES has_column_privilege() (found 2026-09-25: the
+// run never reached its own final summary line or exit code, sections [0]-[3]
+// silently incomplete).
+const PROFILE_UPDATE_COLUMNS = ['display_name']
 // MAINTAIN is PG17 and prod's `m` bit is real; `revoke all` clears it, but a
 // leftover would otherwise be invisible.
 const NON_DML = ['TRUNCATE', 'REFERENCES', 'TRIGGER', 'MAINTAIN']

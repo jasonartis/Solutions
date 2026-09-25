@@ -4,6 +4,54 @@ The running, dated build journal that used to live in `CLAUDE.md`'s "## Current 
 section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every session)
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
+- **2026-09-25 (RE-CHECKING THE DEFERRED ACL-HARDENING ITEMS FROM 2026-07-29 — docs/15,
+  Sonnet, no migration, no schema change).** Asked to find more decision-free work; went
+  looking for anything real rather than repeating the same three blocked items. Found that
+  `scripts/verify-acl-hardening.ts` — the tool meant to gate exactly this class of regression
+  — had itself gone stale and was **crashing before completing a single run**: it checked
+  `authenticated`'s UPDATE grant on `profiles.settings`, a column that moved to
+  `public.user_private` with the email slice (2026-09-17) and no longer exists on `profiles`
+  at all. `has_column_privilege()` on a nonexistent column raises, which aborted the script
+  before it ever reached its own summary line or exit code — so it had been silently
+  reporting nothing, not passing, for over a week. **Fixed**: dropped `settings` from
+  `PROFILE_UPDATE_COLUMNS`.
+  **With it actually running again, 11/16 checks pass, 5 fail — and NONE of the 5 is a new
+  leak.** All five are the allowlist itself not knowing about legitimate later migrations:
+  `syn_zmanim_cached()` being anon-executable (its own migration's deliberate design, docs/23),
+  and eight tables added since the 2026-07-28 sweep (`activity_events`, `login_events`,
+  `user_private`, `view_as_sessions`, `syn_zmanim_fetch_log`, etc.) each carrying its own
+  correctly-narrower-than-CRUD grant that this tool's hardcoded `TABLE_EXCEPTIONS` list was
+  never updated to include. **This is docs/15's own prediction — "the sweep decays without a
+  drift check" — but decaying in the CHECKING TOOL rather than in the schema itself**, which
+  is a subtler failure: a verifier that fails on legitimate change trains whoever runs it to
+  stop trusting its FAILs, which is worse than not having it.
+  **One real, low-severity finding survives**: two trigger functions
+  (`view_as_guard_session()`, `vm_guard_last_conversation_admin()`) hold `service_role`
+  EXECUTE that their own defining migrations never revoked — both migrations revoke from
+  `public, anon, authenticated` but stop short of `service_role`, unlike docs/03 #27's
+  "revoke from all four roles" convention. Practically inert (trigger functions cannot be
+  invoked directly regardless of grant — Postgres checks EXECUTE at `create trigger` time,
+  not fire time, and the pseudo-return-type refuses a direct call anyway), but it is a real
+  drift from the stated convention and the right fix is a new migration adding the missing
+  `revoke ... from service_role` — the original migrations are already pushed and cannot be
+  edited (docs/03 #28).
+  **THE ITEM DOCS/15 ACTUALLY FLAGGED IS STILL OPEN, confirmed live via `scripts/acl-audit.ts`
+  moments ago:** prod's `pg_default_acl` for role `postgres` in schema `public` (and
+  `storage`) still auto-grants FULL privileges — `arwdDxtm` on every table, EXECUTE on every
+  function, full sequence privileges — to `anon`, `authenticated` AND `service_role` for any
+  NEW object `postgres` creates. It has not caused a leak because every migration since the
+  2026-07-28 sweep has manually revoked-before-granting (the zmanim migration included) — but
+  that is DISCIPLINE, not a structural guarantee, and docs/03 #27's own CI incident proves the
+  discipline can be skipped. Supabase removes this legacy behaviour **2026-10-30** — about 5
+  weeks out — but `supabase/config.toml`'s own comment does not say whether that flips
+  EXISTING projects' already-set default ACL or only changes the behaviour for newly-created
+  ones, so this cannot be assumed to self-resolve.
+  **Deliberately NOT done this session, and why:** actually stripping prod's default ACL, or
+  writing the new migration for the two trigger-function grants, is real ACL/migration work —
+  Opus-tier per the model-choice rules, and it touches the exact mechanism the docs/03 #27
+  privilege-escalation incident was about, so it earns the full draft → adversarial review →
+  live-verify rhythm rather than a solo Sonnet pass. Recorded here, with live numbers, so
+  picking it up does not require re-running this whole investigation first.
 - **2026-09-24 (THE ZMANIM UIs — read-only v1, docs/23 §5c. Sonnet, no migration).** Picked up
   unprompted after the founder asked for decision-free work to chug away at: docs/23 §5c had
   already resolved its own one blocking decision (whether `job_requests.org_id` can be NULL for
