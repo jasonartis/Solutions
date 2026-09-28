@@ -1,8 +1,10 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { redirect } from 'next/navigation'
 import { getModule, moduleRegistry } from '@platform/core'
 import { createClient } from '@/lib/supabase/server'
+import { blockingRows, type OrgDeleteImpactRow } from '@/lib/org-delete'
 import {
   changeMemberRole,
   inviteOrgMember,
@@ -30,32 +32,105 @@ async function requireSuperadmin() {
   return supabase
 }
 
-export async function createOrg(formData: FormData) {
-  const supabase = await requireSuperadmin()
-  const name = String(formData.get('name') ?? '').trim()
-  const slug = String(formData.get('slug') ?? '')
+/** The ONE slug normaliser. createOrg and renameOrg must agree: an org created
+ *  one way and renamed the other could otherwise end up with a slug the router
+ *  cannot match.
+ *
+ *  The last two rules are NEW (2026-09-28) and change createOrg's behaviour
+ *  slightly, deliberately. The old rule mapped every run of invalid characters
+ *  to a dash and stopped, so `Slug Probe NEW!!` became `slug-probe-new-` — a
+ *  trailing dash nobody wants, which only became visible once addresses were
+ *  editable and could be seen being produced. Leading/trailing dashes are
+ *  stripped and runs collapsed; `!!!` (which used to yield `---`) now yields
+ *  the empty string and is caught by assertUsableSlug. */
+function normalizeSlug(raw: FormDataEntryValue | null): string {
+  return String(raw ?? '')
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9-]+/g, '-')
-  if (!name || !slug) throw new Error('Name and slug are required')
+    .replace(/-{2,}/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
+function assertUsableSlug(slug: string) {
+  if (!slug || !/[a-z0-9]/.test(slug)) {
+    throw new Error('Slug must contain at least one letter or number')
+  }
+}
+
+export async function createOrg(formData: FormData) {
+  const supabase = await requireSuperadmin()
+  const name = String(formData.get('name') ?? '').trim()
+  const slug = normalizeSlug(formData.get('slug'))
+  if (!name) throw new Error('Name and slug are required')
+  assertUsableSlug(slug)
 
   const { error } = await supabase.from('orgs').insert({ name, slug })
-  if (error) throw new Error(error.message)
+  if (error) {
+    // Same expected-refusal reasoning as renameOrg below (docs/03 #22).
+    if (error.code === '23505') {
+      redirect(
+        `/console?error=${encodeURIComponent(
+          `An organization already uses the address "${slug}", so nothing was created.`,
+        )}`,
+      )
+    }
+    throw new Error(error.message)
+  }
   revalidatePath('/console')
 }
 
 // Founder feedback (2026-07-16): no way anywhere to rename an org — surfaced
 // while explaining that the "Solutions" org is really Pozna's real client
-// (slug `pozne`), just misleadingly named. Slug is deliberately NOT editable
-// here — it's baked into the public schedule URL (/s/pozne) and anything
-// else already linking to it; renaming that would break existing links.
+// (slug `pozne`), just misleadingly named.
+//
+// ⚠ THAT DECISION IS REVERSED (2026-09-28, founder). The original rule was
+// "slug is deliberately NOT editable here — it's baked into the public
+// schedule URL (/s/pozne) and anything else already linking to it; renaming
+// that would break existing links."
+//
+// WHY IT CHANGED, recorded rather than silently flipped. The founder raised it
+// himself: `orgs.id` is the identity and `slug` is only a unique label —
+// verified that `orgs.slug` is the ONLY slug column in the database, so no
+// other table holds a copy and no data can be orphaned by changing it. The
+// original concern is real but it is REVERSIBLE: change the slug back and the
+// links work again. Forbidding it permanently made a typo'd slug unfixable
+// forever, which is the worse failure. So it warns loudly instead of refusing
+// — the same principle applied to deleteOrg below, which DOES refuse, because
+// that one is not reversible.
 export async function renameOrg(orgId: string, formData: FormData) {
   const supabase = await requireSuperadmin()
   const name = String(formData.get('name') ?? '').trim()
   if (!name) throw new Error('Name is required')
 
-  const { error } = await supabase.from('orgs').update({ name }).eq('id', orgId)
-  if (error) throw new Error(error.message)
+  const patch: { name: string; slug?: string } = { name }
+
+  // The slug field is optional: a form that omits it renames only the name,
+  // exactly as before this change.
+  const rawSlug = formData.get('slug')
+  if (rawSlug !== null && String(rawSlug).trim() !== '') {
+    const slug = normalizeSlug(rawSlug)
+    assertUsableSlug(slug)
+    patch.slug = slug
+  }
+
+  const { error } = await supabase.from('orgs').update(patch).eq('id', orgId)
+  if (error) {
+    // 23505 = unique_violation on orgs_slug_key. Typing an address someone else
+    // already has is an EXPECTED refusal, not a crash — and docs/03 #22 is
+    // explicit that THROWING from a server action for an expected refusal gets
+    // the message redacted, so the user would see nothing useful. Verified in a
+    // browser: the thrown version surfaced no text at all. Redirect with the
+    // reason instead, exactly as deleteOrg does.
+    if (error.code === '23505') {
+      redirect(
+        `/console?error=${encodeURIComponent(
+          `Another organization already uses the address "${patch.slug}", so nothing was changed.`,
+        )}`,
+      )
+    }
+    throw new Error(error.message)
+  }
   revalidatePath('/console')
 }
 
@@ -154,4 +229,70 @@ export async function updateSynagogueSettings(orgId: string, formData: FormData)
     .eq('module_key', 'synagogue-schedules')
   if (error) throw new Error(error.message)
   revalidatePath('/console')
+}
+
+// ---------------------------------------------------------------------------
+// Deleting an org (2026-09-28, migration 20260928010000)
+// ---------------------------------------------------------------------------
+// THE NEED (docs/18 item 8): undoing an onboarding mistake — wrong slug, wrong
+// client — previously required a session with direct database access, because
+// the console had no delete affordance at all.
+//
+// WHY THIS REFUSES RATHER THAN WARNS, unlike renameOrg above. Deleting an org
+// cascades across 67 tables and there is no rehearsed way back: backups are a
+// nightly whole-database dump, and extracting one tenant out of it and
+// re-inserting it into live production has never been done. A slug change is
+// reversible; this is not. So the rule is the one WhatsApp uses for groups —
+// you cannot delete it until it is empty — rather than Slack's "type your
+// password and it is gone forever".
+//
+// SETUP IS NOT CONTENT. A brand-new org legitimately has rows in org_members,
+// org_modules and module_roles the moment you configure it; refusing on those
+// would make the feature useless for the exact case it exists for. Anything
+// else with rows is a real person's real data and blocks the delete.
+/** What would deleting this org do? Superadmin-only; the function enforces that
+ *  itself and raises on an unknown org id rather than returning an empty list. */
+export async function getOrgDeleteImpact(orgId: string): Promise<OrgDeleteImpactRow[]> {
+  const supabase = await requireSuperadmin()
+  const { data, error } = await supabase.rpc('org_delete_impact', { check_org_id: orgId })
+  if (error) throw new Error(error.message)
+  return ((data ?? []) as OrgDeleteImpactRow[]).map((r) => ({ ...r, row_count: Number(r.row_count) }))
+}
+
+export async function deleteOrg(orgId: string, formData: FormData) {
+  const supabase = await requireSuperadmin()
+
+  const { data: org, error: readErr } = await supabase
+    .from('orgs')
+    .select('id, slug')
+    .eq('id', orgId)
+    .maybeSingle()
+  if (readErr) throw new Error(readErr.message)
+  if (!org) throw new Error('That organization no longer exists')
+
+  // Typed confirmation, GitHub-style. Checked BEFORE the impact query so a
+  // mistyped slug never reaches the destructive path at all.
+  const typed = String(formData.get('confirmSlug') ?? '').trim()
+  if (typed !== org.slug) {
+    redirect(`/console/orgs/${orgId}/delete?error=${encodeURIComponent('That did not match the address, so nothing was deleted.')}`)
+  }
+
+  // Re-checked at submit time, not just at render time: the page the operator
+  // is looking at may be minutes old, and something may have been created in
+  // the org since it rendered.
+  const impact = await getOrgDeleteImpact(orgId)
+  const blocking = blockingRows(impact)
+  if (blocking.length > 0) {
+    const summary = blocking.map((r) => `${r.table_name} (${r.row_count})`).join(', ')
+    redirect(
+      `/console/orgs/${orgId}/delete?error=${encodeURIComponent(
+        `This organization now holds data that would be destroyed: ${summary}. Nothing was deleted.`,
+      )}`,
+    )
+  }
+
+  const { error } = await supabase.from('orgs').delete().eq('id', orgId)
+  if (error) throw new Error(error.message)
+  revalidatePath('/console')
+  redirect('/console')
 }

@@ -20,7 +20,13 @@ import {
 
 const inputCls = 'rounded border border-gray-300 px-2 py-1 text-sm'
 
-export default async function ConsolePage() {
+export default async function ConsolePage(props: {
+  searchParams?: Promise<{ error?: string }>
+}) {
+  // Expected refusals (a duplicate address, say) arrive here as a query param
+  // rather than a thrown error: docs/03 #22 — a server action that THROWS for
+  // an expected refusal has its message redacted, so the user sees nothing.
+  const { error: actionError } = (await props.searchParams) ?? {}
   const profile = await getProfile()
   if (!profile?.is_superadmin) notFound()
   // The superadmin's saved default for "add member": immediately-active vs a
@@ -53,6 +59,12 @@ export default async function ConsolePage() {
   return (
     <div>
       <h1 className="mb-2 text-2xl font-semibold">Owner Console</h1>
+
+      {actionError && (
+        <p className="mb-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          {actionError}
+        </p>
+      )}
 
       {/* Superadmin-only tools that deliberately live OUTSIDE the module tab
           strips, so those stay strictly by-the-rules (docs/13, 2026-08-02). */}
@@ -141,9 +153,33 @@ export default async function ConsolePage() {
                     className={`${inputCls} ml-2 w-56`}
                   />
                 </label>
+                {/* Editable since 2026-09-28, reversing the 2026-07-16 decision
+                    that it must not be — see the note on renameOrg. Warned
+                    rather than forbidden: a broken link is reversible by
+                    setting the address back, whereas leaving a typo
+                    unfixable forever is not. */}
+                <label className="text-xs text-gray-500">
+                  Address
+                  <input
+                    name="slug"
+                    defaultValue={org.slug}
+                    className={`${inputCls} ml-2 w-44 font-mono`}
+                    title="Changing this breaks any existing link to /o/<address> and the public page /s/<address>"
+                  />
+                </label>
                 <button className="rounded border border-gray-300 px-3 py-1 text-sm text-gray-700 hover:bg-gray-50">
-                  Save name
+                  Save
                 </button>
+                <span className="text-xs text-gray-400">
+                  changing the address breaks existing links to{' '}
+                  <code>/s/{org.slug}</code>
+                </span>
+                <Link
+                  href={`/console/orgs/${org.id}/delete`}
+                  className="ml-auto text-xs text-red-600 hover:underline"
+                >
+                  Delete organization
+                </Link>
                 <span className="text-xs text-gray-400">(slug /{org.slug} stays fixed — it's used in existing links)</span>
               </form>
 
