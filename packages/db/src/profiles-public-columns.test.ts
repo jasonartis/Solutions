@@ -71,7 +71,16 @@ const EMAIL_READERS: Record<string, string> = {
 }
 
 /** Matches on the PATTERN but reads nothing — recorded so the baseline is honest. */
-const COMMENT_MATCHES_ONLY = ['vm_guard_last_conversation_admin']
+const COMMENT_MATCHES_ONLY = [
+  'vm_guard_last_conversation_admin',
+  // Added 2026-09-28 by 20260928010000. Its cascade escape carries a comment
+  // explaining that the clause distinguishes the `orgs` cascade from the
+  // `auth.users` one — the literal table name is the whole point of the
+  // sentence, so it is kept and classified here rather than reworded into
+  // something vaguer to dodge a grep. The function reads no address and
+  // touches no auth table; the control below proves the match is comment-only.
+  'org_members_guard_last_admin',
+]
 
 describe('profiles is PUBLIC, and the email surface is enumerable (docs/22 §21.3, §11.6)', () => {
   it('RATCHET 1: public.profiles carries only the declared PUBLIC columns', async () => {
