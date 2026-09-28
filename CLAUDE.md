@@ -910,16 +910,28 @@ Everything below is open but unranked:
   **⚠⚠ THREE MIGRATIONS ARE PENDING ON PROD AND `migrate:prod` APPLIES ALL OF THEM — THERE IS
   NO WAY TO PUSH ONE (measured with `--dry-run`, 2026-09-28):**
   1. `20260925010000_trigger_fn_execute_completes_revoke.sql` — **deliberately held** (below).
-  2. `20260925030000_rank_map_three_modules.sql` — **A DIFFERENT SESSION'S WORK.** Its own
-     CLAUDE.md note says *"`migrate:prod` HAS NOT RUN; do not call it shipped"*, and it carries
-     **an open founder decision**: visual-messaging `moderator` was ranked **1 in-session, NOT
-     by the founder** (docs/24 §4b — "say so if you want 3"). It also renames a role value.
+  2. `20260925030000_rank_map_three_modules.sql` — **A DIFFERENT SESSION'S WORK, AND THAT
+     SESSION IS STILL MID-SLICE** (2026-09-28: uncommitted `console/positions/`,
+     `lib/positions-console.ts` and edits to `console/page.tsx` in the shared tree — a Positions
+     console that builds on these very ranks). **The `moderator` = 1 decision is SETTLED**
+     (founder relayed it 2026-09-28; rank 3 would hand a content-moderation role
+     grants-administration that `vm_can_moderate_org` never even reads). So the blocker is no
+     longer a decision — it is that **this migration belongs to a slice in progress and should
+     deploy with it, verified by its owner.**
   3. `20260928010000_org_delete.sql` — org deletion, reviewed and browser-verified.
-  **SO DEPLOYING ANY OF THEM SHIPS ALL THREE, including another session's unratified rank
-  decision. Do not run `migrate:prod` without the founder settling that, and ideally without
-  whoever owns #2 confirming it is ready.** This is the concrete form of the shared-repo hazard
-  this file warns about elsewhere: the danger is not a bad commit, it is a deploy command with
-  a wider blast radius than the work in front of you.
+  **SO DEPLOYING ANY OF THEM SHIPS ALL THREE.** This is the concrete form of the shared-repo
+  hazard this file warns about elsewhere: the danger is not a bad commit, it is a deploy command
+  with a wider blast radius than the work in front of you.
+  **HOW TO VERIFY #1 AND #3 ON PROD, whoever ends up running the push** — written here because
+  the person who deploys may not be the person who wrote them:
+  - **#1:** `pnpm exec tsx scripts/verify-acl-hardening.ts` must go **16/17 → 17/17**. NOT
+    `prod-verify-migration.ts`, which defines-no-functions here and passes it **vacuously**.
+  - **#3:** its own assertion block runs AT APPLY TIME and is the real check — it proves the
+    org-delete path, that the admin floor still refuses a direct seat delete and a demotion,
+    and that `org_delete_impact` is callable and gated. A clean `migrate:prod` therefore means
+    those passed on prod. Behavioural coverage of the ORPHANING refusal (deleting a sole-admin
+    user) is in `packages/db/src/org-delete.test.ts`, which runs against LOCAL only — it is
+    deliberately not probed on prod, because that would mean deleting a real user to prove it.
   **ORG DELETION IS BUILT (2026-09-28, #3 above + `/console/orgs/<id>/delete`)**: it REFUSES
   when an org holds real module data (setup rows do not block), shows an itemised inventory,
   requires the address typed, and states that uploaded files are NOT covered. **The org address
