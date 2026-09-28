@@ -47,10 +47,45 @@ test('owner has the console; regular users do not', async ({ page }) => {
   // migration needed — org_modules.settings already covered by the
   // existing superadmin RLS write policy).
   const synSection = page.locator('section', { has: page.getByRole('heading', { name: 'Demo Synagogue' }) })
+  const locationId = () => synSection.getByLabel('myzmanim location ID')
   await expect(synSection.getByLabel('Timezone')).toHaveValue('America/New_York')
-  await synSection.getByLabel('myzmanim location ID').fill('US99999')
-  await synSection.getByRole('button', { name: 'Save location' }).click()
-  await expect(synSection.getByLabel('myzmanim location ID')).toHaveValue('US99999')
+
+  // THIS TEST USED TO POISON A LATER ONE, and it took a CI failure on a
+  // DOCS-ONLY commit to find it (2026-09-28). Two defects, both fixed here:
+  //
+  //   1. IT NEVER PUT THE SEEDED VALUE BACK. It wrote US99999 into Demo
+  //      Synagogue's location and left it there, while
+  //      'org settings: org admin edits module settings' (line ~146) asserts the
+  //      seeded US11210 on the very same org_modules row. That test failed with
+  //      "Expected US11210 / Received US99999" — note the tell: the input held a
+  //      WRONG value steadily across 14 polls, not a slow one. A timing flake
+  //      resolves; a polluted value does not. Judge by the received value, not
+  //      by the word "timeout".
+  //   2. ITS OWN ASSERTION WAS VACUOUS, which is why the breakage was
+  //      INTERMITTENT rather than constant. There was no waitForResponse, and
+  //      these inputs are uncontrolled (`defaultValue`), so asserting the field
+  //      right after typing echoes the keystrokes whether or not the write ever
+  //      reached Postgres. Whether the row actually changed was a race with test
+  //      teardown — so the later test failed only on the runs where the write
+  //      happened to land. The neighbouring guards test documents this same trap
+  //      (see its header); this test predates that lesson.
+  //
+  // Fixed by saving through one helper that waits for the POST and RELOADS
+  // before asserting — which makes it a persistence test rather than a DOM test
+  // — and by restoring the seeded value at the end. The restore is not just
+  // tidiness: docs/23's zmanim cache holds a year of real data keyed to
+  // US11210, so a leaked US99999 also sends local dev to the hebcal fallback.
+  const saveLocation = async (value: string) => {
+    const posted = page.waitForResponse((r) => r.request().method() === 'POST')
+    await locationId().fill(value)
+    await synSection.getByRole('button', { name: 'Save location' }).click()
+    await posted
+    await page.reload()
+    await expect(locationId()).toHaveValue(value)
+  }
+
+  await saveLocation('US99999')
+  await saveLocation('US11210') // restore the seeded value — see above
 })
 
 test('org self-management: admin adds/removes members, changes roles, grants/revokes module roles', async ({
@@ -2220,4 +2255,66 @@ test('owner console engagement: a pending invite is excluded from the org rollup
   const cleanupSection = page.locator('section', { has: page.getByRole('heading', { name: 'Platform Self-Test' }) })
   await cleanupSection.locator('li', { has: page.getByText('grace@demo.local') }).getByRole('button', { name: 'Remove' }).click()
   await expect(cleanupSection.getByText('grace@demo.local')).not.toBeVisible()
+})
+
+// ---------------------------------------------------------------------------
+// OWNER CONSOLE — POSITIONS AND AUTHORITY (2026-09-28).
+//
+// The screen answers "what are all the positions, and what level can control
+// what level?" It exists rather than a doc because docs/rank-admission-map.md is
+// GENERATED — current only as of the last run of the test that writes it —
+// whereas this reads module_position_rank() on every load.
+//
+// WHAT MAKES THESE ASSERTIONS NON-VACUOUS: the ranks below are the ones
+// 20260925030000 put in the database, and they were 0 before it. A page that
+// rendered a hardcoded table, or that read the TypeScript mirror instead of SQL,
+// could still show the right words — so the test also asserts the DRIFT BANNER
+// IS ABSENT (SQL and TS agree) and that the scope-node line reflects real rows,
+// which no static page could get right.
+// ---------------------------------------------------------------------------
+test('owner console positions: ranks come from the database, and the control rules read off them', async ({
+  page,
+}) => {
+  await signIn(page, 'owner@demo.local')
+  await page.goto('/console/positions')
+  await expect(page.getByRole('heading', { name: 'Positions and authority' })).toBeVisible()
+
+  // The database and the code must agree. If this banner is ever visible, a
+  // migration landed without its TypeScript half (or vice versa) — the page
+  // says so loudly BECAUSE it reads both and trusts SQL.
+  await expect(page.getByText('The database and the code disagree')).not.toBeVisible()
+
+  // Make-a-Match: admin 3 / matchmaker 1 / single 0 — all three were rank 0
+  // until 20260925030000, so these values prove the page is reading the live
+  // ladder rather than the old assumption that these modules are unmapped.
+  const match = page.locator('section', { has: page.getByRole('heading', { name: 'Make-a-Match' }) })
+  // `has:` is resolved RELATIVE to each <tr>, so the inner locator must be
+  // rooted at `page`, not at the section — rooting it at the section nests the
+  // section inside itself and matches nothing.
+  const matchRow = (role: string) => match.locator('tr', { has: page.getByText(role, { exact: true }) })
+  await expect(matchRow('admin')).toContainText('global module authority')
+  await expect(matchRow('matchmaker')).toContainText('operational staff')
+  await expect(matchRow('single')).toContainText('end user')
+
+  // The control rule, read off those ranks: an admin (3) clears the rank-2 write
+  // gate and outranks both, so it appoints them. A matchmaker (1) does NOT clear
+  // that gate, so it appoints nobody even though 1 > 0 — the exact distinction
+  // the founder settled on 2026-09-25, rendered rather than asserted in prose.
+  await expect(matchRow('admin')).toContainText('matchmaker')
+  await expect(matchRow('matchmaker')).toContainText('nobody')
+
+  // Live schema fact, not a constant: matchmaking is single-global-entity and
+  // has no scope nodes, while classroom's entity tree really has rows. A
+  // hardcoded page cannot get this pair right.
+  await expect(match).toContainText('no scope nodes')
+  const classroom = page.locator('section', { has: page.getByRole('heading', { name: 'Classroom' }) })
+  await expect(classroom).toContainText('scope node')
+  await expect(classroom.locator('tr', { has: page.getByText('professor', { exact: true }) })).toContainText(
+    'runs one entity',
+  )
+
+  // Superadmin-only, like every other console screen.
+  await signIn(page, 'alice@demo.local')
+  await page.goto('/console/positions')
+  await expect(page.getByText('404')).toBeVisible()
 })

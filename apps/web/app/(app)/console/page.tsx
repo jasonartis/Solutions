@@ -96,6 +96,13 @@ export default async function ConsolePage(props: {
         <span className="text-gray-400" title="Is the next year of myzmanim data covered, and where are the holes">
           zmanim prefetch coverage
         </span>
+        <span className="text-gray-300">·</span>
+        <Link href="/console/positions" className="text-blue-600 hover:underline">
+          Positions
+        </Link>
+        <span className="text-gray-400" title="Every position's rank, read live from the database, and who can appoint or remove whom">
+          who can appoint whom
+        </span>
       </nav>
 
       <section className="mb-8 rounded-lg border border-gray-200 bg-white p-5">

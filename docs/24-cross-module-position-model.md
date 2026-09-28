@@ -239,8 +239,18 @@ matchmaking (`admin` 3, `matchmaker` 1), synagogue-schedules (`maker` 1), visual
 (`admin` 3, `moderator` 1). Everything else falls through to 0 exactly as before. No table,
 column, policy or trigger. Plus the seven view-as pair declarations and six new RLS tests.
 
-**One rank was decided here, not by the founder: visual-messaging `moderator` = 1, not the
-3 this doc originally proposed in §2.** Its authority is `vm_can_moderate_org()`, a role-NAME
+**FOUNDER CONFIRMED 2026-09-28: `moderator` stays at rank 1.** Asked explicitly, with the
+two options laid out as consequences rather than labels, and confirmed after review. The
+deciding consequence was the one that runs opposite to intuition: **at rank 3 a moderator
+becomes unremovable by the visual-messaging admin who appointed them** (3 does not outrank 3,
+and the same-role escape needs a strictly narrower scope this module has no nodes to express),
+so removing one would become an org-admin-only act — while simultaneously handing a
+content-moderation role the ability to add and remove other people's module access. Rank 1
+gives the admin both appointment and removal, and confines the moderator to moderation. Do
+not re-litigate this.
+
+**Originally decided in-session rather than by the founder: visual-messaging `moderator` = 1,
+not the 3 this doc proposed in §2.** Its authority is `vm_can_moderate_org()`, a role-NAME
 check that never reads rank, so 3 would have handed a content-moderation role
 grants-administration it has never needed. At 1 it stays out of `module_has_manager_grant`
 while the admin (3) can still appoint and remove it. It also matches the convention every

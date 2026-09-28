@@ -4,6 +4,43 @@ The running, dated build journal that used to live in `CLAUDE.md`'s "## Current 
 section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every session)
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
+- **2026-09-28 (THE POSITIONS CONSOLE, AND A TEST THAT POISONED ANOTHER ONE. Opus, no
+  migration).** Two things, both founder-directed after the rank-mapping slice.
+  **(1) A CI FAILURE ON A DOCS-ONLY COMMIT TURNED OUT TO BE TEST POLLUTION, not a flake.**
+  `84ca43e` changed only markdown and still failed e2e on
+  `platform.spec.ts:146 > org settings`. **The tell was in the received value, not the
+  word "timeout": the input held `US99999` steadily across 14 polls — a WRONG value, not a
+  slow one. A timing flake resolves; a polluted value does not.** Cause:
+  `owner has the console` fills `US99999` into Demo Synagogue's myzmanim location, saves,
+  and never restores the seeded `US11210` that the later test asserts. **Why it was
+  INTERMITTENT rather than constant is the better half of the lesson** — that test had no
+  `waitForResponse` and its own assertion was VACUOUS (these inputs are uncontrolled
+  `defaultValue`, so asserting right after typing echoes the keystrokes whether or not the
+  write reached Postgres), so whether the row actually changed was a race with teardown.
+  The neighbouring guards test documents this exact trap; this one predated it. Fixed by
+  saving through one helper that waits for the POST and RELOADS before asserting, then
+  restoring the seeded value. Verified by running the polluter and its victim together
+  (2 passed) and confirming the row reads `US11210` afterwards. The restore is not mere
+  tidiness: docs/23's zmanim cache holds a year of real data keyed to `US11210`, so a leaked
+  `US99999` also sends local dev to the hebcal fallback.
+  **(2) `/console/positions` — "what are all the positions, and what level can control what
+  level?"** Founder-asked, and explicitly **NOT a static page**: every rank is read from
+  SQL's `module_position_rank()` at request time, so a rank changed by a migration shows up
+  on the next load with nothing to regenerate. That is the difference from
+  `docs/rank-admission-map.md`, which answers the same question but is only as current as
+  the last run of the test that writes it. It also reads live grant counts, live
+  `module_scope_nodes` counts (which is what makes the "only into a narrower scope" rule
+  concrete per module), and **surfaces any role string granted but NOT in the module's
+  declared vocabulary** — worth having, since `module_roles.role` is free text with no CHECK
+  constraint. It deliberately reads BOTH SQL and the TypeScript mirror and shows a loud
+  banner when they disagree, because a page that read only TS could never show a drift.
+  Read-only by design: ranks are immutable config (docs/15 4.1 item 5 — a tenant-writable
+  rank table lets someone set `student = 5` and invert the ladder). One e2e test, written to
+  be non-vacuous: it asserts ranks that were 0 before `20260925030000`, asserts the drift
+  banner is ABSENT, and asserts the scope-node line differs between matchmaking (none) and
+  classroom (real rows) — none of which a hardcoded page could get right. Verified in a real
+  browser, not just by assertions. Test floors raised to e2e 53 / rls 243, which also locks
+  in the 6 rank-mapping tests that were above the floor but never recorded.
 - **2026-09-28 (ORG DELETION — the console gap from docs/18 item 8, plus an editable address.
   Opus, migration `20260928010000`, IN THE REPO, NOT ON PROD).** Four adversarial reviews
   across two rounds, and **every round changed the design**, which is the story worth keeping.
