@@ -3150,9 +3150,43 @@ delete from orgs where slug='cascade-probe-tmp';
 -- CONTEXT: SQL statement "DELETE FROM ONLY public.org_members WHERE $1 = org_id"
 ```
 
-Latent only because there is no delete-an-org surface. **Not fixed: "should
+~~Latent only because there is no delete-an-org surface. **Not fixed: "should
 deleting an org be possible at all, and what happens to its modules' data" is a
-product question**, and it is the same question docs/21 asks about users.
+product question**, and it is the same question docs/21 asks about users.~~
+
+**FIXED 2026-09-28 — `20260928010000_org_delete.sql`.** The product question was
+answered narrowly on purpose: an org holding real module data still cannot be
+deleted from the console, so "what happens to its modules' data" is not yet
+answered and does not need to be. Only an org that is effectively empty (setup
+rows only — `org_members`, `org_modules`, `module_roles`) can be removed.
+
+**THE ESCAPE IS NOT THE ONE §30.3 PRESCRIBES, AND THAT IS THE INTERESTING PART.**
+§30.3's generalisation — `pg_trigger_depth() > 1` distinguishes a user's own
+statement from a referential action — is right about the MECHANISM and wrong as
+the fix here, because **two different referential actions reach this guard and
+deserve opposite answers**:
+
+| cascade from | the org | correct answer |
+|---|---|---|
+| `orgs` | is being destroyed | ALLOW — the admin floor is meaningless |
+| `auth.users` | **survives**, with zero admins | **REFUSE** — that silently orphans it |
+
+A bare depth test cannot tell them apart and permits the second. Demonstrated
+live: with the depth-only variant, deleting a user who solely administers an org
+succeeds and leaves the org with no owner or admin and no way to appoint one.
+The shipped clause tests `pg_trigger_depth() > 1` **AND** that the parent org no
+longer exists — depth alone is too blunt, and parent-existence alone FAILS OPEN
+(it reads "I cannot see the org" as "the org is gone", so a future
+`FORCE ROW LEVEL SECURITY` would delete the floor silently). Each covers the
+other's failure mode.
+
+So §30.3's rule needs a rider: *a cascade escape must ask which parent is
+disappearing, not merely how deep it is* — and it is asserted in
+`packages/db/src/org-delete.test.ts`, which was proven to fail under the
+depth-only variant on exactly one test, the right one.
+
+**§30.2 (deleting a user who created a conversation) is STILL OPEN** and is
+untouched by this.
 
 ### 30.2 DELETING A USER WHO CREATED ANY CONVERSATION IS IMPOSSIBLE
 

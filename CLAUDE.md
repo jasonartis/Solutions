@@ -907,10 +907,25 @@ Everything below is open but unranked:
   EXISTING projects automatically — do not assume it self-resolves; **after that date just
   re-run `scripts/acl-audit.ts` and read its `[default privileges]` block rather than
   reasoning about it.**
-  **⚠ AN UNAPPLIED MIGRATION IS SITTING IN THE REPO — DELIBERATELY HELD, NOT WAITING ON A
-  DECISION: `20260925010000_trigger_fn_execute_completes_revoke.sql` (2026-09-25).**
-  **`migrate:prod` applies EVERY pending migration, so know it is there before running that
-  command for any other reason** — that is the only urgent thing about it.
+  **⚠⚠ THREE MIGRATIONS ARE PENDING ON PROD AND `migrate:prod` APPLIES ALL OF THEM — THERE IS
+  NO WAY TO PUSH ONE (measured with `--dry-run`, 2026-09-28):**
+  1. `20260925010000_trigger_fn_execute_completes_revoke.sql` — **deliberately held** (below).
+  2. `20260925030000_rank_map_three_modules.sql` — **A DIFFERENT SESSION'S WORK.** Its own
+     CLAUDE.md note says *"`migrate:prod` HAS NOT RUN; do not call it shipped"*, and it carries
+     **an open founder decision**: visual-messaging `moderator` was ranked **1 in-session, NOT
+     by the founder** (docs/24 §4b — "say so if you want 3"). It also renames a role value.
+  3. `20260928010000_org_delete.sql` — org deletion, reviewed and browser-verified.
+  **SO DEPLOYING ANY OF THEM SHIPS ALL THREE, including another session's unratified rank
+  decision. Do not run `migrate:prod` without the founder settling that, and ideally without
+  whoever owns #2 confirming it is ready.** This is the concrete form of the shared-repo hazard
+  this file warns about elsewhere: the danger is not a bad commit, it is a deploy command with
+  a wider blast radius than the work in front of you.
+  **ORG DELETION IS BUILT (2026-09-28, #3 above + `/console/orgs/<id>/delete`)**: it REFUSES
+  when an org holds real module data (setup rows do not block), shows an itemised inventory,
+  requires the address typed, and states that uploaded files are NOT covered. **The org address
+  (slug) is also now EDITABLE**, reversing the 2026-07-16 "deliberately not editable" decision —
+  reasoning recorded on `renameOrg`. Principle used throughout, worth reusing: **warn for
+  reversible, refuse for irreversible.** Full story: journal 2026-09-28.
   It removes `service_role` EXECUTE from two trigger functions (`view_as_guard_session`,
   `vm_guard_last_conversation_admin`) that prod's default privileges granted at CREATE and
   whose own migrations revoked only 3 of the 4 roles. **On prod the entire delta is:

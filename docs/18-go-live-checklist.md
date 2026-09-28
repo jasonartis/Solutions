@@ -235,15 +235,28 @@ All six steps worked cleanly on the first try. Full click-path, in order:
    `pg_stat_user_tables`-style shortcuts.
 
 **Two real findings, not hypothetical:**
-- **The console has NO way to delete an org.** `apps/web/app/(app)/console/actions.ts` has no
-  `deleteOrg` — cleaning up the throwaway org needed a direct owner-level SQL connection
-  (`delete from orgs where id = …`), bypassing the app entirely. Every `org_id`-referencing
-  table cascades correctly except `superadmin_lookup_log` (deliberately `SET NULL`, matching
-  its append-only design elsewhere in this doc set) — so a raw delete is SAFE, just not
-  reachable from the UI. **This is a real operational gap**: today, undoing an onboarding
-  mistake (wrong slug, wrong client) requires a Claude session with `.env.deploy` access, not
-  something the founder can do solo from the console. Not launch-blocking (mistakes are rare
-  and reversible with help), but worth a founder decision on whether it's worth building.
+- ~~**The console has NO way to delete an org.**~~ **BUILT 2026-09-28** (migration
+  `20260928010000` + `/console/orgs/<id>/delete`). The original finding and its reasoning are
+  kept below because **one sentence of it was wrong in a way that mattered**.
+  Original text: *"Every `org_id`-referencing table cascades correctly except
+  `superadmin_lookup_log` (deliberately `SET NULL`…) — so a raw delete is SAFE, just not
+  reachable from the UI. This is a real operational gap: undoing an onboarding mistake (wrong
+  slug, wrong client) requires a Claude session with `.env.deploy` access."*
+  **⚠ "A RAW DELETE IS SAFE" WAS TRUE ONLY OF THE ORG THAT WAS ACTUALLY TESTED.** Measured
+  2026-09-25: the delete succeeds for an org with no members, a plain `member` seat, or a
+  PENDING owner — and is **REFUSED** for an org holding an ACTIVE owner/admin, because the
+  cascade into `org_members` trips `org_members_guard_last_admin`, which had no cascade escape
+  (docs/20 §30.1). The rehearsal org fell in the first group, so the unqualified claim read as
+  general. **Every one of the 8 real orgs was undeletable.** Fixed by `20260928010000`.
+  **ALSO CORRECTED: the stated need was the case that already worked.** "Undo an onboarding
+  typo" describes an org nobody has joined yet — already deletable. What the fix actually
+  unblocks is deleting an org with a real administrator in it. And the cheapest answer to a
+  typo'd *slug* turned out not to be deletion at all: the address is now editable
+  (reversing the 2026-07-16 decision that it must not be).
+  **What shipped is deliberately timid**: the console REFUSES to delete an org holding real
+  module data, rather than warning and letting you through — deleting an org cascades across
+  67 tables and no tenant-level restore has ever been rehearsed. Offboarding a real client is
+  left as a separate, deliberate operation.
 - **A new client's people must sign up for an account BEFORE an admin can add them** —
   `resolveEmailToUserId`/`org_find_user_by_email` returns nothing for an email with no
   account yet, and the real UI surfaces this as "No user found … they must sign up first."

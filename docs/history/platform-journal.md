@@ -4,6 +4,59 @@ The running, dated build journal that used to live in `CLAUDE.md`'s "## Current 
 section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every session)
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
+- **2026-09-28 (ORG DELETION — the console gap from docs/18 item 8, plus an editable address.
+  Opus, migration `20260928010000`, IN THE REPO, NOT ON PROD).** Four adversarial reviews
+  across two rounds, and **every round changed the design**, which is the story worth keeping.
+  **THE JUSTIFICATION WAS REFUTED BY MY OWN MEASUREMENT.** The stated need was "undo an
+  onboarding mistake". Measured first: an org with no members, a plain `member` seat, or a
+  PENDING owner **already deleted fine**; only an org with an ACTIVE owner/admin was refused.
+  So the typo case never needed a fix, and what the change actually unblocks is deleting an org
+  with a real administrator. A reviewer caught the header claiming otherwise — using the
+  measurement already on screen. Second time in one session that a stated reason failed review;
+  the generalisable half is that **a review asked only "is it safe" and "is it complete" cannot
+  tell you the WHY is wrong**, so the second round asked "is this worth building at all" and got
+  BUILD DIFFERENTLY.
+  **WHAT CHANGED AS A RESULT:** the console now REFUSES to delete an org holding real module
+  data rather than warning and letting the operator through. Prior art was checked and then
+  followed this time — Slack deletes a workspace irreversibly behind a password, WhatsApp
+  refuses to delete a group until it is empty; the first draft cited WhatsApp and built the
+  opposite. Google Cloud's 30-day restore was rejected with its real cost stated (soft-delete
+  through 67 cascading tables), not the strawman first offered. And "backups are the undo" was
+  withdrawn: the nightly dump is whole-database, and extracting ONE tenant from it into live
+  prod has never been rehearsed.
+  **THE ESCAPE USES TWO TESTS BECAUSE EACH COVERS THE OTHER'S FAILURE.** docs/20 §30.3
+  prescribes `pg_trigger_depth() > 1`; alone it is wrong here, because the `orgs` cascade (floor
+  moot, allow) and the `auth.users` cascade (org SURVIVES with zero admins, refuse) are both
+  referential actions. Parent-existence separates them — but alone it FAILS OPEN, reading "I
+  cannot see the org" as "the org is gone", so a future `FORCE ROW LEVEL SECURITY` would delete
+  the admin floor silently. Conjoined, neither failure applies. **Demonstrated live**: the
+  depth-only variant lets you delete a user who solely administers an org.
+  **THE SHARPEST REVIEW FINDING: nothing asserted the thing the whole design existed for.**
+  Swap the conjunct for a bare depth test and every assertion in the migration still passed. It
+  is now asserted in `packages/db/src/org-delete.test.ts` and **proven to have teeth** — under
+  the broken variant exactly one test fails, the right one. The migration now also states what
+  it does NOT assert, rather than implying comprehensiveness. Reviews also caught that the DO
+  block never invoked `org_delete_impact` at all, that it made a real user own a probe org
+  (now a subtransaction that always rolls back, verified zero residue), and a flatly false
+  sentence claiming storage objects "carry no org_id" — visual-messaging stores them under
+  `<org_id>/<conversation_id>/<uuid>`.
+  **TWO DEFECTS ONLY THE BROWSER FOUND**, after typecheck, 262 db tests and four reviews were
+  all green: a duplicate address surfaced **no message at all** (throwing from a server action
+  for an EXPECTED refusal gets it redacted — docs/03 #22, already learned once here), and the
+  slug normaliser produced trailing dashes, invisible until addresses became editable. Also
+  caught one of my own tests lying: it read the page before the redirect landed and reported a
+  working feature as broken.
+  **THE ADDRESS IS NOW EDITABLE, reversing the 2026-07-16 decision** that it must not be —
+  recorded in the code, not flipped silently. `orgs.slug` is the ONLY slug column in the
+  database, so nothing can be orphaned; the original concern (public `/s/<slug>` links break) is
+  REVERSIBLE by setting it back, while an unfixable typo is not. Principle applied throughout:
+  **warn for reversible, refuse for irreversible.** A control stopped a wrong conclusion here
+  too — `/o/<new-slug>` 404s after renaming, which looked like broken routing until an
+  untouched seeded org 404'd identically (it is membership-gating).
+  typecheck 9/9, db 262/262, full flow verified in a real browser.
+  **NOT DEPLOYED, and the reason is a coordination hazard worth knowing: `migrate:prod` would
+  apply THREE pending migrations, one of them a concurrent session's** — see the 2026-09-28
+  deploy note in CLAUDE.md.
 - **2026-09-25, CONTINUED ON OPUS (THE FORGOTTEN-REVOKE RATCHET — docs/15 deferred item 2's
   "needs a drift check", built. No migration, no prod change).** The founder switched tiers
   for the ACL work; the first Opus move was to re-measure rather than draft SQL, and the
