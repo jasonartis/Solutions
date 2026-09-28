@@ -407,4 +407,63 @@ path for that picker (an edge-aware definer is the obvious candidate), not just 
 policy. Also note §1.6's correction: whatever replaces it must keep `is_org_admin` in the OR,
 or org admins who hold no module grant lose the table entirely.
 
+## 7. THE SPEED-DATING FOLD IS BLOCKED — measured 2026-09-28, and it is a founder decision
+
+The founder approved building the speed-dating half of §3 ("seat = grant") on 2026-09-28.
+**It cannot be built as specified, and the reason is not an implementation detail.**
+
+**The blocker, measured live rather than reasoned:** `registerForEvent`
+(`modules/speed-dating/ui/actions.ts:124`) is SELF-SERVICE — the user inserts their own
+`sd_participants` row. Under "seat = grant" that same action must also mint a
+`module_roles` grant for that user. **It cannot.** `module_roles_guard_hierarchy` step (3)
+refuses it outright:
+
+```
+[2] charlie self-grant -> REFUSED: You cannot grant a module position to yourself
+[3] CONTROL alice grants charlie "audience" -> allowed   (then cleaned up)
+```
+
+The control matters: the same insert by an entitled caller succeeds, so the refusal is
+specifically the self-grant rule, not a malformed row or the wrong org.
+
+**And a SECURITY DEFINER does not rescue it.** docs/20 §17.8 already records this for
+`join_module`: a definer does not bypass a BEFORE trigger, so the guard still fires and still
+sees `new.user_id = auth.uid()`. Closing this needs an explicit CARVE-OUT inside the guard —
+which is exactly what `20260727010000` did for org invites (a self-accept arm reachable only
+through the `org_accept_invite` definer). The pattern exists and is audited; it is still new
+mechanism in the most sensitive guard on the platform.
+
+**WHY THE TESTS WOULD NOT HAVE CAUGHT THIS — the part worth carrying.** Measured: all 6
+local `sd_participants` rows are held by users who DO hold a `participant` grant, so a role
+conjunct looks perfectly safe against seeded data. But those grants come from
+`packages/db/src/seed.ts:973-979` minting them directly with the service role — **not from
+the registration flow the product actually uses.** A genuinely self-registered user holds no
+grant at all, so adding the conjunct would revoke access to the event they had just joined,
+and every local test would still pass. This is the documented fixture trap in its most
+expensive form: *a fixture that pre-satisfies the condition under test makes the test
+vacuous*, and here the seed pre-satisfies it for every row that exists.
+
+**THE DECISION, three options with their consequences:**
+
+1. **Add a self-join carve-out to the guard** (the org-invite precedent). Registration mints
+   its own grant through a definer the guard recognises. Most faithful to "seat = grant", and
+   it is the same thing docs/15 slice 4 ("defaults on join") and docs/20's `join_module` both
+   need — so it is shared groundwork, not speed-dating-specific. Cost: new mechanism in
+   `module_roles_guard_hierarchy`, full docs/03 #12 rhythm, and it widens who can create
+   grants, which is precisely the guard's reason for existing.
+2. **Require staff to grant the role before anyone can register.** No new mechanism; the
+   conjunct goes in as-is. Cost: it changes the product — self-registration stops working for
+   anyone an organizer has not already added to the module, which is the opposite of how a
+   speed-dating event is meant to fill.
+3. **Leave speed dating on the org-membership conjunct it has today** and treat the
+   audience/mentor seat types as unbuilt until there is a real event to build against.
+   Cost: the gap stays open — an ejected participant whose module role is revoked keeps
+   reading the event, its live round clock, and their revealed matches with contact details.
+   Honest reading of the exposure: `sd_participants` holds **0 rows on production**, so this
+   is exposure-by-construction rather than anything currently reachable.
+
+**Recommendation: option 1, but NOT as part of this slice.** It is the groundwork two other
+deferred pieces already need, which makes it worth doing properly once rather than three
+times — and bolting it onto a fold commit would bury a guard change inside a refactor.
+
 **Next step:** the census-leak slice, at Opus tier, with the picker read path designed first.

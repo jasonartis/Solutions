@@ -889,6 +889,20 @@ accepts either refusal shape and asserts the row does not move.
    genuinely stand alone for observers?** Answering it is a prerequisite for the
    audience/mentor observer surface, which is already on module 6's list.
 
+   **⚠ BUILD ATTEMPTED 2026-09-28 AND BLOCKED — the decision below stands, but
+   it cannot be implemented without a second, separate founder decision. See
+   [docs/24](24-cross-module-position-model.md) §7.** `registerForEvent` is
+   SELF-SERVICE, and `module_roles_guard_hierarchy` refuses a self-grant
+   ("You cannot grant a module position to yourself" — measured live, with a
+   control proving an entitled caller succeeds). A SECURITY DEFINER does not
+   bypass a BEFORE trigger, so this needs a guard carve-out like the org-invite
+   self-accept arm. **And the local tests would NOT have caught the regression:**
+   all 6 seeded `sd_participants` holders hold a `participant` grant only because
+   `seed.ts` mints it directly with the service role, never through the
+   registration flow — so a real self-registered user holds nothing, and the
+   conjunct would revoke access to the event they just joined while every test
+   stayed green.
+
    **DECIDED 2026-09-25 as part of the broader cross-module position model —
    see [docs/24](24-cross-module-position-model.md) §4.** Founder confirmed:
    the seat itself becomes the grant — mint a scoped `module_roles` row
