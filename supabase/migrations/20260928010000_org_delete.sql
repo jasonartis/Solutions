@@ -266,15 +266,38 @@ declare
   probe_org uuid;
   probe_user uuid;
   n integer;
+  probe_skipped boolean := false;
   org_deleted boolean := false;
   seat_blocked boolean := false;
   demote_blocked boolean := false;
 begin
+  -- ⚠ FIXED 2026-09-28, SAME DAY, AFTER THIS BROKE CI. The first version raised
+  -- when `profiles` was empty, reasoning that assertions with no user to probe
+  -- would be vacuous. That is true, and raising was still WRONG: migrations run
+  -- against a FRESH database before any seed exists, so `profiles` is legitimately
+  -- empty every time CI runs `supabase start` — the migration failed, `supabase
+  -- start` failed, and the whole pipeline died before a single test, on every
+  -- commit including other sessions'.
+  --
+  -- The lesson is not "handle the empty case". It is that this file was verified
+  -- only against a SEEDED database — applied to a seeded local, and probed inside
+  -- transactions on seeded data — and a migration's real first audience is an
+  -- EMPTY one. The journal entry for this slice even named fresh-replay coverage
+  -- as the gap and pointed at CI for it; nobody then read CI.
+  --
+  -- So the behavioural probes SKIP when there is no user to probe with, and say
+  -- so rather than pretending they ran. They still run on prod (which has users)
+  -- and on a seeded local. The orphaning refusal, which nothing here asserts
+  -- either way, is covered in packages/db/src/org-delete.test.ts against real
+  -- seeded users — after the seed, which is why that suite is unaffected by this.
   select user_id into probe_user from public.profiles limit 1;
   if probe_user is null then
-    raise exception 'no profiles exist — these assertions would be vacuous';
+    raise notice
+      'org_delete: no profiles yet (fresh database) — skipping the behavioural assertions; the structural ones below still run, and packages/db/src/org-delete.test.ts covers the behaviour after seeding';
+    probe_skipped := true;
   end if;
 
+  if not probe_skipped then
   begin
     insert into public.orgs (name, slug) values ('Assertion Probe', 'assert-probe-'||gen_random_uuid())
       returning id into probe_org;
@@ -310,14 +333,15 @@ begin
   exception when others then
     if sqlerrm <> 'ROLLBACK_PROBE' then raise; end if;
   end;
+  end if;
 
-  if not org_deleted then
+  if not probe_skipped and not org_deleted then
     raise exception 'an org with a sole active owner still cannot be deleted — the escape did not take';
   end if;
-  if not seat_blocked then
+  if not probe_skipped and not seat_blocked then
     raise exception 'the admin floor no longer blocks deleting the sole owner seat — the escape is too broad';
   end if;
-  if not demote_blocked then
+  if not probe_skipped and not demote_blocked then
     raise exception 'the admin floor no longer blocks demoting the sole owner';
   end if;
 
