@@ -907,6 +907,18 @@ Everything below is open but unranked:
   EXISTING projects automatically — do not assume it self-resolves; **after that date just
   re-run `scripts/acl-audit.ts` and read its `[default privileges]` block rather than
   reasoning about it.**
+  **⚠ A MIGRATION MUST MEET AN EMPTY DATABASE BEFORE IT IS PUSHED (learned the hard way
+  2026-09-28).** `20260928010000`'s assertion block raised when `public.profiles` was empty —
+  and migrations run against a FRESH database before any seed, so that is exactly CI's state.
+  `supabase start` failed, **the pipeline died before a single test on four consecutive
+  commits, including a different session's**, and this session reported clean state throughout
+  because nobody read CI. It had been verified only against a SEEDED database. **`supabase db
+  reset` locally, or read the CI run, before calling a migration done** — and note the repair
+  cost is permanent: editing an already-pushed migration trips the append-only guard (docs/03
+  #28) and a later migration cannot help, because the failing one runs first.
+  **RED CI IS SHARED STATE.** `supabase start` is upstream of everything, so one session's bad
+  migration silently blocks every other session's deploys. In this repo checking CI is not
+  self-interest, it is how you find out whether you broke someone else.
   **⚠⚠ THREE MIGRATIONS ARE PENDING ON PROD AND `migrate:prod` APPLIES ALL OF THEM — THERE IS
   NO WAY TO PUSH ONE (measured with `--dry-run`, 2026-09-28):**
   1. `20260925010000_trigger_fn_execute_completes_revoke.sql` — **deliberately held** (below).

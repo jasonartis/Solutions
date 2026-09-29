@@ -41,6 +41,32 @@ decision log, docs/03 conventions, docs/12 safeguards) — this is the chronolog
   classroom (real rows) — none of which a hardcoded page could get right. Verified in a real
   browser, not just by assertions. Test floors raised to e2e 53 / rls 243, which also locks
   in the 6 rank-mapping tests that were above the floor but never recorded.
+- **2026-09-28, LATER (⚠ THE ORG-DELETE MIGRATION BROKE CI FOR EVERY SESSION, AND THE MISS IS
+  MORE INSTRUCTIVE THAN THE BUG).** Its assertion block raised `no profiles exist — these
+  assertions would be vacuous` when `public.profiles` was empty. **Migrations run against a
+  FRESH database before any seed**, so that is precisely the state `supabase start` is in on
+  every CI run: the migration failed, `supabase start` failed, and the pipeline died **before a
+  single test**, on four consecutive commits — including the other session's, which were not
+  remotely involved. Fixed: the behavioural probes SKIP with a notice when there is no user to
+  probe with, and still run on prod and on a seeded local. Verified BOTH ways this time —
+  against an emptied `profiles` and against the seeded one.
+  **THE LESSON IS NOT "handle the empty case".** This file was verified only against a SEEDED
+  database: applied to a seeded local, and probed inside transactions on seeded data. **A
+  migration's real first audience is an EMPTY database**, and nothing in the whole slice ever
+  put it in front of one. Local was deliberately not reset (a concurrent session was using it),
+  which was the right call — and the consequence, that fresh-replay coverage now lived only in
+  CI, was WRITTEN DOWN IN THIS JOURNAL and then never acted on. **Writing down a gap is not
+  closing it, and "CI will catch it" is only true if somebody reads CI.** Four red runs sat
+  there for hours while the session reported clean state.
+  **A SECOND, SHARPER POINT: red CI is shared.** One session's broken migration blocks every
+  other session's deploys, silently, because `supabase start` is upstream of everything. In a
+  repo where two sessions share a working tree, **checking CI is not a courtesy to yourself, it
+  is the only way to know you have not broken someone else.**
+  **AND THE COST OF THE FIX IS PERMANENT:** editing an already-pushed migration trips CI's
+  append-only guard (docs/03 #28), and there is no alternative — a later migration cannot help,
+  because the failing one runs first on a fresh database. So the repair necessarily spends one
+  deliberately-red run. That is the real price of pushing a migration before it has met an empty
+  database, and it is worth more than the bug it fixed.
 - **2026-09-28 (ORG DELETION — the console gap from docs/18 item 8, plus an editable address.
   Opus, migration `20260928010000`, IN THE REPO, NOT ON PROD).** Four adversarial reviews
   across two rounds, and **every round changed the design**, which is the story worth keeping.
