@@ -228,10 +228,63 @@ like everything else in this doc.
    rows use the old value, but it is schema, so it waits on the Opus switch like the rest of
    this brief. Display label in any future UI: "Conversation Moderator."
 
-## 4b. BUILT 2026-09-25 — the rank-mapping half (`20260925030000`)
+## 4b. SHIPPED — the rank-mapping half (`20260925030000`)
 
-**IN THE REPO, NOT ON PRODUCTION.** `migrate:prod` has NOT run. Per the 2026-09-11
-correction, nothing here is "SHIPPED" until it has, and until a prod verification passes.
+**ON PRODUCTION AND PROD-VERIFIED 2026-09-29.** Backup taken
+(`backups/2026-09-29T05-26-36`, 4.2 MB), then `migrate:prod` applied three pending
+migrations together (there is no flag to apply one — see the deploy note below), then
+verified. **The behavioural proof, read live from prod through the pooler:**
+
+```
+matchmaking/admin = 3        synagogue-schedules/maker = 1     visual-messaging/admin = 3
+matchmaking/matchmaker = 1   synagogue-schedules/viewer = 0    visual-messaging/moderator = 1
+matchmaking/single = 0                                         visual-messaging/member = 0
+CONTROL, already-mapped and unmoved: classroom/professor = 2, nail-salon/manager = 2,
+                                     speed-dating/organizer = 2
+CONTROL, reads real data: 30 active org_members
+```
+
+**Prod data: 10 real grants across the three modules** (matchmaking admin 1 / matchmaker 1 /
+single 4, synagogue maker 1, visual-messaging admin 1 / member 2). The single widening reaches
+exactly two of them — the two `admin` grants, which now pass `module_has_manager_grant`.
+**Nobody lost anything**, which is structural rather than lucky: every comparison that could
+have revoked was `0 > 0` before.
+
+**`prod-verify-migration.ts` reports ONE FAILURE on this migration, and it is a
+FALSE POSITIVE that should not be "fixed".** It reads:
+
+```
+FAIL module_position_rank(module_key text, role text)
+     body=match  INVOKER  NO-search_path  exec: anon=no authenticated=yes service_role=yes
+```
+
+Everything that matters passes — the deployed body is byte-identical to the migration, and
+`anon` holds no EXECUTE. What it objects to is the function being INVOKER without a pinned
+`search_path`, because the script hard-fails on `!prosecdef || !sp` for every function without
+exception (`scripts/prod-verify-migration.ts:181-186`). **That rule cannot be satisfied by
+this function without making it worse.** It has been `language sql immutable` with no definer
+and no pinned path since its original definition
+(`20260720010000_module_grants_scope.sql:172-176`); this migration preserved that shape
+exactly, which is precisely why the body matches. It reads no tables, and its only internal
+call is schema-qualified (`public.module_position_rank(role)`), so `search_path` cannot
+redirect it. Marking it `security definer` would hand a pure lookup an elevation it has no use
+for. **So the failure is the verifier over-generalising a rule that is correct for definers
+that touch tables and wrong for an immutable lookup — recorded here rather than silenced, and
+NOT a reason to change the function.** Refining the script to exempt this class is a
+reasonable follow-up and a founder call, since it loosens a shared check.
+
+**The other two migrations that rode along** (both CI-verified, applied in the same push):
+`20260925010000_trigger_fn_execute_completes_revoke` — 0 failures, though note its function
+check is VACUOUS by construction (it defines no functions; it is an ACL revoke on existing
+ones); and `20260928010000_org_delete` — 0 failures, 1 warning, the benign
+no-api-role-EXECUTE class that is correct for a trigger function.
+
+**Deploy facts worth keeping.** `migrate:prod` printed the long `pgdelta` certificate stack
+trace again and still succeeded — it is a catalog-cache PREVIEW step failing AFTER the applies,
+and `Finished supabase db push` is the real signal (a follow-up `--dry-run` then reported
+"Remote database is up to date"). Site after the deploy: `/privacy` 200, `/login` 200,
+`/console/positions` 307, with a missing route returning 404 as the control that makes the 307
+mean "exists and is gated" rather than "exists".
 
 **What landed.** One migration, `20260925030000_rank_map_three_modules.sql`: a single
 `create or replace` of `module_position_rank(module_key, role)` adding three `case` arms —
