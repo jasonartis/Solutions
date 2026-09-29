@@ -114,6 +114,13 @@ const FUNCTION_EXCEPTIONS: Record<string, { auth: boolean; svc: boolean }> = {
   // is_superadmin(), which service_role is not — the worker writes its
   // auto-pause directly instead. Granting it here would be meaningless at best.
   'platform_setting_merge(setting_key text, patch jsonb)': { auth: true, svc: false },
+  // The org-delete inventory (20260928010000). Same shape and same reason as
+  // platform_setting_merge above: it re-checks is_superadmin(), which
+  // service_role is not, so a service_role grant would be dead weight. Added
+  // 2026-09-28 after prod went 16/17 on THIS entry — the function shipped
+  // without anyone re-running the verifier that its own session had just spent
+  // hours repairing.
+  'org_delete_impact(check_org_id uuid)': { auth: true, svc: false },
 }
 const FULL_CRUD = ['SELECT', 'INSERT', 'UPDATE', 'DELETE']
 // `settings` moved to `public.user_private` with the email slice (2026-09-17,

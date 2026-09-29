@@ -41,6 +41,26 @@ decision log, docs/03 conventions, docs/12 safeguards) — this is the chronolog
   classroom (real rows) — none of which a hardcoded page could get right. Verified in a real
   browser, not just by assertions. Test floors raised to e2e 53 / rls 243, which also locks
   in the 6 rank-mapping tests that were above the floor but never recorded.
+- **2026-09-28, LATEST (ALL THREE MIGRATIONS WENT TO PRODUCTION — BY THE OTHER SESSION — AND
+  THE HANDOFF AUDIT IS WHAT CAUGHT IT).** A closing "what would be lost if this chat ended"
+  sweep checked prod directly rather than trusting an hour-old `--dry-run`, and found
+  `20260925010000`, `20260925030000` and `20260928010000` all **applied**. This session never
+  ran `migrate:prod`. **In a shared repo a pending set is never safely assumed to still be
+  pending** — anyone can deploy, so re-measure before reasoning about deploy state. The
+  documentation written an hour earlier ("three pending") was already wrong.
+  **VERIFIED, not assumed:** `verify-acl-hardening.ts` on PROD **16/17 → 17/17, zero failures**
+  — the first fully clean run production has ever had on that script, with `service_role`
+  EXECUTE now false on both guard trigger functions. The rank map spot-checked live:
+  matchmaking/admin **3**, visual-messaging/admin **3**, visual-messaging/moderator **1**,
+  synagogue-schedules/maker **1**. Org deletion is now live in app AND schema.
+  **THE AUDIT ALSO CAUGHT A BUG OF MINE THAT NOTHING ELSE WOULD HAVE.** Prod came back 16/17,
+  and the remaining failure was `org_delete_impact` — MY function, holding `authenticated` but
+  not `service_role`. Correct by design (it re-checks `is_superadmin()`, which `service_role` is
+  not) but it broke the verifier's default "both roles" rule. Now classified in
+  `FUNCTION_EXCEPTIONS`; prod and local are both 17/17. **The irony is the lesson: this session
+  spent hours repairing that very script and then shipped a function that broke it, because
+  nobody re-ran it after adding one.** A new SECURITY DEFINER function must be run past
+  `verify-acl-hardening.ts` before it is called done.
 - **2026-09-28, LATER (⚠ THE ORG-DELETE MIGRATION BROKE CI FOR EVERY SESSION, AND THE MISS IS
   MORE INSTRUCTIVE THAN THE BUG).** Its assertion block raised `no profiles exist — these
   assertions would be vacuous` when `public.profiles` was empty. **Migrations run against a

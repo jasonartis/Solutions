@@ -907,6 +907,24 @@ Everything below is open but unranked:
   EXISTING projects automatically — do not assume it self-resolves; **after that date just
   re-run `scripts/acl-audit.ts` and read its `[default privileges]` block rather than
   reasoning about it.**
+  **AVAILABLE, NOT DONE, AND IT NEEDS A FOUNDER OPT-IN RATHER THAN A SESSION JUST DOING IT:
+  wiring `verify-acl-hardening.ts` into CI.** It is **already green on local (17/17)**, so it
+  needs no migration and could go in today — the earlier claim that the trigger-revoke blocked
+  it was FALSE (CI runs a fresh local database, where that defect cannot exist). **The reason to
+  pause is friction, not risk:** its checks are hand-maintained allow-lists, so once it gates
+  CI, every new table or function makes CI red until someone classifies it on purpose. That is
+  the same deliberate-friction bargain `view-as-coverage.test.ts` already imposes and it is
+  defensible — but it taxes every future slice, so it is the founder's call, not a tidy-up.
+  (`table-grants-ratchet.test.ts` is already in CI and carries NO such cost, because its
+  invariants are absolute rather than listed.)
+  **⚠ LOCAL'S MIGRATION LEDGER DOES NOT MATCH PROD'S PENDING SET — RESET BEFORE REHEARSING THE
+  DEPLOY (2026-09-28).** Local has `20260928010000` applied AND recorded (done by hand so its
+  tests could run), while `20260925010000` and `20260925030000` are NOT applied there, and
+  `20260923010000` is missing from local's ledger entirely though its objects exist (a separate
+  session's artifact). **So local is NOT a faithful replay of what `migrate:prod` will do.**
+  Everything passes locally regardless, which is exactly what makes it misleading. `supabase db
+  reset` before treating a local run as a deploy rehearsal — and note that reset wipes a
+  database a concurrent session may be using, so check first.
   **⚠ A MIGRATION MUST MEET AN EMPTY DATABASE BEFORE IT IS PUSHED (learned the hard way
   2026-09-28).** `20260928010000`'s assertion block raised when `public.profiles` was empty —
   and migrations run against a FRESH database before any seed, so that is exactly CI's state.
@@ -919,31 +937,37 @@ Everything below is open but unranked:
   **RED CI IS SHARED STATE.** `supabase start` is upstream of everything, so one session's bad
   migration silently blocks every other session's deploys. In this repo checking CI is not
   self-interest, it is how you find out whether you broke someone else.
-  **⚠⚠ THREE MIGRATIONS ARE PENDING ON PROD AND `migrate:prod` APPLIES ALL OF THEM — THERE IS
-  NO WAY TO PUSH ONE (measured with `--dry-run`, 2026-09-28):**
-  1. `20260925010000_trigger_fn_execute_completes_revoke.sql` — **deliberately held** (below).
-  2. `20260925030000_rank_map_three_modules.sql` — **A DIFFERENT SESSION'S WORK, AND THAT
-     SESSION IS STILL MID-SLICE** (2026-09-28: uncommitted `console/positions/`,
-     `lib/positions-console.ts` and edits to `console/page.tsx` in the shared tree — a Positions
-     console that builds on these very ranks). **The `moderator` = 1 decision is SETTLED**
-     (founder relayed it 2026-09-28; rank 3 would hand a content-moderation role
-     grants-administration that `vm_can_moderate_org` never even reads). So the blocker is no
-     longer a decision — it is that **this migration belongs to a slice in progress and should
-     deploy with it, verified by its owner.**
-  3. `20260928010000_org_delete.sql` — org deletion, reviewed and browser-verified.
-  **SO DEPLOYING ANY OF THEM SHIPS ALL THREE.** This is the concrete form of the shared-repo
-  hazard this file warns about elsewhere: the danger is not a bad commit, it is a deploy command
-  with a wider blast radius than the work in front of you.
-  **HOW TO VERIFY #1 AND #3 ON PROD, whoever ends up running the push** — written here because
-  the person who deploys may not be the person who wrote them:
-  - **#1:** `pnpm exec tsx scripts/verify-acl-hardening.ts` must go **16/17 → 17/17**. NOT
-    `prod-verify-migration.ts`, which defines-no-functions here and passes it **vacuously**.
-  - **#3:** its own assertion block runs AT APPLY TIME and is the real check — it proves the
-    org-delete path, that the admin floor still refuses a direct seat delete and a demotion,
-    and that `org_delete_impact` is callable and gated. A clean `migrate:prod` therefore means
-    those passed on prod. Behavioural coverage of the ORPHANING refusal (deleting a sole-admin
-    user) is in `packages/db/src/org-delete.test.ts`, which runs against LOCAL only — it is
-    deliberately not probed on prod, because that would mean deleting a real user to prove it.
+  **✅ ALL THREE PENDING MIGRATIONS ARE NOW ON PRODUCTION AND VERIFIED (2026-09-28).** They were
+  applied by the other session, NOT by this one — which is itself the lesson: in a shared repo,
+  `migrate:prod` is a command anyone can run, so a pending set is never safely assumed to still
+  be pending. **Re-check with `pnpm migrate:prod --dry-run` before reasoning about deploy state.**
+  1. `20260925010000_trigger_fn_execute_completes_revoke.sql` — **APPLIED AND VERIFIED.**
+     `verify-acl-hardening.ts` on PROD went **16/17 → 17/17, zero failures** (2026-09-28) — the
+     first time production has been fully clean on that script. `service_role` EXECUTE is now
+     **false** on both `view_as_guard_session` and `vm_guard_last_conversation_admin`, confirmed
+     directly against `pg_proc`.
+  2. `20260925030000_rank_map_three_modules.sql` — **APPLIED AND SPOT-VERIFIED LIVE ON PROD:**
+     matchmaking/admin → **3**, visual-messaging/admin → **3**, visual-messaging/moderator →
+     **1**, synagogue-schedules/maker → **1**. Exactly the intended map.
+  3. `20260928010000_org_delete.sql` — **APPLIED.** Its own assertion block runs at apply time
+     and is the real check (it proves the org-delete path, that the admin floor still refuses a
+     direct seat delete and a demotion, and that `org_delete_impact` is callable and gated), so
+     a clean apply means those passed ON PROD. `org_delete_impact` confirmed present.
+     Behavioural coverage of the ORPHANING refusal (deleting a sole-admin user) lives in
+     `packages/db/src/org-delete.test.ts`, LOCAL only — deliberately never probed on prod,
+     because proving it means deleting a real user.
+  **SO ORG DELETION IS FULLY LIVE — app AND schema.** The app code deployed with `3497e33`.
+  **⚠ AND IT EXPOSED A REAL BUG IN MY OWN WORK, caught only by running the verifier afterwards:**
+  `org_delete_impact` holds `authenticated` but not `service_role`, which is correct by design
+  (it re-checks `is_superadmin()`, which `service_role` is not — same shape as
+  `platform_setting_merge`) but broke `verify-acl-hardening.ts`'s default "both roles" rule. It
+  is now classified in `FUNCTION_EXCEPTIONS`. **The lesson: a new SECURITY DEFINER function must
+  be run past that verifier before it is called done** — this session spent hours repairing that
+  script and then shipped a function that broke it.
+  **STILL TRUE AND WORTH KEEPING: the generic `prod-verify-migration.ts` is FUNCTION-ONLY.** It
+  was meaningful for #2 (a single `create or replace` of `module_position_rank`) and would have
+  passed #1 **vacuously** — #1 defines no functions. Pick the verifier to match the migration's
+  shape, never by habit.
   **ORG DELETION IS BUILT (2026-09-28, #3 above + `/console/orgs/<id>/delete`)**: it REFUSES
   when an org holds real module data (setup rows do not block), shows an itemised inventory,
   requires the address typed, and states that uploaded files are NOT covered. **The org address
@@ -1126,9 +1150,20 @@ rank 1 (org-admin grants makers); visual-messaging's per-conversation `moderator
 collides with a real, unrelated module-wide `moderator` grant — gets renamed to
 `conversation_moderator` (a migration, since it's schema, even though 0 live rows use the old
 value).
-**THE RANK-MAPPING HALF IS NOW BUILT — IN THE REPO, NOT ON PROD (2026-09-25, Opus,
-`20260925030000_rank_map_three_modules.sql`). `migrate:prod` HAS NOT RUN; do not call it
-shipped.** docs/15 slice 2 is finally complete, 6 of 6 modules. One `create or replace` of
+**THE RANK-MAPPING HALF IS SHIPPED, ON PRODUCTION AND PROD-VERIFIED (applied 2026-09-29 after
+a backup; `20260925030000_rank_map_three_modules.sql`).** Prod reads
+matchmaking admin 3/matchmaker 1/single 0, synagogue maker 1, visual-messaging admin
+3/moderator 1/member 0, with classroom/nail-salon/speed-dating unmoved as controls and 30
+active org_members proving the read is real. 10 live grants across the three modules; the
+widening reaches exactly the 2 `admin` grants; nothing narrowed.
+**⚠ `prod-verify-migration.ts` reports 1 FAILURE on it that is a FALSE POSITIVE — do not
+"fix" the function.** Body matches and anon holds nothing; the script hard-fails any function
+that is not `security definer` with a pinned `search_path` (`:181-186`), and this one has been
+`language sql immutable` with neither since `20260720010000:172-176`. It reads no tables and
+its only internal call is schema-qualified, so search_path cannot redirect it; making it
+definer would hand a pure lookup an elevation it has no use for. Refining the script is a
+founder call (it loosens a shared check). Full reasoning: docs/24 §4b.
+**Original entry, kept because the deploy hazard it names is real:** built 2026-09-25, Opus. docs/15 slice 2 is finally complete, 6 of 6 modules. One `create or replace` of
 `module_position_rank` — no table, column, policy or trigger. matchmaking admin 3/matchmaker 1,
 synagogue maker 1, visual-messaging admin 3/**moderator 1 (decided in-session, NOT by the
 founder — docs/24 §4b has the reasoning; say so if you want 3)**. **Exactly one widening:
