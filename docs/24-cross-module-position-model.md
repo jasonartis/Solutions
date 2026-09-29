@@ -443,7 +443,7 @@ Dana. That is the intended outcome, not a side effect to correct.
 
 | piece | state |
 |---|---|
-| Rank-mapping the three modules (§2) | **BUILT, in the repo — §4b.** Not on prod. |
+| Rank-mapping the three modules (§2) | **SHIPPED — ON PRODUCTION AND VERIFIED 2026-09-28.** `20260925030000` is in prod's `schema_migrations`, and `module_position_rank` was spot-checked live against prod: matchmaking/admin **3**, visual-messaging/admin **3**, visual-messaging/moderator **1**, synagogue-schedules/maker **1**. §4b. |
 | The `module_roles` census-leak fix (§4.5) | **UNBLOCKED, NOT BUILT.** See below. |
 | The roster fold (§3) + `conversation_moderator` rename (§4 item 4) | **NOT BUILT.** Its own slice. |
 

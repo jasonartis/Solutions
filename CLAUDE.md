@@ -974,29 +974,16 @@ Everything below is open but unranked:
   (slug) is also now EDITABLE**, reversing the 2026-07-16 "deliberately not editable" decision —
   reasoning recorded on `renameOrg`. Principle used throughout, worth reusing: **warn for
   reversible, refuse for irreversible.** Full story: journal 2026-09-28.
-  It removes `service_role` EXECUTE from two trigger functions (`view_as_guard_session`,
-  `vm_guard_last_conversation_admin`) that prod's default privileges granted at CREATE and
-  whose own migrations revoked only 3 of the 4 roles. **On prod the entire delta is:
-  service_role loses EXECUTE on two functions. Nothing else.**
-  **IT IS NOT NEEDED, AND THE ORIGINAL CASE FOR IT WAS WRONG (corrected 2026-09-25 when the
-  founder pushed back — good challenge, it does not survive scrutiny).** The grant is **not
-  exploitable at all**: a trigger function cannot be invoked directly whatever the ACL
-  (Postgres refuses a `returns trigger` call), and `service_role` already bypasses RLS, so it
-  confers nothing. **⚠ THE MIGRATION'S OWN HEADER CLAIMS IT IS "the last thing between
-  `verify-acl-hardening.ts` and running in CI" — THAT IS FALSE.** CI runs against a FRESH LOCAL
-  database, where the defect cannot exist (local's function default is `postgres=X`), and that
-  script is **already 17/17 on local today** — so it can be wired into CI right now with no
-  migration at all. The header cannot be fixed: the file is pushed and CI's append-only guard
-  blocks any edit or delete (docs/03 #28), so this note is the correction.
-  **What survives as a reason is thin**: `verify-acl-hardening.ts` run *against prod* stays red
-  at 16/17, and a permanently-red checker is one people stop reading.
-  **PLAN: hold it and bundle it with the post-2026-10-30 default-privileges work**, so one prod
-  push closes the whole ACL story instead of two. Verify it then with
-  `scripts/verify-acl-hardening.ts` going 16/17 → **17/17** on prod — NOT with
-  `prod-verify-migration.ts`, which defines no functions here and would pass it **vacuously**.
-  It was still drafted properly (two adversarial reviews, both found real defects, all fixed;
-  verified by RECREATING the prod defect in a rolled-back transaction since it is a **no-op on
-  local**). Full story: journal 2026-09-25.
+  **THE TRIGGER-REVOKE (#1) IS DONE AND ITS STORY IS WORTH ONE LINE:** it removed
+  `service_role` EXECUTE from two trigger functions that prod's default privileges granted at
+  CREATE, because their own migrations revoked only 3 of the 4 roles. It was **argued down to
+  "not needed" mid-session** (the grant is unexploitable — a `returns trigger` function cannot
+  be called whatever the ACL) and deliberately held; it then shipped anyway with the other two
+  and turned prod's ACL verifier fully green. **The lesson that outlives it: a migration's own
+  header can be wrong and CANNOT BE FIXED once pushed** (docs/03 #28) — that file still claims
+  it is "the last thing between `verify-acl-hardening.ts` and running in CI", which is FALSE,
+  since CI runs a fresh local database where the defect cannot exist. Corrections to a pushed
+  migration live here, not in the file. Full story: journal 2026-09-25.
   **⚠ BUT THE PRACTICAL RISK IS NOW GUARDED (2026-09-25, Opus):
   `packages/db/src/table-grants-ratchet.test.ts` runs IN CI** and fails on any table in
   `public` where anon holds anything or authenticated holds TRUNCATE/REFERENCES/TRIGGER/
@@ -1012,10 +999,9 @@ Everything below is open but unranked:
   grants** (prod grants anon the full set incl. TRUNCATE; buckets private,
   policies key on `auth.uid()`; a `public`-schema sweep doesn't touch it); ~9
   internal-only helpers keeping `authenticated` EXECUTE they don't need; 3 provably dead functions
-  locked not dropped; `service_role`'s retained TRUNCATE; **and one small NEW finding**: 2
-  trigger functions (`view_as_guard_session`, `vm_guard_last_conversation_admin`) hold
-  `service_role` EXECUTE their own migrations never revoked (practically inert, but a real
-  drift from docs/03 #27's convention — needs a new migration, can't edit the pushed ones).
+  locked not dropped; `service_role`'s retained TRUNCATE. ~~**and one small NEW finding**: 2 trigger functions
+  holding `service_role` EXECUTE~~ **— FIXED AND ON PROD 2026-09-28 via `20260925010000`;
+  `verify-acl-hardening.ts` is now 17/17 on production, its first fully clean run.**
   All of this is Opus-tier ACL/migration work per the model-choice rules — not started solo.
   Plus: generic scope-wrappers deriving
   org from the entity row; generalize coarse `<prefix>_can_manage(org)`; per-class storage
