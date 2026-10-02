@@ -344,7 +344,21 @@ unprompted (standing rule).**
 
 **Host state, 2026-08-12:** the machine was migrated to a new Windows profile
 (`C:\Users\yarmishj.AEI-LT-JYARMISH`) after the old one was lost. Claude's own state — memories,
-560 permission entries, the `log-session` skill — is fully migrated and verified. **If `pnpm` is not
+560 permission entries, the `log-session` skill — is fully migrated and verified.
+**⚠ "MIGRATED" MEANT COPIED, NOT MOVED — AND THAT SENTENCE ABOVE IS WHAT MADE THE FOLLOWING
+MISTAKE POSSIBLE (2026-10-02).** Every documented profile gotcha below has the shape *"X is
+MISSING, it lives in the other profile"* — they fail loudly. **This one is the INVERSE: X is
+PRESENT, and it is the WRONG ONE.** The old profile kept a complete, readable, plausible copy
+of the `log-session` skill, frozen at 2026-08-09 and six weeks behind. A session was pointed at
+it (the dead path was still an `additionalDirectories` entry), read it, concluded 11 things were
+missing, and nearly wrote 10 redundant edits into a file nothing loads — caught only because the
+founder asked "are you sure they are not there already?". **A stale copy does not error; it
+answers confidently and wrongly.** The stale skill folder was deleted 2026-10-02 (content
+preserved: `~/.claude/skills` is a git repo with remote `dbackup → D:\Jason_prompts\skills.git`,
+and the deleted state is commit `e592d73`, an ancestor of the live HEAD). **The general rule:
+when you find per-user state under `C:\Users\yarmishj` (no suffix), it is the DEAD profile —
+check `C:\Users\yarmishj.AEI-LT-JYARMISH` before trusting or editing anything you found there.**
+**If `pnpm` is not
 on PATH, that is the known profile issue and the gotchas below have the workaround; it is not a new
 fault.** Do not re-diagnose it as tool corruption. **Docker Desktop has several documented
 per-profile/host quirks on this machine (admin-group membership, wrong container mode, a crashed
