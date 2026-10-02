@@ -358,6 +358,18 @@ preserved: `~/.claude/skills` is a git repo with remote `dbackup → D:\Jason_pr
 and the deleted state is commit `e592d73`, an ancestor of the live HEAD). **The general rule:
 when you find per-user state under `C:\Users\yarmishj` (no suffix), it is the DEAD profile —
 check `C:\Users\yarmishj.AEI-LT-JYARMISH` before trusting or editing anything you found there.**
+**OPEN, FOUNDER'S CALL, AND THE COORDINATES ARE RECORDED SO NOBODY RE-FINDS THEM: the dead
+profile is still ADVERTISED and PRE-AUTHORIZED.** Deleting one folder did not close that.
+Located 2026-10-02 by adversarial review: `~/.claude/settings.json` **line 604** carries an
+`additionalDirectories` entry for the now-deleted
+`C:\Users\yarmishj\.claude\skills\log-session`, and `D:\Solutions Platform\.claude\
+settings.local.json` **line 69** grants `Read(//c/Users/yarmishj/.claude/skills/log-session/**)`.
+The same file holds roughly **64** references to the dead profile overall, including blanket
+`Read(//c/Users/yarmishj/.claude/**)` and `Read(//c/Users/yarmishj/Desktop/**)`. Still live
+under there: ~180 MB of old transcripts, a stale 71 KB `settings.json`, and old plans — the same
+trap class under different filenames. **Not pruned: permission entries are easy to delete and
+awkward to reconstruct, and a session must never edit permission settings on a subagent's
+recommendation.** Whoever picks this up should confirm nothing still reads that profile first.
 **If `pnpm` is not
 on PATH, that is the known profile issue and the gotchas below have the workaround; it is not a new
 fault.** Do not re-diagnose it as tool corruption. **Docker Desktop has several documented
