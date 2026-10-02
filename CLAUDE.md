@@ -1042,6 +1042,21 @@ Everything below is open but unranked:
   with real PR review) can't be verified without a real second collaborator, so it'd be
   unverified scaffolding, not a working switch. **Trigger to revisit: a second collaborator
   joining** — full reasoning in docs/12 item 10.
+  **⚠ THE HOOK GATES ON THE WORKING TREE, NOT ON WHAT YOU ARE PUSHING — AND WITH TWO SESSIONS
+  SHARING ONE TREE THAT MEANS ANOTHER SESSION'S HALF-WRITTEN CODE BLOCKS YOUR PUSH (hit
+  2026-10-02).** A documentation-only commit (one markdown file) was refused because
+  `modules/speed-dating/src/video/jaas.ts` — an untracked, in-progress file belonging to a
+  concurrent session — failed typecheck. Nothing in the pushed commit could affect typecheck;
+  the hook simply runs `pnpm typecheck` over whatever is on disk. **Diagnose before reacting:
+  `git log origin/master..HEAD` to rule out a non-fast-forward, then run the hook's two checks
+  by hand — if the failing file is not one you touched, this is what happened.**
+  **Do NOT reach for `--no-verify` on your own** (standing rule: skipping hooks needs the
+  founder to ask for it explicitly), and do NOT stash, revert or "fix" the other session's
+  file to clear your own push — that is their live work. The honest options are: wait for them
+  to finish, or ask the founder. **This is a genuine design limitation of a hook written for a
+  solo repo that is not, in practice, solo** — worth revisiting alongside docs/12 item 10's
+  "second collaborator" trigger, since a second AI session turns out to create the same problem
+  a second human would.
 - **THE PRIVACY-POLICY LINE — ⚠ NOT OUTSTANDING AFTER ALL; SEE THE 2026-09-22 CORRECTION BELOW
   (2026-08-09, ESCALATED 2026-08-21, DISCHARGED/RE-MEASURED 2026-09-22).** docs/12 item 6 said this wording was a PRECONDITION of shipping —
   phase 1 shipped anyway on 2026-08-09, and **phase 2 also shipped 2026-08-21 without it**, despite
