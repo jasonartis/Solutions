@@ -73,9 +73,14 @@ Last on purpose: leans on module 1's primitives (questions, matches, orgs) plus 
 
 **Status (2026-07-09): event-runnable minus video.** Full UI (events, registration, lifecycle controls) plus the **real rotation engine + automatic round-clock worker** (two-sided/single-pool rotation, byes, block avoidance, no-repeat enforcement — 7 unit tests, 7 live clock assertions) replaced the manual organizer stand-in. Mutual-interest reveal honors privacy end-to-end (proven by e2e). Notes/reports/blocks UI shipped 2026-07-11. **Lobby/live-round UI shipped 2026-07-16** (live "who you're paired with now" + countdown, computed from `ends_at` since the schema's `'break'` state is never actually written — see module spec for a real bug caught and fixed in the manual round-advance action along the way). **Two-sided capacity + waitlist shipped 2026-07-16** (also revealed pool sides were never actually used anywhere in the app until this pass; capacity/labels + side selection + roster/promotion UI + the capacity-count enforcement via the `sd_side_registered_count` definer RPC — the count had an RLS-invisible-read bug caught by e2e, fixed in an Opus session `20260716020000`, see module spec). Remaining **(updated 2026-09-04)**: ~~Jitsi video (needs the VPS decision)~~ **the
 provider interface, JWT join-token issuance, and the click-to-join UI are all
-SHIPPED and CI-verified** — what's left is standing up a real Jitsi server
-(local `docker-jitsi-meet` or the deployed VPS) to prove the `lib-jitsi-meet`
-connection sequence itself, which is infrastructure, not code; ~~resume-review
+SHIPPED and CI-verified** — what's left is proving the `lib-jitsi-meet`
+connection sequence against a real server. **⚠ UPDATED 2026-10-02: this is no
+longer a VPS.** The founder chose **JaaS** (8x8-hosted, free to 25 monthly
+active users) over self-hosting, and its provider is built — so what remains is
+an ACCOUNT plus one real two-browser call, not infrastructure to stand up. Do
+NOT stand up `docker-jitsi-meet` to verify this: it speaks a different
+transport (BOSH vs JaaS's XMPP websocket) and a different MUC host, so it would
+prove a code path we do not ship. docs/02 "Video" has the priced comparison; ~~resume-review
 profiles beyond the profile card~~ **DONE** (the card now shows live, while
 paired, not only after the encounter — a true pre-round "up next" preview
 remains unbuilt, a real structural gap in the rotation engine, not this

@@ -571,6 +571,45 @@ P2P is on by default for two participants. Harmless if ignored. **Do not cite do
 mode for 1:1 calls barely loads the server" as measured until a real call has been inspected** —
 that claim is the basis of the whole bandwidth argument and has never been observed.
 
-**Still not built, unchanged by this slice:** the audience/mentor observer video surface
-(blocked on docs/24 §4's seat-becomes-the-grant decision — decided, not built), and the
-pre-round "up next" profile preview (needs the orchestrator to precompute a future round).
+### STILL NOT BUILT — four client-side gaps, none needing an account
+
+These were identified during this slice and deliberately not built; they are the natural next
+session (**Sonnet tier — no migration, no RLS, no DB**) and none of them needs a JaaS account,
+because they are all testable by the same reading discipline that found the nine bugs.
+
+1. **TOKEN EXPIRY CAN KILL A LONG ROUND MID-CALL — the one worth doing first.** The join-token
+   TTL is hardcoded at 900s (`DEFAULT_TTL_SECONDS` in both `jaas.ts` and `jitsi.ts`), and
+   `tokenTtlSeconds` is **never passed from `config.ts`** — verified, not assumed. Meanwhile
+   `sd_events.round_duration_seconds` (`20260709050000:135`) defaults to 420 but its CHECK is
+   only `> 0`, so **an organizer can legitimately configure a 20-minute round and the token
+   will expire while two people are talking.** The fix is to derive the TTL from the round
+   rather than hardcode it, with a floor and a ceiling (a token must not outlive its round by
+   much — it is the only thing standing between a slug and a stranger).
+2. **No mute or camera-off control.** The UI has Join and Leave and nothing else. (The `muted`
+   attribute on the LOCAL preview is echo-cancellation, not a control — do not mistake it for
+   one.) For an event where two strangers meet, this is a real product gap, not polish.
+3. **No reconnection handling.** Zero `CONNECTION_INTERRUPTED` / `CONNECTION_RESTORED`
+   listeners. The 20s timeouts added this slice make the component fail FAST and cleanly, which
+   is the opposite of recovering from a blip mid-round.
+4. **No device selection** (which camera / which microphone).
+
+### Also still not built, and BLOCKED rather than merely pending
+
+- The **audience/mentor observer video surface** — blocked on docs/24 §4's
+  seat-becomes-the-grant decision (decided, not built).
+- The **pre-round "up next" profile preview** — needs the orchestrator to precompute a future
+  round, a real structural change.
+
+### Two research facts from this slice, recorded so they are not re-derived
+
+- **`lib-jitsi-meet` IS fully supported on JaaS** — this is the fact the whole provider choice
+  rests on, and it was checked, not assumed: 8x8 publish `jitsi/ljm-getting-started` precisely
+  for LJM-against-JaaS. Had JaaS been IFrame-only, our custom chrome (timer, notepad, partner
+  list wrapped around a bare video surface) would have needed a rewrite and the decision would
+  have gone the other way.
+- **There is a newer, higher-level `JitsiMeetJS.joinConference(room, appId, jwt, options)`
+  helper** that collapses our hand-rolled connect → initJitsiConference → join sequence, and
+  8x8's own sample uses it. **Deliberately NOT adopted:** its availability across LJM versions
+  is undocumented, self-hosted and JaaS would have to agree on it, and it hides exactly the
+  connection config that `connectionOptions()` exists to vary per provider. Worth revisiting
+  only AFTER a real call has proven the explicit path works — not before.

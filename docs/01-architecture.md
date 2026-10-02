@@ -116,7 +116,7 @@ Everything runs locally with full cloud parity:
 | Next.js app | `pnpm dev` | Vercel (Phase A/B) — see docs/05 |
 | Worker | `pnpm dev` (runs alongside) | VPS (from Phase B) |
 | Email | Mailpit container (catches all outbound mail, web UI) | Resend/SES |
-| Jitsi | `jitsi/docker-jitsi-meet` compose (only when working on M6) | Jitsi VPS |
+| Video (M6) | JaaS free tier is the default dev target too; `jitsi/docker-jitsi-meet` ONLY if self-hosting | **JaaS (8x8-hosted)** since 2026-10-02 — not a VPS; see docs/02 "Video" |
 | Secrets | `.env.local` (git-ignored) | Host env vars / GitHub secrets |
 
 Workflow: `supabase start` → `pnpm dev` → develop against local DB with seeded test orgs/users → `supabase db diff` generates migrations → commit → CI applies migrations to cloud and deploys. **Migrations are forward-only and always exercised locally first.** Seed scripts (`packages/db/seed`) create a demo org per module with realistic test data — this is also the AI-development substrate (an agent can always boot a working local world).
