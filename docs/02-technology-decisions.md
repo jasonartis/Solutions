@@ -59,12 +59,55 @@ Every choice evaluated against: least cost, least maintenance, most expandable, 
 - Supabase Realtime (part of the stack, works locally) for DB-change UI updates and notification badges.
 - Socket.IO in the worker for module 6's event orchestration — server-authoritative clock and room state don't map to DB-change streams. MIT, boring, well-documented.
 
-## Video: Jitsi (self-hosted), behind a provider interface
+## Video: Jitsi — **JaaS (8x8-hosted) by default since 2026-10-02**, self-hosting still supported
 
-- Decided 2026-07-06 (module 6 discussion). Open-source, self-hostable on one modest VPS (~$20–40/mo); P2P mode for 1:1 calls barely touches the server; embed via IFrame API or `lib-jitsi-meet` (we want lib-level control to wrap our own timer/notepad/rotation chrome around the video surface).
-- **Provider interface** (`create room / issue join token / close room`) so swapping to managed (Daily, LiveKit, JaaS = 8x8-hosted Jitsi) is config, not rewrite.
-- Ops honesty: self-hosting means TURN servers for restrictive networks, and upgrades. JaaS is the managed middle option if ops chafe.
-- Local: `jitsi/docker-jitsi-meet` compose.
+- Decided 2026-07-06 (module 6 discussion): Jitsi, open-source, embedded via `lib-jitsi-meet`
+  rather than the IFrame API — we want lib-level control to wrap our own timer/notepad/rotation
+  chrome around a bare video surface.
+- **Provider interface** (`create room / issue join token / connection options / close room`) so
+  swapping providers is cheap. `connection options` was added 2026-10-02: self-hosted and JaaS
+  differ in transport, MUC host and script origin, and the browser must not know which it is
+  talking to.
+- **DEFAULT CHANGED 2026-10-02 to JaaS** (founder decision, after the hosting comparison below).
+  Self-hosted is one env var away (`SPEED_DATING_VIDEO_PROVIDER=jitsi`) and becomes the cheaper
+  option past ~32 monthly active users. Local: `jitsi/docker-jitsi-meet` compose if self-hosting.
+
+### The hosting comparison, measured 2026-10-02 — do not re-derive
+
+**The software is free either way.** Jitsi, `lib-jitsi-meet` and coturn are open source with no
+per-user fee. What costs money is the machine, and this comparison is about that alone.
+
+| | JaaS (8x8-hosted) | Self-hosted |
+|---|---|---|
+| Price | **25 MAU/month free**, then **$0.99 per extra MAU** (no cut-off) | Hetzner **EU CX23 $6.49/mo**, **US entry CPX11 $20.49/mo** |
+| Ops | none | TLS renewal, OS patching, Jitsi upgrades, coturn. 8x8 state plainly there is **no support or SLA** for self-hosted |
+| TURN | included | our own coturn |
+
+- **MAU** = a participant who joined at least one meeting *with at least one other participant*
+  in the billing cycle. It counts **per DEVICE** (laptop + phone = 2) and is tracked by a
+  localStorage identifier, so cleared storage or incognito re-counts. Treat any estimate as a
+  floor. Repeat attendance inside one cycle still counts once.
+- The spec's default event is **7v7 = 14 people**, so a monthly event is **free**.
+- **Crossover: ~32 MAU/month** vs the EU box, **~46** vs the US box. Below that JaaS is both
+  cheaper and zero-ops.
+- **⚠ Hetzner's 15 June 2026 price adjustment is why the old "~$20–40/mo VPS" line was stale:**
+  the cheap CX/CAX plans are **Germany/Finland only**, and US (Ashburn/Hillsboro) entry went
+  $6.99 → $20.49. An EU box still works for US daters *if* P2P holds (media never touches the
+  server); it is the TURN fallback that would relay through Germany and add real latency.
+- **`meet.jit.si` was considered and rejected**: we cannot sign JWTs for it, so room security
+  would drop from "unguessable slug **+** JWT gate" to the slug alone. Not acceptable for an
+  event carrying an explicit safety promise.
+
+### What a JaaS swap actually costs in code (so "config, not rewrite" stays honest)
+
+It is a small code change, not zero — a second provider file, ~130 lines, which is exactly what
+the interface exists to contain. Forced by 8x8's own docs: **RS256 with a `kid`** instead of
+HS256 with a shared secret; `aud`/`iss` are the **hardcoded strings `jitsi`/`chat`** rather than
+our identifiers; `sub` is the AppID; `nbf` is required; and the XMPP transport is a websocket
+carrying the AppID and room rather than BOSH.
+
+- Ops honesty, unchanged for whichever path: self-hosting means TURN servers for restrictive
+  networks, and upgrades.
 
 ## Rendering/exports: Playwright (headless Chromium) + sharp
 

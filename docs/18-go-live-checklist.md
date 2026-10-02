@@ -349,11 +349,21 @@ None of these blocks a first client. Recorded so their absence reads as a decisi
   `service_role`'s retained TRUNCATE, the per-position × per-table visibility map. One has
   an external clock worth tracking: **Supabase removes the legacy auto-expose 2026-10-30**,
   which is when the `ALTER DEFAULT PRIVILEGES` drift item stops being theoretical.
-- **Speed-dating video (Jitsi)** — **updated 2026-09-04**: the provider interface, JWT
-  join-token issuance, and the click-to-join UI are all shipped and CI-verified (module-6
-  spec's dated entries); what remains is a real Jitsi server (local `docker-jitsi-meet` or
-  the deployed VPS) to prove the actual WebRTC connection, plus the VPS deploy decision
-  itself — still the largest single piece of INFRASTRUCTURE the platform is missing, just
-  no longer unbuilt code. Still irrelevant unless the first client is a speed-dating client.
+- **Speed-dating video** — **updated 2026-10-02: THE VPS DECISION IS GONE, and so is the
+  cost.** The founder chose **JaaS (8x8-hosted Jitsi)** over self-hosting, and the provider is
+  built (`modules/speed-dating/src/video/jaas.ts`, 42/42 module tests). Its **free tier is 25
+  monthly active users** against a default 7v7 event of 14 people, so a monthly event costs
+  **$0** and needs no VPS, no TLS, no coturn and no patching. Full priced comparison: docs/02
+  "Video". Self-hosting remains one env var away and is cheaper past ~32 MAU/month.
+  **What is left is no longer infrastructure the platform must BUILD — it is an ACCOUNT:**
+  create a JaaS app, generate an RS256 keypair, and set `JAAS_APP_ID` / `JAAS_API_KEY_ID` /
+  `JAAS_PRIVATE_KEY` (three Vercel env vars, same shape as the Sentry DSN). Same posture as the
+  myzmanim credential: the code is finished and inert until an account exists.
+  **Then, and only then, the one thing nothing in this repo can prove: a real two-browser call.**
+  The `lib-jitsi-meet` connection sequence has still never executed anywhere — reading it on
+  2026-10-02 found three bugs that would each have fired on the first call (silent audio; remote
+  media dropped for whichever dater joined second; an unrecoverable retry), all fixed, none
+  reachable by any test we can run. Still irrelevant unless the first client is a speed-dating
+  client.
 - **Modules 7 and 8** — both marked DRAFT / NOT SCOPED; module 8 needs a file-level
   investigation of the legacy app before it can even be estimated.

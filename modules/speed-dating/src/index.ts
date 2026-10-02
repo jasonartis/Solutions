@@ -1,5 +1,6 @@
 export * from './rotation'
 export * from './video/provider'
 export * from './video/jitsi'
+export * from './video/jaas'
 export * from './video/config'
 export * from './video/authorize'

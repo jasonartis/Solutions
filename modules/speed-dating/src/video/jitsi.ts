@@ -1,6 +1,12 @@
 import { randomBytes } from 'node:crypto'
 import { SignJWT } from 'jose'
-import type { IssueTokenParams, IssuedToken, VideoProvider, VideoRoomRef } from './provider'
+import type {
+  IssueTokenParams,
+  IssuedToken,
+  VideoConnectionOptions,
+  VideoProvider,
+  VideoRoomRef,
+} from './provider'
 
 export type JitsiConfig = {
   domain: string
@@ -62,6 +68,19 @@ export function createJitsiProvider(config: JitsiConfig): VideoProvider {
         .setExpirationTime(exp)
         .sign(secretKey)
       return { token, expiresAt: new Date(exp * 1000) }
+    },
+
+    // Self-hosted Jitsi serves lib-jitsi-meet from its own domain and speaks
+    // BOSH at /http-bind — the values video-room.tsx used to hardcode before
+    // the JaaS provider existed, preserved here verbatim so this path is
+    // unchanged by that refactor. No `focus` entry: on a self-hosted install
+    // the component's default focus discovery is correct.
+    connectionOptions(): VideoConnectionOptions {
+      return {
+        scriptHost: config.domain,
+        hosts: { domain: config.domain, muc: `conference.${config.domain}` },
+        serviceUrl: `https://${config.domain}/http-bind`,
+      }
     },
 
     // Self-hosted Jitsi has no persistent room object to tear down — a room

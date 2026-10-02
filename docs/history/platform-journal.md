@@ -4,6 +4,73 @@ The running, dated build journal that used to live in `CLAUDE.md`'s "## Current 
 section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every session)
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
+- **2026-10-02 (MODULE 6 VIDEO: JaaS ADOPTED, AND NINE LATENT BUGS FOUND BY READING. Opus,
+  no migration, no DB touched).** Started as a question — *"have we built the module that
+  required jitsi yet?"* — and the honest answer was "the code exists and has never once run."
+  **It still has not run; what changed is that it is now much likelier to work when it does,
+  and the remaining blocker is an ACCOUNT rather than a VPS.**
+  **(1) THE COST QUESTION WAS A REAL CORRECTION, not a detail.** The founder asked *"I thought
+  Jitsi is free, are you saying it will cost?"* — and he was right to. The software is free in
+  every scenario; only the machine costs money, and I had conflated the two. Researching it
+  then found the repo's own figure was stale: **Hetzner's 2026-06-15 price adjustment made the
+  cheap CX/CAX plans Germany/Finland-only and moved US entry from $6.99 to $20.49**, so docs/05's
+  "+$20–40/mo Jitsi VPS" was wrong in both directions. **JaaS's free tier is 25 monthly active
+  users**; the spec's default event is 7v7 = 14 people and a repeat attendee inside one billing
+  cycle counts once, so **a monthly event is $0 with no VPS, no TLS, no coturn, no patching.**
+  Crossover to a self-hosted box is ~32 MAU/month. Founder chose JaaS. Full priced table:
+  docs/02 "Video" — do not re-derive it.
+  **(2) `meet.jit.si` was considered and rejected on security, not cost:** we cannot sign JWTs
+  for it, so room protection would fall from "unguessable slug **+** JWT gate" to the slug
+  alone — unacceptable for an event carrying an explicit safety promise.
+  **(3) BUILT: `src/video/jaas.ts`, a SECOND provider beside `jitsi.ts`.** Everything that
+  differs is forced by 8x8's published contract and is asserted as a LITERAL so a "tidying"
+  refactor fails locally: RS256 with a `kid`; `aud`/`iss` are the hardcoded strings `jitsi` and
+  `chat`, **not our identifiers**; `sub` is the AppID; `nbf` required. `connectionOptions()` is
+  new on the provider interface — the client had the self-hosted BOSH/MUC values hardcoded, and
+  the browser must never learn which provider it is talking to. **`transcription` and
+  `outbound-call` are refused** alongside recording: "no recording, ever" is a promise about
+  durable artefacts, and a transcript is one.
+  **(4) NINE BUGS, ALL FOUND BY READING — three while writing, SIX by two narrow adversarial
+  review agents. Two of the nine were in work done this same session, one a hard blocker.**
+  That is the argument for the review step, not a footnote to it. Full list: the module-6 spec's
+  2026-10-02 entry. The two worth carrying:
+  **(a) THE BLOCKER — `JAAS_PRIVATE_KEY`'s newline unescaping was a NO-OP and its test was
+  VACUOUS.** `replace(/\n/g, '\n')` is one backslash short and replaces real newlines with
+  themselves; a `.env` file and Vercel both store a PEM escaped, so **every join in production
+  would have failed.** The test asserted `rejects.toThrow()` against a stub PEM — true before
+  the feature, true after, true if deleted. It did not miss the bug, **it reported the bug's
+  absence.** → **docs/03's vacuity section, new worked case:** for a transformation, assert the
+  SUCCESS it enables, never a failure it survives; and an un-matched `rejects.toThrow()` accepts
+  every cause including yours. Also: **a backslash crossing a shell, a heredoc and a language
+  literal has three chances to be eaten and all three fail silently** — this exact bug was
+  re-introduced twice more in the session by a heredoc and a `python -c`. Verify the written
+  BYTES (`grep | cat -A`), never the source you meant to write.
+  **(b) MY OWN FIRST FIX WAS STILL WRONG, and only review caught it.** Remote media was dropped
+  for whichever dater joined second (`TRACK_ADDED` fires *during* `room.join()`, while the media
+  elements only rendered at `in_call`). I "fixed" it by mounting from `joining` — **still a
+  race**, because `setStatus` inside `startTransition` is a DEFERRED commit and is not ordered
+  against the join at all. Now mounted unconditionally: the race is removed, not narrowed.
+  **(5) ONE REVIEW FINDING REJECTED, with evidence, so it is not "fixed" later.** Review argued
+  `context.user.moderator` should be the string `"true"`/`"false"` (8x8's own PHP sample emits
+  strings). **The real Prosody plugins compare `== "true"` AND `== true` explicitly** — either
+  type grants correctly. The part actually worth knowing: **neither is a Lua TRUTHINESS check**,
+  and in Lua the string `"false"` is truthy — so had it been one, "fixing" this would have
+  granted every dater in-call moderator rights. It stays a boolean, reasoning in the code.
+  **(6) VERIFICATION: 43/43 module tests (was 21 + rotation), typecheck 9/9, web build clean.**
+  Teeth proven twice — changing `aud` and deleting a feature failed 4 tests; reverting the
+  newline fix failed exactly 1, the right one, with the multi-line control still green.
+  A local `turbo run build` exiting **134** is the documented host OOM; `NODE_OPTIONS=
+  --max-old-space-size=6144` with a direct `pnpm run build` in `apps/web` completes clean.
+  **(7) WHAT IS STILL NOT PROVEN, and it is the same thing as before: the `lib-jitsi-meet`
+  sequence against a real server.** No provider is configured anywhere — `JAAS_*` and `JITSI_*`
+  are unset on this machine, in CI and on prod. **All nine bugs were found by reading precisely
+  because no unit test can observe a `<video>` element with no sound coming out of it.** The
+  next step is a JaaS account (3 Vercel env vars, same shape as the Sentry DSN) and one real
+  two-browser call — **and it is reasonable to expect that call to find more.**
+  `p2p: { enabled: true }` is passed and is UNVERIFIED; do not cite docs/02's "P2P barely loads
+  the server" as measured until a real call has been inspected.
+  Docs updated: docs/02 (the priced comparison), docs/05 (phase D + the local row), docs/18
+  (the item is an account now, not infrastructure), docs/03 (the vacuity case), module-6 spec.
 - **2026-09-28 (THE POSITIONS CONSOLE, AND A TEST THAT POISONED ANOTHER ONE. Opus, no
   migration).** Two things, both founder-directed after the rank-mapping slice.
   **(1) A CI FAILURE ON A DOCS-ONLY COMMIT TURNED OUT TO BE TEST POLLUTION, not a flake.**

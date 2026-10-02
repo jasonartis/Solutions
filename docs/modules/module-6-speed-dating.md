@@ -430,3 +430,147 @@ build, seed, db tests, e2e including the corrected "Join video" assertion)
 passed on the first try after the fix. This closes out module 6's three
 remaining items for this session. What's left is named above and is
 infrastructure-gated (a real Jitsi server), not code-gated.
+
+---
+
+## 2026-10-02 — JaaS adopted as the default video provider; nine latent client bugs fixed
+
+**Founder decision, after a priced comparison (full table in docs/02 "Video" — do not
+re-derive): JaaS (8x8-hosted Jitsi) is the default, self-hosting stays one env var away.**
+The reasoning in one line: the free tier is 25 monthly active users, this module's own default
+event is 7v7 = 14 people, and a repeat attendee inside one billing cycle still counts once — so
+a monthly event costs nothing and needs no VPS, no TLS renewal, no coturn and no OS patching.
+Self-hosted becomes cheaper past ~32 MAU/month and is selected with
+`SPEED_DATING_VIDEO_PROVIDER=jitsi`.
+
+**The question that prompted it was "I thought Jitsi is free, are you saying it will cost?" —
+and the honest answer corrected a conflation worth keeping.** The software is free in every
+scenario; only the machine costs money. The old "~$20–40/mo Jitsi VPS" figure in docs/05 had
+also gone stale: **Hetzner's 2026-06-15 price adjustment made the cheap CX/CAX plans
+Germany/Finland only, and moved US entry from $6.99 to $20.49.**
+
+### What shipped
+
+- **`src/video/jaas.ts`** — a SECOND provider beside `jitsi.ts`, not a replacement. Everything
+  that differs is forced by 8x8's published JWT contract, and each is asserted by a test as a
+  LITERAL so a "tidying" refactor fails locally rather than in production: **RS256 with a `kid`
+  header** (not HS256 + shared secret); **`aud`/`iss` are the hardcoded strings `jitsi` and
+  `chat`**, not our identifiers; `sub` is the AppID; `nbf` is required, and is set 10s in the
+  past because our clock and 8x8's are not synchronised and a not-yet-valid token is
+  indistinguishable to a dater from a broken room.
+- **`context.features` refuses `transcription` and `outbound-call`** as well as recording and
+  livestreaming. JaaS exposes both and self-hosted does not. "No recording, ever" (Safety) is a
+  promise about there being no durable artefact of the conversation, and **a transcript is one.**
+- **`connectionOptions(roomRef)` is new on the provider interface.** The client had the
+  self-hosted BOSH/MUC values hardcoded; JaaS uses an XMPP websocket carrying the AppID and
+  room, a different MUC host and an explicit focus. The browser must never learn which provider
+  it is talking to — that is what makes docs/02's "swapping is config, not rewrite" true rather
+  than aspirational.
+- **The default is a real decision, not a search.** An env still carrying only `JITSI_*` now
+  fails loudly rather than quietly pointing at a server nobody meant to use — asserted by a test.
+
+### NINE BUGS, all found by READING — none reachable by any test that can run today
+
+Three were found writing the slice; **six more by two narrow adversarial review agents**, run
+per docs/03 #12. Every one would have fired on a real call, and this module has never made one.
+**Two of the nine were in work done THIS session, one of them a blocker** — which is the
+argument for the review step, not a footnote to it.
+
+**Found by review, and the most important thing in this entry:**
+
+1. **`JAAS_PRIVATE_KEY`'s newline unescaping was a NO-OP, and the test that covered it was
+   VACUOUS.** `rawKey.replace(/\n/g, '\n')` replaces real newlines with themselves — one
+   backslash away from the intended `/\\n/g`. A `.env` file and Vercel's dashboard both store a
+   PEM as escaped `\n`, so `importPKCS8` would have received a one-line key and **every single
+   join in production would have failed.** The test asserted `rejects.toThrow()` against a stub
+   PEM — which passes whether or not the conversion ran. **The vacuity rule (docs/03) in its
+   purest form: the test did not merely miss the bug, it reported the bug's absence.** Rewritten
+   against a REAL generated keypair, asserting a token is actually MINTED from the mangled form,
+   with a multi-line key as the control. The production code now uses `split`/`join` on a
+   constant built from `String.fromCharCode(92)`, so no escape sequence appears in the file at
+   all and the failure cannot recur silently.
+2. **`provider.issueToken()` was unguarded, so the above would also have been UNREADABLE.** Only
+   `getVideoProvider()` sat in a try/catch. Because JaaS parses its key lazily, a bad key throws
+   from `issueToken` — an uncaught Server Action exception, whose message Next REDACTS to a
+   digest in production. That is docs/03 #22, the exact lesson this module's own first CI run
+   taught, reintroduced. The gap existed because the self-hosted provider's HS256 signing cannot
+   fail, so nothing had ever thrown from that line. Its reason is deliberately GENERIC with the
+   detail logged server-side: it is the one path whose error could conceivably carry key
+   material.
+3. **Remote media was dropped for whichever dater joined SECOND, and the first fix for it was
+   still wrong.** The media elements rendered only when `status === 'in_call'`, set after
+   `room.join()` resolves — but `TRACK_ADDED` fires *during* the join when the partner is already
+   in the room. Mid-session this was "fixed" by mounting from `joining`; **review showed that is
+   still a race**, because `setStatus` runs inside `startTransition` and its commit is DEFERRED,
+   not ordered against the join at all. The elements are now mounted UNCONDITIONALLY — the race
+   is removed rather than narrowed. Separately, `remoteTracks.push` sat *after* the null-ref
+   guard, so a dropped track was invisible to `TRACK_REMOVED` and to teardown as well; it is
+   now recorded before the guard, always.
+4. **`room.addTrack()` returns a Promise and was never awaited** (the local TS shim wrongly typed
+   it `void`). A rejection published nothing: the partner would see a black tile with no error
+   anywhere but an unhandled rejection. Now awaited via `Promise.all`, before `join()`, which is
+   the order `ljm-getting-started` states explicitly.
+5. **Teardown's `try/catch` caught nothing.** `dispose`, `leave` and `disconnect` all return
+   Promises; a synchronous `catch` around an un-awaited promise swallows no rejection, so the
+   "already gone" comments were false comfort. All teardown now goes through one `settle()`
+   helper that absorbs both a sync throw and a rejection, and through a single `teardownCall()`
+   — three ad-hoc teardowns is how the camera came to stay on in three different ways.
+6. **Unmount mid-join orphaned the entire session.** `page.tsx` keys this component on the
+   pairing id, so a round advancing unmounts it *while joining*; the unmount's `leave()` saw a
+   null session and returned, and `join()` carried on against a dead component — camera light
+   on, MUC presence live, nothing left to stop it. Now a `cancelledRef` is checked after every
+   await and tears down on the spot.
+7. **Local tracks leaked on any failure after `createLocalTracks`** (they were block-scoped
+   inside the `try`, so the `catch` could not dispose them — camera stays on behind the error).
+8. **Both join awaits were unbounded**, so a dead token or unreachable host left the UI on
+   "Connecting…" forever with no way out but a reload — the Try-again button renders only in the
+   `error` state. Both are now raced against a 20s timeout.
+9. **"Try again" had no `disabled={isPending}`**, so two clicks ran `join()` concurrently and the
+   second session assignment orphaned the first connection and its camera.
+
+**Found while writing, before review:** the partner's audio was never attached at all (a
+`<video>` element plays only the track attached to it, and there was no `<audio>` element — the
+call would have been **silent**); `loadJitsiScript` cached a REJECTED promise forever, so "Try
+again" was structurally incapable of recovering from a failed library load; and no
+`TRACK_REMOVED` handling, so a partner who dropped left a frozen last frame reading as a live
+call.
+
+### One review finding REJECTED, with the evidence, so it is not "fixed" later
+
+Review argued `context.user.moderator` should be the STRING `"true"`/`"false"`, since 8x8's own
+PHP sample emits strings, and that the reserved `moderator: true` staff path would silently fail
+as a boolean. **Checked against the real Prosody plugins (`token_affiliation`,
+`token_owner_party`): both compare `== "true"` AND `== true` explicitly.** Either type grants
+correctly, so the claim does not hold — and, more importantly, **neither is a Lua TRUTHINESS
+check**, which is the thing actually worth knowing: in Lua the string `"false"` is truthy, so had
+it been a truthiness check, "fixing" this would have granted every dater in-call moderator
+rights. 8x8's docs say it should be a boolean. It stays a boolean, and the reasoning is in the
+code.
+
+### Verification, and what it honestly does not cover
+
+**43/43 module tests** (was 21 video + rotation), **typecheck 9/9**, **web build clean**. Test
+teeth proven twice, as docs/03 requires: changing `aud` to our AppID and deleting the
+`transcription` feature failed **4 tests**; reverting the newline fix to a no-op failed **exactly
+1** — the right one — while the multi-line control stayed green.
+
+> A local `turbo run build` exiting **134** is the documented host OOM, not a type error
+> (CLAUDE.md gotchas). `NODE_OPTIONS=--max-old-space-size=6144` with a direct `pnpm run build`
+> in `apps/web` completes clean.
+
+**NONE OF THIS PROVES THE CALL WORKS.** There is still no video provider anywhere — `JAAS_*`
+and `JITSI_*` are unset on this machine, in CI and on prod. All nine bugs were found by reading,
+which is exactly the point: **no unit test can observe a `<video>` element with no sound coming
+out of it.** What remains unverified is what was unverified before — the `lib-jitsi-meet`
+sequence against a real server. The honest next step is a JaaS account and one real two-browser
+call, and it is reasonable to expect that call to find more.
+
+**`p2p: { enabled: true }` is passed to `initJitsiConference` and is UNVERIFIED.** The low-level
+API reference does not list the key, though every option it does list is a `config.js` key and
+P2P is on by default for two participants. Harmless if ignored. **Do not cite docs/02's "P2P
+mode for 1:1 calls barely loads the server" as measured until a real call has been inspected** —
+that claim is the basis of the whole bandwidth argument and has never been observed.
+
+**Still not built, unchanged by this slice:** the audience/mentor observer video surface
+(blocked on docs/24 §4's seat-becomes-the-grant decision — decided, not built), and the
+pre-round "up next" profile preview (needs the orchestrator to precompute a future round).

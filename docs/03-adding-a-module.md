@@ -811,6 +811,44 @@ saying how) vs **BELIEVED**, and say the source of truth overrides the brief. �
 and useful ("at least N; zero means it is broken"); an exact shape or count is not. **The test:
 would being wrong make the agent check harder, or conform?**
 
+**A TEST THAT ASSERTS ONLY `rejects.toThrow()` PROVES NOTHING ABOUT *WHY* IT THREW — and that
+is how a one-backslash no-op shipped (2026-10-02, speed-dating JaaS provider).**
+`rawKey.replace(/\n/g, '\n')` was meant to turn an escaped `\n` (how a `.env` file and Vercel's
+dashboard both store a multi-line PEM) into a real newline. One backslash short, it replaces
+real newlines with themselves: a **total no-op**. Every join in production would have failed on
+a one-line private key.
+
+The test looked like coverage and was not:
+
+```ts
+process.env.JAAS_PRIVATE_KEY = '-----BEGIN PRIVATE KEY-----\\nstub\\n-----END PRIVATE KEY-----'
+await expect(provider.issueToken(params)).rejects.toThrow()   // passes either way
+```
+
+The key was a stub, so it rejects whether or not the unescaping ran. The assertion was true
+before the feature, true after it, and true if the feature were deleted. **It did not merely
+fail to catch the bug — it reported the bug's absence**, which is the whole point of this
+section.
+
+→ Two rules, and the second is the general one:
+
+- **For a transformation, assert the SUCCESS it enables, never a failure it survives.** Rewritten
+  against a real generated keypair, the test mangles its newlines, then asserts a token is
+  actually **minted and verifies** — impossible unless the conversion ran. A normal multi-line
+  key is the control, so a pass cannot come from the transformation being skipped entirely.
+- **A negative assertion is only as strong as the specificity of what it rejects.**
+  `rejects.toThrow()` with no matcher accepts every cause, including the one you introduced.
+  If a negative really is the right shape, pin the message.
+
+**Corollary, cheap and worth doing: when an escape sequence is load-bearing, write it so it
+cannot be miscounted.** The fix uses `split`/`join` against a constant built from
+`String.fromCharCode(92)`, so no escape sequence appears in the file at all. The same bug was
+re-introduced *twice more in the same session* by shell heredocs and a `python -c` one-liner
+silently eating a backslash — which is the real lesson about escaping on this host: **a
+backslash that passes through a shell, a heredoc and a language literal has three chances to be
+wrong, and all three fail silently.** Verify the written bytes (`grep | cat -A`), never the
+source you intended to write.
+
 ## Triggers on `auth.users` (engagement monitoring phase 1, 2026-08-09)
 
 The platform now has two: `on_auth_user_created` (AFTER INSERT → `handle_new_user`, live since

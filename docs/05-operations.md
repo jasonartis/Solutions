@@ -35,7 +35,7 @@ git push master (local)
 
 | Env | Purpose | Infra |
 |---|---|---|
-| **local** | all development and testing | Docker: supabase CLI stack, Mailpit, (Jitsi when needed); `pnpm dev` |
+| **local** | all development and testing | Docker: supabase CLI stack, Mailpit, (`docker-jitsi-meet` only if self-hosting — JaaS's free tier is the default dev target too); `pnpm dev` |
 | **preview** | per-PR review builds | Vercel preview deployments, pointed at a Supabase *branch/staging* project — never prod data |
 | **prod** | real clients | Supabase cloud + Vercel + worker VPS (Phase B+) |
 
@@ -73,7 +73,7 @@ A dedicated staging project is added when the first real client is live; before 
 | A — build | now | **$0** | Supabase free, Vercel Hobby, GitHub free, Sentry/UptimeRobot free, myzmanim free acct |
 | B — first users | worker needed in cloud (module 3 live) | **~$10–20** | + Hetzner/DO VPS (worker, Coolify, backups) |
 | C — revenue | paying clients (Vercel Hobby is non-commercial) and/or backup needs | **~$55–75** | + Vercel Pro $20 *or* app moves to VPS ($0 extra); + Supabase Pro $25; + domain ~$15/yr |
-| D — module 6 live | speed-dating events running | **+~$20–40** | + Jitsi VPS (can suspend between events) |
+| D — module 6 live | speed-dating events running | **+$0** up to 25 MAU/mo | JaaS free tier (founder decision 2026-10-02 — see docs/02 "Video"). Past ~32 MAU/mo a self-hosted box is cheaper: Hetzner **EU $6.49**, **US $20.49** (NOT the "$20–40 VPS" this row used to claim — stale since Hetzner's 2026-06-15 price change) |
 
 Every phase boundary is a documented decision point, not an automatic upgrade. The self-hosted exit ramp (everything onto one larger VPS via Coolify + self-hosted Supabase, ~$30–50 flat) remains available throughout if managed costs ever outpace value.
 

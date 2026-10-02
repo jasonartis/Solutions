@@ -61,6 +61,19 @@ describe('Jitsi video provider', () => {
     await expect(jwtVerify(token, new TextEncoder().encode('some-other-secret'))).rejects.toThrow()
   })
 
+  it('builds self-hosted connection options — BOSH, own domain, no focus override', () => {
+    const options = createJitsiProvider(cfg).connectionOptions('sd-abc123')
+    // These are the exact values video-room.tsx hardcoded before the provider
+    // abstraction existed (2026-10-02); asserted so the JaaS refactor provably
+    // did not move the self-hosted path.
+    expect(options.scriptHost).toBe(cfg.domain)
+    expect(options.hosts.domain).toBe(cfg.domain)
+    expect(options.hosts.muc).toBe(`conference.${cfg.domain}`)
+    expect(options.hosts.focus).toBeUndefined()
+    expect(options.serviceUrl).toBe(`https://${cfg.domain}/http-bind`)
+    expect(options.websocketKeepAliveUrl).toBeUndefined()
+  })
+
   it('closeRoom and createRoom never throw for the self-hosted provider', async () => {
     const provider = createJitsiProvider(cfg)
     await expect(provider.closeRoom('sd-anything')).resolves.toBeUndefined()

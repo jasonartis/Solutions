@@ -955,9 +955,10 @@ test('speed-dating module: register → round → mutual interest → reveal', a
 
   // Video (module 6 remaining item 1, 2026-09-04): proves the WIRING — button
   // -> getVideoJoinToken server action -> authorizeVideoJoin -> a clear error
-  // surfaced in the UI. CORRECTED after a first CI run (JITSI_* unset
-  // everywhere — local, CI, prod alike, the self-hosted VPS is a paused
-  // go-live item): the expected message is NOT the provider factory's throw.
+  // surfaced in the UI. CORRECTED after a first CI run (no video provider is
+  // configured anywhere — local, CI, prod alike; since 2026-10-02 the default
+  // provider is JaaS and the JAAS_* vars are unset, exactly as the JITSI_* vars
+  // were before it): the expected message is NOT the provider factory's throw.
   // tryCreateVideoRoom (called when runPairingRound created this pairing)
   // silently returns null for unconfigured video, so room_ref stays null —
   // and authorizeVideoJoin's "room not ready" check fires BEFORE the code

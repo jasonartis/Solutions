@@ -19,6 +19,24 @@ A multi-tenant modular platform: each client engagement produces a **module** bu
      and update only the compact "Now / Next / Standing rules" below. A fresh chat must never
      pay for the full journal. See "Session hygiene". -->
 
+**MODULE 6 VIDEO — JaaS IS THE DEFAULT PROVIDER, BUILT, AND UNVERIFIABLE FROM THIS REPO
+(2026-10-02, no migration).** Founder chose **JaaS (8x8-hosted Jitsi)** over a self-hosted VPS:
+free tier is **25 monthly active users**, the spec's default event is 7v7 = 14 people, so a
+monthly event is **$0** with no VPS, TLS, coturn or patching. Self-hosting is one env var away
+(`SPEED_DATING_VIDEO_PROVIDER=jitsi`) and wins past ~32 MAU/month. **The priced comparison is in
+docs/02 "Video" — do not re-derive it.** It also corrects docs/05's stale "+$20–40/mo VPS":
+Hetzner's 2026-06-15 change made the cheap plans EU-only and US entry is now $20.49.
+**WHAT REMAINS IS AN ACCOUNT, NOT INFRASTRUCTURE** — create a JaaS app, generate an RS256
+keypair, set `JAAS_APP_ID` / `JAAS_API_KEY_ID` / `JAAS_PRIVATE_KEY` (3 Vercel vars, same shape
+as the Sentry DSN). Then the one thing nothing here can prove: **a real two-browser call.**
+**NINE BUGS WERE FOUND BY READING THIS SLICE — SIX OF THEM BY ADVERSARIAL REVIEW, AND TWO OF THE
+NINE WERE IN THIS SESSION'S OWN WORK, ONE A HARD BLOCKER**: a one-backslash no-op in the
+private-key newline unescaping that would have failed EVERY production join, whose test was
+vacuous (now a worked case in docs/03's vacuity section). **Expect a real call to find more.**
+Audience/mentor observer video is still blocked on docs/24 §4 (decided, not built); the
+pre-round "up next" preview still needs the orchestrator to precompute a future round.
+Full story: the module-6 spec's 2026-10-02 entry + the journal.
+
 **THE GO-LIVE CHECKLIST IS DONE FOR
 NOW — 1, 2, 3, AND 8 ALL SHIPPED; 4, 5, 6, 7 AND **NEW ITEM 9** ARE ALL DELIBERATELY PAUSED** (founder's call,
 extract-don't-speculate: each adds real cost or a new dependency for a problem that only
@@ -200,12 +218,8 @@ doc.
   Server Action for an expected refusal gets its message REDACTED — fixed by returning
   `{ok, reason}` instead of throwing (new convention, docs/03 #22, applies platform-wide
   to any future direct-await-a-server-action UI). Final commit (`61551ab`) confirmed
-  `completed success` on GitHub Actions. **Still NOT done, and blocked on infrastructure
-  not code:** standing up `docker-jitsi-meet` (or the deployed VPS) to verify the actual
-  `lib-jitsi-meet` WebRTC call sequence — nothing in this repo can prove that without a
-  real Jitsi server; the audience/mentor observer video surface; and a true pre-round "up
-  next" profile-card preview (needs the orchestrator to precompute a future round — a real
-  structural change, not started).
+  `completed success` on GitHub Actions. **⚠ ITS "STILL NOT DONE" LIST IS SUPERSEDED BY
+  2026-10-02 — see the MODULE 6 VIDEO block at the top of this section.**
 - **(1) Per-org tunable size/opacity guards: DONE** (`1bb84f1`, no migration —
   `org_modules.settings` + `/o/[orgSlug]/settings`).
 - **(2) Ad-hoc person-to-person groups: REOPENED 2026-09-06/10 AND BEING REDESIGNED IN A

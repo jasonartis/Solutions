@@ -2,7 +2,13 @@
 
 import { revalidatePath } from 'next/cache'
 import { DERIVED_SCOPE_PLACEHOLDER, recordActivity } from '@platform/core'
-import { authorizeVideoJoin, buildNextRound, getVideoProvider, tryCreateVideoRoom } from '@modules/speed-dating'
+import {
+  authorizeVideoJoin,
+  buildNextRound,
+  getVideoProvider,
+  tryCreateVideoRoom,
+  type VideoConnectionOptions,
+} from '@modules/speed-dating'
 import { createClient } from '@/lib/supabase/server'
 import { getEventSides, getShareContactOnMatch, parseEventFormat, type SideKey } from './event-format'
 
@@ -422,7 +428,7 @@ export async function revealMatches(orgSlug: string, eventId: string) {
 // configured) is a normal, anticipated state, not a bug, so none of them may
 // throw or the caller never actually sees why.
 export type VideoJoinResult =
-  | { ok: true; token: string; roomRef: string; domain: string; expiresAt: string }
+  | { ok: true; token: string; roomRef: string; connection: VideoConnectionOptions; expiresAt: string }
   | { ok: false; reason: string }
 
 export async function getVideoJoinToken(orgSlug: string, eventId: string, pairingId: string): Promise<VideoJoinResult> {
@@ -469,17 +475,52 @@ export async function getVideoJoinToken(orgSlug: string, eventId: string, pairin
     return { ok: false, reason: err instanceof Error ? err.message : 'Video is not configured' }
   }
 
-  const { token, expiresAt } = await provider.issueToken({
+  // issueToken MUST be guarded, not just getVideoProvider(). The JaaS provider
+  // parses its private key LAZILY, on first use — so a malformed or mangled
+  // JAAS_PRIVATE_KEY surfaces precisely here, and an unguarded throw from a
+  // Server Action is an uncaught exception whose message Next REDACTS to a
+  // digest in a production build (docs/03 #22, the lesson this module's own
+  // first CI run taught). Found by adversarial review 2026-10-02; the gap
+  // existed because the self-hosted provider's HS256 signing cannot fail,
+  // so nothing had ever thrown from this line.
+  //
+  // The reason is DELIBERATELY GENERIC and the detail goes to the server log:
+  // this is the one code path whose error could conceivably carry private-key
+  // material, and a dater has no use for it either way.
+  let token: string
+  let expiresAt: Date
+  try {
+    ;({ token, expiresAt } = await provider.issueToken({
+      roomRef: pairing.room_ref!,
+      userId: user.id,
+      displayName: profile?.display_name || user.email || 'Guest',
+      email: user.email,
+      // No participant ever holds Jitsi moderator rights — the organizer
+      // console is a separate surface, and "no recording, ever" is a product
+      // promise a dater can't override from inside the call.
+      moderator: false,
+    }))
+  } catch (err) {
+    console.error(`[speed-dating] video token issuance failed: ${err instanceof Error ? err.message : String(err)}`)
+    return { ok: false, reason: 'Video is temporarily unavailable. Please tell the organizer.' }
+  }
+  // The connection shape comes from the PROVIDER, never hardcoded in the
+  // client — self-hosted and JaaS differ in transport, MUC host and script
+  // origin, and the browser must not have to know which it is talking to.
+  //
+  // NOTE: this uses the CURRENTLY configured provider, not pairing.room_provider.
+  // Switching providers mid-event is unsupported: the room slug would resolve
+  // on the new provider as an empty room, so two daters straddling the switch
+  // would sit in separate rooms. Not guarded in code because there is no live
+  // data to guard (sd_pairings is empty everywhere) and a guard would be an
+  // untested branch; recorded here instead.
+  return {
+    ok: true,
+    token,
     roomRef: pairing.room_ref!,
-    userId: user.id,
-    displayName: profile?.display_name || user.email || 'Guest',
-    email: user.email,
-    // No participant ever holds Jitsi moderator rights — the organizer
-    // console is a separate surface, and "no recording, ever" is a product
-    // promise a dater can't override from inside the call.
-    moderator: false,
-  })
-  return { ok: true, token, roomRef: pairing.room_ref!, domain: provider.domain, expiresAt: expiresAt.toISOString() }
+    connection: provider.connectionOptions(pairing.room_ref!),
+    expiresAt: expiresAt.toISOString(),
+  }
 }
 
 // Private notepad (spec: strictly author-only, never visible to organizers —
