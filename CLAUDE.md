@@ -649,6 +649,27 @@ fires BEFORE UPDATE triggers, which has already bitten this repo once.
   / it never resolved" contradiction gets shipped.
 
 Everything below is open but unranked:
+- **FOUND 2026-10-02 BY THE CENSUS SLICE'S ADVERSARIAL REVIEW, NOT FIXED — a dead parameter in
+  a live RLS predicate.** `mm_assignment_covers_me(check_matchmaker_id, check_target_group_id,
+  check_target_user_id)` **NEVER REFERENCES ITS FIRST PARAMETER** (verified in the DEPLOYED
+  body, not inferred from a migration). It returns true whenever
+  `check_target_user_id = auth.uid()`, so `mm_matchmaker_assignments`' policy arm **reads as a
+  matchmaker check and is really "any row naming me".** The OUTCOME is defensible — a single
+  learns who their own matchmaker is, which they should — so **nothing is leaking today and
+  this is not urgent**; the hazard is that the next person to touch matchmaking RLS trusts the
+  signature. Own slice: dropping a parameter changes the signature, so it is a migration plus
+  every call site. **Promoted here out of docs/24 §6b.1 deliberately** — it was recorded inside
+  a block headed CLOSED, and open state hidden inside a completed item is how it gets lost.
+- **Three OTHER residual census paths, same review, deliberately NOT fixed and NOT bugs:**
+  `mm_pair_scores` (your scored counterparties, all of whom are `single` — purpose-bound and
+  arguably the product), `sal_worker_profiles_select_member` (**literally `is_org_member`, the
+  predicate `20261002010000` just removed from `module_roles`** — a full census of the salon
+  `worker` role, plausibly intended since you pick your technician), and
+  `mm_questions.submitted_by` (authorship implies pool membership; the column read was
+  measured, the INFERENCE was not). **Each is purpose-shaped where `module_roles` was bound to
+  no purpose at all**, which is why closing that one was worth doing and these are a different
+  question. **They belong with docs/22 §20.2's founder-deferred entity-level visibility
+  question, not as four one-off fixes.** Full detail + the live confirmations: docs/24 §6b.1.
 - ~~**CI never ran any module's own unit test suite.**~~ **FIXED 2026-09-14, founder-initiated,
   no migration, no DB touched.** `ci.yml` now runs the four module vitest suites (classroom,
   matchmaking, speed-dating, synagogue-schedules — 107 tests) right after typecheck, before
