@@ -113,6 +113,25 @@ rot; pipelines don't.
   else's — the one category this repo has already been bitten by twice from the
   other direction (`33d5f20`, and the 2026-08-09 sweep).
 - Never run bulk mutations against prod without a fresh backup (below).
+- **Never run `pnpm migrate:prod` while an UNTRACKED migration sits in
+  `supabase/migrations/` — git status is not the deploy manifest (2026-10-02).**
+  `migrate:prod` wraps `supabase db push`, which reads the migrations
+  **DIRECTORY**, not git. So a migration file that is untracked, uncommitted and
+  belonging to someone else's in-flight work **still counts as pending and still
+  gets applied.** Confirmed live: `pnpm migrate:prod --dry-run` listed a
+  never-committed `20261002010000_module_roles_census.sql` as pending while it
+  existed only as a `??` entry in `git status`.
+  → This compounds the already-recorded hazard that **`db push` applies EVERY
+  pending migration and has no flag to stop at one.** Together they mean: in a
+  shared tree, running `migrate:prod` for your OWN unrelated reason can silently
+  ship another session's RLS policy change to production. There is no prompt, no
+  per-file selection, and nothing in the command names the other work.
+  → **Before any `migrate:prod`, run `--dry-run` first and READ THE LIST** — not
+  as a formality but to check that every file named is one you meant to deploy.
+  If an unexpected file appears, stop and find its owner; do not reason about
+  whether it looks safe. The documented way to hold one migration back is to move
+  the file out of `supabase/migrations/` for the duration (docs/22 §23.6), which
+  works precisely because the directory is the manifest.
 - **Never `git rm` a handoff/working note until its OPEN ITEMS have been diffed
   into the repo** — not just its task list ticked off. Grep the file for
   `STILL`/`OPEN`/`NOT`/`left`/`gap`/`empty`/`deliberately`/`follow-on` and check
