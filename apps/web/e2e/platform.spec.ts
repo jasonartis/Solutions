@@ -278,7 +278,22 @@ test('alice sees a generated week in the synagogue schedules module', async ({ p
   await expect(page.getByRole('heading', { name: 'Weekday Schedule' })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Shabbat Schedule' })).toBeVisible()
   // Fixed rule renders one uniform time; zman rule renders per-day times.
-  await expect(page.getByText('6:00 PM')).toBeVisible()
+  // SCOPED TO THE `Mincha` ROW ON PURPOSE (2026-10-02). A bare
+  // getByText('6:00 PM') is AMBIGUOUS a few days a year and fails strict mode:
+  // Shabbat's "Mincha & Kabbolas Shabbos" is `sunset - 20, rounded down to 5
+  // minutes`, so in the weeks when sunset falls in 18:20-18:24 it renders
+  // exactly 6:00 PM and collides with this fixed 18:00 rule. Measured live on
+  // 2026-10-02: two cells read 6:00 PM (sunset 6:24 PM), and the suite failed
+  // on an unrelated diff. Matching the row whose label cell is EXACTLY
+  // "Mincha" also excludes "Mincha (winter)", and is strictly stronger than the
+  // old assertion: it proves the FIXED rule rendered, not merely that some cell
+  // somewhere happens to say 6:00 PM.
+  await expect(
+    page
+      .getByRole('row')
+      .filter({ has: page.getByRole('cell', { name: 'Mincha', exact: true }) })
+      .getByText('6:00 PM'),
+  ).toBeVisible()
   await expect(page.getByText('Maariv')).toBeVisible()
   await expect(page.getByText('Candle Lighting')).toBeVisible()
 })
@@ -1566,7 +1581,15 @@ test('public schedule page works with no login', async ({ page }) => {
   await page.goto('/s/demo-shul')
   await expect(page.getByRole('heading', { name: 'Demo Synagogue' })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Weekday Schedule' })).toBeVisible()
-  await expect(page.getByText('6:00 PM')).toBeVisible()
+  // Same strict-mode ambiguity as the signed-in render test above — see the
+  // comment there for the mechanism (a zman-derived Shabbat time can round onto
+  // this fixed 18:00 one for a few days each year).
+  await expect(
+    page
+      .getByRole('row')
+      .filter({ has: page.getByRole('cell', { name: 'Mincha', exact: true }) })
+      .getByText('6:00 PM'),
+  ).toBeVisible()
   // An unpublished/unknown org 404s.
   await page.goto('/s/no-such-shul')
   await expect(page.getByText('404')).toBeVisible()
