@@ -783,8 +783,8 @@ Everything below is open but unranked:
   unbuilt slice left.
 - ~~Single-entity modules (matchmaking / synagogue-schedules / visual-messaging) NOT yet
   rank-mapped, which BLOCKS the census fix.~~ **BOTH HALVES DONE.** Rank-mapping shipped and
-  is on prod (`20260925030000`, 2026-09-29); the census fix it unblocked is built
-  (`20261002010000`, 2026-10-02 — see the block above), **in the repo, not yet on prod.**
+  is on prod (`20260925030000`, 2026-09-29); the census fix it unblocked is built AND
+  **APPLIED TO PRODUCTION AND PROD-VERIFIED 2026-10-05** (`20261002010000` — see the block above).
   Two live facts survive from this bullet's long version:
   (i) `module_roles_update_module_manager` / `_delete_module_manager` were **dead policies**
   for all three modules while every role ranked 0; the rank map revived them for the
@@ -1233,8 +1233,24 @@ test whose tripwire was proven by adding the hazardous arm. *Why it was missed: 
 live in the rank map's FIRST table, not the per-module sections.* The other two findings were
 false claims in view-as notes (a matchmaker's reach is split, not all assignment-scoped; and a
 vm admin's reach is a strict SUPERSET of a moderator's, so that pair has no "absence" to show).
-**THE `module_roles` CENSUS LEAK IS FIXED IN THE REPO (2026-10-02, `20261002010000`) — NOT YET
-ON PROD; `migrate:prod` has not run.** `module_roles_select_member` (any org member read every
+**THE `module_roles` CENSUS LEAK IS CLOSED — ON PRODUCTION AND PROD-VERIFIED 2026-10-05
+(`20261002010000`).** Applied by `pnpm migrate:prod` after a fresh backup
+(`backups/2026-10-05T21-42-51`), by a DIFFERENT session than the one that built it, at the
+founder's explicit go-ahead. **The evidence is the BEFORE/AFTER on the same database, not the
+pass: `scripts/prod-verify-module-roles-census.mts` scored 20/28 with 8 failures against prod
+PRE-apply and 28/28 POST-apply, every CONTROL green in both.** Live prod effect, per real
+member: 5 `demo-match` members went 6 grants to 1 (the dating pool's membership is no longer
+enumerable), 3 in `demo-salon` and 2 in `demo-visual` likewise; **every owner/admin and every
+rank->=2 manager unchanged, and `pozne` — the only non-demo org — is 0 -> 0.** Both behavioural
+controls passed: non-managers can no longer enumerate others' grants, AND managers still read
+beyond their own, so the arm did not die silently.
+**Two deploy facts worth keeping:** (a) the migration's own `do $$` assertion block runs AT
+APPLY TIME and is a real prod check — old policy gone, new policy present, exactly one SELECT
+policy — and `db push` is atomic per file, so a raised assertion would have rolled it back;
+(b) `migrate:prod` again printed the loud `Failed to read certificate file ...
+pgdelta-target-ca.crt` stack trace and then "Finished supabase db push" — **the push SUCCEEDED**
+(confirmed by a follow-up `--dry-run` reading "Remote database is up to date" plus the 28/28).
+That trace is the pgdelta PREVIEW step, not the apply; do not re-run the push over it. `module_roles_select_member` (any org member read every
 grant in the org, in every module) is replaced by `module_roles_select_self_or_manager`: own
 rows, `is_org_admin`, `module_has_manager_grant` for THAT row's module, `is_superadmin`.
 Measured before/after as 13 real signed-in users — an ordinary `demo-match` member went from 6
