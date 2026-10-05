@@ -528,6 +528,31 @@ functions exist in `public`), so no SQL predicate's answer moved; only direct cl
 
 **NOT ON PROD.** `migrate:prod` has not run for it.
 
+**ITS PROD VERIFIER IS `scripts/prod-verify-module-roles-census.mts` (28 checks), and it
+exists because the generic one would have passed this migration VACUOUSLY.**
+`prod-verify-migration.ts` is function-only and this migration defines **zero** functions, so
+its "0 failures" would assert nothing about the policy — the same trap CLAUDE.md records from
+`20260806010000`. `prod-verify-module-role.mts` does not cover it either (zero mentions of
+either policy name; it belongs to `20260915010000`). **Run it BEFORE and AFTER `migrate:prod`**
+— the before/after is the evidence, not the final pass, because a script that only ever ran
+post-apply cannot tell "the migration worked" from "the assertion was always true".
+
+Measured 2026-10-05, the same script against two databases differing only in whether the
+migration has been applied:
+
+| target | applied? | score | failures |
+|---|---|---|---|
+| PRODUCTION | no | **20/28** | 8, all in §[2] and §[3] — every CONTROL green |
+| local | yes | **28/28** | 0 |
+
+**Writing it caught a false assertion in itself**, which is the part worth keeping: the first
+draft flagged "an ordinary member who reads more rows than they own" as the leak, and prod
+promptly failed it for three people — a classroom professor and two salon managers. They are
+exactly the `module_has_manager_grant` arm working as designed. **"Ordinary member" is not the
+same predicate as "holds no manager grant"**, and the corrected check now excludes rank-≥-2
+holders, carries a control that non-managers exist at all, and asserts the opposite direction
+too (a manager must still read beyond their own rows, or the arm has silently died).
+
 ### 6b.1 WHAT THIS DOES **NOT** CLOSE — four residual paths, found by adversarial review
 
 Recorded so the fix is not read as more than it is. **None is a regression introduced by

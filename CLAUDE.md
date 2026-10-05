@@ -1252,6 +1252,13 @@ mode-2 edges on the platform start at rank ≥ 2, now **pinned by a test** whose
 proven. *The reusable lesson: every component fact in that claim was true and measured; the
 error was the JOIN between them. A chain of verified facts is not a verified conclusion —
 find the caller and read its guard.* Full account: docs/24 §6b, docs/19's 2026-10-02 section.
+**ITS PROD VERIFIER IS `scripts/prod-verify-module-roles-census.mts`** — 28 checks; the
+generic `prod-verify-migration.ts` would pass this VACUOUSLY (function-only; this migration
+defines zero functions). **Run it before AND after `migrate:prod`:** PROD pre-apply scores
+**20/28** with all 8 failures in the policy sections and every CONTROL green, local post-apply
+**28/28**. Prod pre-flight, measured: **19 of 30 active members will read fewer rows, every
+one of them a `@demo.local` account** — every org owner/admin and every rank-≥-2 module
+manager unchanged, and the only non-demo org (`pozne`) holds zero grants, so it is 0 → 0.
 **WHAT IT DOES NOT CLOSE, recorded so nobody reads it as more: four residual census paths in
 MODULE tables** (`mm_pair_scores`, `sal_worker_profiles_select_member` — literally the
 predicate just removed, `mm_matchmaker_assignments`, `mm_questions.submitted_by`), none a
