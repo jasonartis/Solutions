@@ -85,6 +85,33 @@ rot; pipelines don't.
   in-conversation approval AND the marker. Migrations are forward-only,
   additive-first (CLAUDE.md working agreements).
 - Never put the service-role key anywhere but the worker (docs/03 #14).
+- **Never act on a conclusion that another session's work is ABANDONED — ask that
+  session first (2026-10-02).** A session being absent from `ListAgents`, or
+  unreachable under the name you last used, does **NOT** mean it has ended. It can
+  be busy, between turns, or resumed under a new name. Hit live: a session found 11
+  uncommitted paths including an untracked migration, confirmed the author was
+  unreachable, and concluded the work was orphaned and at risk. It was not — that
+  session had been **resumed and was mid-verification**, and both supporting
+  premises were stale rather than wrong-at-the-time (its adversarial reviews had
+  since COMPLETED, and it was inside a single clean CI-order run that a salvage
+  commit would have cut across). One question before touching anything is what kept
+  it a non-event.
+  → **The rule is the question, not the restraint.** Preserving another session's
+  work is a good instinct and the side-branch shape below is right — but ask first,
+  because the cost of asking is one message and the cost of being wrong is someone
+  else's slice.
+  → **If a session really is gone** and you want to preserve uncommitted work:
+  commit it to a **side branch**, never master (`ci.yml` is
+  `on: push: branches: [master]` with `deploy` gated to master, so a branch push
+  runs and deploys nothing), and do **not** merge — an unreviewed migration on
+  master is a separate and worse problem. A plain file copy outside the repo is the
+  zero-risk first move; **delete it once the premise is void**, because a complete,
+  readable, stale duplicate is the dead-profile hazard in CLAUDE.md's host section
+  ("a stale copy does not error; it answers confidently and wrongly").
+  → **Corollary, and the reason this sits in a safeguards list rather than a gotcha:**
+  the failure mode here is not losing your own work, it is destroying someone
+  else's — the one category this repo has already been bitten by twice from the
+  other direction (`33d5f20`, and the 2026-08-09 sweep).
 - Never run bulk mutations against prod without a fresh backup (below).
 - **Never `git rm` a handoff/working note until its OPEN ITEMS have been diffed
   into the repo** — not just its task list ticked off. Grep the file for
