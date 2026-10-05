@@ -444,7 +444,7 @@ Dana. That is the intended outcome, not a side effect to correct.
 | piece | state |
 |---|---|
 | Rank-mapping the three modules (§2) | **SHIPPED — ON PRODUCTION AND VERIFIED 2026-09-28.** `20260925030000` is in prod's `schema_migrations`, and `module_position_rank` was spot-checked live against prod: matchmaking/admin **3**, visual-messaging/admin **3**, visual-messaging/moderator **1**, synagogue-schedules/maker **1**. §4b. |
-| The `module_roles` census-leak fix (§4.5/§5.5) | **BUILT 2026-10-02 — `20261002010000`, in the repo, NOT YET ON PROD.** §6b. |
+| The `module_roles` census-leak fix (§4.5/§5.5) | **CLOSED — ON PRODUCTION AND PROD-VERIFIED 2026-10-05** (`20261002010000`; prod 20/28 → 28/28). §6b. |
 | The roster fold (§3) + `conversation_moderator` rename (§4 item 4) | **NOT BUILT.** Its own slice. |
 
 ## 6b. THE CENSUS-LEAK FIX IS BUILT — `20261002010000`, 2026-10-02, Opus
@@ -526,7 +526,15 @@ one line — the generated map catching a new consumer without being told. (2) 1
 `public` read `module_roles` and **all 18 are SECURITY DEFINER** (control: 24 non-definer
 functions exist in `public`), so no SQL predicate's answer moved; only direct client reads did.
 
-**NOT ON PROD.** `migrate:prod` has not run for it.
+****ON PRODUCTION AND PROD-VERIFIED 2026-10-05** — applied by `migrate:prod` after a fresh backup (`backups/2026-10-05T21-42-51`), with `scripts/prod-verify-module-roles-census.mts` scoring **20/28 PRE-apply and 28/28 POST-apply against prod**, every CONTROL green in both. Independently re-run afterwards from this session: 28/28, and `migrate:prod --dry-run` reports prod up to date.**
+
+**THE LIVE PROD EFFECT, per real member:** 19 of 30 active members read fewer rows — five
+`demo-match` members 6 → 1, three in `demo-salon`, two in `demo-visual`, `platform-self-test`
+1 → 0. Every org owner/admin and every rank-≥-2 module manager unchanged, and **`pozne`, the
+only non-demo org, is 0 → 0.** Every affected account is `@demo.local`, so no real client data
+moved. **The migration's own `do $$` assertion block also ran at APPLY TIME on prod and
+passed** — old policy gone, new policy present, exactly one SELECT policy — and since `db push`
+is atomic per file that was a real gate, not decoration.
 
 **ITS PROD VERIFIER IS `scripts/prod-verify-module-roles-census.mts` (28 checks), and it
 exists because the generic one would have passed this migration VACUOUSLY.**

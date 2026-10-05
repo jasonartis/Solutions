@@ -4,8 +4,44 @@ The running, dated build journal that used to live in `CLAUDE.md`'s "## Current 
 section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every session)
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
-- **2026-10-02 (THE `module_roles` CENSUS LEAK, CLOSED — `20261002010000`. Opus. In the repo,
-  NOT on prod).** Open since 2026-09-10, blocked twice, unblocked by the rank map on 09-29.
+- **2026-10-05 (THE CENSUS LEAK REACHED PRODUCTION — and the verifier that proved it caught
+  its own false assertion first).** `20261002010000` applied by `migrate:prod` after a fresh
+  backup (`backups/2026-10-05T21-42-51`). **Deployed by a CONCURRENT SESSION on the founder's
+  go-ahead, not by the session that built it** — recorded because it is the second time in a
+  week that `migrate:prod` has been run by someone other than the slice's author, which is the
+  documented reason never to assume a pending set is still pending.
+  **THE EVIDENCE IS THE BEFORE/AFTER, NOT THE PASS:** `prod-verify-module-roles-census.mts`
+  scored **20/28 PRE-apply and 28/28 POST-apply against production**, every CONTROL green in
+  both, the 8 pre-apply failures confined to the two policy sections. Re-run independently
+  afterwards from the authoring session: 28/28, with `migrate:prod --dry-run` reporting prod up
+  to date. Live effect: 19 of 30 active members read fewer rows, **every one of them a
+  `@demo.local` account**; every owner/admin and every rank-≥-2 manager unchanged; `pozne`, the
+  only non-demo org, 0 → 0. The migration's `do $$` block ran at APPLY TIME on prod and passed,
+  and `db push` is atomic per file, so it gated rather than decorated.
+  **THE SLICE SHIPPED WITHOUT A PROD VERIFIER AND NOBODY NOTICED FOR AN HOUR — a concurrent
+  session found it.** The generic `prod-verify-migration.ts` is FUNCTION-ONLY and this
+  migration defines **zero** functions, so running it would have printed "0 failures" while
+  asserting nothing about the policy; `prod-verify-module-role.mts` does not cover it either.
+  The slice therefore could not satisfy this repo's own bar — *do not write SHIPPED until
+  `migrate:prod` has run AND its prod verification has passed* — because **there was nothing
+  for the second clause to run.** The objection stands independently of risk: *"apply it"* and
+  *"apply it and be able to prove it applied"* are different propositions, and the small,
+  demo-only blast radius does not substitute for verifiability.
+  **AND THE PRE-APPLY RUN CAUGHT A FALSE ASSERTION IN THE VERIFIER ITSELF, which is the single
+  most reusable thing here.** The first draft asserted that *"an ordinary member who reads more
+  rows than they own"* is the leak. Production failed it immediately for three people — a
+  classroom professor and two salon managers — who are the `module_has_manager_grant` arm
+  working exactly as designed. **"Ordinary member" is not the same predicate as "holds no
+  manager grant".** A verifier run only AFTER the deploy would have gone green while asserting
+  something false, and that green would have been offered as proof. → **Run a prod verifier
+  BEFORE the apply as well as after**, not for the before-picture alone but because the
+  before-run is the only thing that exercises the FAILING branch of every assertion. The
+  corrected check excludes rank-≥-2 holders, carries a control that non-managers exist at all,
+  and asserts the opposite direction too (a manager must still read beyond their own rows, or
+  the arm has died silently and nothing else would notice).
+
+- **2026-10-02 (THE `module_roles` CENSUS LEAK, CLOSED — `20261002010000`. Opus. Built and
+  verified in the repo; reached production 2026-10-05, see the entry above).** Open since 2026-09-10, blocked twice, unblocked by the rank map on 09-29.
   **The leak:** `module_roles_select_member` was `is_org_member(org_id) OR is_superadmin()` —
   no module, role or self filter — so any active member read every grant in their org. In
   `demo-match` that is the membership of the dating pool. **The fix is one policy**:

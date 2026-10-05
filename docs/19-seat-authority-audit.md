@@ -585,7 +585,7 @@ Also: whatever replaces the policy must keep `is_org_admin(org_id)` in the OR �
 today WITHOUT ever holding a `module_roles` row, so a bare manager-grant replacement
 would strip their access to the table. Full write-up: docs/24 §1.6, §4b, §6.
 
-## SHIPPED IN THE REPO 2026-10-02 — `20261002010000_module_roles_census.sql`. NOT YET ON PROD.
+## CLOSED — `20261002010000_module_roles_census.sql`, ON PRODUCTION AND PROD-VERIFIED 2026-10-05
 
 The section above is now HISTORY for everything except its §"third obstacle", which was
 **WRONG** and is corrected below. The policy is:
@@ -651,8 +651,8 @@ admin (constructed in a rolled-back transaction, since no such user is seeded) p
 `modules/matchmaking/ui/manage/page.tsx:48-49` needs. That is the page docs/19 point 2 said
 would break, and it is the thing rank-mapping unblocked.
 
-**Still owed:** `migrate:prod` has not run. Do not write SHIPPED/CLOSED on production until it
-has and the prod measurement is taken.
+**Nothing owed.** **ON PRODUCTION AND PROD-VERIFIED 2026-10-05** — applied by `migrate:prod` after a fresh backup (`backups/2026-10-05T21-42-51`), with `scripts/prod-verify-module-roles-census.mts` scoring **20/28 PRE-apply and 28/28 POST-apply against prod**, every CONTROL green in both. Independently re-run afterwards from this session: 28/28, and `migrate:prod --dry-run` reports prod up to date. The prod measurement was taken both before and after, which is
+what makes the 28/28 mean something rather than merely being true.
 
 ## POST-MIGRATION PROD MEASUREMENT, 2026-09-11 — nobody lost access
 
