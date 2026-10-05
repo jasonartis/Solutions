@@ -8353,3 +8353,315 @@ describe('rank-mapping the last three modules (20260925030000)', () => {
     }
   })
 })
+
+// ---------------------------------------------------------------------------
+// THE MODULE-ROLE CENSUS LEAK, CLOSED (20261002010000)
+//
+// Before this migration `module_roles_select_member` was
+// `is_org_member(org_id) OR is_superadmin()` — no module, role or self filter —
+// so any active member of an org read every grant in it. In `demo-match` that
+// is the membership of the dating pool (docs/19 "ADJACENT, FOUND 2026-09-10",
+// docs/24 §5.5, docs/20 §8.4).
+//
+// WHAT THESE TESTS ASSERT IS THE EFFECTIVE READ SET, NEVER ONE POLICY. Three
+// permissive policies admit a reader here — the new SELECT policy and the two
+// surviving `for all` write policies, whose USING governs SELECT as well
+// (docs/20 §8.1). Asserting the new policy's text alone would reproduce that
+// exact trap, so every test below signs in as a real user and counts rows.
+//
+// EACH ARM IS ISOLATED, because the demo fixtures confound them: alice is BOTH
+// an org owner and a rank-3 matchmaking admin, so her full read proves nothing
+// about which arm supplied it. The subjects below are chosen so that exactly
+// one arm can be responsible.
+// ---------------------------------------------------------------------------
+describe('the module-role census leak is closed (20261002010000)', () => {
+  const svcKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
+  const svc = () => createClient(url, svcKey, { auth: { persistSession: false } })
+
+  // CRITICAL, AND IT BROKE e2e BEFORE THIS EXISTED — the same trap documented at
+  // the salon view-as block above, hit again here for the same reason. One test
+  // below signs in as grace, because she is the ONLY plain-org-member holder of a
+  // SCOPED rank-2 grant on the platform and therefore the only subject that can
+  // isolate the module_has_manager_grant arm. That real password sign-in advances
+  // her last_sign_in_at, which phase 1's capture trigger records into
+  // login_events/login_rollup — and apps/web/e2e/platform.spec.ts:2182 asserts
+  // grace has NEVER signed in, to prove "absent rollup row reads as absence, not
+  // error". CI runs this suite immediately before e2e on the SAME database with no
+  // reset between, and THIS describe is the last in the file, so its pollution is
+  // the pollution e2e sees. Measured: without this cleanup that e2e test fails
+  // deterministically (1 login_rollup row for grace after the suite).
+  // Both tables are read-only to every api role INCLUDING the superadmin, so the
+  // delete cannot go through an RLS client — it needs the raw owner connection.
+  afterAll(async () => {
+    const graceId = await userIdOf('grace@demo.local')
+    const sql = postgres(ownerDbUrl, { prepare: false, max: 1 })
+    try {
+      await sql`delete from public.login_events where user_id = ${graceId}`
+      await sql`delete from public.login_rollup where user_id = ${graceId}`
+    } finally {
+      await sql.end()
+    }
+  })
+
+  async function orgIdBySlug(slug: string): Promise<string> {
+    const { data, error } = await svc().from('orgs').select('id').eq('slug', slug).single()
+    expect(error, `resolving org ${slug}: ${JSON.stringify(error)}`).toBeNull()
+    return data!.id as string
+  }
+
+  /** What the table REALLY holds, read past RLS. The control for every "0". */
+  async function actualGrants(orgId: string) {
+    const { data, error } = await svc()
+      .from('module_roles')
+      .select('user_id, module_key, role')
+      .eq('org_id', orgId)
+    expect(error, `service-role read of ${orgId}: ${JSON.stringify(error)}`).toBeNull()
+    return (data ?? []) as { user_id: string; module_key: string; role: string }[]
+  }
+
+  it('an ordinary member no longer reads the census — only their own grants', async () => {
+    const match = await orgIdBySlug('demo-match')
+    const dana = await signIn('dana@demo.local')
+    const danaId = (await dana.auth.getUser()).data.user!.id
+
+    const { data, error } = await dana.from('module_roles').select('user_id, role').eq('org_id', match)
+    expect(error, `dana reading module_roles: ${JSON.stringify(error)}`).toBeNull()
+    const rows = data ?? []
+
+    // NON-VACUITY, FIRST DIRECTION: she really does read something, so a later
+    // "0 others" is not just a broken query or a denied table.
+    expect(rows.length, 'dana must still read her OWN grant').toBeGreaterThan(0)
+    expect(rows.every((r) => r.user_id === danaId), 'dana must read nobody else').toBe(true)
+
+    // NON-VACUITY, SECOND DIRECTION — the one that actually matters. The zero
+    // must be an EXCLUSION, not an empty table: demo-match genuinely holds
+    // other people's grants, and specifically other people holding `single`,
+    // which is the dating-pool census this migration exists to close.
+    const real = await actualGrants(match)
+    const othersSingle = real.filter((r) => r.user_id !== danaId && r.role === 'single')
+    expect(othersSingle.length, 'CONTROL: demo-match must hold other members’ `single` grants').toBeGreaterThan(0)
+    expect(real.length, 'CONTROL: dana must be reading fewer rows than exist').toBeGreaterThan(rows.length)
+  })
+
+  it('a matchmaker (rank 1) gets no broader read than any other member — docs/24 §5.5, intended', async () => {
+    // Recorded as a TEST and not only in prose because it looks like a
+    // regression: the person whose job is matchmaking cannot enumerate the
+    // pool through this table. The founder-decided rank for `matchmaker` is 1
+    // (an assignee, not a manager), and her legitimate reach is
+    // mm_matchmaker_assignments, not module_roles.
+    const match = await orgIdBySlug('demo-match')
+    const mel = await signIn('mel@demo.local')
+    const melId = (await mel.auth.getUser()).data.user!.id
+    const { data } = await mel.from('module_roles').select('user_id, role').eq('org_id', match)
+    const rows = data ?? []
+    expect(rows.length, 'mel must still read her own matchmaker grant').toBeGreaterThan(0)
+    expect(rows.every((r) => r.user_id === melId), 'a rank-1 matchmaker reads nobody else').toBe(true)
+
+    // CONTROL: her rank really is 1, so this is the rank rule and not an
+    // accident of her having no grant to be found by.
+    const { data: rank } = await mel.rpc('module_position_rank', { module_key: 'matchmaking', role: 'matchmaker' })
+    expect(rank, 'CONTROL: matchmaker is rank 1').toBe(1)
+  })
+
+  it('A RANK-2 MANAGER WHO IS NOT AN ORG ADMIN still reads that module’s whole roster — including a SCOPED grant', async () => {
+    // grace is the sharpest subject on the platform for this: she is only an
+    // org MEMBER of demo-salon (never owner/admin, never superadmin) and her
+    // nail-salon `manager` grant is SCOPED to one location. So a full read can
+    // only have come from module_has_manager_grant — and it proves that
+    // predicate does NOT carry has_module_role's `scope_ref is null` cliff,
+    // which is the regression both adversarial reviewers caught in docs/19.
+    const salon = await orgIdBySlug('demo-salon')
+    const grace = await signIn('grace@demo.local')
+    const graceId = (await grace.auth.getUser()).data.user!.id
+
+    const { data: seat } = await svc()
+      .from('org_members')
+      .select('role, status')
+      .eq('org_id', salon)
+      .eq('user_id', graceId)
+      .single()
+    expect(seat?.role, 'CONTROL: grace must be a plain member, or this proves nothing').toBe('member')
+    expect(seat?.status).toBe('active')
+
+    const { data: own } = await svc()
+      .from('module_roles')
+      .select('role, scope_ref')
+      .eq('org_id', salon)
+      .eq('user_id', graceId)
+    expect(own?.length, 'CONTROL: grace holds exactly one nail-salon grant').toBe(1)
+    expect(own![0]!.role).toBe('manager')
+    expect(own![0]!.scope_ref, 'CONTROL: and it is SCOPED, not global').not.toBeNull()
+
+    const { data } = await grace.from('module_roles').select('user_id, role').eq('org_id', salon)
+    const rows = data ?? []
+    const real = await actualGrants(salon)
+    expect(rows.length, 'a scoped rank-2 manager reads the module’s whole roster').toBe(real.length)
+    expect(rows.some((r) => r.user_id !== graceId), 'and that includes other people').toBe(true)
+  })
+
+  it('AN ORG ADMIN WHO HOLDS NO MANAGER GRANT keeps the table — the arm module_has_manager_grant cannot supply', async () => {
+    // docs/24 §1.6: org admins hold module authority WITHOUT ever holding a
+    // module_roles row, and module_has_manager_grant does not consult
+    // is_org_admin. Dropping that arm would strip them of the table silently.
+    // Demonstrated as a BEFORE/AFTER on one person so nothing else can explain
+    // it: orgtest holds only a rank-0 `stub`/`user` grant.
+    const pst = await orgIdBySlug('platform-self-test')
+    const orgtestId = await userIdOf('orgtest@demo.local')
+    const client = await signIn('orgtest@demo.local')
+
+    const { data: rank } = await client.rpc('module_position_rank', { module_key: 'stub', role: 'user' })
+    expect(rank, 'CONTROL: orgtest’s only grant is rank 0').toBe(0)
+
+    const before = (await client.from('module_roles').select('user_id').eq('org_id', pst)).data ?? []
+    expect(before.every((r) => r.user_id === orgtestId), 'as a plain member he reads only himself').toBe(true)
+
+    const real = await actualGrants(pst)
+    expect(real.some((r) => r.user_id !== orgtestId), 'CONTROL: the org holds someone else’s grant').toBe(true)
+
+    try {
+      const promote = await alice
+        .from('org_members')
+        .update({ role: 'admin' })
+        .eq('org_id', pst)
+        .eq('user_id', orgtestId)
+      expect(promote.error, `promoting orgtest: ${JSON.stringify(promote.error)}`).toBeNull()
+
+      const after = (await client.from('module_roles').select('user_id').eq('org_id', pst)).data ?? []
+      expect(after.length, 'an org admin reads the whole org’s grants').toBe(real.length)
+      expect(after.some((r) => r.user_id !== orgtestId), 'including rows that are not his').toBe(true)
+    } finally {
+      // CI runs e2e next on this same database with no reset. Never leave him promoted.
+      const restore = await alice
+        .from('org_members')
+        .update({ role: 'member' })
+        .eq('org_id', pst)
+        .eq('user_id', orgtestId)
+      expect(restore.error, `restoring orgtest to member: ${JSON.stringify(restore.error)}`).toBeNull()
+    }
+  })
+
+  it('a manager’s read stops at the MODULE boundary — rank 2 in one module is nothing in another', async () => {
+    // module_has_manager_grant takes the ROW's module_key, so the arm is
+    // evaluated per row. Proven on one person in one org holding rank 2 in
+    // exactly one of the two modules that org uses.
+    const demoA = await orgIdBySlug('demo-a')
+    const bobId = await userIdOf('bob@demo.local')
+    const real = await actualGrants(demoA)
+    const classroomRows = real.filter((r) => r.module_key === 'classroom')
+    const otherRows = real.filter((r) => r.module_key !== 'classroom')
+    expect(classroomRows.length, 'CONTROL: demo-a holds classroom grants').toBeGreaterThan(0)
+    expect(otherRows.length, 'CONTROL: demo-a also holds grants in a DIFFERENT module').toBeGreaterThan(0)
+
+    try {
+      expect(
+        (await alice.from('org_members').insert({ org_id: demoA, user_id: bobId, role: 'member' })).error,
+      ).toBeNull()
+      await acceptInviteAs('bob@demo.local', demoA)
+      expect(
+        (
+          await alice
+            .from('module_roles')
+            .insert({ org_id: demoA, user_id: bobId, module_key: 'classroom', role: 'professor' })
+        ).error,
+      ).toBeNull()
+
+      const { data: rank } = await bob.rpc('module_position_rank', { module_key: 'classroom', role: 'professor' })
+      expect(rank, 'CONTROL: professor is rank 2').toBe(2)
+
+      const seen = (await bob.from('module_roles').select('user_id, module_key').eq('org_id', demoA)).data ?? []
+      const seenClassroom = seen.filter((r) => r.module_key === 'classroom')
+      const seenOther = seen.filter((r) => r.module_key !== 'classroom')
+      // +1: his own professor grant, created above.
+      expect(seenClassroom.length, 'he reads every classroom grant').toBe(classroomRows.length + 1)
+      expect(seenOther.length, 'and NONE of the other module’s').toBe(0)
+    } finally {
+      const s = svc()
+      await s.from('module_roles').delete().eq('org_id', demoA).eq('user_id', bobId)
+      await s.from('org_members').delete().eq('org_id', demoA).eq('user_id', bobId)
+    }
+  })
+
+  it('the superadmin arm is load-bearing: the Owner Console reads an org it is not a member of', async () => {
+    const match = await orgIdBySlug('demo-match')
+    const owner = await signIn('owner@demo.local')
+    const ownerId = (await owner.auth.getUser()).data.user!.id
+
+    const { data: seat } = await svc()
+      .from('org_members')
+      .select('user_id')
+      .eq('org_id', match)
+      .eq('user_id', ownerId)
+      .maybeSingle()
+    expect(seat, 'CONTROL: the superadmin must NOT be a member, or this proves nothing').toBeNull()
+
+    const real = await actualGrants(match)
+    const { data } = await owner.from('module_roles').select('user_id').eq('org_id', match)
+    expect((data ?? []).length, 'the superadmin reads every grant in the org').toBe(real.length)
+    expect((data ?? []).every((r) => r.user_id !== ownerId), 'and holds none of them himself').toBe(true)
+  })
+
+  it('EVERY mode-2 view-as edge starts at a position SQL ranks >= 2 — the narrowed policy cannot break the target picker', async () => {
+    // THE INVARIANT THIS MIGRATION NOW DEPENDS ON, AND THE CORRECTION THAT
+    // UNBLOCKED IT. docs/24 §6 and docs/19's ADJACENT section both say the fix
+    // breaks the view-as target picker for "a rank-1 caller with a live mode-1
+    // edge", naming speed-dating's host -> participant. MEASURED, that is not
+    // how the picker is reached: apps/web/components/view-as/page.tsx:121 calls
+    // targetsFor() only when `active.mode2` is true, and viewAsTabsFor() sets a
+    // tab's mode2 only from an edge whose mode2 is true. A mode-1-only edge
+    // never enumerates anybody — mode 1 renders the CALLER's own rows and needs
+    // no person picker at all. host -> participant is mode1:true, mode2:false.
+    //
+    // So the picker is safe exactly as long as every mode-2 edge starts at a
+    // position of rank >= 2, which module_has_manager_grant admits. That is not
+    // a law of the ladder, it is a property of today's declarations — so it is
+    // asserted here, against SQL's rank (the authority the policy actually
+    // calls), not the TypeScript mirror.
+    const offenders: string[] = []
+    let mode2Edges = 0
+    for (const mod of moduleRegistry) {
+      const decl = getModule(mod.key)?.viewAs
+      if (!decl) continue
+      for (const [from, targets] of Object.entries(decl.edges ?? {})) {
+        for (const [to, edge] of Object.entries(targets as Record<string, { mode2?: boolean }>)) {
+          if (!edge?.mode2) continue
+          mode2Edges += 1
+          const { data: rank, error } = await alice.rpc('module_position_rank', { module_key: mod.key, role: from })
+          expect(error, `rank(${mod.key}, ${from}): ${JSON.stringify(error)}`).toBeNull()
+          if ((rank as number) < 2) offenders.push(`${mod.key}: ${from} (rank ${rank}) -> ${to}`)
+        }
+      }
+    }
+    // NON-VACUITY: there must BE mode-2 edges, or this passes by having nothing
+    // to check — the exact shape docs/03's vacuity section warns about.
+    expect(mode2Edges, 'CONTROL: the platform must declare at least one mode-2 edge').toBeGreaterThan(0)
+    expect(
+      offenders,
+      'A mode-2 edge from a rank-<2 position would make the view-as target picker read ' +
+        'module_roles rows that 20261002010000 no longer returns, giving an empty picker ' +
+        'instead of an error. Give that position rank >= 2, or give the picker a definer read path.',
+    ).toEqual([])
+  })
+
+  it('CONTROL: the old blanket policy is gone and exactly one SELECT policy remains', async () => {
+    const sql = postgres(ownerDbUrl, { prepare: false, max: 1 })
+    try {
+      const rows = await sql<{ polname: string; polcmd: string }[]>`
+        select polname, polcmd::text from pg_policy where polrelid = 'public.module_roles'::regclass
+      `
+      const names = rows.map((r) => r.polname)
+      expect(names, 'the blanket member-read policy must be gone').not.toContain('module_roles_select_member')
+      expect(names).toContain('module_roles_select_self_or_manager')
+      expect(rows.filter((r) => r.polcmd === 'r').length, 'exactly one SELECT-only policy').toBe(1)
+      // CONTROL: the two `for all` policies survive, so the tests above are
+      // measuring the real union and not a table that lost its other doors.
+      expect(
+        rows
+          .filter((r) => r.polcmd === '*')
+          .map((r) => r.polname)
+          .sort(),
+      ).toEqual(['module_roles_write_org_admin', 'module_roles_write_superadmin'])
+    } finally {
+      await sql.end()
+    }
+  })
+})

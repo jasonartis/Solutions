@@ -1329,6 +1329,62 @@ mechanism is proven in the managed environment, but it carries rules that are no
       defect had to be fixed twice (`20260922030000`; `20260914020000`'s header
       had justified the duplication as safety).
 
+32. **A CHAIN OF INDIVIDUALLY VERIFIED FACTS IS NOT A VERIFIED CONCLUSION — FIND THE
+    CALLER AND READ ITS GUARD.** The `module_roles` census fix sat blocked for three
+    weeks behind a stated blocker that was false, and the blocker was built out of
+    facts that were each true and each correctly measured:
+    - *"the view-as target picker reads `module_roles` through the caller's own RLS
+      client"* — true (`lib/view-as.ts:152`).
+    - *"`module_view_as_edge` carries MODE 2 ONLY, so a mode-1 edge is invisible to
+      the database"* — true, measured.
+    - *"speed-dating's `host` is rank 1 and holds a live mode-1 edge into
+      `participant`"* — true, and a founder decision.
+    The conclusion drawn — *"so narrowing the policy breaks the picker and it needs an
+    edge-aware definer read path"* — was **false**, because the picker is called ONLY
+    when `active.mode2` is true (`components/view-as/page.tsx:121`). A mode-1-only
+    edge never enumerates anybody; mode 1 renders the CALLER's own rows. The mirror's
+    mode-1 blindness was real and simply never reachable from that code path.
+    - **The error lives in the JOIN between true facts, which is exactly where review
+      does not look** — each premise survives being checked on its own, so checking
+      the premises harder would never have found it. It auto-loaded into every session
+      through CLAUDE.md for a week and would have had the next session build a
+      SECURITY DEFINER nothing needed.
+    - → When a doc says a change is blocked because some code path needs something:
+      **open that code path and read the condition it runs under, before designing
+      around it.** One grep for the caller, one read of its guard. A claim of the form
+      *"X reads Y, so narrowing Y breaks X"* is only as good as the question *"under
+      what condition does X actually run?"*
+    - → And when the invariant turns out to hold **as a property of today's
+      declarations rather than a law**, pin it with a test rather than a sentence.
+      Here: *every mode-2 edge starts at a position SQL ranks ≥ 2*, asserted against
+      `module_position_rank` (the authority the policy calls) and not the TypeScript
+      mirror, with a non-vacuity control that at least one mode-2 edge exists.
+
+33. **RE-READ A MIGRATION'S OWN HEADER IMMEDIATELY BEFORE COMMITTING IT — the PROSE,
+    not the SQL.** #28 makes a pushed migration uneditable, so the header is the one
+    artefact in the slice that can never be corrected afterwards: corrections have to
+    go in CLAUDE.md instead, where nobody reading the migration will ever see them.
+    And the header is the part most likely to be wrong, because of how it is produced
+    — **written early, while the design is still moving, and then left alone while the
+    SQL underneath it changes.** Everything else gets a second look by construction:
+    the SQL is reviewed, tested, and verified against prod. The prose gets none of that.
+    - **Worked example (`20261002010000`, caught on the last read before commit):** the
+      header justified keeping the `is_org_admin` arm by asserting that *every* live
+      `_can_manage` reads `is_org_admin(...) OR has_module_role(...)`. True of
+      `mm_can_manage`, `syn_can_write` and `vm_can_manage` — but `cls_can_manage` and
+      `sal_can_manage` test `module_position_rank(...) >= 2` inline instead. **Five
+      gates, not three, and two of them not of the stated shape.**
+    - **This is the hardest kind to catch and the easiest to leave: the conclusion was
+      still right.** What the policy arm actually depends on is only that
+      `is_org_admin()` is the FIRST DISJUNCT, which is true of all five. A header wrong
+      in a way that does not change the outcome produces no failing test and no broken
+      page — only a permanent, confident, false statement that the next reader has
+      every reason to trust and to build on.
+    - → Read the header last, as prose, asking of each sentence: *is this still true of
+      the SQL below it, and did I MEASURE it or infer it?* Universal quantifiers
+      (“every”, “no”, “always”) are where to look first — they are the claims a later
+      reader is least likely to re-check and most likely to rely on.
+
 ## Hard rules
 
 1. **Never fork a platform primitive.** If the notifications/files/workflow primitive almost fits, extend it in `packages/platform` (benefiting every module) — don't copy it into the module.

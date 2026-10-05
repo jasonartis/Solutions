@@ -1308,8 +1308,9 @@ vocabulary gets locked.
   **ZERO MIGRATIONS, and that is the design, not a shortcut.** Three things could have
   forced SQL and all were already open: `is_org_admin()` short-circuits on
   `is_superadmin()` so a superadmin's own client reaches every org; `profiles_select_own`
-  carries an `is_superadmin()` arm so the person picker works; `module_roles_select_member`
-  likewise. So the feature is presentation over the caller's own RLS client — the same
+  carries an `is_superadmin()` arm so the person picker works; `module_roles`' select policy
+  likewise — **renamed `module_roles_select_self_or_manager` by `20261002010000`, which
+  narrowed everything EXCEPT that arm, deliberately, to keep this page working (docs/24 §6b)**. So the feature is presentation over the caller's own RLS client — the same
   keystone as slice 5, and the reason a god-mode surface needed no new read path.
 
   **The security argument, stated so it can be attacked later.** Every query the page

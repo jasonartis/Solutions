@@ -107,6 +107,7 @@ are out of scope here entirely.
 | `module_caller_covers_rank` | rank >= 2 | direct | _no policy — triggers/functions only_ |
 | `module_has_manager_grant` | rank >= 2 | direct | module_roles (delete) |
 | `module_has_manager_grant` | rank >= 2 | direct | module_roles (insert) |
+| `module_has_manager_grant` | rank >= 2 | direct | module_roles (select) |
 | `module_has_manager_grant` | rank >= 2 | direct | module_roles (update) |
 | `module_roles_guard_last_director` | rank < 4; rank >= 4 | direct | _no policy — triggers/functions only_ |
 | `sal_can_manage` | rank >= 2 | direct | _no policy — triggers/functions only_ |

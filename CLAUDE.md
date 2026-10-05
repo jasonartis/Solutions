@@ -567,7 +567,13 @@ and 0 seats, and the script calls that VACUOUS, not "zero affected."** db 248/24
 SYNAGOGUE-SCHEDULES week render, untouched by this diff, passing in isolation in 8.8s;
 at the time the `myzmanim` API was returning `NotAuthorized` for every date and
 falling back to hebcal, which made that page slow — **RESOLVED 2026-09-24: the key works and
-the page now serves from cache**); ratchet 227 → 237; new `scripts/prod-verify-vm-admin-floor.mts` 34/34
+the page now serves from cache**. **⚠ THAT SLOWNESS ATTRIBUTION IS NOW DOUBTFUL — 2026-10-02
+found a DIFFERENT cause for the same test, and it is PLAUSIBLY what this was**: a Playwright
+strict-mode violation, `getByText('6:00 PM')` resolving to two cells, which presents as a
+`toBeVisible` failure with a 5000ms timeout line and therefore reads exactly like a slow
+render unless you scroll to the "resolved to 2 elements" line. **Stated as PLAUSIBLE, not
+established** — that run's output is gone and neither session can re-read it. Fixed for good
+either way; see the strict-mode gotcha below); ratchet 227 → 237; new `scripts/prod-verify-vm-admin-floor.mts` 34/34
 local (the function-only verifier cannot see a trigger BINDING). Full story: docs/19's
 2026-09-22 section. **TWO DEPLOY FACTS WORTH KEEPING: (a) the `service_role` revoke was
 VINDICATED ON PROD** — the helper reads `postgres=X/postgres` only, while the older
@@ -775,27 +781,19 @@ Everything below is open but unranked:
 - Slice 3 remainder: **entity-level joinPolicy** (invite-only/request-approval/open per
   class/location/event) — deferred follow-on. Slice 4 (defaults-on-join) is the only
   unbuilt slice left.
-- Single-entity modules (matchmaking / synagogue-schedules / visual-messaging) NOT yet
-  rank-mapped — OPTIONAL (a real behavior change, not cosmetic). **Note since slice 5:** their
-  vocabularies are entirely rank 0, so they imply no view-as pairs today; rank-mapping any of
-  them will FAIL THE BUILD until every newly-implied pair is explicitly answered. That is the
-  2026-07-30 amendment working as designed, not an obstacle — but budget for it.
-  **NO LONGER PURELY OPTIONAL AS OF 2026-09-10 — it now BLOCKS a real fix.** `module_roles`
-  reads are org-wide (`module_roles_select_member` is `is_org_member OR is_superadmin`, no
-  module/role/self filter), so any org member can enumerate who holds which module role — in
-  `demo-match`, that is the dating pool's membership.
-  **MEASURED 2026-09-14, and it also kills two policies nobody had noticed were dead:**
-  `module_position_rank`'s body maps ONLY classroom, nail-salon and speed-dating and falls
-  through to 0 for everything else — so `module_has_manager_grant` (needs rank ≥ 2) is FALSE
-  for a visual-messaging admin and a matchmaking admin, which is why the census fix is blocked,
-  **and why `module_roles_update_module_manager` and `module_roles_delete_module_manager` are
-  already dead policies for those three modules today.** Narrowing it needs a replacement read
-  path for the people who legitimately administer grants, and the natural one
-  (`module_has_manager_grant`) requires rank ≥ 2 — which is FALSE for a matchmaking admin,
-  because these three modules sit entirely at rank 0. So the census leak cannot be closed
-  until they are rank-mapped. Full detail, including why narrowing the select policy ALONE
-  does nothing (`module_roles_write_org_admin` is `for all`, and its USING also governs
-  SELECT): docs/19's "ADJACENT, FOUND 2026-09-10, DESCOPED" section.
+- ~~Single-entity modules (matchmaking / synagogue-schedules / visual-messaging) NOT yet
+  rank-mapped, which BLOCKS the census fix.~~ **BOTH HALVES DONE.** Rank-mapping shipped and
+  is on prod (`20260925030000`, 2026-09-29); the census fix it unblocked is built
+  (`20261002010000`, 2026-10-02 — see the block above), **in the repo, not yet on prod.**
+  Two live facts survive from this bullet's long version:
+  (i) `module_roles_update_module_manager` / `_delete_module_manager` were **dead policies**
+  for all three modules while every role ranked 0; the rank map revived them for the
+  matchmaking and visual-messaging `admin` (rank 3) and they remain correctly dead for
+  synagogue-schedules, whose only role `maker` is rank 1 by founder decision.
+  (ii) **Narrowing `module_roles`' SELECT policy alone does not narrow the table** —
+  `module_roles_write_org_admin` is `for all` and its USING governs SELECT too. That is why
+  this slice's tests assert the EFFECTIVE read set by signing in as real users, never one
+  policy's text. Detail: docs/19's ADJACENT section + its 2026-10-02 continuation.
 - ~~**The e2e flake family** (2026-07-30 speed-dating; 2026-08-05 "loses ONE test per full run,
   a different one each time").~~ **BOTH FIXED; closed at the 2026-08-09 docs beat — see item 3.**
   The diagnosis is the part worth keeping: **a MOVING failure is environmental, not a set of test
@@ -965,6 +963,17 @@ Everything below is open but unranked:
   Everything passes locally regardless, which is exactly what makes it misleading. `supabase db
   reset` before treating a local run as a deploy rehearsal — and note that reset wipes a
   database a concurrent session may be using, so check first.
+  **⚠ AND THE LEDGER IS NOT A PROXY FOR THE SCHEMA — A MISSING LEDGER ROW DOES NOT MEAN THE
+  OBJECTS ARE ABSENT (measured 2026-10-02).** `20260925030000` was missing from local's ledger
+  entirely while its effect was fully live: `module_position_rank('matchmaking','admin')`
+  returned **3**, not 0. A concurrent session read the warning above, inferred "not in the
+  ledger, so not applied, so matchmaking admin ranks 0, so the manage page is broken locally",
+  and stated that consequence as fact; it was wrong in every step after the first. **The
+  warning above is about FAITHFUL REPLAY, not about what exists** — the two come apart because
+  objects can be applied by hand or by another session without the ledger row landing. → To
+  learn whether something is applied, **ask the catalog, not `schema_migrations`**: call the
+  function, query `pg_policy`/`pg_proc`. One query, and it is the only one that answers the
+  question actually being asked.
   **⚠ A MIGRATION MUST MEET AN EMPTY DATABASE BEFORE IT IS PUSHED (learned the hard way
   2026-09-28).** `20260928010000`'s assertion block raised when `public.profiles` was empty —
   and migrations run against a FRESH database before any seed, so that is exactly CI's state.
@@ -1204,27 +1213,16 @@ that is not `security definer` with a pinned `search_path` (`:181-186`), and thi
 its only internal call is schema-qualified, so search_path cannot redirect it; making it
 definer would hand a pure lookup an elevation it has no use for. Refining the script is a
 founder call (it loosens a shared check). Full reasoning: docs/24 §4b.
-**Original entry, kept because the deploy hazard it names is real:** built 2026-09-25, Opus. docs/15 slice 2 is finally complete, 6 of 6 modules. One `create or replace` of
-`module_position_rank` — no table, column, policy or trigger. matchmaking admin 3/matchmaker 1,
-synagogue maker 1, visual-messaging admin 3/**moderator 1 (decided in-session, NOT by the
-founder — docs/24 §4b has the reasoning; say so if you want 3)**. **Exactly one widening:
-`module_has_manager_grant` becomes true for the two admins, which is what unblocks the census
-leak; nothing was narrowed** (every comparison that could revoke was `0 > 0` before). Typecheck
-9/9, **257/257** across the six in-scope db suites; `docs/rank-admission-map.md` regenerated.
-**The 2026-07-30 amendment fired as designed** — seven newly-implied view-as pairs, all
-answered OFF, teeth proven by deleting an entry (`TS2741`) and by reverting the function body
-(3 of 5 new tests fail).
-**CI GREEN IN ITS EXACT ORDER on `643daec` — db 257/257 → e2e 52/52, same database, no reset;
-`check` and `deploy` both success.** Note the PREVIOUS commit (`84ca43e`, DOCS-ONLY) failed
-e2e on `platform.spec.ts:146 › org settings` with a second test flaky-but-passing — a
-docs-only diff cannot cause that, so it is the known flake family, and it did NOT recur.
-**Prod now serves the new TS rank table while prod's DATABASE still returns 0 for these
-roles** (the migration is not applied). That divergence is harmless and fail-safe — the ranks
-are read only for DISPLAY on the superadmin view-as console, every new pair is OFF, and the
-prod DB is the STRICTER of the two — but it should be closed by applying the migration.
-**For once `scripts/prod-verify-migration.ts` is exactly the right verifier and its result
-will NOT be vacuous**: that script is function-only, and this migration defines exactly one
-function (contrast the policy-heavy migrations that each needed a bespoke script).
+**Build detail (2026-09-25, Opus) now lives in docs/24 §4b — pruned from here 2026-10-02,
+and one paragraph of it was DELETED AS FALSE rather than merely condensed:** it said *"prod
+now serves the new TS rank table while prod's DATABASE still returns 0 for these roles (the
+migration is not applied)"* and called for closing that divergence. **The migration HAS been
+applied** (2026-09-29, stated three paragraphs above in this very block, and re-confirmed
+2026-10-02 — `migrate:prod --dry-run` reports prod up to date with nothing pending). A
+block that contradicts itself across twenty lines is worse than one that is merely long.
+What is kept: docs/15 slice 2 is complete, 6 of 6 modules; the 2026-07-30 amendment fired as
+designed (seven newly-implied view-as pairs, all answered OFF); and the durable review
+finding below.
 **BOTH ADVERSARIAL REVIEWS FOUND REAL DEFECTS, all fixed — the durable one:
 `view_as_guard_session` IS A FIFTH RANK CONSUMER the migration header missed.** It is generic
 and is the ONLY authority gate on `view_as_sessions`. Its rank arm flipped false→true for all
@@ -1235,10 +1233,33 @@ test whose tripwire was proven by adding the hazardous arm. *Why it was missed: 
 live in the rank map's FIRST table, not the per-module sections.* The other two findings were
 false claims in view-as notes (a matchmaker's reach is split, not all assignment-scoped; and a
 vm admin's reach is a strict SUPERSET of a moderator's, so that pair has no "absence" to show).
-**NEXT: the census-leak fix is UNBLOCKED but is NOT a one-line policy narrowing** — it breaks
-the view-as target picker, which reads `module_roles` through the caller's own client and whose
-rank-1 callers (speed-dating `host`) hold a live mode-1 edge the SQL mirror cannot see (it
-carries mode 2 only). Design that read path first; docs/24 §6.
+**THE `module_roles` CENSUS LEAK IS FIXED IN THE REPO (2026-10-02, `20261002010000`) — NOT YET
+ON PROD; `migrate:prod` has not run.** `module_roles_select_member` (any org member read every
+grant in the org, in every module) is replaced by `module_roles_select_self_or_manager`: own
+rows, `is_org_admin`, `module_has_manager_grant` for THAT row's module, `is_superadmin`.
+Measured before/after as 13 real signed-in users — an ordinary `demo-match` member went from 6
+grants to 1; **grace, a plain org member whose rank-2 salon grant is SCOPED, kept all 6**,
+which is the proof that `module_has_manager_grant` does NOT carry `has_module_role`'s
+`scope_ref is null` cliff. db 270/270 (the rank-admission map gained one line on its own:
+`module_has_manager_grant` is now a rank gate on `module_roles (select)`).
+**⚠ THIS BLOCK PREVIOUSLY SAID THE FIX "IS NOT A ONE-LINE POLICY NARROWING" BECAUSE IT
+"BREAKS THE VIEW-AS TARGET PICKER" VIA SPEED-DATING'S RANK-1 `host`. THAT WAS FALSE AND IS
+WITHDRAWN — do not go and design the definer read path it asked for; nothing needs it.** The
+picker (`targetsFor`) is called ONLY when `active.mode2` is true
+(`components/view-as/page.tsx:121`), and a mode-1-only edge never enumerates anybody — mode 1
+renders the CALLER's own rows. `host -> participant` is `mode1: true, mode2: false`. All four
+mode-2 edges on the platform start at rank ≥ 2, now **pinned by a test** whose teeth were
+proven. *The reusable lesson: every component fact in that claim was true and measured; the
+error was the JOIN between them. A chain of verified facts is not a verified conclusion —
+find the caller and read its guard.* Full account: docs/24 §6b, docs/19's 2026-10-02 section.
+**WHAT IT DOES NOT CLOSE, recorded so nobody reads it as more: four residual census paths in
+MODULE tables** (`mm_pair_scores`, `sal_worker_profiles_select_member` — literally the
+predicate just removed, `mm_matchmaker_assignments`, `mm_questions.submitted_by`), none a
+regression, each purpose-shaped where `module_roles` was bound to no purpose at all. They
+belong with docs/22 §20.2's founder-deferred entity-level question. **One is a real defect
+worth its own slice: `mm_assignment_covers_me` NEVER REFERENCES its `check_matchmaker_id`
+parameter** (verified in the deployed body), so that policy arm reads as a matchmaker check
+and is actually "any row naming me" — outcome defensible, signature lying. docs/24 §6b.1.
 
 **Standing rules:** never start a slice/module build without the founder initiating; every
 migration/RLS/trigger change runs the docs/03 #12 rhythm (draft → adversarial review →
@@ -1444,6 +1465,21 @@ in the sections below.
   `node-compile-cache` corruption below — clearing that does not help. **Use `pnpm exec turbo
   run test --concurrency=1`.** Never read a parallel-run failure as a real one. The same
   applies to `typecheck` and `build` (exit code **134** = SIGABRT is this, not a type error).
+  **⚠ BUT A 134 DOES NOT TELL YOU WHICH OF THREE THINGS IT IS, AND ONE OF THEM IS THE
+  DATABASE ABOUT TO VANISH (2026-10-02, two sessions the same day).** Measured cases:
+  (a) `pnpm --filter web build` exited 134 and **Docker's engine died minutes later**, taking
+  Supabase with it — one memory-pressure event, not two; (b) a concurrent session's
+  `turbo run build` exited 134 where **`--concurrency=1` was NOT enough** and
+  `NODE_OPTIONS=--max-old-space-size=6144` with a direct `pnpm run build` in `apps/web` fixed
+  it, with Docker healthy for the rest of that session (**reported by that session, not measured
+  here**); (c) the same build then succeeded on a plain retry after deleting
+  `%TEMP%
+ode-compile-cache`. **So `--concurrency=1` is not a universal fix and "134 means
+  Docker is dying" is not a rule either.** The discriminator is one command, so run it before
+  choosing a remedy: **`docker ps`.** If the engine answers, it is a heap problem (clear the
+  compile cache, then the heap flag). If it reports *"cannot find the file specified"* on
+  `dockerDesktopLinuxEngine`, the engine is gone and your next test run will fail wholesale for
+  that reason instead — see the Docker entries above, and restart Kong afterwards.
 - **THE WHOLE E2E SUITE FAILING IS ALWAYS INFRASTRUCTURE, NEVER YOUR DIFF — and there are FOUR
   causes that look identical at the summary line.** (Merged 2026-08-11 from three separate entries;
   they kept being written as if each were the only one, which is exactly what makes the summary
@@ -1466,6 +1502,14 @@ in the sections below.
   3. **`browserType.launch: Executable doesn't exist at …\ms-playwright\chromium_headless_shell-…`
      (2026-08-11)** — the browser binary is simply not installed. The app builds, the server
      starts, the seed succeeds. **Fix: `pnpm --filter web exec playwright install chromium`.**
+  **A FIFTH, AND IT BLOCKS THE RUN BEFORE ANY TEST: `http://localhost:3000/login is already
+  used` (2026-10-02).** Under `CI=true` the config sets `reuseExistingServer: false`, so
+  Playwright refuses to start when anything holds :3000 — and its OWN `next start` webserver
+  **outlives a killed or timed-out run**, so the usual cause is your own previous attempt, not a
+  stale dev server. **Check whose it is before killing it:** `netstat -ano | grep ":3000"` for
+  the pid, then `Get-CimInstance Win32_Process -Filter "ProcessId=N"` and read `CommandLine` —
+  **`next start` is a Playwright orphan and safe to kill; `next dev` is a live session's server
+  and is not yours to touch** (with two sessions sharing this tree, that distinction matters).
   4. **Docker not actually running** — see the Docker entries above; a dead or wrong-mode engine
      takes the database with it.
   **Measure, don't theorise** (the 2026-08-06 lesson cost an hour): `curl -X POST
@@ -1477,6 +1521,26 @@ in the sections below.
   per-test error (the only thing that distinguishes the four) and leaves a trailing list of test
   names that reads as a mysterious mass failure. Redirect to a file and grep it; the same rule
   already stated below for exit codes applies to diagnosing causes.
+- **A PLAYWRIGHT FAILURE THAT PRINTS THE ELEMENT IT SAYS IS NOT VISIBLE IS A STRICT-MODE
+  AMBIGUITY, NOT A MISSING ELEMENT (2026-10-02).** `expect(locator).toBeVisible() failed` whose
+  body then lists `1) <td ...>6:00 PM</td> ... 2) <td ...>6:00 PM</td>` is saying the locator
+  matched TWO elements, so strict mode refused — the content is right there on the page. Read
+  the candidate list: if it enumerates matches, the fix is a narrower locator, never a timeout,
+  a retry, or a hunt for a rendering bug.
+  **The worked case, because it recurs ANNUALLY and reads as a real break:** the two synagogue
+  tests assert `getByText('6:00 PM')`, which is the weekday `Mincha` FIXED 18:00 rule. Shabbat's
+  `Mincha & Kabbolas Shabbos` is `sunset - 20, rounded DOWN to 5 minutes` — so in the weeks when
+  sunset lands in 18:20-18:24 it renders *exactly* 6:00 PM and collides. **Measured 2026-10-02:
+  sunset 6:24 PM, two cells reading 6:00 PM, both tests red on a diff that could not possibly
+  touch them** (one of the two needs NO LOGIN at all, which is the tell that it is not your
+  auth/RLS change). It passes again as soon as sunset drifts a few minutes — so it will look
+  like a flake that "fixed itself", and come back next autumn and each spring.
+  **Fixed properly rather than waited out:** both now match the row whose label cell is exactly
+  `Mincha`, which also excludes `Mincha (winter)` and is strictly STRONGER than the old
+  assertion — it proves the fixed rule rendered, not merely that some cell says 6:00 PM.
+  **The general rule: an assertion on a formatted TIME or other computed display value is a
+  collision waiting to happen** — scope it to its row, and remember a zman-derived value can
+  wander onto a fixed one on any given date.
 - **Do NOT edit app source while the e2e suite is running** (the local config serves
   `pnpm dev`, so an edit lands mid-run on a half-compiled app). Editing `docs/*.md` is safe.
   Related: piping the run through `| tail -N` swallows its exit code, so a failing suite
@@ -1507,6 +1571,19 @@ in the sections below.
   so this can't go through the ordinary RLS client) — the suite that dirties her state now cleans it
   up itself, so no downstream test ever sees the pollution regardless of run order. Verified by
   reproducing the exact CI sequence locally post-fix: 139/139 db, then 51/51 e2e, no reset between.
+  **⚠ IT RECURRED 2026-10-02, AND THE LESSON IS THAT THE FIX DOES NOT GENERALISE — IT IS
+  PER-BLOCK.** The census slice added a new `describe` that signs in as grace (she is the only
+  plain-org-member holder of a SCOPED rank-2 grant, so the only subject that can isolate
+  `module_has_manager_grant` from `is_org_admin`), and broke the SAME e2e test again. **The
+  2026-08-20 fix is an `afterAll` on ONE block; it protects nothing else**, and a new block at
+  the END of the file is strictly worse than the old one, because its pollution lands after the
+  original's cleanup has already run. Found by running CI's exact order, not by review —
+  neither adversarial reviewer looked at fixture side effects. → **Before signing in as grace
+  anywhere, copy that `afterAll`** (raw owner connection; both tables are read-only to every
+  api role including the superadmin, so an RLS client cannot do it). → And verify the cleanup
+  with a CONTROL, or the check is vacuous: assert grace has 0 rows **and that other users have
+  some** (measured: grace 0, ten other users non-zero), otherwise a dead capture trigger reads
+  as a successful cleanup.
   **`scripts/verify-activity-capture.mts` still signs in as grace with no equivalent cleanup** — it's
   a standalone script never run by CI, but running it by hand before e2e with no reset in between
   will still reintroduce this. A `db:reset`+`seed` before e2e fixes it same as it always did (a

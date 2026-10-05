@@ -444,11 +444,138 @@ Dana. That is the intended outcome, not a side effect to correct.
 | piece | state |
 |---|---|
 | Rank-mapping the three modules (§2) | **SHIPPED — ON PRODUCTION AND VERIFIED 2026-09-28.** `20260925030000` is in prod's `schema_migrations`, and `module_position_rank` was spot-checked live against prod: matchmaking/admin **3**, visual-messaging/admin **3**, visual-messaging/moderator **1**, synagogue-schedules/maker **1**. §4b. |
-| The `module_roles` census-leak fix (§4.5) | **UNBLOCKED, NOT BUILT.** See below. |
+| The `module_roles` census-leak fix (§4.5/§5.5) | **BUILT 2026-10-02 — `20261002010000`, in the repo, NOT YET ON PROD.** §6b. |
 | The roster fold (§3) + `conversation_moderator` rename (§4 item 4) | **NOT BUILT.** Its own slice. |
 
-**The census-leak fix is no longer blocked, but it is not a one-line policy narrowing either,
-and the reason is worth recording before someone tries.** Narrowing
+## 6b. THE CENSUS-LEAK FIX IS BUILT — `20261002010000`, 2026-10-02, Opus
+
+**IT WAS A ONE-POLICY NARROWING AFTER ALL, AND THE REASON THIS SECTION SAID OTHERWISE WAS A
+MISREADING OF THE PICKER.** The paragraph that used to sit here is preserved verbatim at the
+end of this section, because the *shape* of its mistake is worth more than the claim was.
+
+```
+module_roles_select_self_or_manager :: SELECT ::
+  (user_id = auth.uid() and is_org_member(org_id))
+  or is_org_admin(org_id)
+  or module_has_manager_grant(org_id, module_key)
+  or is_superadmin()
+```
+
+Measured before/after across 13 (caller, org) pairs as real signed-in users: ordinary members
+drop from the whole org to their own rows; org admins, superadmins and rank-≥-2 module
+managers are unchanged. Full table and the method: docs/19's 2026-10-02 section. §5.5's
+predicted outcome held exactly, **including the part that looks like a regression**: Mel the
+matchmaker (rank 1) now reads only her own row. That is intended — it is recorded as a named
+test, not just prose, so nobody "fixes" it back.
+
+**THE CORRECTION, stated precisely.** The old text said the fix breaks the view-as target
+picker for a rank-1 caller holding a live mode-1 edge. The picker is `targetsFor()`, and
+`apps/web/components/view-as/page.tsx:121` calls it **only when `active.mode2` is true**
+(`!inMode2 && active.mode2`); `viewAsTabsFor()` (`packages/platform/src/view-as.ts:522`)
+derives a tab's `mode2` as `prev.mode2 || edge.mode2`, so a mode-1-only edge yields `false`
+and never reaches the read. **Mode 1 renders the CALLER's own rows and has no person picker at
+all.** The named counterexample, speed-dating `host -> participant`, is
+`mode1: true, mode2: false` (`view-as-modules.ts:1312`) — so it is not a counterexample, it is
+the case that structurally cannot hit the picker. Enumerated live: **exactly four mode-2 edges
+exist** (classroom professor(2)→ga, professor(2)→student, nail-salon admin(3)→worker,
+manager(2)→worker) and **zero start below rank 2**. No edge-aware definer was needed and none
+was built.
+
+**WHY THE WRONG CONCLUSION WAS REACHED, because this is the reusable part.** Every component
+fact in the old paragraph was TRUE and correctly measured: `targetsFor` really does read
+`module_roles` through the caller's own client; `module_view_as_edge` really does carry mode 2
+only; `host` really is rank 1 with a live mode-1 edge into `participant`. The error was in the
+JOIN between them — treating the mirror's mode-1 blindness as a gap the picker needs bridged,
+when the picker is itself mode-2-only and therefore sits entirely on the covered side of it.
+**A chain of individually verified facts is not a verified conclusion.** The cheap check that
+would have caught it is the one that was never run: *find the caller and read its guard.*
+
+**PINNED BY A TEST WITH PROVEN TEETH.** `rls.test.ts`'s "EVERY mode-2 view-as edge starts at a
+position SQL ranks >= 2" enumerates the declarations, reads each source rank from SQL's
+`module_position_rank` (the authority the policy actually calls, never the TypeScript mirror),
+and fails naming the offender. Teeth proven by flipping `host -> participant` to `mode2: true`
+and watching it fail with `speed-dating: host (rank 1) -> participant`. It also carries a
+non-vacuity control asserting at least one mode-2 edge exists. **So the invariant the policy
+leans on is now machine-checked rather than a reading of today's declarations.**
+
+**§1.6's OWN WORDING IS SLIGHTLY WRONG AND THE MIGRATION HEADER CORRECTS IT.** §1.6 says
+"Every live `_can_manage`-style function (`mm_can_manage`, `syn_can_write`, `vm_can_manage`)
+reads `is_org_admin(...) OR has_module_role(...)`" — true of those three, but there are
+**five** such gates, and the other two do not use `has_module_role`: `cls_can_manage` and
+`sal_can_manage` test `module_position_rank(...) >= 2` inline instead. **The conclusion
+survives intact and is in fact better supported**, because what the arm depends on is only
+that `is_org_admin()` is the FIRST DISJUNCT — which is true of all five, verified in the
+deployed bodies. Caught while re-reading the migration header before committing, i.e. inside
+the window where a header can still be fixed (docs/03 #28).
+
+**§1.6's rule was kept and is isolated by its own test.** `is_org_admin(org_id)` is in the OR
+literally, not only via `is_superadmin()`. orgtest — holder of exactly one rank-0 grant —
+reads only himself as a plain member and the entire org the instant he is promoted to admin,
+with nothing else about him changed.
+
+**WHAT WAS DELIBERATELY NOT CHANGED.** `module_roles_write_org_admin` and
+`module_roles_write_superadmin` are still `for all`, so their USING still governs SELECT
+(docs/20 §8.1). Left alone because both admit exactly the readers the new SELECT policy also
+admits, so the effective read set is a union of three same-intent doors rather than a hole —
+and the tests assert that EFFECTIVE set by signing in as real users and counting rows, never
+by reading one policy's text, which would be §8.1's trap in miniature.
+
+**Two incidental results worth keeping.** (1) `module_has_manager_grant` is now a rank gate on
+`module_roles (select)`, which `docs/rank-admission-map.md` discovered on its own and added as
+one line — the generated map catching a new consumer without being told. (2) 18 functions in
+`public` read `module_roles` and **all 18 are SECURITY DEFINER** (control: 24 non-definer
+functions exist in `public`), so no SQL predicate's answer moved; only direct client reads did.
+
+**NOT ON PROD.** `migrate:prod` has not run for it.
+
+### 6b.1 WHAT THIS DOES **NOT** CLOSE — four residual paths, found by adversarial review
+
+Recorded so the fix is not read as more than it is. **None is a regression introduced by
+`20261002010000`; all four predate it and all four live in MODULE tables, not in
+`module_roles`.** Three were confirmed live as `charlie@demo.local` (rank 0) in rolled-back
+transactions; the fourth is partly reasoned and says so.
+
+1. **`mm_pair_scores` is a near-equivalent dating-pool census** (`20260709020000:549`,
+   `user_a = auth.uid() or user_b = auth.uid() or ...`). `recompute.ts:20` builds the pair set
+   *from* `module_roles ... role = 'single'`, so **every counterparty is by construction a
+   `single`**. Confirmed: charlie read 2 of the 3 other pool members. **The honest reading is
+   that this is the PRODUCT, not a bug** — CLAUDE.md already lists "matchmaking's own scored
+   matches" as one of the two purpose-bound exceptions to "no org lets an ordinary member
+   browse its roster". It is purpose-bound (you see pairs involving YOU) where
+   `module_roles` was not (you saw everyone's grants in every module). But at real scale every
+   single is scored against every other, so **do not claim the pool census is closed
+   platform-wide — only that the table nothing else guarded no longer discloses it.**
+2. **`sal_worker_profiles_select_member` is `is_org_member(org_id)`** (`20260709030000:760`)
+   — literally the predicate just removed from `module_roles`, giving a full census of the
+   nail-salon `worker` role. Confirmed live. **Equivalent in shape, not narrower.** Also
+   plausibly intended (you pick your technician when booking — CLAUDE.md's other purpose-bound
+   exception), but it has never been decided on purpose, which is the difference.
+3. **`mm_assignment_covers_me(check_matchmaker_id, ...)` NEVER REFERENCES ITS FIRST
+   PARAMETER** — verified in the deployed body, not inferred. It returns true whenever
+   `check_target_user_id = auth.uid()` (or you are in the target group), so the
+   `mm_matchmaker_assignments` policy arm **reads as a matchmaker check and is really "any row
+   naming me"**. The OUTCOME is defensible (a single learns who their own matchmaker is, which
+   they should) but **the signature lies**, and a dead parameter on a SECURITY DEFINER used in
+   an RLS policy is exactly what gets misread by the next reader. Its own slice: dropping a
+   parameter changes the signature, so it is a migration plus every call site.
+4. **`mm_questions.submitted_by`** (`20260709020000:512`) is readable for `status='approved'`
+   by any single/matchmaker, so authorship can imply pool membership. Narrower and
+   role-ambiguous. **The column read was confirmed live; the INFERENCE was not measured** —
+   every seeded question was written by an admin through the service role, so no live row
+   actually demonstrates it.
+
+**The generalisable point, worth more than the four items:** closing a census on the table
+that *names* the thing does not close it on the tables that *mirror* it. `module_roles` was
+worth fixing because it was the one disclosure **bound to no purpose at all** — it answered
+"who holds what, in every module" to anyone who asked. The four above each answer a narrower,
+purpose-shaped question. **Deciding whether those purposes are the right ones is docs/22
+§20.2's founder-deferred entity-level visibility question, not this slice.**
+
+---
+
+*Superseded text, kept because the mistake is instructive (see "WHY THE WRONG CONCLUSION WAS
+REACHED" above):* **The census-leak fix is no longer blocked, but it is not a one-line policy
+narrowing either, and the reason is worth recording before someone tries.** Narrowing
 `module_roles_select_member` to self-plus-managers breaks the view-as target picker, which
 reads `module_roles` through the caller's ordinary RLS client
 (`apps/web/lib/view-as.ts:151-156`) to enumerate holders of a position. A rank-1 caller with a

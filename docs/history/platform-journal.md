@@ -4,6 +4,119 @@ The running, dated build journal that used to live in `CLAUDE.md`'s "## Current 
 section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every session)
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
+- **2026-10-02 (THE `module_roles` CENSUS LEAK, CLOSED — `20261002010000`. Opus. In the repo,
+  NOT on prod).** Open since 2026-09-10, blocked twice, unblocked by the rank map on 09-29.
+  **The leak:** `module_roles_select_member` was `is_org_member(org_id) OR is_superadmin()` —
+  no module, role or self filter — so any active member read every grant in their org. In
+  `demo-match` that is the membership of the dating pool. **The fix is one policy**:
+  `module_roles_select_self_or_manager` = own rows ∨ `is_org_admin` ∨
+  `module_has_manager_grant(org_id, module_key)` ∨ `is_superadmin`.
+  **MEASURED BEFORE AND AFTER, 13 (caller, org) pairs, real signed-in users** — ordinary
+  members 6 → 1, org admins/superadmins/rank-≥2 managers unchanged. **The measurement that
+  carries the most weight is grace's**: a plain org `member` of demo-salon whose rank-2
+  nail-salon grant is SCOPED. She kept the full read, which is the live proof that
+  `module_has_manager_grant` does NOT carry `has_module_role`'s `scope_ref is null` cliff —
+  the exact regression both reviewers caught in the 2026-09-15 slice.
+  **THE HEADLINE IS A CORRECTION, NOT THE FIX.** Both docs/19 and docs/24 §6 said this was
+  "NOT a one-line policy narrowing" because it would break the view-as target picker for a
+  rank-1 caller holding a live mode-1 edge, naming speed-dating's `host`, and both prescribed
+  building an edge-aware SECURITY DEFINER read path. **That was false, and the one-line
+  narrowing was correct.** `targetsFor()` is called ONLY when `active.mode2` is true
+  (`components/view-as/page.tsx:121`); `viewAsTabsFor` derives a tab's `mode2` as
+  `prev.mode2 || edge.mode2`, so a mode-1-only edge yields false and never reaches the read.
+  **Mode 1 renders the CALLER's own rows and has no person picker at all.** The named
+  counterexample `host -> participant` is `mode1: true, mode2: false`. Enumerated live:
+  **exactly four mode-2 edges exist and zero start below rank 2.** The claim had auto-loaded
+  into every session through CLAUDE.md for a week; it is now withdrawn there explicitly, since
+  a stale claim of a BLOCKER sends the next session to build something nothing needs.
+  **WHY IT WAS WRONG, which is the part worth carrying: every component fact in it was TRUE
+  and correctly measured** — the picker really does read `module_roles` through the caller's
+  own client, `module_view_as_edge` really does carry mode 2 only, `host` really is rank 1 with
+  a live mode-1 edge. The error was the JOIN: treating the mirror's mode-1 blindness as a gap
+  the picker needs bridged, when the picker is itself mode-2-only and sits entirely on the
+  covered side of it. **A chain of individually verified facts is not a verified conclusion.**
+  The check that would have caught it costs one grep: *find the caller and read its guard.*
+  **TESTS, 8 NEW, EACH ARM ISOLATED** because the demo fixtures confound them (alice is both an
+  org owner and a rank-3 matchmaking admin, so her full read proves nothing about which arm
+  supplied it). Subjects chosen so exactly one arm can be responsible: grace for
+  `module_has_manager_grant` (scoped, plain member), orgtest promoted mid-test for
+  `is_org_admin` (one rank-0 grant, before/after with nothing else changed), owner@demo.local
+  for `is_superadmin` (not a member, holds none of the rows he reads). Plus a module-boundary
+  test (bob gets classroom rank 2 in demo-a and reads every classroom grant and NONE of the
+  other module's) and the invariant test pinning "every mode-2 edge starts at rank ≥ 2",
+  read from SQL's `module_position_rank` rather than the TypeScript mirror.
+  **TEETH PROVEN BOTH WAYS.** Reverting the policy fails 5 of 8 — and the 3 that still pass
+  are exactly the ones guarding against OVER-narrowing, which is the right answer, not a gap.
+  Flipping `host -> participant` to `mode2: true` fails the invariant test by name
+  (`speed-dating: host (rank 1) -> participant`).
+  **THE RANK-ADMISSION MAP CAUGHT SOMETHING ON ITS OWN.** `rank-admission.test.ts` failed with
+  a snapshot diff adding one line: `module_has_manager_grant | rank >= 2 | direct |
+  module_roles (select)`. Nobody told it the policy existed; it discovered a new rank consumer
+  from the catalog. That is the discovered-not-declared design paying off.
+  **THE EMPTY-DATABASE RULE WAS FOLLOWED AND VISIBLY SO.** `supabase db reset` applied it
+  against a fresh database, and `20260928010000` printed its own "no profiles yet (fresh
+  database)" notice immediately before it — so the empty state was observed, not assumed. The
+  migration's only assertion block is catalog-only for that reason.
+  **ADVERSARIAL REVIEW FOUND FOUR RESIDUAL CENSUS PATHS, none a regression, all in MODULE
+  tables** — `mm_pair_scores` (near-equivalent for the dating pool, but purpose-bound and
+  arguably the product), `sal_worker_profiles_select_member` (**literally `is_org_member`, the
+  predicate just removed from `module_roles`**), `mm_matchmaker_assignments`,
+  `mm_questions.submitted_by`. Recorded in docs/24 §6b.1 rather than quietly fixed, because
+  each is purpose-shaped where `module_roles` was bound to no purpose at all, and deciding
+  those purposes is docs/22 §20.2's founder-deferred question. **One is a genuine defect worth
+  its own slice: `mm_assignment_covers_me(check_matchmaker_id, ...)` NEVER REFERENCES its first
+  parameter** — verified in the deployed body — so the policy arm reads as a matchmaker check
+  and is really "any row naming me". Outcome defensible, signature lying.
+  **Also live-verified because the seed confounds it:** a matchmaking `admin` who is NOT an org
+  admin (constructed in a rolled-back transaction) passes `mm_can_manage` and still reads all 4
+  `single` and 1 `matchmaker` rows that `matchmaking/ui/manage/page.tsx:48-49` needs — the page
+  docs/19 point 2 said the narrowing would break.
+  **THE SLICE'S OWN TEST BROKE e2e, AND ONLY CI'S EXACT ORDER FOUND IT.** The new block signs
+  in as grace — unavoidably, since she is the only plain-org-member holder of a SCOPED rank-2
+  grant and therefore the only subject that isolates `module_has_manager_grant` from
+  `is_org_admin`. That real password sign-in advances `last_sign_in_at`, phase 1's trigger
+  records it, and `platform.spec.ts:2182` asserts grace has NEVER signed in. **This is the
+  documented 2026-08-20 trap, and it recurred because the 2026-08-20 fix does not generalise:
+  it is an `afterAll` on ONE describe block.** A new block at the END of the file is strictly
+  worse than the original, because its pollution lands after that block's cleanup has run.
+  **Neither adversarial reviewer found it** — both were pointed at the policy, and fixture side
+  effects are not a policy question. It took db-suite-then-e2e-on-the-same-database, which is
+  the one thing a local "run the tests" habit skips. Fixed with the same `afterAll` (raw owner
+  connection — both tables are read-only to every api role including the superadmin), and
+  **verified with a control, because the obvious check is vacuous**: grace 0 rows AND ten other
+  users non-zero, so a dead capture trigger cannot masquerade as a successful cleanup.
+  **TWO OTHER e2e FAILURES WERE INVESTIGATED AND ARE NOT THIS DIFF** — the synagogue week
+  render and the public schedule page, both failing on a `6:00 PM` cell. Cause measured rather
+  than assumed: **`supabase db reset` wipes `syn_zmanim_cache` (0 rows after a reset)**, so the
+  page has no cached zmanim and falls back to a live provider, which is slow enough to miss the
+  assertion. The documented week-render flake, with its mechanism now pinned to the cache being
+  empty rather than to the myzmanim account state.
+  **A FALSE CLAIM WAS CAUGHT IN THE MIGRATION'S OWN HEADER on the last read before commit** —
+  it asserted that *every* live `_can_manage` reads `is_org_admin(...) OR has_module_role(...)`.
+  True of `mm_`/`syn_`/`vm_`; `cls_can_manage` and `sal_can_manage` test
+  `module_position_rank >= 2` inline. The conclusion survived (all five lead with
+  `is_org_admin`, which is all the arm needs), which is exactly what makes this class hard — no
+  test fails, no page breaks, just a permanent false statement, since docs/03 #28 makes a
+  pushed header uneditable. Now docs/03 **#33**; the verified-facts-wrong-conclusion rule is
+  **#32**.
+  **DOCKER'S ENGINE DIED MID-SLICE** and took the database with it, presenting as 52 of 53 e2e
+  tests failing. Preceded by a build exiting **134**, which was written off as the known host
+  OOM. A concurrent session then supplied the counter-case — its own 134 was a genuine heap
+  problem that `--concurrency=1` did NOT fix and a heap flag did — and a third case closed it:
+  the same build here succeeded on a plain retry after deleting `%TEMP%\node-compile-cache`.
+  **Three cases, three remedies, one exit code**, so the entry became a discriminator (`docker
+  ps`) rather than a story. Its heap-flag case is labelled in CLAUDE.md as reported by that
+  session and not measured here.
+  **Two sessions shared the tree, and the collaboration is the thing worth recording.** The
+  other session cleared the reset, confirmed it added no `module_roles` reader, independently
+  re-verified the picker correction and conceded it, corrected my 134 overgeneralisation before
+  it shipped as a rule, and — believing this session had ended with the work uncommitted —
+  **asked before touching any of it rather than salvage-branching first.** Its premises were
+  stale rather than wrong-at-the-time, and one question was what established that. It also
+  declined to delete its own tripwire on my say-so that the corrections were "written", on the
+  correct grounds that **an uncommitted correction is exactly as losable as an unwritten one.**
+  Staged by explicit path, committed with `git commit -- <paths>`.
+
 - **2026-10-02 (MODULE 6 VIDEO: JaaS ADOPTED, AND NINE LATENT BUGS FOUND BY READING. Opus,
   no migration, no DB touched).** Started as a question — *"have we built the module that
   required jitsi yet?"* — and the honest answer was "the code exists and has never once run."

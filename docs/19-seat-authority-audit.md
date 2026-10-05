@@ -585,6 +585,75 @@ Also: whatever replaces the policy must keep `is_org_admin(org_id)` in the OR �
 today WITHOUT ever holding a `module_roles` row, so a bare manager-grant replacement
 would strip their access to the table. Full write-up: docs/24 §1.6, §4b, §6.
 
+## SHIPPED IN THE REPO 2026-10-02 — `20261002010000_module_roles_census.sql`. NOT YET ON PROD.
+
+The section above is now HISTORY for everything except its §"third obstacle", which was
+**WRONG** and is corrected below. The policy is:
+
+```
+module_roles_select_self_or_manager :: SELECT ::
+  (user_id = auth.uid() and is_org_member(org_id))
+  or is_org_admin(org_id)
+  or module_has_manager_grant(org_id, module_key)
+  or is_superadmin()
+```
+
+**Measured before and after, same 13 (caller, org) pairs, real signed-in users.** Before,
+every one of them read every row in their org. After:
+
+| caller | org | reads | why |
+|---|---|---|---|
+| dana (matchmaking `single`, rank 0) | demo-match | 6 → **1** | her own |
+| mel (`matchmaker`, rank 1) | demo-match | 6 → **1** | her own — docs/24 §5.5's intended outcome |
+| gabe (classroom `ga`, rank 1) | demo-a | 6 → **1** | his own |
+| charlie (student + sample member) | demo-a | 6 → **2** | both his own |
+| grace (nail-salon `manager`, rank 2, SCOPED, plain org member) | demo-salon | 6 → **6** | `module_has_manager_grant` |
+| alice (org owner) | demo-match | 6 → **6** | `is_org_admin` |
+| owner@demo.local (superadmin, NOT a member) | demo-match | 6 → **6** | `is_superadmin` |
+
+**grace is the measurement that matters most**: a plain org `member` whose rank-2 grant is
+SCOPED to one location. Her full read can only have come from `module_has_manager_grant`,
+which proves that predicate does NOT carry `has_module_role`'s `scope_ref is null` cliff —
+the regression both adversarial reviewers caught in the 2026-09-15 slice.
+
+**⚠ THE "THIRD OBSTACLE" ABOVE IS FALSE, AND NOTHING WAS BUILT TO WORK AROUND IT.** It says
+the fix breaks the view-as target picker for "any caller below rank 2 who holds a live mode-1
+edge", naming speed-dating's `host`. The picker is `targetsFor()`, and
+`apps/web/components/view-as/page.tsx:121` calls it **only when `active.mode2` is true**;
+`viewAsTabsFor()` sets a tab's `mode2` only from an edge whose own `mode2` is true. **A
+mode-1-only edge never enumerates anybody** — mode 1 renders the CALLER's own rows and needs
+no person picker. `host -> participant` is `mode1: true, mode2: false`
+(`view-as-modules.ts:1312`), so it is not a counterexample; it is the case that never reaches
+the read. Enumerated live: the platform declares **exactly four** mode-2 edges — classroom
+professor(2)→ga, professor(2)→student, nail-salon admin(3)→worker, manager(2)→worker — and
+**zero** of them start below rank 2. So no edge-aware definer was needed, and none was built.
+
+*Why the obstacle was believed: the SQL edge mirror genuinely does carry mode 2 only, which is
+true and was correctly measured. The error was one step later — treating that gap as something
+the picker needs bridged, when the picker is itself mode-2-only and therefore sits entirely on
+the covered side of it.* **That property is now PINNED BY A TEST** (`rls.test.ts`, "EVERY
+mode-2 view-as edge starts at a position SQL ranks >= 2"), which reads the rank from SQL's
+`module_position_rank` rather than the TypeScript mirror, and whose teeth were proven by
+flipping `host -> participant` to `mode2: true` and watching it fail by name. If a future
+slice adds a mode-2 edge below rank 2, that test fails and names it — it does not silently
+hand someone an empty picker.
+
+**What survives from the section above, unchanged and load-bearing:** point 1 (both doors
+must be considered — the two `for all` write policies' USING governs SELECT, which is why the
+tests assert the EFFECTIVE read set and never one policy's text), and §1.6's rule that
+`is_org_admin` must stay in the OR. That arm is isolated by its own test: orgtest, holding one
+rank-0 grant, reads only himself as a member and the whole org the moment he is promoted to
+admin, with nothing else about him changed.
+
+**Also verified live, because the seed confounds it:** a matchmaking `admin` who is NOT an org
+admin (constructed in a rolled-back transaction, since no such user is seeded) passes
+`mm_can_manage` and still reads all 4 `single` and 1 `matchmaker` rows that
+`modules/matchmaking/ui/manage/page.tsx:48-49` needs. That is the page docs/19 point 2 said
+would break, and it is the thing rank-mapping unblocked.
+
+**Still owed:** `migrate:prod` has not run. Do not write SHIPPED/CLOSED on production until it
+has and the prod measurement is taken.
+
 ## POST-MIGRATION PROD MEASUREMENT, 2026-09-11 — nobody lost access
 
 Run AFTER `migrate:prod` applied `20260910040000` (it should have been run

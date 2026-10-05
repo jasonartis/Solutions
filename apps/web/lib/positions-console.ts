@@ -59,8 +59,11 @@ async function rankOf(supabase: SupabaseClient, moduleKey: string, role: string)
 
 export async function getPositionsSnapshot(supabase: SupabaseClient): Promise<PositionsSnapshot> {
   // Every grant on the platform. The superadmin's own RLS admits this
-  // (module_roles_select_member carries an is_superadmin() arm); no definer and
-  // no service-role key, same as every other console screen.
+  // (module_roles_select_self_or_manager keeps a literal is_superadmin() arm);
+  // no definer and no service-role key, same as every other console screen.
+  // That arm is deliberately redundant with is_org_admin()'s own superadmin
+  // disjunct — 20261002010000 kept it literal precisely so THIS read does not
+  // depend on an arm buried inside another function.
   const { data: grantRows } = await supabase.from('module_roles').select('module_key, role, scope_ref')
   const grants = (grantRows ?? []) as { module_key: string; role: string; scope_ref: string | null }[]
 
