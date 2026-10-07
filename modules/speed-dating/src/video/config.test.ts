@@ -122,6 +122,46 @@ describe('video provider selection', () => {
     await expect(jwtVerify(token, pair.publicKey, { audience: 'jitsi', issuer: 'chat' })).resolves.toBeDefined()
   })
 
+  // Each of these mints a REAL token from the pasted form and verifies it against
+  // the matching public key — a `rejects.toThrow()` would be vacuous (see above).
+  const mintFrom = async (mangle: (pkcs8: string, pkcs1: string) => string) => {
+    const { generateKeyPairSync } = await import('node:crypto')
+    const nodePair = generateKeyPairSync('rsa', { modulusLength: 2048 })
+    const pkcs8 = nodePair.privateKey.export({ type: 'pkcs8', format: 'pem' }).toString()
+    const pkcs1 = nodePair.privateKey.export({ type: 'pkcs1', format: 'pem' }).toString()
+    setJaasEnv()
+    process.env.JAAS_PRIVATE_KEY = mangle(pkcs8, pkcs1)
+    const { token } = await getVideoProvider().issueToken({
+      roomRef: 'sd-z',
+      userId: 'u',
+      displayName: 'U',
+      moderator: false,
+    })
+    const { importSPKI } = await import('jose')
+    const spki = nodePair.publicKey.export({ type: 'spki', format: 'pem' }).toString()
+    const { payload } = await jwtVerify(token, await importSPKI(spki, 'RS256'), { audience: 'jitsi', issuer: 'chat' })
+    expect(payload.room).toBe('sd-z')
+  }
+
+  it('accepts a PKCS#1 ("BEGIN RSA PRIVATE KEY") key, which importPKCS8 alone rejects', async () => {
+    await mintFrom((_p8, p1) => {
+      expect(p1).toContain('BEGIN RSA PRIVATE KEY') // control: really the other container
+      return p1
+    })
+  })
+
+  it('accepts PKCS#1 pasted as one escaped line', async () => {
+    await mintFrom((_p8, p1) => p1.split('\n').join(String.fromCharCode(92) + 'n'))
+  })
+
+  it('accepts CRLF line endings and wrapping quotes', async () => {
+    await mintFrom((p8) => {
+      const crlf = p8.split('\n').join('\r\n')
+      expect(crlf).toContain('\r\n') // control
+      return `"${crlf}"`
+    })
+  })
+
   it('rejects an unknown provider name loudly, but still lets rounds run', async () => {
     setJaasEnv()
     process.env.SPEED_DATING_VIDEO_PROVIDER = 'daily'

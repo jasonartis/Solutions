@@ -1,3 +1,4 @@
+import { createPrivateKey } from 'node:crypto'
 import { createJaasProvider } from './jaas'
 import { createJitsiProvider } from './jitsi'
 import type { VideoProvider, VideoRoomRef } from './provider'
@@ -46,7 +47,7 @@ function readJaasConfig(): { appId: string; keyId: string; privateKeyPem: string
   const keyId = process.env.JAAS_API_KEY_ID
   const rawKey = process.env.JAAS_PRIVATE_KEY
   if (!appId || !keyId || !rawKey) return null
-  return { appId, keyId, privateKeyPem: unescapeNewlines(rawKey) }
+  return { appId, keyId, privateKeyPem: normalizePrivateKey(rawKey) }
 }
 
 // Written with split/join rather than a regex literal ON PURPOSE. The regex
@@ -60,6 +61,23 @@ const BACKSLASH_N = String.fromCharCode(92) + 'n'
 
 function unescapeNewlines(raw: string): string {
   return raw.split(BACKSLASH_N).join('\n')
+}
+
+// Everything a pasted key can plausibly arrive as, normalised to the one form
+// jose's importPKCS8 accepts: wrapping quotes (a .env habit), CRLF (Windows
+// editors), literal backslash-n (Vercel/.env), and the PKCS#1 container
+// ("BEGIN RSA PRIVATE KEY"), which is what `ssh-keygen -m PEM` and older
+// openssl emit and which importPKCS8 rejects outright. Converting through
+// node:crypto means the container never has to be guessed by the operator.
+function normalizePrivateKey(raw: string): string {
+  let pem = raw.trim()
+  const first = pem.charAt(0)
+  if ((first === '"' || first === "'") && pem.endsWith(first)) pem = pem.slice(1, -1)
+  pem = unescapeNewlines(pem).split('\r\n').join('\n').trim()
+  if (pem.includes('BEGIN RSA PRIVATE KEY')) {
+    return createPrivateKey(pem).export({ type: 'pkcs8', format: 'pem' }).toString()
+  }
+  return pem
 }
 
 function readJitsiConfig(): { domain: string; appId: string; appSecret: string } | null {
