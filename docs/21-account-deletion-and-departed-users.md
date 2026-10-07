@@ -1,8 +1,12 @@
 # Account deletion and departed users — what survives a person leaving
 
-**Status: PLAN, updated 2026-09-11. NOT BUILT. READ §7 FIRST — the founder's SILHOUETTE
-model supersedes §3's mechanism and most of §4's classification. Older text: the
-per-column classification in §4 is proposed and needs sign-off.**
+**Status: FULLY DECIDED, NOT BUILT (2026-10-07). READ §7 FIRST, then §7.9.** The founder's
+SILHOUETTE model (§7, 2026-09-11) supersedes §3's mechanism and §4's classification — **§4's
+"needs sign-off" rows are all CLOSED by §7.3/§7.7**, and the last three product questions were
+answered 2026-10-07 (§7.9). Nothing here waits on the founder; it is ready to build (Opus).
+*(Before 2026-10-07 this header still said §4 "needs sign-off", which sent a session to report
+the work as blocked when it was not. A header is a claim like any other: re-read it when the
+body below it moves.)*
 
 Found while fixing the seat-authority class (docs/19). Not urgent — **there is no
 account-deletion feature today**, so none of this is live. It becomes urgent the
@@ -401,3 +405,27 @@ platform already applies to its four-state invite rendering and the view-as
 
 → The archive's reason column must be derived from **what actually blocked the
 next step**, never from "is this person departed?" as a standalone test.
+
+## 7.9 THE LAST THREE QUESTIONS — ANSWERED (founder, 2026-10-07: "defaults")
+
+Asked as scenarios with prior-art defaults; the founder took all three defaults.
+
+1. **Who starts a deletion: BOTH.** A self-serve **"Delete my account"** on `/account` with a
+   typed confirmation (every major platform does this), AND the superadmin can start it from
+   the Owner Console for an emailed request (`/privacy` says "on request", which both satisfy).
+2. **Grace period: 30 DAYS** (Facebook/Instagram; Google is ~20).
+3. **Signing back in during the grace period CANCELS the deletion** (Facebook's behaviour; it
+   is the point of a reversible state). After 30 days the silhouette step (§7.4) is
+   irreversible and nothing reconnects the identity (§7.2).
+
+**Still owed with the build, not a decision:** the fourth `/privacy` line — "what we keep after
+you delete your account, and why" (§5 item 5) — and the "Former member" rendering (§7.5).
+**Re-check before building:** §7.4's correction lists four bare predicates that made step 3
+insufficient. docs/19's module-role slice (`20260915010000`) has since closed
+`cls_review_assignments_update_reviewer` and `mm_assignments_select`'s matchmaker arm;
+`sd_participants_update_self` was already unreachable; **`cls_set_preferred_name`'s
+unenrolled-student half is still open (CLAUDE.md)** — verify each against the live catalog,
+don't trust this list. Under the silhouette model `auth.users` is never deleted, so the two
+deletion landmines (docs/20 §30: org delete — since fixed by `20260928010000` — and a
+conversation creator's `vm_pin_conversation`) are not on this path; confirm that too.
+

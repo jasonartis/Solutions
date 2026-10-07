@@ -614,7 +614,11 @@ matters. Triage itself is fine and already built (states `open`/`reviewed`/`acti
 bundled:** docs/19 §5's ejection-semantics question, which changes what ejection *means*.
 
 **NEW — [docs/21-account-deletion-and-departed-users.md](docs/21-account-deletion-and-departed-users.md)
-(PLAN, not built).** 42 cascading FKs to `auth.users`: deleting one user erases their
+(FULLY DECIDED 2026-10-07, NOT BUILT — READY FOR AN OPUS SESSION; read its §7 then §7.9).**
+Founder took the defaults: self-serve delete on `/account` AND superadmin-initiated, 30-day
+grace period, signing back in cancels. **The "3 columns flagged for sign-off" below were
+CLOSED by §7 on 2026-09-11 — a stale header made a session report this as blocked.**
+Original entry: 42 cascading FKs to `auth.users`: deleting one user erases their
 peer-review comments on OTHER students' work, their abuse flags, safety notes they wrote about
 other people, and every drawing anyone replied to underneath theirs (`vm_layers` cascades on
 BOTH `author_id` and `parent_layer_id`, so a deleted conversation-creator takes the whole
