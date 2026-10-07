@@ -688,3 +688,30 @@ transfer state so the new admin has to affirmatively accept, not just be
 silently reassigned), which is comparable in shape to classroom's existing
 peer-review-assignment or matchmaking's question-approval flows already
 built on this platform. Parked as a future enhancement, not scoped further.
+
+## 2026-10-07 — accept-first seats, and the seat word `conversation_moderator`
+
+**Built (Opus), every org.** `20261007020000` renames the per-conversation seat `moderator` to
+`conversation_moderator` (founder decision, docs/24 §4 item 4). `20261007030000` makes every seat
+created for someone else a **pending invitation**: it confers nothing (every vm_ access predicate
+requires `status = 'active'`, now asserted at apply time), the invitee sees the title and who
+invited them under **Invitations** on the module page (and on the conversation URL), and
+**Accept** / **Decline**. Your OWN seat — creating a conversation, deep-link self-join — is still
+instant, because that is the person choosing to be there.
+
+**Rules, all enforced in SQL, all tested (`rls.test.ts`, "accept-first seats", 14 tests):**
+only the invitee accepts (not the conversation admin, not the org owner); an admin "unban"
+(banned→active) becomes a pending re-invite stamped with who sent it (also via upsert); a seat
+cannot be re-pointed at another person or another conversation; a pre-ban stays a ban; an admin
+may still ban a pending invitee; a pending admin seat never holds the admin floor open.
+
+**Found by adversarial review, before shipping:** the unban path and the seat-move path were
+both two-call forced joins. The unban fix has a side effect worth stating: **an admin can no
+longer silently undo a self-block** — before this, flipping a self-blocked seat back to active
+put the person straight back in. It now needs their own yes. The table still cannot tell a
+moderation ban from a self-block (no "banned by" column), so both behave the same way.
+
+**Recorded, not built:** decline-and-block (after a decline the row is gone, so re-invites are
+unlimited; the only way out today is accept then self-block); an org manager can still write
+`invited_by` on an ordinary update (the manager escape predates this).
+

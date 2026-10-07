@@ -1494,12 +1494,20 @@ test('visual messaging: create from a picture, draw a reply, membership gates ac
   await page.getByRole('link', { name: title }).click()
   await page.getByPlaceholder('member@email').fill('charlie@demo.local')
   const added = page.waitForResponse((r) => r.request().method() === 'POST')
-  await page.getByRole('button', { name: 'Add member' }).click()
+  await page.getByRole('button', { name: 'Invite member' }).click()
   await added
 
+  // Accept-first (20261007030000): the invite confers NOTHING until charlie
+  // says yes. Positive control first — the invitation is really there, with
+  // who sent it — then the negative: the conversation is still not listed.
   await signIn(page, 'charlie@demo.local')
   await page.goto('/o/demo-visual/m/visual-messaging')
-  await page.getByRole('link', { name: title }).click()
+  const invitation = page.locator('li', { hasText: title }).filter({ hasText: 'invited by Alice A' })
+  await expect(invitation).toBeVisible()
+  await expect(page.getByRole('link', { name: title })).not.toBeVisible()
+  await invitation.getByRole('button', { name: 'Accept' }).click()
+  // Accept lands straight on the conversation.
+  await expect(page.getByRole('heading', { name: title })).toBeVisible()
   await expect(page.getByText('Replies to this layer (1)')).toBeVisible()
 
   // Charlie flags the reply layer (a non-moderator member — he has no

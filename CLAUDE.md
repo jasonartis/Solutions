@@ -274,13 +274,19 @@ doc.
   predicates never checked org membership. Rule → **docs/03 #20** (a per-entity SEAT is not
   authority). docs/03 #21 is the meta-lesson: **search docs/ by MECHANISM before designing
   one**, which is how docs/16 got missed for most of a session.
-- **QUEUED, NOT STARTED — accept-first for conversation seats in REAL orgs.** The founder
-  confirmed he expects "invited to a chat → accept or decline, never auto-joined" everywhere,
-  but today `addMember` inserts an ACTIVE seat directly in every org. Needs a `pending` value
-  on `vm_conversation_members.status` (cheap: all four vm_ predicates already filter
-  positively on `= 'active'`, so they honour it with no changes) plus accept UI. **It changes
-  shipped behaviour across every org, so it gets its own migration/review/e2e** — do not ride
-  it along with the ad-hoc build.
+- **ACCEPT-FIRST CONVERSATION SEATS — BUILT 2026-10-07 (`20261007030000`), every org.** A seat
+  created for someone else is `pending` (trigger `vm_members_c_invite`, server-stamps
+  `invited_by`), confers nothing until the invitee accepts via `vm_accept_conversation_invite`;
+  decline = delete own pending seat; invitations listed via `vm_my_pending_invites`. **Nobody
+  else can accept — not even the org owner** (consent block in `vm_pin_member`, BEFORE the
+  manager escape). **Adversarial review found two real forced-join holes, both fixed and
+  tested:** an admin "unbanning" (banned→active) now produces a PENDING re-invite — which also
+  means an admin can no longer silently undo a SELF-block (pre-existing hole; the table cannot
+  tell a moderation ban from a self-block); and an org owner could carry an active seat into a
+  DIFFERENT conversation, now refused. **Open, recorded not built:** an invitee cannot
+  decline-and-block (re-invites after a decline are unlimited); an org manager can still set
+  `invited_by` on a non-reinvite update (pre-existing manager escape). Deploy state: see the
+  2026-10-07 journal entry.
 - **Anonymous public view-links stay deferred post-v1** — not part of "completing" this module.
 - **PUBLIC SQUARE is now its own workstream and the founder still wants it** ("a module
   completely public and independent of a real org is a good thing to have").

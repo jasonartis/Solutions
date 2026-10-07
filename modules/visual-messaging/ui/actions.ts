@@ -128,6 +128,40 @@ export async function joinConversation(orgSlug: string, conversationId: string) 
   redirect(`/o/${orgSlug}/m/visual-messaging/conversations/${conversationId}`)
 }
 
+// Accept-first seats (20261007030000): being added to a conversation creates a
+// PENDING seat that confers nothing until the invitee says yes. Accept goes
+// through a definer because a pending invitee cannot see the conversation, so
+// the scope trigger would refuse a direct UPDATE of their own seat. Returns
+// Throws on failure like the other form actions here (they are plain <form>
+// actions, not awaited by client code, so docs/03 #22 does not apply).
+export async function acceptConversationInvite(orgSlug: string, conversationId: string) {
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('vm_accept_conversation_invite', { check_conversation_id: conversationId })
+  fail(error, 'Accept invitation failed')
+  revalidatePath(`/o/${orgSlug}/m/visual-messaging`)
+  redirect(`/o/${orgSlug}/m/visual-messaging/conversations/${conversationId}`)
+}
+
+// Decline = delete your own pending seat (vm_members_delete_self). Deleting
+// rather than marking it declined matches LEAVE, so a later re-invite works.
+// Scoped to status 'pending' so this can never be used to leave by accident.
+export async function declineConversationInvite(orgSlug: string, conversationId: string) {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) throw new Error('Not signed in')
+  const { error } = await supabase
+    .from('vm_conversation_members')
+    .delete()
+    .eq('conversation_id', conversationId)
+    .eq('user_id', user.id)
+    .eq('status', 'pending')
+  fail(error, 'Decline invitation failed')
+  revalidatePath(`/o/${orgSlug}/m/visual-messaging`)
+  redirect(`/o/${orgSlug}/m/visual-messaging`)
+}
+
 // A conversation admin opens or closes deep-link joining. Writes
 // settings.joinPolicy; the vm_conversations_update_admin policy gates who,
 // and vm_pin_conversation leaves settings free to change (it only pins
@@ -188,6 +222,9 @@ export async function addMember(orgSlug: string, conversationId: string, formDat
     )
   }
 
+  // Lands as an INVITATION: vm_members_c_invite forces status 'pending' and
+  // stamps invited_by for any seat created for someone else, so the person
+  // sees nothing of this conversation until they accept (20261007030000).
   const { error } = await supabase.from('vm_conversation_members').insert({
     org_id: conv.org_id,
     conversation_id: conversationId,

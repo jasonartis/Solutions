@@ -18,9 +18,17 @@ walk through.
 
 1. From the Dashboard, click **Visual Messaging** on your organization's card.
 2. Under **Start a conversation**, type a title, choose a picture, click
-   **Create**. You're its admin; add people with **Add member** (bottom of
-   the conversation page), or open it to link-joining (see the moderator
-   guide) and share its link.
+   **Create**. You're its admin; invite people with **Invite member** (bottom
+   of the conversation page), or open it to link-joining (see the moderator
+   guide) and share its link. An invited person sees nothing of the
+   conversation until they accept.
+
+## Accept or decline an invitation
+
+When someone invites you to a conversation, it appears under **Invitations**
+at the top of the Visual Messaging page, with who invited you. Click
+**Accept** to join, or **Decline** to remove the invitation (they can invite
+you again later). Until you accept, you can't see its pictures or replies.
 
 ## Join by a shared link
 
@@ -102,8 +110,8 @@ you a drawing seat). Invite-only conversations can't be joined this way.
 5. **Members (admin):** **Link joining** controls whether someone in your
    organization who has the conversation's link can join themselves as a
    read-only viewer. Click **Open to anyone with the link** to allow it (share
-   the page URL), or **Make invite-only** to require an explicit **Add
-   member**. Invite-only is the default.
+   the page URL), or **Make invite-only** to require an explicit **Invite
+   member** (which the person must accept). Invite-only is the default.
 `,
     },
   ],

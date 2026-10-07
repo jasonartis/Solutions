@@ -6,7 +6,9 @@ import { resolveVisualMessagingSettings, type VisualMessagingSettings } from '@/
 import LayerCanvas, { type Stroke, type Stamp, type TextStamp, type ImageStamp } from '../../layer-canvas'
 import LayerGrid from '../../layer-grid'
 import {
+  acceptConversationInvite,
   addMember,
+  declineConversationInvite,
   flagLayer,
   joinConversation,
   replyWithDrawing,
@@ -65,6 +67,36 @@ export default async function ConversationPage(props: {
   // the conversation's joinPolicy is 'open' (invite-only / banned / unknown
   // all refuse server-side). We can't reveal the title — no read access yet.
   if (!conversation) {
+    // Invited but not yet accepted? The seat row is readable to its holder
+    // (vm_members_select's user_id = auth.uid() arm) even though the
+    // conversation is not, so offer accept/decline instead of a deep-link join.
+    // The title comes from the same definer the landing page uses.
+    const { data: invites } = await supabase.rpc('vm_my_pending_invites', { check_org_id: org.id })
+    const invite = ((invites ?? []) as { conversation_id: string; title: string; invited_by_name: string | null }[]).find(
+      (i) => i.conversation_id === conversationId,
+    )
+    if (invite) {
+      return (
+        <div className="mx-auto max-w-md py-12 text-center">
+          <p className="mb-1 text-sm text-gray-400">{org.name}</p>
+          <h1 className="mb-3 text-xl font-semibold">You&apos;re invited to “{invite.title}”</h1>
+          <p className="mb-6 text-sm text-gray-500">
+            {invite.invited_by_name ?? 'A member'} invited you. You won&apos;t see its pictures or replies until you
+            accept.
+          </p>
+          <div className="flex justify-center gap-2">
+            <form action={acceptConversationInvite.bind(null, orgSlug, conversationId)}>
+              <button className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
+                Accept
+              </button>
+            </form>
+            <form action={declineConversationInvite.bind(null, orgSlug, conversationId)}>
+              <button className="rounded border border-gray-300 px-4 py-2 text-sm hover:bg-gray-50">Decline</button>
+            </form>
+          </div>
+        </div>
+      )
+    }
     return (
       <div className="mx-auto max-w-md py-12 text-center">
         <p className="mb-1 text-sm text-gray-400">{org.name}</p>
@@ -122,12 +154,17 @@ export default async function ConversationPage(props: {
   const { data: myMembership } = me
     ? await supabase
         .from('vm_conversation_members')
-        .select('role')
+        .select('role, status')
         .eq('conversation_id', conversationId)
         .eq('user_id', me.id)
         .maybeSingle()
     : { data: null }
-  const canPost = myMembership?.role === 'participant' || myMembership?.role === 'conversation_moderator' || myMembership?.role === 'admin'
+  // Status matters too: a creator always resolves the conversation (the
+  // created_by arm), so their seat may be pending or banned — vm_can_post
+  // would refuse, and the button must not offer what RLS denies.
+  const canPost =
+    myMembership?.status === 'active' &&
+    (myMembership.role === 'participant' || myMembership.role === 'conversation_moderator' || myMembership.role === 'admin')
 
   const current = rows.find((l) => l.id === layerParam) ?? root
   const byId = new Map(rows.map((l) => [l.id, l]))
@@ -467,7 +504,7 @@ export default async function ConversationPage(props: {
                   className="rounded border border-gray-300 px-2 py-1 text-sm"
                 />
                 <button className="rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700">
-                  Add member
+                  Invite member
                 </button>
               </form>
             </>

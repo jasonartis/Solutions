@@ -8681,14 +8681,14 @@ describe('mm_assignment_covers_me takes no matchmaker argument (20261007010000)'
         where n.nspname = 'public' and p.proname = 'mm_assignment_covers_me'
       `
       expect(rows.length, 'mm_assignment_covers_me must exist exactly once (the 3-arg overload must be gone)').toBe(1)
-      expect(rows[0].args).toEqual(['check_target_group_id', 'check_target_user_id'])
+      expect(rows[0]!.args).toEqual(['check_target_group_id', 'check_target_user_id'])
 
       const pol = await sql<{ qual: string }[]>`
         select pg_get_expr(polqual, polrelid) as qual from pg_policy
         where polrelid = 'public.mm_matchmaker_assignments'::regclass and polname = 'mm_assignments_select'
       `
       expect(pol.length, 'CONTROL: mm_assignments_select exists').toBe(1)
-      expect(pol[0].qual).toContain('mm_assignment_covers_me(target_group_id, target_user_id)')
+      expect(pol[0]!.qual).toContain('mm_assignment_covers_me(target_group_id, target_user_id)')
     } finally {
       await sql.end()
     }
@@ -8813,5 +8813,278 @@ describe('visual messaging: the per-conversation seat is conversation_moderator 
     const dPost = await dana.rpc('vm_can_post', { check_conversation_id: conv })
     expect(dPost.error, JSON.stringify(dPost.error)).toBeNull()
     expect(dPost.data, 'a viewer seat can post').toBe(false)
+  })
+})
+
+describe('visual messaging: accept-first seats (20261007030000)', () => {
+  // Being added to a conversation used to mean being IN it. Now a seat created
+  // for someone else is a pending invitation that confers nothing until the
+  // invitee accepts. demo-visual: alice = org owner (vm_can_manage), charlie
+  // and dana = plain members. dana is each fixture conversation's admin.
+  const svcKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
+  const svc = () => createClient(url, svcKey, { auth: { persistSession: false } })
+  const convIds: string[] = []
+  let org = ''
+  let aliceId = ''
+  let charlieId = ''
+  let danaId = ''
+  let alice: SupabaseClient
+  let charlie: SupabaseClient
+  let dana: SupabaseClient
+
+  beforeAll(async () => {
+    org = (await svc().from('orgs').select('id').eq('slug', 'demo-visual').single()).data!.id as string
+    aliceId = await userIdOf('alice@demo.local')
+    charlieId = await userIdOf('charlie@demo.local')
+    danaId = await userIdOf('dana@demo.local')
+    alice = await signIn('alice@demo.local')
+    charlie = await signIn('charlie@demo.local')
+    dana = await signIn('dana@demo.local')
+  })
+  afterAll(async () => {
+    for (const id of convIds) await svc().from('vm_conversations').delete().eq('id', id)
+  })
+
+  /** A conversation whose only seat is dana's ACTIVE admin seat (service role: no JWT, so not forced pending). */
+  const makeConv = async (title: string) => {
+    const c = await svc().from('vm_conversations').insert({ org_id: org, title, created_by: danaId }).select('id').single()
+    if (c.error) throw new Error(`fixture conversation failed: ${c.error.message}`)
+    const id = c.data!.id as string
+    convIds.push(id)
+    const s = await svc()
+      .from('vm_conversation_members')
+      .insert({ org_id: org, conversation_id: id, user_id: danaId, role: 'admin', status: 'active' })
+    if (s.error) throw new Error(`fixture admin seat failed: ${s.error.message}`)
+    return id
+  }
+  const seatOf = async (conv: string, userId: string) =>
+    (
+      await svc()
+        .from('vm_conversation_members')
+        .select('status, role, invited_by')
+        .eq('conversation_id', conv)
+        .eq('user_id', userId)
+        .maybeSingle()
+    ).data
+  const invite = async (client: SupabaseClient, conv: string, userId: string, role = 'participant') => {
+    const r = await client.from('vm_conversation_members').insert({ org_id: org, conversation_id: conv, user_id: userId, role })
+    expect(r.error, `fixture invite failed: ${JSON.stringify(r.error)}`).toBeNull()
+  }
+
+  it('a seat an admin creates for someone else is stored PENDING, with invited_by server-stamped', async () => {
+    const conv = await makeConv('RLS fixture - invite is pending')
+    // The client asks for ACTIVE and claims alice invited - both overridden.
+    const ins = await dana.from('vm_conversation_members').insert({
+      org_id: org,
+      conversation_id: conv,
+      user_id: charlieId,
+      role: 'participant',
+      status: 'active',
+      invited_by: aliceId,
+    })
+    expect(ins.error, JSON.stringify(ins.error)).toBeNull()
+    const seat = await seatOf(conv, charlieId)
+    expect(seat?.status, 'an admin handed charlie an ACTIVE seat without asking').toBe('pending')
+    expect(seat?.invited_by, 'invited_by was taken from the client').toBe(danaId)
+  })
+
+  it('an ORG MANAGER invite is pending too, not only a conversation admin invite', async () => {
+    const conv = await makeConv('RLS fixture - manager invite')
+    const ins = await alice
+      .from('vm_conversation_members')
+      .insert({ org_id: org, conversation_id: conv, user_id: charlieId, role: 'participant', status: 'active' })
+    expect(ins.error, JSON.stringify(ins.error)).toBeNull()
+    expect((await seatOf(conv, charlieId))?.status).toBe('pending')
+  })
+
+  it('a pending invitee reads NOTHING of the conversation, but does read their own seat and the invitation', async () => {
+    const conv = await makeConv('RLS fixture - pending reads nothing')
+    await invite(dana, conv, charlieId)
+
+    // CONTROL: dana, an active seat, does read it - so charlie's empties are exclusions.
+    const dSees = await dana.from('vm_conversations').select('id').eq('id', conv)
+    expect(dSees.data?.length, 'CONTROL: the admin cannot read her own conversation').toBe(1)
+
+    const cConv = await charlie.from('vm_conversations').select('id').eq('id', conv)
+    expect(cConv.error).toBeNull()
+    expect(cConv.data, 'a pending invitee read the conversation').toEqual([])
+    const roster = await charlie.from('vm_conversation_members').select('user_id').eq('conversation_id', conv)
+    expect(roster.data?.map((r) => r.user_id), 'a pending invitee read the roster beyond their own seat').toEqual([charlieId])
+    for (const fn of ['vm_is_conv_member', 'vm_can_post', 'vm_can_moderate', 'vm_is_conv_admin']) {
+      const r = await charlie.rpc(fn, { check_conversation_id: conv })
+      expect(r.error, `${fn}: ${JSON.stringify(r.error)}`).toBeNull()
+      expect(r.data, `${fn} is true for a pending seat`).toBe(false)
+    }
+
+    const inv = await charlie.rpc('vm_my_pending_invites', { check_org_id: org })
+    expect(inv.error, JSON.stringify(inv.error)).toBeNull()
+    const rows = (inv.data ?? []) as { conversation_id: string; title: string; invited_by_name: string | null }[]
+    const mine = rows.find((i) => i.conversation_id === conv)
+    expect(mine, 'charlie cannot see his own invitation').toBeTruthy()
+    expect(mine!.title).toBe('RLS fixture - pending reads nothing')
+    expect(mine!.invited_by_name).toBe('Dana D')
+    // Someone else's invitation is not listed to dana.
+    const dInv = await dana.rpc('vm_my_pending_invites', { check_org_id: org })
+    expect(((dInv.data ?? []) as { conversation_id: string }[]).some((i) => i.conversation_id === conv)).toBe(false)
+  })
+
+  it('NOBODY else can accept for the invitee: not the conversation admin, not the org owner', async () => {
+    const conv = await makeConv('RLS fixture - no proxy accept')
+    await invite(dana, conv, charlieId)
+    const cases: [string, SupabaseClient][] = [
+      ['dana (conv admin)', dana],
+      ['alice (org owner)', alice],
+    ]
+    for (const [who, client] of cases) {
+      const up = await client
+        .from('vm_conversation_members')
+        .update({ status: 'active' })
+        .eq('conversation_id', conv)
+        .eq('user_id', charlieId)
+      expect(up.error?.message ?? '', `${who} accepted on charlie's behalf`).toContain('Only the invited person')
+    }
+    expect((await seatOf(conv, charlieId))?.status).toBe('pending')
+  })
+
+  it('the invitee accepts: the seat becomes active, the role is unchanged, and the conversation opens', async () => {
+    const conv = await makeConv('RLS fixture - accept')
+    await invite(dana, conv, charlieId, 'viewer')
+    const acc = await charlie.rpc('vm_accept_conversation_invite', { check_conversation_id: conv })
+    expect(acc.error, JSON.stringify(acc.error)).toBeNull()
+    const seat = await seatOf(conv, charlieId)
+    expect(seat?.status).toBe('active')
+    expect(seat?.role, 'accepting changed the role').toBe('viewer')
+    const sees = await charlie.from('vm_conversations').select('id').eq('id', conv)
+    expect(sees.data?.length, 'accepted, yet still cannot read the conversation').toBe(1)
+
+    const again = await charlie.rpc('vm_accept_conversation_invite', { check_conversation_id: conv })
+    expect(again.error?.message ?? '', 'a second accept should refuse').toContain('No pending invitation')
+    const notMine = await dana.rpc('vm_accept_conversation_invite', { check_conversation_id: conv })
+    expect(notMine.error?.message ?? '', 'someone with no invitation accepted').toContain('No pending invitation')
+  })
+
+  it('the invitee declines: the seat is deleted, and can be re-invited', async () => {
+    const conv = await makeConv('RLS fixture - decline')
+    await invite(dana, conv, charlieId)
+    const del = await charlie
+      .from('vm_conversation_members')
+      .delete()
+      .eq('conversation_id', conv)
+      .eq('user_id', charlieId)
+      .eq('status', 'pending')
+      .select('id')
+    expect(del.error, JSON.stringify(del.error)).toBeNull()
+    expect(del.data?.length, 'decline deleted nothing').toBe(1)
+    expect(await seatOf(conv, charlieId)).toBeNull()
+    await invite(dana, conv, charlieId)
+    expect((await seatOf(conv, charlieId))?.status).toBe('pending')
+  })
+
+  it('a pre-ban stays a ban: it is not turned into an invitation', async () => {
+    const conv = await makeConv('RLS fixture - pre-ban')
+    const ins = await dana
+      .from('vm_conversation_members')
+      .insert({ org_id: org, conversation_id: conv, user_id: charlieId, role: 'participant', status: 'banned' })
+    expect(ins.error, JSON.stringify(ins.error)).toBeNull()
+    expect((await seatOf(conv, charlieId))?.status).toBe('banned')
+  })
+
+  it('a seat cannot be re-pointed at another person, even by the org owner', async () => {
+    const conv = await makeConv('RLS fixture - no seat move')
+    const up = await alice
+      .from('vm_conversation_members')
+      .update({ user_id: charlieId })
+      .eq('conversation_id', conv)
+      .eq('user_id', danaId)
+    expect(up.error?.message ?? '', 'the org owner moved an active seat to charlie').toContain('cannot be moved')
+    expect((await seatOf(conv, danaId))?.status, 'CONTROL: dana seat is intact').toBe('active')
+    expect(await seatOf(conv, charlieId)).toBeNull()
+  })
+
+  it('a PENDING admin seat does not hold the admin floor open', async () => {
+    const conv = await makeConv('RLS fixture - pending admin is no floor')
+    await invite(dana, conv, charlieId, 'admin')
+    expect((await seatOf(conv, charlieId))?.status, 'CONTROL: the second admin seat is pending').toBe('pending')
+    const leave = await dana.from('vm_conversation_members').delete().eq('conversation_id', conv).eq('user_id', danaId)
+    expect(leave.error?.message ?? '', 'the only ACTIVE admin left because a pending one was counted').toContain('at least one admin')
+  })
+
+  // ---- Found by the adversarial review of this migration (both reproduced
+  // live before the fix): two ways to hand someone an ACTIVE seat unasked.
+  it('UNBAN IS A RE-INVITE: banned -> active by an admin or the org owner lands PENDING, stamped with who did it', async () => {
+    const cases: [string, SupabaseClient, () => string][] = [
+      ['dana (conv admin)', dana, () => danaId],
+      ['alice (org owner)', alice, () => aliceId],
+    ]
+    for (const [who, client, byId] of cases) {
+      const conv = await makeConv(`RLS fixture - unban by ${who}`)
+      const ins = await dana
+        .from('vm_conversation_members')
+        .insert({ org_id: org, conversation_id: conv, user_id: charlieId, role: 'participant', status: 'banned' })
+      expect(ins.error, JSON.stringify(ins.error)).toBeNull()
+      expect((await seatOf(conv, charlieId))?.status, 'CONTROL: the seat starts banned').toBe('banned')
+      const up = await client
+        .from('vm_conversation_members')
+        .update({ status: 'active' })
+        .eq('conversation_id', conv)
+        .eq('user_id', charlieId)
+      expect(up.error, `${who}: ${JSON.stringify(up.error)}`).toBeNull()
+      const seat = await seatOf(conv, charlieId)
+      expect(seat?.status, `${who} forced charlie into the conversation by "unbanning" him`).toBe('pending')
+      expect(seat?.invited_by, `${who}: the re-invite is not stamped with who sent it`).toBe(byId())
+      const r = await charlie.rpc('vm_is_conv_member', { check_conversation_id: conv })
+      expect(r.data, `${who}: charlie is a member without having accepted`).toBe(false)
+    }
+  })
+
+  it('the same through an UPSERT on an existing banned row', async () => {
+    const conv = await makeConv('RLS fixture - upsert unban')
+    await dana
+      .from('vm_conversation_members')
+      .insert({ org_id: org, conversation_id: conv, user_id: charlieId, role: 'participant', status: 'banned' })
+    const up = await dana
+      .from('vm_conversation_members')
+      .upsert(
+        { org_id: org, conversation_id: conv, user_id: charlieId, role: 'participant', status: 'active' },
+        { onConflict: 'conversation_id,user_id' },
+      )
+    expect(up.error, JSON.stringify(up.error)).toBeNull()
+    expect((await seatOf(conv, charlieId))?.status, 'an upsert forced charlie in').toBe('pending')
+  })
+
+  it('a seat cannot be carried into a DIFFERENT conversation, even by the org owner', async () => {
+    const convA = await makeConv('RLS fixture - seat move A')
+    const convB = await makeConv('RLS fixture - seat move B')
+    await svc()
+      .from('vm_conversation_members')
+      .insert({ org_id: org, conversation_id: convA, user_id: charlieId, role: 'participant', status: 'active' })
+    const up = await alice
+      .from('vm_conversation_members')
+      .update({ conversation_id: convB })
+      .eq('conversation_id', convA)
+      .eq('user_id', charlieId)
+    expect(up.error?.message ?? '', 'the org owner moved charlie into conversation B').toContain('another conversation')
+    expect((await seatOf(convA, charlieId))?.status, 'CONTROL: the seat is still in A').toBe('active')
+    expect(await seatOf(convB, charlieId)).toBeNull()
+  })
+
+  it('an admin may still BAN a pending invitee (only acceptance is the invitee’s alone)', async () => {
+    const conv = await makeConv('RLS fixture - ban a pending invitee')
+    await invite(dana, conv, charlieId)
+    const up = await dana
+      .from('vm_conversation_members')
+      .update({ status: 'banned' })
+      .eq('conversation_id', conv)
+      .eq('user_id', charlieId)
+    expect(up.error, JSON.stringify(up.error)).toBeNull()
+    expect((await seatOf(conv, charlieId))?.status).toBe('banned')
+  })
+
+  it('your OWN seat is not an invitation: an open conversation self-join is active at once', async () => {
+    const conv = await makeConv('RLS fixture - self-join stays instant')
+    await svc().from('vm_conversations').update({ settings: { joinPolicy: 'open' } }).eq('id', conv)
+    const j = await charlie.rpc('vm_join_conversation', { check_conversation_id: conv })
+    expect(j.error, JSON.stringify(j.error)).toBeNull()
+    expect((await seatOf(conv, charlieId))?.status).toBe('active')
   })
 })

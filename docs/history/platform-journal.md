@@ -4,6 +4,24 @@ The running, dated build journal that used to live in `CLAUDE.md`'s "## Current 
 section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every session)
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
+- **2026-10-07 (THREE PLANNED SLICES BUILT IN ONE SESSION, Opus — founder asked for "everything
+  already planned that just needs building").** Triage first: of seven candidates only three
+  were truly decided — account deletion still needs docs/21 §4 sign-off, the speed-dating
+  audience/mentor fold is blocked on docs/24 §7's founder choice, the "up next" preview needs an
+  orchestrator design, and the role-labels list is not in the docs. Built:
+  (1) `20261007010000` — `mm_assignment_covers_me` drops the parameter it never read
+  (signature only; docs/24 §6b.1 item 3). (2) `20261007020000` — the seat `moderator` →
+  `conversation_moderator` (docs/24 §4.4). (3) `20261007030000` — accept-first seats in every
+  org (module-4 spec, 2026-10-07 entry). Each got its own adversarial review: (1) and (2) no
+  defects; **(3) found two real forced-join paths (unban, seat move to another conversation),
+  both fixed before push.** Verified in CI's order on a fresh reset: db 289/289 → e2e 52/53 with
+  1 flaky-on-retry (the documented speed-dating resume-review timeout, untouched module);
+  typecheck 9/9. New verifier `scripts/prod-verify-20261007.mts`: local 46/46, PROD PRE-APPLY
+  20 pass / 21 fail with every CONTROL green. **Two process notes:** the auto-mode classifier
+  blocked WRITING migration (3) ("Modify Shared Resources") though it had allowed (1) and (2) —
+  cleared by the founder's explicit go-ahead in chat; and `verify-acl-hardening.ts` with no
+  `VERIFY_DB_URL` targets PROD by default (read-only, but not what a local check expects).
+  **Deploy outcome: see the next line of this entry once `migrate:prod` has run.**
 - **2026-10-05 (THE CENSUS LEAK REACHED PRODUCTION — and the verifier that proved it caught
   its own false assertion first).** `20261002010000` applied by `migrate:prod` after a fresh
   backup (`backups/2026-10-05T21-42-51`). **Deployed by a CONCURRENT SESSION on the founder's
