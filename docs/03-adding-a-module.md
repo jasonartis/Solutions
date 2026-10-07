@@ -1410,6 +1410,29 @@ mechanism is proven in the managed environment, but it carries rules that are no
       answered the weaker form of.* The weaker answer was true and the conclusion happened to
       hold; it would not have held on a table any cross-table policy inline-reads.
 
+## Account deletion: every table that names a person is classified (2026-10-07)
+
+35. **A NEW TABLE THAT NAMES A PERSON NEEDS A LINE IN `account_silhouette`'s
+    CLASSIFICATION — revoke, delete, scrub, or keep — and a reason.** Deleting an
+    account never deletes `auth.users` (docs/21 §7.4), so `ON DELETE CASCADE` no longer
+    decides anything: a table nobody classifies simply KEEPS the departed person's rows,
+    identity included. The rule that decides the line is §7.1's: *did a human do this, and
+    did it touch someone else?* Keep. *Did code derive it?* Delete. *Is it a copy of who
+    they are?* Scrub. Full table and reasons: docs/21 §7.10. Three things that came out of
+    the build and generalise:
+    - **A pin trigger that ends in `return old` silently reverts a no-session UPDATE.**
+      `sd_pin_participant` made the silhouette's scrub "succeed" while changing nothing; it
+      now has the no-JWT bypass every other guard already had. Before writing a definer
+      or job that updates a module table, read that table's BEFORE UPDATE triggers for a
+      `return old` fall-through.
+    - **A helper that takes a free uuid array is an oracle** unless it checks the caller's
+      relationship to each id. `former_members` first answered for any uuid; it is now
+      bounded to people who shared an org with the person at deletion.
+    - **Never key UI on the return value of a one-shot write.** The login page pushes and
+      then refreshes, so the dashboard renders twice; a banner shown "if the RPC just
+      cancelled something" flashed and vanished. Read the recorded state instead. Caught
+      by e2e, not by review.
+
 ## Hard rules
 
 1. **Never fork a platform primitive.** If the notifications/files/workflow primitive almost fits, extend it in `packages/platform` (benefiting every module) — don't copy it into the module.
@@ -1417,6 +1440,14 @@ mechanism is proven in the managed environment, but it carries rules that are no
 3. **Module code never imports from another module.** Shared needs go through `packages/platform`. (Module 6 uses the question engine, not `modules/matchmaking` internals.)
 4. **Settings via the settings primitive** (typed, per-org, admin-lockable) — no ad-hoc config tables.
 5. **All outbound email through the email queue**; all background work through pg-boss; no inline `setTimeout` business logic.
+   **ONE DELIBERATE EXCEPTION (2026-10-07): account-deletion expiry runs on `pg_cron`**
+   (`20261007090000`, docs/21 §7.10). Production has no always-on worker, so a pg-boss cron
+   would silently never fire, and this job deletes identities on a promise made to a person.
+   pg_cron runs inside the managed database with no credentials and no process to keep up.
+   The bar for the next exception is the same: the job must be pure SQL, idempotent and
+   range-based (a missed day catches up), and something must render whether it has run
+   (that page reads `cron.job_run_details`). Anything that needs app code or an external
+   call still goes through pg-boss.
 6. **Roles come from the manifest** and are checked server-side per route; UI hiding is convenience, not security.
 7. **Seed data is mandatory** — a module without a seeded demo org can't be developed or demoed.
 

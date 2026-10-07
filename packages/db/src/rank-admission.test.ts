@@ -128,6 +128,11 @@ const GENERIC_VOCABULARY = ['director', 'coordinator', 'lead', 'position'] as co
  * comparison admits defeats the file.
  */
 const KNOWN_READERS = [
+  // 20261007090000: refuses an account deletion that would leave a module with
+  // no Director (rank >= 4) — the same threshold as
+  // module_roles_guard_last_director, which a no-session silhouette bypasses.
+  // It ADMITS nothing; it can only refuse.
+  'account_deletion_blockers(uuid)',
   'cls_can_manage(uuid)',
   'module_caller_can_manage_seat(uuid,text,text,uuid)',
   'module_caller_covers_rank(uuid,text,uuid,integer)',

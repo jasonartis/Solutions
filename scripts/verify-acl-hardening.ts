@@ -89,6 +89,10 @@ const TABLE_EXCEPTIONS: Record<string, string[]> = {
   // View-as session log (20260731010000) — a session is opened and read, never
   // edited or erased.
   view_as_sessions: ['SELECT', 'INSERT'],
+  // Account deletion (20261007090000, docs/21 §7.10). Read-only to
+  // authenticated (own row, or every row for a superadmin); every write is a
+  // SECURITY DEFINER that re-checks its own gate.
+  account_deletions: ['SELECT'],
 }
 
 // Functions whose intended EXECUTE differs from the blanket
@@ -121,6 +125,27 @@ const FUNCTION_EXCEPTIONS: Record<string, { auth: boolean; svc: boolean }> = {
   // without anyone re-running the verifier that its own session had just spent
   // hours repairing.
   'org_delete_impact(check_org_id uuid)': { auth: true, svc: false },
+  // ACCOUNT DELETION (20261007090000, docs/21 §7.10) — run past this verifier
+  // BEFORE commit this time, which is the lesson the entry above records.
+  // Internal helpers and the two irreversible steps: NO api role. The expiry
+  // runs from pg_cron as postgres, and refuses any caller with a session.
+  'account_pending_departure(target uuid)': { auth: false, svc: false },
+  'account_has_left(target uuid)': { auth: false, svc: false },
+  'account_deletion_blockers(target uuid)': { auth: false, svc: false },
+  'account_begin_departure(target uuid, via text, actor uuid)': { auth: false, svc: false },
+  'account_silhouette(target uuid)': { auth: false, svc: false },
+  'account_complete_due_deletions()': { auth: false, svc: false },
+  // Entry points: authenticated only. Each acts on auth.uid() or re-checks
+  // is_superadmin(), neither of which service_role has, so a grant to it would
+  // be dead weight at best.
+  'account_request_deletion(confirm_email text)': { auth: true, svc: false },
+  'account_my_deletion_blockers()': { auth: true, svc: false },
+  'account_deletion_resume()': { auth: true, svc: false },
+  'account_request_deletion_for_email(target_email text)': { auth: true, svc: false },
+  'account_cancel_deletion(target uuid)': { auth: true, svc: false },
+  'account_deletion_runner_status()': { auth: true, svc: false },
+  'former_members(check_user_ids uuid[])': { auth: true, svc: false },
+  'sd_my_departed_matches(check_event_id uuid)': { auth: true, svc: false },
 }
 const FULL_CRUD = ['SELECT', 'INSERT', 'UPDATE', 'DELETE']
 // `settings` moved to `public.user_private` with the email slice (2026-09-17,
@@ -485,6 +510,9 @@ async function main() {
     syn_zmanim_fetch_log: ['SELECT', 'INSERT'],
     view_as_sessions: ['SELECT'],
     platform_settings: ['SELECT', 'INSERT', 'UPDATE'],
+    // 20261007090000 revokes service_role and never re-grants: the worker has no
+    // business with deletion requests, and the expiry runs in pg_cron as postgres.
+    account_deletions: [],
   }
   const svcLost = tables.filter((t) => {
     const want = SVC_EXCEPTIONS[t.relname] ?? FULL_CRUD

@@ -61,6 +61,24 @@ const EMAIL_READERS: Record<string, string> = {
   sd_match_contacts:
     'The speed-dating contact share. Gated on sd_can_organize_event, a revealed match, and the ' +
     'event\'s own shareContactOnMatch toggle.',
+  // ACCOUNT DELETION (20261007090000, docs/21 §7). None RETURNS an address.
+  account_request_deletion:
+    'Self-serve deletion. Compares the typed confirmation with the CALLER\'s own address and returns ' +
+    'only ok/reason — never the address.',
+  account_request_deletion_for_email:
+    'Superadmin deletion for an emailed request. Resolves an address to a user INSIDE the function, ' +
+    'gated on is_superadmin(); returns ok/reason only, so no new email->user lookup is exposed.',
+  account_pending_departure:
+    'Reads auth.users.last_sign_in_at (not the address) to derive "signed back in since the request". ' +
+    'Internal: no API role holds EXECUTE.',
+  account_deletion_resume:
+    'Reads the CALLER\'s own last_sign_in_at to confirm a real sign-in before recording a cancel. No address.',
+  account_complete_due_deletions:
+    'The pg_cron job. Reads last_sign_in_at to cancel rather than delete a returning person. No API role ' +
+    'holds EXECUTE, and it refuses any caller with a session.',
+  account_silhouette:
+    'The irreversible step. WRITES the address to NULL (the scrub) and reads nothing out. Internal: no API ' +
+    'role holds EXECUTE.',
   // NOT LISTED, and worth a line because it is the interesting absence:
   // `handle_new_user` WAS one of the four pre-slice matches and is no longer a
   // match at all. It used to copy `new.email` into `profiles` at signup — the

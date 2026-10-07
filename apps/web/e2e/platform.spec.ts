@@ -2350,3 +2350,56 @@ test('owner console positions: ranks come from the database, and the control rul
   await page.goto('/console/positions')
   await expect(page.getByText('404')).toBeVisible()
 })
+
+// ACCOUNT DELETION (docs/21 §7.9, 20261007090000). A FRESH account made through
+// signup, never a seeded one: e2e must not depart anybody another test signs
+// in as. The irreversible silhouette step is proven in the db suite
+// (account-deletion.test.ts); this proves the screens a person actually uses.
+test('delete my account: scheduled, signed out, and signing back in cancels it', async ({ page }) => {
+  const email = `e2e-leaver-${Date.now()}@demo.local`
+  await page.goto('/login')
+  await page.getByRole('button', { name: 'Create account' }).click()
+  await page.getByLabel('Email').fill(email)
+  await page.getByLabel('Display name').fill('E2E Leaver')
+  await page.getByLabel('Password').fill('password123')
+  await page.getByRole('button', { name: 'Sign up' }).click()
+  await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible({ timeout: 15_000 })
+
+  await page.goto('/account')
+  const del = page.getByRole('button', { name: 'Delete my account' })
+  // A WRONG confirmation is refused in place and changes nothing.
+  await page.getByLabel(/Type your email address/).fill('someone-else@demo.local')
+  await del.click()
+  await expect(page.getByText('That is not the email address on this account')).toBeVisible()
+
+  await page.getByLabel(/Type your email address/).fill(email)
+  await del.click()
+  await expect(page).toHaveURL(/\/login\?deletion=scheduled/)
+  await expect(page.getByText(/Your account is scheduled for deletion on \d{4}-\d{2}-\d{2}/)).toBeVisible()
+
+  // Signed out for real: a protected page sends us back to login.
+  await page.goto('/account')
+  await expect(page).toHaveURL(/\/login/)
+
+  // Signing back in cancels it, and the person is told so.
+  await page.getByLabel('Email').fill(email)
+  await page.getByLabel('Password').fill('password123')
+  await page.getByRole('button', { name: 'Sign in' }).click()
+  await expect(page.getByText('your account deletion has been cancelled')).toBeVisible({ timeout: 15_000 })
+  // And it STAYS cancelled: the account still works on the next page load.
+  await page.goto('/account')
+  await expect(page.getByRole('heading', { name: 'Your account' })).toBeVisible()
+})
+
+test('owner console: account deletions page shows the runner and the cancelled request', async ({ page }) => {
+  await signIn(page, 'owner@demo.local')
+  await page.goto('/console/accounts')
+  await expect(page.getByRole('heading', { name: 'Account deletions' })).toBeVisible()
+  // The honesty badge always says SOMETHING about the daily job — scheduled,
+  // never run, or last run — and never renders as an empty box.
+  await expect(page.getByTestId('deletion-runner')).toContainText(/daily deletion job/i)
+  // A sole org owner (alice owns several demo orgs, alone) is refused up front.
+  await page.getByLabel('Their email address').fill('alice@demo.local')
+  await page.getByRole('button', { name: 'Start deletion' }).click()
+  await expect(page.getByText(/Not started: they are the only administrator of/)).toBeVisible()
+})

@@ -4,6 +4,27 @@ The running, dated build journal that used to live in `CLAUDE.md`'s "## Current 
 section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every session)
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
+- **2026-10-07 (later, Opus) — ACCOUNT DELETION BUILT (`20261007090000`), NOT ON PROD.** The
+  silhouette model of docs/21 §7, both entry points, the 30-day grace period, "Former member"
+  rendering across five modules, the speed-dating match archive under §7.8's rule, and the
+  fourth `/privacy` line. Full record: **docs/21 §7.10**. **§7.9's open build question —
+  what runs the expiry on prod — is answered with `pg_cron`**, measured available on prod
+  first (1.6.4, preloaded); recorded as the one exception to docs/03 hard rule 5. "Signing back
+  in cancels" is DERIVED from GoTrue's `last_sign_in_at` rather than triggered, so nothing new
+  sits on the sign-in path. **Three narrow adversarial reviewers found real issues, all fixed
+  and tested:** `former_members` was an oracle over any uuid (now bounded to former
+  co-members); two co-admins could both leave and wedge the second forever (a leaving admin no
+  longer counts as the one who stays); and scrub gaps (GoTrue audit rows, version-dependent
+  auth tables, no sole-Director check). **One real bug was found only by e2e:** the dashboard's
+  "your deletion was cancelled" banner flashed and vanished, because the login page pushes then
+  refreshes and the second render had nothing left to cancel — now docs/03 #35. **One found
+  only by building:** `sd_pin_participant` silently reverted a no-session UPDATE (`return
+  old`), so the scrub "succeeded" changing nothing; it now has the no-JWT bypass the other
+  guards have. Teeth proven by breaking that bypass and the oracle bound — each failed exactly
+  its own test. Verified in CI's order on a fresh reset: **db 310/310 -> e2e 55/55**, same database, no reset between (11 + 2 new tests);
+  typecheck 9/9; `verify-acl-hardening.ts` local 17/17; `prod-verify-account-deletion.mts` local 85/85, prod
+  pre-apply 3 controls pass / 29 fail as designed. **Collided with the parallel session on
+  migration version `20261007040000`** (see the entry below); mine moved to `…090000`.
 - **2026-10-07 (later, Opus) — DECLINE-AND-BLOCK, per conversation (`20261007050000`), BUILT,
   NOT DEPLOYED.** Founder picked option A (block this conversation) over B (block this person,
   recorded as a future enhancement in the module-4 spec). Re-reading the 10-07 accept-first

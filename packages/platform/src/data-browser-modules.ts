@@ -132,6 +132,22 @@ export const platformDataBrowser = declareDataBrowser({
         'an open product question (docs/15 §8.1 point 6).',
     },
     {
+      table: 'account_deletions',
+      activity: true,
+      label: 'Account deletion requests',
+      personColumns: ['user_id', 'requested_by'],
+      // Deleting an account is a platform act, not an org act.
+      orgColumn: null,
+      orderBy: { column: 'requested_at', ascending: false },
+      limit: 20,
+      note:
+        'Whether this person asked to delete their account (or a superadmin started it on ' +
+        'their behalf), when it falls due, and whether it was cancelled or completed ' +
+        '(docs/21 §7). `requested_by` also surfaces the deletions a superadmin started for ' +
+        'other people. A row in state "deleted" is a silhouette: its identity is already ' +
+        'gone, so this section is the one place the platform still says the account existed.',
+    },
+    {
       table: 'login_events',
       activity: true,
       label: 'Sign-ins recorded',

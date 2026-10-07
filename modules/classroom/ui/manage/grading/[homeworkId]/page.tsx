@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { FORMER_MEMBER_LABEL, loadFormerMembers } from '@platform/core'
 import { requireOrgModule } from '@/lib/module-gate'
 import {
   computeCombinationFinals,
@@ -77,7 +78,16 @@ export default async function GradingPage(props: {
     filesBySubmission.set(f.submission_id, list)
   }
 
+  // A deleted student's submissions and grades are kept (docs/21 §7.1): they
+  // are part of the class record. Label the author as a former member rather
+  // than printing a bare id (§7.5).
+  const formerIds = await loadFormerMembers(supabase, [
+    ...(submissions ?? []).map((s) => s.student_id),
+    ...(grades ?? []).map((g) => g.student_id),
+    ...(assignments ?? []).map((a) => a.reviewer_id),
+  ])
   const nameOf = (userId: string) => {
+    if (formerIds.has(userId)) return FORMER_MEMBER_LABEL
     const p = (profiles ?? []).find((pr) => pr.user_id === userId)
     return p?.display_name || userId
   }

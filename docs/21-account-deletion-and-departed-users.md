@@ -1,6 +1,10 @@
 # Account deletion and departed users — what survives a person leaving
 
-**Status: FULLY DECIDED, NOT BUILT (2026-10-07). READ §7 FIRST, then §7.9.** The founder's
+**Status: BUILT 2026-10-07 — migration `20261007090000`, read §7.10 for what exists and what
+is still owed. NOT ON PRODUCTION until `pnpm migrate:prod` has run AND
+`scripts/prod-verify-account-deletion.mts` passes there.** The design below is unchanged.
+
+**Previous status: FULLY DECIDED, NOT BUILT (2026-10-07). READ §7 FIRST, then §7.9.** The founder's
 SILHOUETTE model (§7, 2026-09-11) supersedes §3's mechanism and §4's classification — **§4's
 "needs sign-off" rows are all CLOSED by §7.3/§7.7**, and the last three product questions were
 answered 2026-10-07 (§7.9). Nothing here waits on the founder; it is ready to build (Opus).
@@ -438,4 +442,118 @@ unenrolled-student half is still open (CLAUDE.md)** — verify each against the 
 don't trust this list. Under the silhouette model `auth.users` is never deleted, so the two
 deletion landmines (docs/20 §30: org delete — since fixed by `20260928010000` — and a
 conversation creator's `vm_pin_conversation`) are not on this path; confirm that too.
+
+## 7.10 BUILT (2026-10-07, Opus) — what exists, how expiry runs, what was decided in the build
+
+Migration `20261007090000_account_deletion.sql`; tests `packages/db/src/account-deletion.test.ts`
+(11, throwaway accounts only) + two e2e; prod verifier `scripts/prod-verify-account-deletion.mts`.
+
+### How it works
+
+| Step | What happens | Where |
+|---|---|---|
+| Request (self) | `/account` → "Delete my account", typed confirmation = your own email, checked **in SQL**. | `account_request_deletion` |
+| Request (superadmin) | `/console/accounts` → email address. Resolved inside the function; no new lookup exposed. | `account_request_deletion_for_email` |
+| Either request | Refused if you are a superadmin, the only active owner/admin of an org, or the only Director (rank ≥ 4) of a module. Otherwise: row `departed`, `due_at = now + 30 days`, **every session deleted** (signed out everywhere). | `account_begin_departure` |
+| Grace period | Nothing else changes. Others see you normally — except a speed-dating match (below). | — |
+| Sign back in | **Cancels.** Derived, not triggered: a departure is live only while `auth.users.last_sign_in_at <= requested_at`. The dashboard records it (`account_deletion_resume`) and says so. | `account_pending_departure` |
+| Superadmin cancel | For a request made in error. | `account_cancel_deletion` |
+| Day 30 | The **silhouette** (classification below), then `deleted`. A refusal (e.g. became sole admin during grace) leaves the row `departed` with `last_error`, shown on the console and retried daily. | `account_complete_due_deletions` → `account_silhouette` |
+
+**Why no trigger on `auth.users`:** a new trigger there sits on the critical path of every
+sign-in (docs/03 "Triggers on auth.users"). Deriving the cancel from GoTrue's own
+`last_sign_in_at` cannot break sign-in and cannot drift from GoTrue. Deleting the sessions at
+request time is what makes "signed in since" mean a real new sign-in — a surviving refresh
+token would otherwise keep someone using the app for 30 days and then delete them mid-use. An
+access token already issued stays valid for its hour, and cannot cancel (tested).
+
+### WHAT RUNS THE 30-DAY EXPIRY ON PROD — §7.9's open build question, answered
+
+**`pg_cron`, inside the database**, job `account-deletions-complete-due`, daily 03:17 UTC, as
+`postgres`. Measured on prod before building: pg_cron 1.6.4 available, `cron.database_name =
+postgres`. Not pg-boss, because prod has no always-on worker and a pg-boss cron would silently
+never fire. A deliberate exception to docs/03 hard rule 5, recorded there. The job is
+idempotent and range-based, so a missed day is caught up. **Honesty badge:**
+`/console/accounts` reads `cron.job_run_details` and says plainly if the job is unscheduled,
+off, failing, never run, or more than two days quiet. The completion function **refuses any
+caller with a session** — run with a JWT, `sd_pin_participant` would silently revert the
+participant scrub, so there is exactly one caller context.
+
+**What the privacy copy says, and why it is true:** deletion completes 30 days after the
+request, by the daily job. It is not instant, and the copy does not claim it is.
+
+### The classification (§7.1's rule applied to every table that names a person)
+
+| Verdict | Tables |
+|---|---|
+| **REVOKE** (membership) | `org_members`, `module_roles`, `mm_group_members` (the pool — left in place, the rescore job would keep pairing a silhouette) |
+| **DELETE** (machine-derived) | `login_events`, `login_rollup`, `activity_events`, `activity_rollup`, `mm_pair_scores`, `sd_pairings` *except* one a safety note or report points at |
+| **DELETE** (personal, touches nobody) | `mm_answers` |
+| **SCRUB** (copies of identity) | `profiles.display_name`, `user_private.settings`/`is_superadmin`, `cls_class_members` preferred names, `sal_worker_profiles.display_name` (+ `active=false`), `sd_participants.profile`/`profile_card` (+ withdrawn from events not yet complete), the person's key in `sd_matches.contact_shared`, `sal_customers.user_id` → NULL |
+| **AUTH** | `email`, `phone` NULL (the address is free for a fresh signup — §7.2); password blanked; metadata emptied; banned 100 years; identities, sessions, MFA, one-time tokens, webauthn, OAuth consents, flow state and GoTrue audit rows deleted. Token columns deliberately **not** NULLed — GoTrue scans some as plain strings. GoTrue still loads the row (tested). |
+| **KEEP** | every human act that touched someone else: `vm_layers`, `vm_reactions`, `vm_flags`, `cls_review_comments`, `cls_review_assignments`, `cls_submissions`, `cls_grades`, `cls_exam_papers`, `cls_survey_answers`, `sd_notes` (both directions), `sd_reports`, `sd_interest`, `sd_matches`, `sd_blocks`, `sd_bans`, `mm_interests`, `mm_matchmaker_assignments`, seats/rosters (inert — every seat predicate also requires org membership, docs/19), audit logs, uploaded files |
+
+**The §7.9 re-check, against the live catalog:** `cls_set_preferred_name` (the half still
+recorded as open) requires `is_org_member(c.org_id)` in its deployed body, so it is a no-op for
+a silhouette, which has no membership — and a silhouette also has no session to call it with.
+The two docs/20 §30 landmines are **off this path**: `auth.users` is never deleted, so no FK
+cascade or SET NULL fires (`vm_pin_conversation` never sees one), and the org-member revocation
+is a direct delete that `org_members_guard_last_admin` would refuse — which is why sole admins
+are refused up front.
+
+### Rendering (§7.5, §7.7, §7.8)
+
+- **"Former member"** — `former_members(ids)` + `packages/platform/src/former-members.ts`, wired
+  into visual messaging (layer authors and flag reporters), classroom (grading, exams, roster),
+  matchmaking mutual matches, speed dating (event page, my-blocks list) and nail-salon workers.
+  Needed because a silhouette has no membership, so co-members can no longer read its
+  `profiles` row and every page would otherwise print "Someone".
+- **Speed-dating archive** — `sd_my_departed_matches(event)` returns the caller's own
+  **revealed** matches whose counterparty has left (grace period or deleted). A match row
+  exists only when both said yes, so a person the viewer declined, or who declined the viewer,
+  is never reported as having left. The reveal guard is untouched.
+
+### Adversarial review (three narrow reviewers, 2026-10-07) — findings and what was done
+
+1. **`former_members` was an oracle** (any uuid → "is this a deleted account?"), reachable by
+   someone who had *declined* the person. **Fixed:** the row records `former_org_ids` at
+   deletion, and the function answers only to an active member of one of those orgs. Tested
+   with a non-co-member control.
+2. **Two co-admins could both leave**, each passing because the other was still active, and
+   the second would be wedged as sole admin forever. **Fixed:** an admin who is themselves in a
+   grace period does not count as the one who stays. Tested with its control.
+3. **Gaps in the scrub** — GoTrue audit rows, webauthn/OAuth/flow tables, `phone_change`, and
+   no sole-Director check. **Fixed** (version-dependent auth tables are guarded by
+   `to_regclass`, so a Supabase upgrade cannot make every silhouette fail).
+4. Confirmed sound: no API role can start, cancel or complete someone else's deletion; the
+   `sd_pin_participant` no-session bypass is reachable only by trusted backends; nothing
+   cascades into another person's records; `sd_my_departed_matches` matches the match policy.
+
+### JUDGEMENT CALLS MADE IN THE BUILD — the founder may want to overrule any of these
+
+- **A salon's customer card survives, unlinked** (`sal_customers.user_id` → NULL; name and
+  phone kept). Reasoning: it is the salon's own business record, as a walk-in's card is, and
+  deleting an OpenTable account does not delete the restaurant's record. The privacy line says
+  so. The alternative is scrubbing name and phone too.
+- **The residual of finding 1:** a co-member who declined the person in speed dating *and*
+  wrote a safety note about them keeps that pairing (a safety record outranks
+  minimisation), so they can see "Former member" beside their own note.
+- **§7.8's "I said yes and was waiting" row is built only for MUTUAL matches.** If the viewer
+  said yes and the counterparty never decided, nothing is shown. Showing "left" there but not
+  after a "no" would let the viewer tell undecided from rejected — exactly the reveal guard. So
+  that case is deliberately silent.
+- **Superadmin-initiated deletions are cancelled by the person signing in**, same as
+  self-serve (§7.9 point 3 applied to both entry points).
+- **Uploaded files are kept** with the records that own them (submissions, layer images).
+- **A customer's past appointment with a deleted worker shows "—"**, because the customer page
+  lists only active workers; the salon's own manage page shows "Former member".
+
+### Still owed
+
+- **Production.** `pnpm migrate:prod` (founder's go-ahead), then the verifier; its §[6] only
+  goes green the day after, once pg_cron has actually run there.
+- Telling the person (by email) that a deletion was started on their behalf — there is no SMTP
+  yet (docs/18), so the founder replies to the emailed request by hand.
+- Matchmaking has the "Former member" label but no archive section like speed dating's; the
+  founder scoped the archive to speed dating.
 

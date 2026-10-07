@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { FORMER_MEMBER_LABEL, loadFormerMembers } from '@platform/core'
 import { requireOrgModule } from '@/lib/module-gate'
 import { publishExamFinal, saveExamScores, uploadExamPaper } from './actions'
 
@@ -45,7 +46,10 @@ export default async function ExamGradingPage(props: {
       supabase.from('profiles').select('user_id, display_name'),
     ])
 
+  // Kept class records can belong to a deleted student (docs/21 §7.5).
+  const formerIds = await loadFormerMembers(supabase, (members ?? []).map((m) => m.user_id))
   const nameOf = (userId: string) => {
+    if (formerIds.has(userId)) return FORMER_MEMBER_LABEL
     const m = (members ?? []).find((x) => x.user_id === userId)
     const preferred = [m?.preferred_first_name, m?.preferred_last_name].filter(Boolean).join(' ')
     if (preferred) return preferred

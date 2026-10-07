@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { FORMER_MEMBER_LABEL, loadFormerMembers } from '@platform/core'
 import { requireOrgModule } from '@/lib/module-gate'
 import { ORDERED_DAYS, formatDayRangesForInput, type WeeklySchedule } from '../availability'
 import {
@@ -82,7 +83,12 @@ export default async function SalonManagePage(props: { params: Promise<{ orgSlug
   const revenue = (earnings ?? []).reduce((sum, e) => sum + Number(e.amount), 0)
   const spent = (expensesAll ?? []).reduce((sum, e) => sum + Number(e.amount), 0)
   const profit = revenue - spent
-  const workerName = new Map((workers ?? []).map((w) => [w.user_id, w.display_name]))
+  // A deleted worker's profile row is kept with its name blanked (docs/21 §7.4),
+  // so past appointments and earnings still have someone to belong to. Label it.
+  const formerWorkers = await loadFormerMembers(supabase, (workers ?? []).map((w) => w.user_id))
+  const workerName = new Map(
+    (workers ?? []).map((w) => [w.user_id, formerWorkers.has(w.user_id) ? FORMER_MEMBER_LABEL : w.display_name]),
+  )
   const byWorker = new Map<string, number>()
   for (const e of earnings ?? []) {
     if (!e.worker_id) continue

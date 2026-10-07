@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { SiteFooter } from '@/components/site-footer'
@@ -21,6 +21,14 @@ export default function LoginPage() {
   const [displayName, setDisplayName] = useState('')
   const [message, setMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  // Set by the 'Delete my account' action on its way here (docs/21 §7.9).
+  // Read from location in an effect rather than useSearchParams, which would
+  // force a Suspense boundary onto this whole page.
+  const [deletionDue, setDeletionDue] = useState<string | null>(null)
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search)
+    if (q.get('deletion') === 'scheduled') setDeletionDue(q.get('due') ?? '')
+  }, [])
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -71,6 +79,13 @@ export default function LoginPage() {
             {mode === 'signup' && 'Create an account'}
             {mode === 'magic' && 'Get a sign-in link by email'}
           </p>
+
+          {deletionDue !== null && (
+            <p className="mb-4 rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+              Your account is scheduled for deletion{deletionDue ? ` on ${deletionDue}` : ''} and you have been
+              signed out everywhere. Changed your mind? Sign in before then and the deletion is cancelled.
+            </p>
+          )}
 
           <form onSubmit={submit} className="space-y-4">
             <label className="block">

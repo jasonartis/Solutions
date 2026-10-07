@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { FORMER_MEMBER_LABEL, loadFormerMembers } from '@platform/core'
 import { requireOrgModule } from '@/lib/module-gate'
 import { expressInterest, saveAnswer, withdrawInterest } from './actions'
 
@@ -151,6 +152,10 @@ async function SingleView(props: { orgSlug: string; orgId: string; userId: strin
   ])
   const interestedIn = new Set((myInterests ?? []).map((i) => i.target_user_id as string))
   const mutualMatches = (mutual ?? []) as { matched_user: string; display_name: string | null; email: string | null }[]
+  // An interest is a human act and survives account deletion (docs/21 §7.1),
+  // so a mutual match can point at a silhouette: no name, no email. Label it
+  // as what it is rather than letting it read as a live "Someone" (§7.5).
+  const formerIds = await loadFormerMembers(supabase, mutualMatches.map((m) => m.matched_user))
 
   return (
     <div className="space-y-8">
@@ -160,7 +165,10 @@ async function SingleView(props: { orgSlug: string; orgId: string; userId: strin
           <ul className="space-y-1 text-sm">
             {mutualMatches.map((m) => (
               <li key={m.matched_user} className="rounded border border-green-200 bg-green-50 px-3 py-2">
-                <span className="font-medium">{m.display_name || 'Someone'}</span> is interested in you
+                <span className="font-medium">
+                  {formerIds.has(m.matched_user) ? FORMER_MEMBER_LABEL : m.display_name || 'Someone'}
+                </span>{' '}
+                is interested in you
                 too{m.email && (
                   <>
                     {' — reach out at '}

@@ -19,13 +19,19 @@ A multi-tenant modular platform: each client engagement produces a **module** bu
      and update only the compact "Now / Next / Standing rules" below. A fresh chat must never
      pay for the full journal. See "Session hygiene". -->
 
-**NEXT WORK ITEM, PICKED BY THE FOUNDER 2026-10-07: ACCOUNT DELETION, OPUS TIER.** Fully
-decided — read [docs/21](docs/21-account-deletion-and-departed-users.md) §7 then §7.9 (self-serve
-AND superadmin-initiated, 30-day grace, signing back in cancels). **One open BUILD question
-first: prod has no always-on worker, so decide what runs the 30-day expiry (§7.9).** Shipped
-the same day, all on prod and prod-verified: `20261007010000` (matchmaking signature fix),
-`20261007020000` (`conversation_moderator`), `20261007030000` (accept-first chat seats) —
-journal 2026-10-07.
+**ACCOUNT DELETION IS BUILT (2026-10-07, Opus, `20261007090000`) — NOT ON PRODUCTION YET.**
+Read [docs/21](docs/21-account-deletion-and-departed-users.md) **§7.10** first. Self-serve on
+`/account` + superadmin on `/console/accounts`; both only START a 30-day grace period (signed
+out everywhere; signing back in cancels, DERIVED from GoTrue's `last_sign_in_at`, no trigger on
+`auth.users`). Day 30 the silhouette runs: `auth.users` is never deleted, identity scrubbed,
+memberships revoked, machine-derived rows deleted, human acts kept; others see "Former
+member". **THE EXPIRY RUNS ON `pg_cron` INSIDE THE DATABASE** (prod has no worker; docs/03 hard
+rule 5 now records the exception). **Remaining: founder go-ahead for `pnpm migrate:prod`, then
+`scripts/prod-verify-account-deletion.mts`** (prod pre-apply: 3 controls pass, 29 fail as
+expected); its §[6] only goes green the day after, once pg_cron has run there. **Six judgement
+calls are listed for founder review in §7.10** (chiefly: a salon's customer card survives
+unlinked). Same day, on prod: `20261007010000`, `20261007020000`, `20261007030000`;
+`20261007050000` (vm decline-and-block) by a parallel session — journal 2026-10-07.
 
 **MODULE 6 VIDEO — JaaS IS THE DEFAULT PROVIDER, BUILT, AND UNVERIFIABLE FROM THIS REPO
 (2026-10-02, no migration).** Founder chose **JaaS (8x8-hosted Jitsi)** over a self-hosted VPS:
@@ -626,11 +632,9 @@ matters. Triage itself is fine and already built (states `open`/`reviewed`/`acti
 `dismissed`, organizer UI, server-stamped `reviewed_by`). **Still open and deliberately NOT
 bundled:** docs/19 §5's ejection-semantics question, which changes what ejection *means*.
 
-**NEW — [docs/21-account-deletion-and-departed-users.md](docs/21-account-deletion-and-departed-users.md)
-(FULLY DECIDED 2026-10-07, NOT BUILT — READY FOR AN OPUS SESSION; read its §7 then §7.9).**
-Founder took the defaults: self-serve delete on `/account` AND superadmin-initiated, 30-day
-grace period, signing back in cancels. **The "3 columns flagged for sign-off" below were
-CLOSED by §7 on 2026-09-11 — a stale header made a session report this as blocked.**
+**[docs/21-account-deletion-and-departed-users.md](docs/21-account-deletion-and-departed-users.md)
+— BUILT 2026-10-07 (`20261007090000`), see the block at the top of this section and docs/21
+§7.10. The text below is the ORIGINAL problem statement, kept for the reasoning.**
 Original entry: 42 cascading FKs to `auth.users`: deleting one user erases their
 peer-review comments on OTHER students' work, their abuse flags, safety notes they wrote about
 other people, and every drawing anyone replied to underneath theirs (`vm_layers` cascades on
@@ -642,8 +646,10 @@ urgent — **there is no account-deletion feature at all** (`deleteUser` appears
 but `/privacy` already promises deletion on request. Trap named in the doc: `ON DELETE SET NULL`
 fires BEFORE UPDATE triggers, which has already bitten this repo once.
 
-- **TWO DELETION LANDMINES, found 2026-09-14, NOT fixed — both block docs/21's account-deletion
-  plan and both are the SAME recorded gotcha (a foreign key's cascade/SET-NULL action fires the
+- **TWO DELETION LANDMINES, found 2026-09-14 — (1) FIXED by `20260928010000`; (2) still
+  present but OFF the account-deletion path, because the silhouette never deletes `auth.users`
+  (verified 2026-10-07, docs/21 §7.10). It still bites a raw `auth.admin.deleteUser` of a
+  conversation creator. Both are the SAME recorded gotcha (a foreign key's cascade/SET-NULL action fires the
   child's BEFORE triggers).** (1) **Deleting an ORG is impossible**: the cascade into
   `org_members` trips `org_members_guard_last_admin`, which has no cascade escape. (2)
   **Deleting a user who CREATED any conversation is impossible**: `vm_pin_conversation` is a

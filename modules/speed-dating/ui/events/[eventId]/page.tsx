@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { FORMER_MEMBER_LABEL, loadFormerMembers } from '@platform/core'
 import { requireOrgModule } from '@/lib/module-gate'
 import {
   blockUser,
@@ -73,7 +74,7 @@ export default async function EventPage(props: {
     supabase.from('sd_interest').select('rater_participant_id, target_participant_id, verdict').eq('event_id', eventId),
     supabase
       .from('sd_matches')
-      .select('participant_a_id, participant_b_id, revealed, contact_shared')
+      .select('id, participant_a_id, participant_b_id, revealed, contact_shared')
       .eq('event_id', eventId),
     supabase.from('profiles').select('user_id, display_name'),
     supabase.from('sd_rounds').select('id, round_number, state, ends_at').eq('event_id', eventId),
@@ -88,10 +89,23 @@ export default async function EventPage(props: {
   ])
 
   const mySeat = (participants ?? []).find((p) => p.user_id === me?.id)
+  // docs/21 §7.5/§7.7: a deleted account renders as a former member, and a
+  // revealed match whose counterparty has left (grace period or deleted) moves
+  // to an archive with that reason. sd_my_departed_matches applies §7.8's
+  // rule — it only ever returns MUTUAL, revealed matches, so a person this
+  // viewer declined (or who declined them) is never reported as having left.
+  const [formerIds, { data: departedMatchRows }] = await Promise.all([
+    loadFormerMembers(supabase, (participants ?? []).map((p) => p.user_id)),
+    mySeat
+      ? supabase.rpc('sd_my_departed_matches', { check_event_id: eventId })
+      : Promise.resolve({ data: [] as string[] }),
+  ])
+  const departedMatchIds = new Set(((departedMatchRows as string[] | null) ?? []))
   const seatName = (participantId: string | null) => {
     if (!participantId) return 'Someone'
     const seat = (participants ?? []).find((p) => p.id === participantId)
     if (!seat) return 'Someone' // seat not visible to this caller (RLS)
+    if (formerIds.has(seat.user_id)) return FORMER_MEMBER_LABEL
     const prof = (profiles ?? []).find((pr) => pr.user_id === seat.user_id)
     return prof?.display_name || 'Someone'
   }
@@ -524,14 +538,36 @@ export default async function EventPage(props: {
             </section>
           )}
 
-          {(matches ?? []).filter((m) => m.revealed).length > 0 && (
+          {(matches ?? []).filter((m) => m.revealed && departedMatchIds.has(m.id)).length > 0 && (
+            <section data-testid="match-archive" className="rounded-lg border border-gray-200 bg-gray-50 p-5">
+              <h2 className="mb-1 text-sm font-medium uppercase tracking-wide text-gray-600">Archive</h2>
+              <p className="mb-3 text-xs text-gray-500">
+                Matches that can&apos;t go any further, and why.
+              </p>
+              <ul className="space-y-1 text-sm text-gray-600">
+                {(matches ?? [])
+                  .filter((m) => m.revealed && departedMatchIds.has(m.id))
+                  .map((m) => {
+                    const other = m.participant_a_id === mySeat.id ? m.participant_b_id : m.participant_a_id
+                    const name = seatName(other)
+                    return (
+                      <li key={m.id}>
+                        {name === 'Someone' ? 'Your match' : name} — this person left the platform.
+                      </li>
+                    )
+                  })}
+              </ul>
+            </section>
+          )}
+
+          {(matches ?? []).filter((m) => m.revealed && !departedMatchIds.has(m.id)).length > 0 && (
             <section className="rounded-lg border border-green-200 bg-green-50 p-5">
               <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-green-700">
                 It&apos;s a match!
               </h2>
               <ul className="space-y-1 text-sm">
                 {(matches ?? [])
-                  .filter((m) => m.revealed)
+                  .filter((m) => m.revealed && !departedMatchIds.has(m.id))
                   .map((m, i) => {
                     const other = m.participant_a_id === mySeat.id ? m.participant_b_id : m.participant_a_id
                     const otherUserId = (participants ?? []).find((p) => p.id === other)?.user_id

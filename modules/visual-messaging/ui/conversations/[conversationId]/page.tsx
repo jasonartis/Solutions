@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { FORMER_MEMBER_LABEL, loadFormerMembers } from '@platform/core'
 import { createClient } from '@/lib/supabase/server'
 import { requireOrgModule } from '@/lib/module-gate'
 import { resolveVisualMessagingSettings, type VisualMessagingSettings } from '@/lib/visual-messaging-settings'
@@ -202,6 +203,7 @@ export default async function ConversationPage(props: {
       .filter((im) => im.url)
 
   const nameOf = (id: string) => {
+    if (formerIds.has(id)) return FORMER_MEMBER_LABEL
     const p = (profiles ?? []).find((pr) => pr.user_id === id)
     return p?.display_name || 'Someone'
   }
@@ -264,6 +266,16 @@ export default async function ConversationPage(props: {
         .order('created_at', { ascending: false })
     : { data: null }
   const openFlagCount = (flags ?? []).filter((f) => f.state === 'open').length
+  // docs/21 §7.5 — THE CASE THAT STARTED IT. A deleted author's layers are
+  // kept (others drew underneath them), but a silhouette has no org membership,
+  // so its profile row is invisible and `nameOf` would print "Someone" — the
+  // same thing a live member with an unreadable profile prints. Former members
+  // get their own label. Declared here, after `flags`, so abuse reporters are
+  // covered too; `nameOf` above only runs during render, after this line.
+  const formerIds = await loadFormerMembers(supabase, [
+    ...rows.map((l) => l.author_id),
+    ...(flags ?? []).map((f) => f.reporter_user_id),
+  ])
 
   return (
     <div>

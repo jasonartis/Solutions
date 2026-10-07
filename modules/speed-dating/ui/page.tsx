@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { FORMER_MEMBER_LABEL, loadFormerMembers } from '@platform/core'
 import { requireOrgModule } from '@/lib/module-gate'
 import { createEvent, unblockUser } from './actions'
 
@@ -34,7 +35,10 @@ export default async function SpeedDatingPage(props: { params: Promise<{ orgSlug
         supabase.from('profiles').select('user_id, display_name'),
       ])
     : [{ data: null }, { data: null }]
+  // A block survives the blocked person's account deletion (docs/21 §7.10).
+  const formerIds = await loadFormerMembers(supabase, (myBlocks ?? []).map((b) => b.blocked_user_id))
   const nameOf = (userId: string) => {
+    if (formerIds.has(userId)) return FORMER_MEMBER_LABEL
     const p = (profiles ?? []).find((pr) => pr.user_id === userId)
     return p?.display_name || 'Someone'
   }

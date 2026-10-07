@@ -37,6 +37,8 @@ Four conventions worth knowing before reading it:
 
 | function | comparison | resolves to | note |
 | --- | --- | --- | --- |
+| `account_deletion_blockers(uuid)` | `module_position_rank(g.module_key, g.role) >= 4` | rank >= 4 | module supplied by the caller |
+| `account_deletion_blockers(uuid)` | `module_position_rank(other.module_key, other.role) >= 4` | rank >= 4 | module supplied by the caller |
 | `cls_can_manage(uuid)` | `module_position_rank('classroom', g.role) >= 2` | rank >= 2 (classroom) | module pinned in the body |
 | `module_caller_can_manage_seat(uuid,text,text,uuid)` | `module_position_rank(check_module_key, g.role) > module_position_rank(check_module_key, seat_role)` | rank(a) > rank(b) | rank vs rank |
 | `module_caller_can_manage_seat(uuid,text,text,uuid)` | `module_position_rank(check_module_key, seat_role) = 3` | rank = 3 | module supplied by the caller |
@@ -63,6 +65,7 @@ are out of scope here entirely.
 
 | gate | rank test(s) | reached via | guards |
 | --- | --- | --- | --- |
+| `account_deletion_blockers` | rank >= 4 | direct | _no policy — triggers/functions only_ |
 | `cls_can_manage` | rank >= 2 | direct | cls_courses (insert) |
 | `cls_can_manage` | rank >= 2 | direct | storage.objects (delete) |
 | `cls_can_manage` | rank >= 2 | direct | storage.objects (insert) |
@@ -167,6 +170,13 @@ Ladder: **4** director · **3** coordinator · **2** lead, professor · **1** ga
 
 | gate | rank test | positions satisfying it | which lets them at |
 | --- | --- | --- | --- |
+| `account_begin_departure` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `account_complete_due_deletions` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `account_deletion_blockers` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `account_my_deletion_blockers` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `account_request_deletion` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `account_request_deletion_for_email` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `account_silhouette` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
 | `cls_can_manage` | rank >= 2 | coordinator, director, lead, professor | cls_courses, storage.objects |
 | `cls_can_manage_class` | rank >= 2 | coordinator, director, lead, professor | cls_announcements, cls_class_members, cls_classes, cls_exam_papers, cls_exams, cls_grades, cls_homeworks, cls_publications, cls_review_assignments, cls_review_comments, cls_submission_files, cls_submissions, cls_survey_answers, cls_surveys |
 | `cls_can_manage_course` | rank >= 2 | coordinator, director, lead, professor | cls_classes, cls_courses, cls_materials |
@@ -190,6 +200,13 @@ Ladder: **4** director · **3** admin, coordinator · **2** lead · **1** matchm
 
 | gate | rank test | positions satisfying it | which lets them at |
 | --- | --- | --- | --- |
+| `account_begin_departure` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `account_complete_due_deletions` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `account_deletion_blockers` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `account_my_deletion_blockers` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `account_request_deletion` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `account_request_deletion_for_email` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `account_silhouette` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
 | `module_caller_can_manage_seat` | rank = 3 | admin, coordinator | _no policy names it — reached through triggers/functions_ |
 | `module_has_manager_grant` | rank >= 2 | admin, coordinator, director, lead | module_roles |
 | `module_roles_guard_hierarchy` | rank = 3 | admin, coordinator | _no policy names it — reached through triggers/functions_ |
@@ -204,6 +221,13 @@ Ladder: **4** director · **3** admin, coordinator · **2** lead, manager · **1
 
 | gate | rank test | positions satisfying it | which lets them at |
 | --- | --- | --- | --- |
+| `account_begin_departure` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `account_complete_due_deletions` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `account_deletion_blockers` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `account_my_deletion_blockers` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `account_request_deletion` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `account_request_deletion_for_email` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `account_silhouette` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
 | `module_caller_can_manage_seat` | rank = 3 | admin, coordinator | _no policy names it — reached through triggers/functions_ |
 | `module_caller_covers_rank` | rank >= 2 | admin, coordinator, director, lead, manager | _no policy names it — reached through triggers/functions_ |
 | `module_has_manager_grant` | rank >= 2 | admin, coordinator, director, lead, manager | module_roles |
@@ -225,6 +249,13 @@ Ladder: **4** director · **3** coordinator · **2** lead · **1** position · *
 
 | gate | rank test | positions satisfying it | which lets them at |
 | --- | --- | --- | --- |
+| `account_begin_departure` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `account_complete_due_deletions` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `account_deletion_blockers` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `account_my_deletion_blockers` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `account_request_deletion` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `account_request_deletion_for_email` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `account_silhouette` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
 | `module_caller_can_manage_seat` | rank = 3 | coordinator | _no policy names it — reached through triggers/functions_ |
 | `module_has_manager_grant` | rank >= 2 | coordinator, director, lead | module_roles |
 | `module_roles_guard_hierarchy` | rank = 3 | coordinator | _no policy names it — reached through triggers/functions_ |
@@ -239,6 +270,13 @@ Ladder: **4** director · **3** admin, coordinator · **2** lead, organizer · *
 
 | gate | rank test | positions satisfying it | which lets them at |
 | --- | --- | --- | --- |
+| `account_begin_departure` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `account_complete_due_deletions` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `account_deletion_blockers` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `account_my_deletion_blockers` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `account_request_deletion` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `account_request_deletion_for_email` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `account_silhouette` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
 | `module_caller_can_manage_seat` | rank = 3 | admin, coordinator | _no policy names it — reached through triggers/functions_ |
 | `module_caller_covers_rank` | rank >= 2 | admin, coordinator, director, lead, organizer | _no policy names it — reached through triggers/functions_ |
 | `module_has_manager_grant` | rank >= 2 | admin, coordinator, director, lead, organizer | module_roles |
@@ -263,6 +301,13 @@ Ladder: **4** director · **3** coordinator · **2** lead · **1** position · *
 
 | gate | rank test | positions satisfying it | which lets them at |
 | --- | --- | --- | --- |
+| `account_begin_departure` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `account_complete_due_deletions` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `account_deletion_blockers` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `account_my_deletion_blockers` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `account_request_deletion` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `account_request_deletion_for_email` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `account_silhouette` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
 | `module_caller_can_manage_seat` | rank = 3 | coordinator | _no policy names it — reached through triggers/functions_ |
 | `module_has_manager_grant` | rank >= 2 | coordinator, director, lead | module_roles |
 | `module_roles_guard_hierarchy` | rank = 3 | coordinator | _no policy names it — reached through triggers/functions_ |
@@ -277,6 +322,13 @@ Ladder: **4** director · **3** coordinator · **2** lead · **1** maker, positi
 
 | gate | rank test | positions satisfying it | which lets them at |
 | --- | --- | --- | --- |
+| `account_begin_departure` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `account_complete_due_deletions` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `account_deletion_blockers` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `account_my_deletion_blockers` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `account_request_deletion` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `account_request_deletion_for_email` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `account_silhouette` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
 | `module_caller_can_manage_seat` | rank = 3 | coordinator | _no policy names it — reached through triggers/functions_ |
 | `module_has_manager_grant` | rank >= 2 | coordinator, director, lead | module_roles |
 | `module_roles_guard_hierarchy` | rank = 3 | coordinator | _no policy names it — reached through triggers/functions_ |
@@ -291,6 +343,13 @@ Ladder: **4** director · **3** admin, coordinator · **2** lead · **1** modera
 
 | gate | rank test | positions satisfying it | which lets them at |
 | --- | --- | --- | --- |
+| `account_begin_departure` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `account_complete_due_deletions` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `account_deletion_blockers` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `account_my_deletion_blockers` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `account_request_deletion` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `account_request_deletion_for_email` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `account_silhouette` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
 | `module_caller_can_manage_seat` | rank = 3 | admin, coordinator | _no policy names it — reached through triggers/functions_ |
 | `module_has_manager_grant` | rank >= 2 | admin, coordinator, director, lead | module_roles |
 | `module_roles_guard_hierarchy` | rank = 3 | admin, coordinator | _no policy names it — reached through triggers/functions_ |

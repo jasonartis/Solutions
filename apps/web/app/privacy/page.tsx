@@ -7,7 +7,7 @@
 // detailed version covering the same facts is kept at
 // docs/privacy-detailed-draft.md for later — an audit, a legal review, or a
 // larger/more regulated client that needs it.
-const LAST_UPDATED = 'September 22, 2026'
+const LAST_UPDATED = 'October 7, 2026'
 
 export default function PrivacyPage() {
   // Platform identity — filled in via .env.deploy (see scripts/dev.ts
@@ -49,6 +49,17 @@ export default function PrivacyPage() {
           deleted, so it's no longer tied to your name, but the fact that someone looked, and
           when, is kept. That's on purpose: a record of staff access that could be erased
           wouldn't really protect anyone.
+        </p>
+        <p>
+          You can also delete your account yourself, from your account page. Nothing is removed straight
+          away: you're signed out, and your account is deleted 30 days later. If you sign back in before
+          then, the deletion is cancelled. When it goes through, your name, email address and sign-in are
+          removed, you leave every organization, and records like your sign-in history are deleted. What
+          we keep is anything you did that other people rely on — a reply in a shared conversation, a
+          review of someone's work, homework and grades that are part of a class record, or a safety
+          report — because removing it would damage their records, not protect yours. It stays where it
+          is, labelled as from a former member and no longer tied to your name. An organization's own
+          business records about you, like a salon's customer card, stay with that organization.
         </p>
         <p>Questions? Contact {contactEmail}.</p>
       </div>

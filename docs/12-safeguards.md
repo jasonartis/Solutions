@@ -404,6 +404,13 @@ Found in a deliberate "what haven't we thought of" pass; ordered by urgency.
    keep after I delete my account, and why."** It is also the honest answer to the
    audit-log tension above — the record survives because it is *someone else's*
    record, not because the platform declined to erase.
+   **✅ THE DELETION LINE IS WRITTEN (2026-10-07, with the build — docs/21 §7.10).**
+   `apps/web/app/privacy/page.tsx` now says how deletion works (self-serve, 30-day
+   grace, signing in cancels), what goes (name, email, sign-in, memberships,
+   sign-in history) and what stays and why (things others rely on, shown as from a
+   former member; an org's own business records). Mechanism only, no org named.
+   Still DRAFT copy for founder review, like the rest of that page. The moderator
+   line below is still owed.
    **AND A FIFTH, ADDED 2026-09-15 — the numbering collided, so read both.** A
    parallel session recorded a "fourth owed line" for the MODERATOR disclosure
    (docs/20 §10, §16.2) while this entry's fourth is the deletion/silhouette

@@ -103,6 +103,13 @@ export default async function ConsolePage(props: {
         <span className="text-gray-400" title="Every position's rank, read live from the database, and who can appoint or remove whom">
           who can appoint whom
         </span>
+        <span className="text-gray-300">·</span>
+        <Link href="/console/accounts" className="text-blue-600 hover:underline">
+          Account deletions
+        </Link>
+        <span className="text-gray-400" title="Start a deletion someone asked for by email, and see pending, cancelled and failed ones">
+          who is leaving
+        </span>
       </nav>
 
       <section className="mb-8 rounded-lg border border-gray-200 bg-white p-5">

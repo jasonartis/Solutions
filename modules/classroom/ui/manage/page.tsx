@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { FORMER_MEMBER_LABEL, loadFormerMembers } from '@platform/core'
 import { requireOrgModule } from '@/lib/module-gate'
 import {
   createClass,
@@ -49,6 +50,8 @@ export default async function ManagePage(props: { params: Promise<{ orgSlug: str
     .select('id, class_id, title')
     .order('sort')
   const profileById = new Map((profiles ?? []).map((p) => [p.user_id, p]))
+  // A deleted student's roster seat is kept, inert (docs/21 §7.4) — label it.
+  const formerIds = await loadFormerMembers(supabase, (members ?? []).map((m) => m.user_id))
   const fmt = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
 
   return (
@@ -240,7 +243,9 @@ export default async function ManagePage(props: { params: Promise<{ orgSlug: str
                     .join(' ')
                   return (
                     <li key={m.user_id} className="flex items-center gap-3">
-                      <span>{preferred || p?.display_name || m.user_id}</span>
+                      <span className={formerIds.has(m.user_id) ? 'text-gray-400' : undefined}>
+                        {formerIds.has(m.user_id) ? FORMER_MEMBER_LABEL : preferred || p?.display_name || m.user_id}
+                      </span>
                       <span className="text-xs uppercase text-gray-400">{m.role}</span>
                       {canManage && (
                         <form action={removeClassMember.bind(null, orgSlug, klass.id, m.user_id)}>

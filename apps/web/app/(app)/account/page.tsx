@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { getProfile } from '@/lib/platform'
 import DisplayNameForm from './display-name-form'
+import DeleteAccountForm from './delete-account-form'
 
 export default async function AccountPage() {
   const supabase = await createClient()
@@ -8,6 +9,8 @@ export default async function AccountPage() {
     data: { user },
   } = await supabase.auth.getUser()
   const profile = await getProfile()
+  // What would stop a deletion, shown BEFORE anyone types anything.
+  const { data: blockers } = await supabase.rpc('account_my_deletion_blockers')
 
   return (
     <div className="max-w-lg">
@@ -28,6 +31,8 @@ export default async function AccountPage() {
           Other members of your organizations can see your display name. They cannot see your email address.
         </p>
       </div>
+
+      <DeleteAccountForm email={user?.email ?? ''} blockers={(blockers as string[] | null) ?? []} />
     </div>
   )
 }

@@ -296,3 +296,61 @@ export async function deleteOrg(orgId: string, formData: FormData) {
   revalidatePath('/console')
   redirect('/console')
 }
+
+// ACCOUNT DELETION (docs/21 §7.9, migration 20261007090000) — the superadmin
+// half, for a deletion request that arrived by email. Like the self-serve
+// button it only STARTS the 30-day grace period; the person is signed out
+// everywhere and can cancel by signing back in. Refusals come back through the
+// page's ?error / ?notice params (docs/03 #22).
+const ACCOUNT_DELETION_REASONS: Record<string, string> = {
+  no_such_user: 'No account uses that email address.',
+  ambiguous_email: 'More than one account matches that address; nothing was changed.',
+  already_deleted: 'That account has already been deleted.',
+  not_authorized: 'Not authorized.',
+  not_pending: 'That deletion is no longer pending, so there was nothing to cancel.',
+}
+
+function describeBlockers(blockers: string[] | undefined): string {
+  return (blockers ?? [])
+    .map((b) =>
+      b === 'superadmin'
+        ? 'it is a platform owner account'
+        : b.startsWith('sole_admin:')
+          ? `they are the only administrator of ${b.slice('sole_admin:'.length)}`
+          : b.startsWith('sole_director:')
+            ? `they are the only Director of ${b.slice('sole_director:'.length)}`
+            : b,
+    )
+    .join('; ')
+}
+
+export async function requestAccountDeletionFor(formData: FormData) {
+  const supabase = await requireSuperadmin()
+  const email = String(formData.get('email') ?? '').trim()
+  const { data, error } = await supabase.rpc('account_request_deletion_for_email', { target_email: email })
+  if (error) redirect(`/console/accounts?error=${encodeURIComponent(error.message)}`)
+  const r = data as { ok: boolean; reason?: string; blockers?: string[]; due_at?: string }
+  if (!r.ok) {
+    const msg =
+      r.reason === 'blocked'
+        ? `Not started: ${describeBlockers(r.blockers)}. Resolve that first.`
+        : (ACCOUNT_DELETION_REASONS[r.reason ?? ''] ?? 'Nothing was changed.')
+    redirect(`/console/accounts?error=${encodeURIComponent(msg)}`)
+  }
+  revalidatePath('/console/accounts')
+  redirect(
+    `/console/accounts?notice=${encodeURIComponent(
+      `Deletion started for ${email}. It completes on ${r.due_at?.slice(0, 10)} unless they sign in before then.`,
+    )}`,
+  )
+}
+
+export async function cancelAccountDeletion(userId: string) {
+  const supabase = await requireSuperadmin()
+  const { data, error } = await supabase.rpc('account_cancel_deletion', { target: userId })
+  if (error) redirect(`/console/accounts?error=${encodeURIComponent(error.message)}`)
+  const r = data as { ok: boolean; reason?: string }
+  if (!r.ok) redirect(`/console/accounts?error=${encodeURIComponent(ACCOUNT_DELETION_REASONS[r.reason ?? ''] ?? 'Nothing was changed.')}`)
+  revalidatePath('/console/accounts')
+  redirect(`/console/accounts?notice=${encodeURIComponent('Deletion cancelled.')}`)
+}

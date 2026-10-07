@@ -1,13 +1,47 @@
 import Link from 'next/link'
 import { getOrgsWithModules, getPendingOrgInvites } from '@/lib/platform'
+import { createClient } from '@/lib/supabase/server'
 import { acceptInvite, declineInvite, leaveOrg } from './actions'
 
 export default async function DashboardPage() {
-  const [orgs, invites] = await Promise.all([getOrgsWithModules(), getPendingOrgInvites()])
+  const supabase = await createClient()
+  // Signing back in during the 30-day grace period cancels a deletion
+  // (docs/21 §7.9). The database already treats it as cancelled the moment
+  // GoTrue records the sign-in; `account_deletion_resume` RECORDS it. Dashboard
+  // is where sign-in lands, so this is where the person hears about it.
+  //
+  // The banner reads the recorded row, NOT the RPC's return value. The login
+  // page does router.push('/dashboard') then router.refresh(), so this page
+  // renders twice: the first render records the cancel, the second finds
+  // nothing left to cancel. Keyed on the RPC, the banner flashed and vanished
+  // (caught by e2e, 2026-10-07). Ten minutes is "you just came back".
+  const [, { data: auth }] = await Promise.all([supabase.rpc('account_deletion_resume'), supabase.auth.getUser()])
+  const [orgs, invites, { data: deletion }] = await Promise.all([
+    getOrgsWithModules(),
+    getPendingOrgInvites(),
+    // Filtered to MY row explicitly: a superadmin's RLS reads every row.
+    supabase
+      .from('account_deletions')
+      .select('state, cancel_reason, cancelled_at')
+      .eq('user_id', auth.user?.id ?? '00000000-0000-0000-0000-000000000000')
+      .maybeSingle(),
+  ])
+  const deletionCancelled =
+    deletion?.state === 'cancelled' &&
+    deletion.cancel_reason === 'signed_in' &&
+    !!deletion.cancelled_at &&
+    Date.now() - new Date(deletion.cancelled_at).getTime() < 10 * 60 * 1000
 
   return (
     <div>
       <h1 className="mb-6 text-2xl font-semibold">Dashboard</h1>
+
+      {deletionCancelled && (
+        <p className="mb-6 rounded border border-green-200 bg-green-50 p-3 text-sm text-green-800">
+          Welcome back. Because you signed in, your account deletion has been cancelled and your
+          account is exactly as you left it.
+        </p>
+      )}
 
       {invites.length > 0 && (
         <div className="mb-6 space-y-3">

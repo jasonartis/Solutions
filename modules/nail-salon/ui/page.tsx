@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { FORMER_MEMBER_LABEL, loadFormerMembers } from '@platform/core'
 import { requireOrgModule } from '@/lib/module-gate'
 import {
   bookAppointment,
@@ -121,7 +122,12 @@ async function OperatorConsole(props: {
     ? await supabase.from('sal_bills').select('id, appointment_id, state, total').in('appointment_id', apptIds)
     : { data: [] as Bill[] }
   const billByAppt = new Map((bills ?? []).map((b) => [b.appointment_id, b as Bill]))
-  const workerName = new Map((workers ?? []).map((w) => [w.user_id, w.display_name]))
+  // A deleted worker's profile row is kept with its name blanked (docs/21 §7.4),
+  // so past appointments and earnings still have someone to belong to. Label it.
+  const formerWorkers = await loadFormerMembers(supabase, (workers ?? []).map((w) => w.user_id))
+  const workerName = new Map(
+    (workers ?? []).map((w) => [w.user_id, formerWorkers.has(w.user_id) ? FORMER_MEMBER_LABEL : w.display_name]),
+  )
 
   return (
     <div className="space-y-8">
