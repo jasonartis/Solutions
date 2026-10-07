@@ -9088,3 +9088,222 @@ describe('visual messaging: accept-first seats (20261007030000)', () => {
     expect((await seatOf(conv, charlieId))?.status).toBe('active')
   })
 })
+
+describe('visual messaging: decline and block (20261007050000)', () => {
+  // A self-block (declining with a block, or blocking from an active seat) is
+  // marked self_blocked, and nobody but the holder may lift it, re-invite over
+  // it, or delete it. Silently: no error that would confirm the block to the
+  // admin it is against. demo-visual: alice = org owner (vm_can_manage),
+  // charlie and dana = plain members, dana admins each fixture conversation.
+  const svcKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
+  const svc = () => createClient(url, svcKey, { auth: { persistSession: false } })
+  const convIds: string[] = []
+  let org = ''
+  let aliceId = ''
+  let charlieId = ''
+  let danaId = ''
+  let alice: SupabaseClient
+  let charlie: SupabaseClient
+  let dana: SupabaseClient
+
+  beforeAll(async () => {
+    org = (await svc().from('orgs').select('id').eq('slug', 'demo-visual').single()).data!.id as string
+    aliceId = await userIdOf('alice@demo.local')
+    charlieId = await userIdOf('charlie@demo.local')
+    danaId = await userIdOf('dana@demo.local')
+    alice = await signIn('alice@demo.local')
+    charlie = await signIn('charlie@demo.local')
+    dana = await signIn('dana@demo.local')
+  })
+  afterAll(async () => {
+    for (const id of convIds) await svc().from('vm_conversations').delete().eq('id', id)
+  })
+
+  const makeConv = async (title: string) => {
+    const c = await svc().from('vm_conversations').insert({ org_id: org, title, created_by: danaId }).select('id').single()
+    if (c.error) throw new Error(`fixture conversation failed: ${c.error.message}`)
+    const id = c.data!.id as string
+    convIds.push(id)
+    const s = await svc()
+      .from('vm_conversation_members')
+      .insert({ org_id: org, conversation_id: id, user_id: danaId, role: 'admin', status: 'active' })
+    if (s.error) throw new Error(`fixture admin seat failed: ${s.error.message}`)
+    return id
+  }
+  const seatOf = async (conv: string, userId: string) =>
+    (
+      await svc()
+        .from('vm_conversation_members')
+        .select('status, invited_by, self_blocked')
+        .eq('conversation_id', conv)
+        .eq('user_id', userId)
+        .maybeSingle()
+    ).data
+  const invite = async (conv: string) => {
+    const r = await dana
+      .from('vm_conversation_members')
+      .insert({ org_id: org, conversation_id: conv, user_id: charlieId, role: 'participant' })
+    expect(r.error, `fixture invite failed: ${JSON.stringify(r.error)}`).toBeNull()
+    expect((await seatOf(conv, charlieId))?.status, 'CONTROL: the invitation is pending').toBe('pending')
+  }
+  /** charlie declines-and-blocks a fresh invitation; asserts it landed. */
+  const declinedAndBlocked = async (title: string) => {
+    const conv = await makeConv(title)
+    await invite(conv)
+    const r = await charlie.rpc('vm_decline_and_block_invite', { check_conversation_id: conv })
+    expect(r.error, JSON.stringify(r.error)).toBeNull()
+    const seat = await seatOf(conv, charlieId)
+    expect(seat?.status, 'decline-and-block did not leave a banned seat').toBe('banned')
+    expect(seat?.self_blocked, 'decline-and-block is not marked as a self-block').toBe(true)
+    return conv
+  }
+
+  it('decline and block: the seat stays, banned and self-blocked; the invitation is gone and nothing is readable', async () => {
+    const conv = await declinedAndBlocked('RLS fixture - decline and block')
+    const inv = await charlie.rpc('vm_my_pending_invites', { check_org_id: org })
+    expect(inv.error).toBeNull()
+    expect(((inv.data ?? []) as { conversation_id: string }[]).some((i) => i.conversation_id === conv)).toBe(false)
+    const sees = await charlie.from('vm_conversations').select('id').eq('id', conv)
+    expect(sees.data, 'a blocked invitee reads the conversation').toEqual([])
+    const again = await charlie.rpc('vm_decline_and_block_invite', { check_conversation_id: conv })
+    expect(again.error?.message ?? '', 'a second decline-and-block should refuse').toContain('No pending invitation')
+  })
+
+  it('a re-invite over the block is refused with 23505 (which addMember swallows) and the block stands', async () => {
+    const conv = await declinedAndBlocked('RLS fixture - re-invite over block')
+    const r = await dana
+      .from('vm_conversation_members')
+      .insert({ org_id: org, conversation_id: conv, user_id: charlieId, role: 'participant' })
+    expect(r.error?.code).toBe('23505')
+    expect((await seatOf(conv, charlieId))?.status).toBe('banned')
+  })
+
+  it('NOBODY else lifts it: admin and org owner updates to active, pending or self_blocked=false are silent no-ops', async () => {
+    const conv = await declinedAndBlocked('RLS fixture - nobody lifts the block')
+    const before = await seatOf(conv, charlieId)
+    const cases: [string, SupabaseClient][] = [
+      ['dana (conv admin)', dana],
+      ['alice (org owner)', alice],
+    ]
+    const patches: Record<string, unknown>[] = [
+      { status: 'active' },
+      { status: 'pending' },
+      { self_blocked: false },
+      { status: 'active', self_blocked: false },
+      { invited_by: aliceId },
+    ]
+    for (const [who, client] of cases) {
+      for (const patch of patches) {
+        const up = await client
+          .from('vm_conversation_members')
+          .update(patch)
+          .eq('conversation_id', conv)
+          .eq('user_id', charlieId)
+        expect(up.error, `${who} ${JSON.stringify(patch)}: the refusal must be SILENT - ${JSON.stringify(up.error)}`).toBeNull()
+        expect(await seatOf(conv, charlieId), `${who} ${JSON.stringify(patch)} changed the self-block`).toEqual(before)
+      }
+    }
+  })
+
+  it('the same through an UPSERT', async () => {
+    const conv = await declinedAndBlocked('RLS fixture - upsert over block')
+    const up = await dana
+      .from('vm_conversation_members')
+      .upsert(
+        { org_id: org, conversation_id: conv, user_id: charlieId, role: 'participant', status: 'active', self_blocked: false },
+        { onConflict: 'conversation_id,user_id' },
+      )
+    expect(up.error, JSON.stringify(up.error)).toBeNull()
+    const seat = await seatOf(conv, charlieId)
+    expect(seat?.status, 'an upsert lifted the block').toBe('banned')
+    expect(seat?.self_blocked).toBe(true)
+  })
+
+  it('NOBODY else deletes it: admin and org owner deletes are silently skipped, even inside a multi-row delete', async () => {
+    const conv = await declinedAndBlocked('RLS fixture - nobody erases the block')
+    const cases: [string, SupabaseClient][] = [
+      ['dana (conv admin)', dana],
+      ['alice (org owner)', alice],
+    ]
+    for (const [who, client] of cases) {
+      const del = await client
+        .from('vm_conversation_members')
+        .delete()
+        .eq('conversation_id', conv)
+        .eq('user_id', charlieId)
+        .select('id')
+      expect(del.error, `${who}: ${JSON.stringify(del.error)}`).toBeNull()
+      expect(del.data, `${who} deleted the self-block`).toEqual([])
+      expect((await seatOf(conv, charlieId))?.self_blocked, `${who}: the block is gone`).toBe(true)
+    }
+    // CONTROL: the same admin CAN delete an ordinary seat in the same statement,
+    // so the empty result above is the guard, not RLS hiding the row.
+    const extra = await svc()
+      .from('vm_conversation_members')
+      .insert({ org_id: org, conversation_id: conv, user_id: aliceId, role: 'participant', status: 'active' })
+    expect(extra.error, JSON.stringify(extra.error)).toBeNull()
+    const ctl = await dana.from('vm_conversation_members').delete().eq('conversation_id', conv).neq('user_id', danaId).select('user_id')
+    expect(ctl.error, JSON.stringify(ctl.error)).toBeNull()
+    expect(ctl.data?.map((r) => r.user_id), 'CONTROL: dana could not delete an ordinary seat').toEqual([aliceId])
+    expect((await seatOf(conv, charlieId))?.self_blocked, 'the multi-row delete took the block with it').toBe(true)
+  })
+
+  it('blocking from an ACTIVE seat is a self-block too: an admin unban no longer re-invites', async () => {
+    const conv = await makeConv('RLS fixture - active self-block')
+    const seat = await svc()
+      .from('vm_conversation_members')
+      .insert({ org_id: org, conversation_id: conv, user_id: charlieId, role: 'participant', status: 'active' })
+    expect(seat.error, JSON.stringify(seat.error)).toBeNull()
+    const b = await charlie.from('vm_conversation_members').update({ status: 'banned' }).eq('conversation_id', conv).eq('user_id', charlieId)
+    expect(b.error, JSON.stringify(b.error)).toBeNull()
+    expect((await seatOf(conv, charlieId))?.self_blocked).toBe(true)
+    const up = await dana.from('vm_conversation_members').update({ status: 'active' }).eq('conversation_id', conv).eq('user_id', charlieId)
+    expect(up.error).toBeNull()
+    expect((await seatOf(conv, charlieId))?.status, 'an admin turned a self-block into a re-invite').toBe('banned')
+  })
+
+  it('UNBLOCK: the holder deletes their own self-blocked seat, after which an invite works again', async () => {
+    const conv = await declinedAndBlocked('RLS fixture - unblock')
+    const del = await charlie.from('vm_conversation_members').delete().eq('conversation_id', conv).eq('user_id', charlieId).select('id')
+    expect(del.error, JSON.stringify(del.error)).toBeNull()
+    expect(del.data?.length, 'the holder could not unblock').toBe(1)
+    await invite(conv)
+  })
+
+  it('a block cannot be FORGED: an admin-inserted banned seat is a moderation ban, not a self-block', async () => {
+    const conv = await makeConv('RLS fixture - forged block')
+    const ins = await dana
+      .from('vm_conversation_members')
+      .insert({ org_id: org, conversation_id: conv, user_id: charlieId, role: 'participant', status: 'banned', self_blocked: true })
+    expect(ins.error, JSON.stringify(ins.error)).toBeNull()
+    const seat = await seatOf(conv, charlieId)
+    expect(seat?.status, 'CONTROL: the row exists and is banned').toBe('banned')
+    expect(seat?.self_blocked).toBe(false)
+  })
+
+  it('ALSO FIXED: a person banned BY A MODERATOR can no longer delete their own seat and rejoin by link', async () => {
+    const conv = await makeConv('RLS fixture - moderation ban sticks')
+    await svc().from('vm_conversations').update({ settings: { joinPolicy: 'open' } }).eq('id', conv)
+    const ban = await dana
+      .from('vm_conversation_members')
+      .insert({ org_id: org, conversation_id: conv, user_id: charlieId, role: 'participant', status: 'banned' })
+    expect(ban.error, JSON.stringify(ban.error)).toBeNull()
+    expect((await seatOf(conv, charlieId))?.self_blocked, 'CONTROL: this is a moderation ban').toBe(false)
+    const del = await charlie.from('vm_conversation_members').delete().eq('conversation_id', conv).eq('user_id', charlieId)
+    expect(del.error?.message ?? '', 'the banned person erased their own ban').toContain('cannot remove a ban')
+    const j = await charlie.rpc('vm_join_conversation', { check_conversation_id: conv })
+    expect(j.error?.message ?? '', 'the banned person rejoined by link').toContain('cannot join')
+    // The admin still lifts a moderation ban as before: a pending re-invite.
+    const up = await dana.from('vm_conversation_members').update({ status: 'active' }).eq('conversation_id', conv).eq('user_id', charlieId)
+    expect(up.error).toBeNull()
+    expect((await seatOf(conv, charlieId))?.status).toBe('pending')
+  })
+
+  it('deleting the CONVERSATION still works with a self-blocked seat in it (the cascade passes the guard)', async () => {
+    const conv = await declinedAndBlocked('RLS fixture - cascade through a block')
+    const del = await dana.from('vm_conversations').delete().eq('id', conv).select('id')
+    expect(del.error, JSON.stringify(del.error)).toBeNull()
+    expect(del.data?.length, 'the admin could not delete her conversation').toBe(1)
+    expect(await seatOf(conv, charlieId), 'the self-blocked seat outlived its conversation').toBeNull()
+  })
+})

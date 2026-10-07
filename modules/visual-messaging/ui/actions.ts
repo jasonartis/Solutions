@@ -162,6 +162,19 @@ export async function declineConversationInvite(orgSlug: string, conversationId:
   redirect(`/o/${orgSlug}/m/visual-messaging`)
 }
 
+// Decline AND block (20261007050000): the seat is kept as a self-block
+// (banned, self_blocked) instead of deleted, so this conversation cannot
+// invite the person again — nobody else can lift, re-invite over, or delete
+// it. Per CONVERSATION, not per inviter. A definer for the same reason as
+// accept: a pending invitee cannot update their own seat directly.
+export async function declineAndBlockConversationInvite(orgSlug: string, conversationId: string) {
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('vm_decline_and_block_invite', { check_conversation_id: conversationId })
+  fail(error, 'Decline and block failed')
+  revalidatePath(`/o/${orgSlug}/m/visual-messaging`)
+  redirect(`/o/${orgSlug}/m/visual-messaging`)
+}
+
 // A conversation admin opens or closes deep-link joining. Writes
 // settings.joinPolicy; the vm_conversations_update_admin policy gates who,
 // and vm_pin_conversation leaves settings free to change (it only pins

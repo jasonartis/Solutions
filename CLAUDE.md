@@ -291,9 +291,14 @@ doc.
   tested:** an admin "unbanning" (banned→active) now produces a PENDING re-invite — which also
   means an admin can no longer silently undo a SELF-block (pre-existing hole; the table cannot
   tell a moderation ban from a self-block); and an org owner could carry an active seat into a
-  DIFFERENT conversation, now refused. **Open, recorded not built:** an invitee cannot
-  decline-and-block (re-invites after a decline are unlimited); an org manager can still set
-  `invited_by` on a non-reinvite update (pre-existing manager escape). **ON PRODUCTION AND
+  DIFFERENT conversation, now refused. **DECLINE-AND-BLOCK IS BUILT (`20261007050000`, per
+  CONVERSATION — founder chose option A; per-PERSON blocking is recorded as a future
+  enhancement in the module-4 spec). IN THE REPO ONLY: `migrate:prod` has NOT run** — verify
+  with `scripts/prod-verify-vm-decline-and-block.mts` before and after (prod pre-apply 7/9-fail,
+  controls green). A `self_blocked` marker means nobody but the holder can lift, re-invite over
+  or delete it (silently); it also closed a pre-existing hole where a moderation-banned person
+  could delete their own seat and rejoin by link. **Still open:** no unblock screen; an org
+  manager can still set `invited_by` on a non-reinvite update (pre-existing manager escape). **ON PRODUCTION AND
   PROD-VERIFIED 2026-10-07** with the other two 2026-10-07 migrations —
   `scripts/prod-verify-20261007.mts` 20/21-fail pre-apply → **46/0** post-apply; prod holds 0
   conversations, so the BEHAVIOUR is proven locally only (rls.test.ts), the structure on prod.

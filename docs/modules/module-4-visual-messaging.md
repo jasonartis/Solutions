@@ -727,7 +727,77 @@ with one active-checking arm and another arm that tests mere row existence would
 it. Not a live defect — each predicate was read in full, and the RLS tests prove a pending seat
 reads nothing — but do not treat that DO block as the guard; the tests are.
 
-**Recorded, not built:** decline-and-block (after a decline the row is gone, so re-invites are
-unlimited; the only way out today is accept then self-block); an org manager can still write
-`invited_by` on an ordinary update (the manager escape predates this).
+**Recorded, not built:** ~~decline-and-block~~ **BUILT the same day, see the next section**; an
+org manager can still write `invited_by` on an ordinary update (the manager escape predates this).
+
+## 2026-10-07 — decline and block (per conversation)
+
+**Founder decision: option A, PER CONVERSATION.** Dana can block Frank's "Weekend plans" chat
+from inviting her again; Frank can still invite her to a different chat. Option B (per person)
+is recorded below as a future enhancement.
+
+**Built (Opus), `20261007050000`, every org.** An invitation now offers **Decline and block**
+next to Decline. It keeps the seat as `banned` with a new server-maintained marker
+`self_blocked = true` instead of deleting it. **Nobody but the holder** can lift that block,
+re-invite over it, or delete it: not the conversation admin, not the org owner. Every such
+attempt is a **silent no-op** (no error), so it does not confirm the block to the person it is
+against, for the same reason `addMember` swallows 23505. Blocking from an ACTIVE seat (the
+2026-09-10 self-block) sets the same marker. **Unblock** = the holder deletes their own
+self-blocked seat; after that an ordinary invite works again. Proof: `rls.test.ts` "decline and
+block", 10 tests; `scripts/prod-verify-vm-decline-and-block.mts` (16/16 local; PROD pre-apply
+7/9-fail with every control green, the expected baseline).
+
+**Why the old workaround did not work (found while designing this, both closed):** the spec
+said "the only way out is accept then self-block". It wasn't a way out. (1) Since
+`20261007030000` an admin's banned → active becomes a pending RE-INVITE, and the table could not
+tell a self-block from a moderation ban, so a self-block could be re-invited forever. (2) An
+admin could DELETE the banned row and then invite normally, so any block stored on the row was
+erasable by the people it is against.
+
+**Also fixed, pre-existing:** a person banned BY A MODERATOR could delete their own seat
+(`vm_members_delete_self` has no status condition) and then rejoin an open conversation by
+link, because `vm_join_conversation`'s ban check is a row lookup. Now refused with
+"You cannot remove a ban". The admin still lifts a moderation ban as before (a pending
+re-invite).
+
+**Two adversarial reviews (bypass, regressions), both clean.** Recorded from them, not defects:
+someone else can still change the `role` of a self-blocked seat (harmless, a banned seat never
+counts toward anything); a holder who is ALSO an org manager can lift their own moderation ban
+through the pin's manager escape (pre-existing, arguably by design); and **deleting the whole
+conversation erases its blocks** (cascade). Nothing is left to rejoin, but a recreated
+conversation starts with no block. If account deletion ever deletes seats DIRECTLY (depth 1,
+under a user's JWT) rather than by cascade, the guard would skip someone else's self-blocked
+seat and refuse a moderation-banned holder's own. The 2026-10-07 account-deletion draft does
+not touch this table.
+
+**Visibility, stated:** `self_blocked` is readable wherever the seat is (the holder, and ACTIVE
+members of the conversation). An admin could already infer a self-block (a banned row no
+moderator created), so this makes explicit what was inferable. No screen shows it.
+
+**Not built:** an "unblock" screen. The SQL path exists (delete your own self-blocked seat),
+but nothing lists a person's blocks, so today a mistaken block can only be undone through the
+API. Cheap to add: a definer like `vm_my_pending_invites` returning own `self_blocked` seats.
+
+## Future enhancement: block a PERSON, not a conversation (option B, 2026-10-07, not built)
+
+Recorded at the founder's request when option A was chosen. **The scenario B solves:** Frank
+invites Dana to "Weekend plans", she declines and blocks; tomorrow he creates "Weekend plans 2"
+and invites her again. A blocks only conversations, so Frank can nag indefinitely with new
+ones. B stops Frank from inviting Dana to anything in that org, which is what WhatsApp and Slack
+do.
+
+**What it needs (none of it exists):**
+- a new table, e.g. `vm_user_blocks (org_id, blocker_id, blocked_id)`, own-rows-only RLS, and
+  revoke-before-grant (docs/03 #27);
+- the invite path (`vm_invite_pending` / the INSERT trigger) refusing a seat for someone who
+  blocked the inviter. It must stay **silent**, like 23505, and must check the INVITER
+  (`auth.uid()`), not just `invited_by`;
+- a screen to list and undo your blocks;
+- **open product questions:** does it also hide the blocked person's existing conversations
+  and layers? Does it apply across orgs, or per org? (The platform's tenancy model says per
+  org.) Does it stop the blocked person from seeing YOU in rosters? Each is a founder call.
+  Compare against WhatsApp/Slack first (feedback memory: check prior art).
+
+**Trigger to build it:** a real user being nagged through new conversations. Until then A is
+enough (extract-don't-speculate).
 

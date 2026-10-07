@@ -4,6 +4,23 @@ The running, dated build journal that used to live in `CLAUDE.md`'s "## Current 
 section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every session)
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
+- **2026-10-07 (later, Opus) — DECLINE-AND-BLOCK, per conversation (`20261007050000`), BUILT,
+  NOT DEPLOYED.** Founder picked option A (block this conversation) over B (block this person,
+  recorded as a future enhancement in the module-4 spec). Re-reading the 10-07 accept-first
+  migration before building showed the recorded workaround ("accept, then self-block") did not
+  work: an admin "unban" re-invited a self-block, and an admin could delete the banned row and
+  invite fresh. Fix: a server-maintained `self_blocked` marker and one guard function bound
+  BEFORE INSERT/UPDATE/DELETE, silent to everyone but the holder; plus a pre-existing hole closed
+  in passing (a moderation-banned person could delete their own seat and rejoin by link). Two
+  narrow adversarial reviews (bypass; regressions) found nothing; one reviewer's probe
+  accidentally autocommitted local writes, cleared by a reset. Verified: db 297/299 on a fresh
+  reset+seed, my 10 new tests included; **the 2 failures are a CONCURRENT session's unfinished
+  account-deletion migration** (two ratchets not yet allow-listed), told to that session.
+  Typecheck 9/9. **A real near-miss worth keeping: the two sessions picked the SAME migration
+  version (`20261007040000`) minutes apart**, which surfaced only as a `schema_migrations_pkey`
+  23505 during `db reset`. Renumbered (mine 050000, theirs 090000). → Before naming a migration
+  in a shared tree, `ls supabase/migrations` immediately before writing it, and again before
+  committing. Full detail: module-4 spec, 2026-10-07 "decline and block".
 - **2026-10-07 (THREE PLANNED SLICES BUILT IN ONE SESSION, Opus — founder asked for "everything
   already planned that just needs building").** Triage first: of seven candidates only three
   were truly decided — account deletion was reported as needing docs/21 §4 sign-off **(WRONG,

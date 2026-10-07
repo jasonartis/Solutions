@@ -8,6 +8,7 @@ import LayerGrid from '../../layer-grid'
 import {
   acceptConversationInvite,
   addMember,
+  declineAndBlockConversationInvite,
   declineConversationInvite,
   flagLayer,
   joinConversation,
@@ -92,6 +93,11 @@ export default async function ConversationPage(props: {
             </form>
             <form action={declineConversationInvite.bind(null, orgSlug, conversationId)}>
               <button className="rounded border border-gray-300 px-4 py-2 text-sm hover:bg-gray-50">Decline</button>
+            </form>
+            <form action={declineAndBlockConversationInvite.bind(null, orgSlug, conversationId)}>
+              <button className="rounded border border-red-200 px-4 py-2 text-sm text-red-700 hover:bg-red-50">
+                Decline and block
+              </button>
             </form>
           </div>
         </div>

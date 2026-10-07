@@ -30,6 +30,11 @@ at the top of the Visual Messaging page, with who invited you. Click
 **Accept** to join, or **Decline** to remove the invitation (they can invite
 you again later). Until you accept, you can't see its pictures or replies.
 
+If you never want to be invited to that conversation again, click **Decline
+and block** instead. Nobody in the conversation can invite you back, and they
+are not notified. The block covers that one conversation
+only; the same person can still invite you to a different one.
+
 ## Join by a shared link
 
 If someone sends you a link to a conversation you're not in yet and its owner

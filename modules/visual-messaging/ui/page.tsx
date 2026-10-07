@@ -1,6 +1,11 @@
 import Link from 'next/link'
 import { requireOrgModule } from '@/lib/module-gate'
-import { acceptConversationInvite, createConversation, declineConversationInvite } from './actions'
+import {
+  acceptConversationInvite,
+  createConversation,
+  declineAndBlockConversationInvite,
+  declineConversationInvite,
+} from './actions'
 
 const inputCls = 'rounded border border-gray-300 px-2 py-1 text-sm'
 const btnCls = 'rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700'
@@ -58,12 +63,18 @@ export default async function VisualMessagingPage(props: { params: Promise<{ org
                   <form action={declineConversationInvite.bind(null, orgSlug, i.conversation_id)}>
                     <button className="rounded border border-gray-300 px-3 py-1 text-sm hover:bg-gray-50">Decline</button>
                   </form>
+                  <form action={declineAndBlockConversationInvite.bind(null, orgSlug, i.conversation_id)}>
+                    <button className="rounded border border-red-200 px-3 py-1 text-sm text-red-700 hover:bg-red-50">
+                      Decline and block
+                    </button>
+                  </form>
                 </span>
               </li>
             ))}
           </ul>
           <p className="mt-2 text-xs text-gray-500">
-            You won&apos;t see a conversation&apos;s pictures or replies until you accept.
+            You won&apos;t see a conversation&apos;s pictures or replies until you accept. Decline and block stops
+            that conversation from inviting you again.
           </p>
         </section>
       )}
