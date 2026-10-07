@@ -127,7 +127,7 @@ export default async function ConversationPage(props: {
         .eq('user_id', me.id)
         .maybeSingle()
     : { data: null }
-  const canPost = myMembership?.role === 'participant' || myMembership?.role === 'moderator' || myMembership?.role === 'admin'
+  const canPost = myMembership?.role === 'participant' || myMembership?.role === 'conversation_moderator' || myMembership?.role === 'admin'
 
   const current = rows.find((l) => l.id === layerParam) ?? root
   const byId = new Map(rows.map((l) => [l.id, l]))

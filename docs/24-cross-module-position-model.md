@@ -445,7 +445,7 @@ Dana. That is the intended outcome, not a side effect to correct.
 |---|---|
 | Rank-mapping the three modules (§2) | **SHIPPED — ON PRODUCTION AND VERIFIED 2026-09-28.** `20260925030000` is in prod's `schema_migrations`, and `module_position_rank` was spot-checked live against prod: matchmaking/admin **3**, visual-messaging/admin **3**, visual-messaging/moderator **1**, synagogue-schedules/maker **1**. §4b. |
 | The `module_roles` census-leak fix (§4.5/§5.5) | **CLOSED — ON PRODUCTION AND PROD-VERIFIED 2026-10-05** (`20261002010000`; prod 20/28 → 28/28). §6b. |
-| The roster fold (§3) + `conversation_moderator` rename (§4 item 4) | **NOT BUILT.** Its own slice. |
+| The roster fold (§3) + `conversation_moderator` rename (§4 item 4) | **RENAME BUILT IN THE REPO 2026-10-07 (`20261007020000`), prod pending `migrate:prod`**: CHECK, `vm_can_post`, `vm_can_moderate` and the one UI check; 0 seats needed rewriting anywhere, and the rewrite path was still exercised in a rolled-back transaction (with a control proving `vm_members_a_pin` silently reverts it unless disabled). Adversarial review: no SQL defects. **The fold remains NOT BUILT** (speed-dating half blocked, §7). |
 
 ## 6b. THE CENSUS-LEAK FIX IS BUILT — `20261002010000`, 2026-10-02, Opus
 

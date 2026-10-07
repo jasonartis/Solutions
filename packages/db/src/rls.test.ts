@@ -8739,3 +8739,79 @@ describe('mm_assignment_covers_me takes no matchmaker argument (20261007010000)'
     expect(r.error?.code, JSON.stringify(r.error)).toBe('PGRST202')
   })
 })
+
+describe('visual messaging: the per-conversation seat is conversation_moderator (20261007020000)', () => {
+  // docs/24 §4 item 4: `moderator` meant both an org-wide module role and a
+  // seat in one conversation. The SEAT is renamed; the module role is not.
+  const svcKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
+  const svc = () => createClient(url, svcKey, { auth: { persistSession: false } })
+  const convIds: string[] = []
+  let org = ''
+  let charlieId = ''
+  let danaId = ''
+
+  beforeAll(async () => {
+    org = (await svc().from('orgs').select('id').eq('slug', 'demo-visual').single()).data!.id as string
+    charlieId = await userIdOf('charlie@demo.local')
+    danaId = await userIdOf('dana@demo.local')
+  })
+  afterAll(async () => {
+    for (const id of convIds) await svc().from('vm_conversations').delete().eq('id', id)
+  })
+
+  const makeConv = async (title: string) => {
+    const c = await svc().from('vm_conversations').insert({ org_id: org, title, created_by: danaId }).select('id').single()
+    if (c.error) throw new Error(`fixture conversation failed: ${c.error.message}`)
+    convIds.push(c.data!.id as string)
+    return c.data!.id as string
+  }
+
+  it('the old seat word is refused and the new one accepted', async () => {
+    const conv = await makeConv('RLS fixture — seat word')
+    const old = await svc()
+      .from('vm_conversation_members')
+      .insert({ org_id: org, conversation_id: conv, user_id: charlieId, role: 'moderator', status: 'active' })
+    expect(old.error?.code, `'moderator' seat was accepted: ${JSON.stringify(old.error)}`).toBe('23514')
+    const neu = await svc()
+      .from('vm_conversation_members')
+      .insert({ org_id: org, conversation_id: conv, user_id: charlieId, role: 'conversation_moderator', status: 'active' })
+    expect(neu.error, JSON.stringify(neu.error)).toBeNull()
+  })
+
+  it('a conversation_moderator seat can post and moderate; a viewer seat in the same conversation cannot', async () => {
+    const conv = await makeConv('RLS fixture — seat powers')
+    const seats = await svc().from('vm_conversation_members').insert([
+      { org_id: org, conversation_id: conv, user_id: charlieId, role: 'conversation_moderator', status: 'active' },
+      { org_id: org, conversation_id: conv, user_id: danaId, role: 'viewer', status: 'active' },
+    ])
+    expect(seats.error, JSON.stringify(seats.error)).toBeNull()
+
+    // CONTROL for "the power comes from the SEAT": charlie holds no org-wide
+    // moderation (plain member, module role `member`), so vm_can_moderate_org
+    // is false for him and only the seat arm can make vm_can_moderate true.
+    // CONTROL for the viewer negative: dana is an ACTIVE org member, so her
+    // "false" below is the seat word speaking, not a dead membership.
+    const danaSeat = await svc().from('org_members').select('status').eq('org_id', org).eq('user_id', danaId).single()
+    expect(danaSeat.data?.status, 'CONTROL: dana is not an active demo-visual member').toBe('active')
+
+    const charlie = await signIn('charlie@demo.local')
+    const orgTier = await charlie.rpc('vm_can_moderate_org', { check_org_id: org })
+    expect(orgTier.error, JSON.stringify(orgTier.error)).toBeNull()
+    expect(orgTier.data, 'CONTROL: charlie has org-wide moderation, so this test proves nothing about the seat').toBe(false)
+
+    const mod = await charlie.rpc('vm_can_moderate', { check_conversation_id: conv })
+    expect(mod.error, JSON.stringify(mod.error)).toBeNull()
+    expect(mod.data, 'a conversation_moderator seat cannot moderate its conversation').toBe(true)
+    const post = await charlie.rpc('vm_can_post', { check_conversation_id: conv })
+    expect(post.error, JSON.stringify(post.error)).toBeNull()
+    expect(post.data, 'a conversation_moderator seat cannot post').toBe(true)
+
+    const dana = await signIn('dana@demo.local')
+    const dMod = await dana.rpc('vm_can_moderate', { check_conversation_id: conv })
+    expect(dMod.error, JSON.stringify(dMod.error)).toBeNull()
+    expect(dMod.data, 'a viewer seat can moderate').toBe(false)
+    const dPost = await dana.rpc('vm_can_post', { check_conversation_id: conv })
+    expect(dPost.error, JSON.stringify(dPost.error)).toBeNull()
+    expect(dPost.data, 'a viewer seat can post').toBe(false)
+  })
+})
