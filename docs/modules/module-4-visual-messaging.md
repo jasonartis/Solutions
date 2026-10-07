@@ -711,6 +711,15 @@ longer silently undo a self-block** — before this, flipping a self-blocked sea
 put the person straight back in. It now needs their own yes. The table still cannot tell a
 moderation ban from a self-block (no "banned by" column), so both behave the same way.
 
+**On production and prod-verified 2026-10-07** (structure only; prod has 0 conversations).
+
+**Noted by the post-deploy review, not a hole:** a seat holder can also accept by UPDATEing
+their own seat (`vm_members_update_self` + the pin's pending→active), skipping the accept
+function's `is_org_member`/`vm_is_module_member` checks. Only a conversation's CREATOR can reach
+that path (anyone else is stopped by the non-definer scope trigger, which cannot resolve a
+conversation they cannot see), and an active seat held by a non-member confers nothing, because
+every access predicate also requires `is_org_member`.
+
 **Recorded, not built:** decline-and-block (after a decline the row is gone, so re-invites are
 unlimited; the only way out today is accept then self-block); an org manager can still write
 `invited_by` on an ordinary update (the manager escape predates this).

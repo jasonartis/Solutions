@@ -285,8 +285,10 @@ doc.
   tell a moderation ban from a self-block); and an org owner could carry an active seat into a
   DIFFERENT conversation, now refused. **Open, recorded not built:** an invitee cannot
   decline-and-block (re-invites after a decline are unlimited); an org manager can still set
-  `invited_by` on a non-reinvite update (pre-existing manager escape). Deploy state: see the
-  2026-10-07 journal entry.
+  `invited_by` on a non-reinvite update (pre-existing manager escape). **ON PRODUCTION AND
+  PROD-VERIFIED 2026-10-07** with the other two 2026-10-07 migrations —
+  `scripts/prod-verify-20261007.mts` 20/21-fail pre-apply → **46/0** post-apply; prod holds 0
+  conversations, so the BEHAVIOUR is proven locally only (rls.test.ts), the structure on prod.
 - **Anonymous public view-links stay deferred post-v1** — not part of "completing" this module.
 - **PUBLIC SQUARE is now its own workstream and the founder still wants it** ("a module
   completely public and independent of a real org is a good thing to have").
@@ -655,8 +657,8 @@ fires BEFORE UPDATE triggers, which has already bitten this repo once.
   / it never resolved" contradiction gets shipped.
 
 Everything below is open but unranked:
-- **FIXED IN THE REPO 2026-10-07 (`20261007010000`, signature only, behaviour unchanged; PROD
-  PENDING `migrate:prod`) — FOUND 2026-10-02 BY THE CENSUS SLICE'S ADVERSARIAL REVIEW — a dead
+- **FIXED AND ON PRODUCTION 2026-10-07 (`20261007010000`, signature only, behaviour unchanged;
+  prod-verified) — FOUND 2026-10-02 BY THE CENSUS SLICE'S ADVERSARIAL REVIEW — a dead
   parameter in a live RLS predicate.** `mm_assignment_covers_me(check_matchmaker_id, check_target_group_id,
   check_target_user_id)` **NEVER REFERENCES ITS FIRST PARAMETER** (verified in the DEPLOYED
   body, not inferred from a migration). It returns true whenever
@@ -1331,6 +1333,7 @@ belong with docs/22 §20.2's founder-deferred entity-level question. **One is a 
 worth its own slice: `mm_assignment_covers_me` NEVER REFERENCES its `check_matchmaker_id`
 parameter** (verified in the deployed body), so that policy arm reads as a matchmaker check
 and is actually "any row naming me" — outcome defensible, signature lying. docs/24 §6b.1.
+**FIXED AND ON PRODUCTION 2026-10-07 (`20261007010000`)** — the parameter is gone.
 
 **Standing rules:** never start a slice/module build without the founder initiating; every
 migration/RLS/trigger change runs the docs/03 #12 rhythm (draft → adversarial review →

@@ -445,7 +445,7 @@ Dana. That is the intended outcome, not a side effect to correct.
 |---|---|
 | Rank-mapping the three modules (§2) | **SHIPPED — ON PRODUCTION AND VERIFIED 2026-09-28.** `20260925030000` is in prod's `schema_migrations`, and `module_position_rank` was spot-checked live against prod: matchmaking/admin **3**, visual-messaging/admin **3**, visual-messaging/moderator **1**, synagogue-schedules/maker **1**. §4b. |
 | The `module_roles` census-leak fix (§4.5/§5.5) | **CLOSED — ON PRODUCTION AND PROD-VERIFIED 2026-10-05** (`20261002010000`; prod 20/28 → 28/28). §6b. |
-| The roster fold (§3) + `conversation_moderator` rename (§4 item 4) | **RENAME BUILT IN THE REPO 2026-10-07 (`20261007020000`), prod pending `migrate:prod`**: CHECK, `vm_can_post`, `vm_can_moderate` and the one UI check; 0 seats needed rewriting anywhere, and the rewrite path was still exercised in a rolled-back transaction (with a control proving `vm_members_a_pin` silently reverts it unless disabled). Adversarial review: no SQL defects. **The fold remains NOT BUILT** (speed-dating half blocked, §7). |
+| The roster fold (§3) + `conversation_moderator` rename (§4 item 4) | **RENAME BUILT AND ON PRODUCTION 2026-10-07 (`20261007020000`), prod-verified**: CHECK, `vm_can_post`, `vm_can_moderate` and the one UI check; 0 seats needed rewriting anywhere, and the rewrite path was still exercised in a rolled-back transaction (with a control proving `vm_members_a_pin` silently reverts it unless disabled). Adversarial review: no SQL defects. **The fold remains NOT BUILT** (speed-dating half blocked, §7). |
 
 ## 6b. THE CENSUS-LEAK FIX IS BUILT — `20261002010000`, 2026-10-02, Opus
 
@@ -596,7 +596,8 @@ transactions; the fourth is partly reasoned and says so.
    overload is dropped, the one policy repointed, body byte-identical to `20260915010000`.
    No app code ever called it. 3 new RLS tests (signature pin, both-direction behaviour with a
    control, the old call refused with PGRST202); db 273/273. Adversarial review: no defects,
-   two gaps both closed. **Prod: pending `migrate:prod`** — check `--dry-run` before assuming.
+   two gaps both closed. **ON PRODUCTION AND PROD-VERIFIED 2026-10-07** (`prod-verify-20261007.mts`
+   46/46; `prod-verify-migration.ts` body md5 matches).
 4. **`mm_questions.submitted_by`** (`20260709020000:512`) is readable for `status='approved'`
    by any single/matchmaker, so authorship can imply pool membership. Narrower and
    role-ambiguous. **The column read was confirmed live; the INFERENCE was not measured** —

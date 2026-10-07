@@ -21,7 +21,19 @@ decision log, docs/03 conventions, docs/12 safeguards) — this is the chronolog
   blocked WRITING migration (3) ("Modify Shared Resources") though it had allowed (1) and (2) —
   cleared by the founder's explicit go-ahead in chat; and `verify-acl-hardening.ts` with no
   `VERIFY_DB_URL` targets PROD by default (read-only, but not what a local check expects).
-  **Deploy outcome: see the next line of this entry once `migrate:prod` has run.**
+  **DEPLOYED AND PROD-VERIFIED THE SAME DAY.** Order: backup (`backups/2026-10-07T15-04-59`)
+  → push → app READY on Vercel → `migrate:prod` (the dry run listed exactly these three) →
+  verify. **One deploy oddity worth knowing:** the first CI run for `82d4663` concluded
+  `failure` with `check` GREEN and the `deploy` job NEVER CREATED — no error in any log or
+  annotation. `rerun-failed-jobs` returned 403 "cannot be retried"; a full `POST .../rerun`
+  (attempt 2) ran clean and deployed. So: a red run whose only job is a green `check` is a
+  GitHub-side job-creation failure, not a test failure. Evidence: `prod-verify-20261007.mts`
+  20 pass / 21 fail pre-apply → **46/0** post-apply, every control green both times;
+  `verify-acl-hardening.ts` 17/17 on prod; five older verifiers still green (vm-admin-floor
+  32, module-role 85, seat-authority 25, vm-policy-split 15, census 28); an independent
+  adversarial review of the DEPLOYED state confirmed every function body md5-matches the
+  committed files. Prod has 0 conversations, so behaviour is proven locally only.
+  The `migrate:prod` run printed the known `pgdelta-target-ca.crt` trace — harmless, as before.
 - **2026-10-05 (THE CENSUS LEAK REACHED PRODUCTION — and the verifier that proved it caught
   its own false assertion first).** `20261002010000` applied by `migrate:prod` after a fresh
   backup (`backups/2026-10-05T21-42-51`). **Deployed by a CONCURRENT SESSION on the founder's
