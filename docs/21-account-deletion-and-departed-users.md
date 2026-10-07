@@ -418,6 +418,16 @@ Asked as scenarios with prior-art defaults; the founder took all three defaults.
    is the point of a reversible state). After 30 days the silhouette step (§7.4) is
    irreversible and nothing reconnects the identity (§7.2).
 
+**AN OPEN BUILD QUESTION, NOT A FOUNDER ONE — WHAT RUNS THE 30-DAY EXPIRY ON PROD?** Production
+has **no continuously-running worker** (CLAUDE.md: pg-boss jobs fire only while
+`pnpm worker:prod` runs on the founder's PC — the same reason docs/17's retention prunes and
+the zmanim sweep do not run there). So a pg-boss cron that converts "departed" to "deleted"
+after 30 days would silently never fire, and "signing back in cancels" would be the only
+transition that ever happens. Decide the runner first (e.g. a check performed lazily on
+sign-in/read, a Vercel cron hitting a guarded route, or making the departed→deleted step
+idempotent and range-based like docs/17's pruner so a late run catches up) — and **say in the
+privacy copy what is actually true** about when deletion completes.
+
 **Still owed with the build, not a decision:** the fourth `/privacy` line — "what we keep after
 you delete your account, and why" (§5 item 5) — and the "Former member" rendering (§7.5).
 **Re-check before building:** §7.4's correction lists four bare predicates that made step 3

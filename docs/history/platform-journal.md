@@ -6,7 +6,9 @@ lean. Newest first. Durable *decisions/conventions* live in their own docs (docs
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
 - **2026-10-07 (THREE PLANNED SLICES BUILT IN ONE SESSION, Opus — founder asked for "everything
   already planned that just needs building").** Triage first: of seven candidates only three
-  were truly decided — account deletion still needs docs/21 §4 sign-off, the speed-dating
+  were truly decided — account deletion was reported as needing docs/21 §4 sign-off **(WRONG,
+  corrected the same day: docs/21 §7 had closed §4 on 2026-09-11 and only its header was stale;
+  the founder then answered the last three questions — §7.9)**, the speed-dating
   audience/mentor fold is blocked on docs/24 §7's founder choice, the "up next" preview needs an
   orchestrator design, and the role-labels list is not in the docs. Built:
   (1) `20261007010000` — `mm_assignment_covers_me` drops the parameter it never read
@@ -34,6 +36,12 @@ decision log, docs/03 conventions, docs/12 safeguards) — this is the chronolog
   adversarial review of the DEPLOYED state confirmed every function body md5-matches the
   committed files. Prod has 0 conversations, so behaviour is proven locally only.
   The `migrate:prod` run printed the known `pgdelta-target-ca.crt` trace — harmless, as before.
+  **Cross-session note: this session's `git push` of `82d4663` also carried the concurrent JaaS
+  video session's local commit `25475eb` (PKCS#1/CRLF/quoted private-key handling) to
+  production** — the two sessions share one `.git`, so another session's unpushed commits ride
+  along with yours. CI was green with it. That session's own `git status` will no longer show it
+  as unpushed; it is not lost. **Next work item picked by the founder the same day: account
+  deletion (docs/21, fully decided — §7.9).**
 - **2026-10-05 (THE CENSUS LEAK REACHED PRODUCTION — and the verifier that proved it caught
   its own false assertion first).** `20261002010000` applied by `migrate:prod` after a fresh
   backup (`backups/2026-10-05T21-42-51`). **Deployed by a CONCURRENT SESSION on the founder's

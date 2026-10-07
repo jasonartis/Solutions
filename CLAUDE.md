@@ -19,6 +19,14 @@ A multi-tenant modular platform: each client engagement produces a **module** bu
      and update only the compact "Now / Next / Standing rules" below. A fresh chat must never
      pay for the full journal. See "Session hygiene". -->
 
+**NEXT WORK ITEM, PICKED BY THE FOUNDER 2026-10-07: ACCOUNT DELETION, OPUS TIER.** Fully
+decided — read [docs/21](docs/21-account-deletion-and-departed-users.md) §7 then §7.9 (self-serve
+AND superadmin-initiated, 30-day grace, signing back in cancels). **One open BUILD question
+first: prod has no always-on worker, so decide what runs the 30-day expiry (§7.9).** Shipped
+the same day, all on prod and prod-verified: `20261007010000` (matchmaking signature fix),
+`20261007020000` (`conversation_moderator`), `20261007030000` (accept-first chat seats) —
+journal 2026-10-07.
+
 **MODULE 6 VIDEO — JaaS IS THE DEFAULT PROVIDER, BUILT, AND UNVERIFIABLE FROM THIS REPO
 (2026-10-02, no migration).** Founder chose **JaaS (8x8-hosted Jitsi)** over a self-hosted VPS:
 free tier is **25 monthly active users**, the spec's default event is 7v7 = 14 people, so a
