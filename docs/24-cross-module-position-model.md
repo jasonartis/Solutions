@@ -591,6 +591,12 @@ transactions; the fourth is partly reasoned and says so.
    they should) but **the signature lies**, and a dead parameter on a SECURITY DEFINER used in
    an RLS policy is exactly what gets misread by the next reader. Its own slice: dropping a
    parameter changes the signature, so it is a migration plus every call site.
+   **FIXED IN THE REPO 2026-10-07 (`20261007010000`) — signature only, behaviour unchanged.**
+   Now `mm_assignment_covers_me(check_target_group_id, check_target_user_id)`; the 3-arg
+   overload is dropped, the one policy repointed, body byte-identical to `20260915010000`.
+   No app code ever called it. 3 new RLS tests (signature pin, both-direction behaviour with a
+   control, the old call refused with PGRST202); db 273/273. Adversarial review: no defects,
+   two gaps both closed. **Prod: pending `migrate:prod`** — check `--dry-run` before assuming.
 4. **`mm_questions.submitted_by`** (`20260709020000:512`) is readable for `status='approved'`
    by any single/matchmaker, so authorship can imply pool membership. Narrower and
    role-ambiguous. **The column read was confirmed live; the INFERENCE was not measured** —

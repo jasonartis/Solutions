@@ -5325,7 +5325,6 @@ describe('seat authority: a module roster row requires ACTIVE org membership (20
       expect(seen.data?.length, 'eve does not read her group’s assignment while an active member').toBe(1)
 
       const rpc = await seatEve.rpc('mm_assignment_covers_me', {
-        check_matchmaker_id: seatMelId,
         check_target_group_id: seatMmGroupId,
         check_target_user_id: null,
       })
@@ -5342,7 +5341,6 @@ describe('seat authority: a module roster row requires ACTIVE org membership (20
         expect(seen.data, 'an ex-member read the assignment over her old group through a bare group seat').toEqual([])
 
         const rpc = await seatEve.rpc('mm_assignment_covers_me', {
-          check_matchmaker_id: seatMelId,
           check_target_group_id: seatMmGroupId,
           check_target_user_id: null,
         })
@@ -5998,7 +5996,6 @@ describe('seat authority: a module roster row requires ACTIVE org membership (20
       {
         rpc: 'mm_assignment_covers_me',
         args: {
-          check_matchmaker_id: seatMelId,
           check_target_group_id: seatMmGroupId,
           check_target_user_id: null,
         },
@@ -8663,5 +8660,82 @@ describe('the module-role census leak is closed (20261002010000)', () => {
     } finally {
       await sql.end()
     }
+  })
+})
+
+describe('mm_assignment_covers_me takes no matchmaker argument (20261007010000)', () => {
+  // docs/24 §6b.1 item 3: the function used to take check_matchmaker_id and
+  // never read it, so mm_assignments_select's arm READ as a matchmaker check
+  // and was really "any assignment that targets me". This migration drops the
+  // argument and changes nothing else — so the tests are (1) the signature no
+  // longer lies, and (2) behaviour is exactly what it was, both directions.
+  const svcKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
+  const svc = () => createClient(url, svcKey, { auth: { persistSession: false } })
+
+  it('exactly one overload, two arguments, none of them a matchmaker', async () => {
+    const sql = postgres(ownerDbUrl, { prepare: false, max: 1 })
+    try {
+      const rows = await sql<{ args: string[] | null }[]>`
+        select p.proargnames::text[] as args
+        from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+        where n.nspname = 'public' and p.proname = 'mm_assignment_covers_me'
+      `
+      expect(rows.length, 'mm_assignment_covers_me must exist exactly once (the 3-arg overload must be gone)').toBe(1)
+      expect(rows[0].args).toEqual(['check_target_group_id', 'check_target_user_id'])
+
+      const pol = await sql<{ qual: string }[]>`
+        select pg_get_expr(polqual, polrelid) as qual from pg_policy
+        where polrelid = 'public.mm_matchmaker_assignments'::regclass and polname = 'mm_assignments_select'
+      `
+      expect(pol.length, 'CONTROL: mm_assignments_select exists').toBe(1)
+      expect(pol[0].qual).toContain('mm_assignment_covers_me(target_group_id, target_user_id)')
+    } finally {
+      await sql.end()
+    }
+  })
+
+  it('the targeted single still reads their own assignment; another single does not', async () => {
+    const charlieId = await userIdOf('charlie@demo.local')
+    const { data: real, error: realErr } = await svc()
+      .from('mm_matchmaker_assignments')
+      .select('id, matchmaker_id')
+      .eq('target_user_id', charlieId)
+    expect(realErr).toBeNull()
+    // CONTROL: the row exists, so dana's "0" below is an exclusion, not an empty table.
+    expect(real?.length, 'CONTROL: the seeded mel->charlie assignment must exist').toBeGreaterThan(0)
+    const ids = real!.map((r) => r.id as string)
+
+    const charlie = await signIn('charlie@demo.local')
+    const mine = await charlie.from('mm_matchmaker_assignments').select('id').in('id', ids)
+    expect(mine.error).toBeNull()
+    expect(mine.data?.length, 'charlie lost sight of who is assigned to him').toBe(ids.length)
+    const yes = await charlie.rpc('mm_assignment_covers_me', { check_target_group_id: null, check_target_user_id: charlieId })
+    expect(yes.error, JSON.stringify(yes.error)).toBeNull()
+    expect(yes.data).toBe(true)
+
+    const dana = await signIn('dana@demo.local')
+    const theirs = await dana.from('mm_matchmaker_assignments').select('id').in('id', ids)
+    expect(theirs.error).toBeNull()
+    expect(theirs.data, 'dana read an assignment that targets charlie').toEqual([])
+    const no = await dana.rpc('mm_assignment_covers_me', { check_target_group_id: null, check_target_user_id: charlieId })
+    expect(no.error, JSON.stringify(no.error)).toBeNull()
+    expect(no.data).toBe(false)
+  })
+
+  it('the old three-argument call no longer resolves', async () => {
+    const charlie = await signIn('charlie@demo.local')
+    const charlieId = await userIdOf('charlie@demo.local')
+    const r = await charlie.rpc('mm_assignment_covers_me', {
+      check_matchmaker_id: charlieId,
+      check_target_group_id: null,
+      check_target_user_id: charlieId,
+    })
+    // PostgREST answers "no function with these argument names" rather than
+    // ignoring the extra key — so a caller still passing the lying argument
+    // fails loudly instead of silently working.
+    expect(r.error, 'a 3-argument call still resolved').not.toBeNull()
+    // PGRST202 = "no function matches these arguments" — so this is the
+    // signature refusing, not a sign-in or permission failure.
+    expect(r.error?.code, JSON.stringify(r.error)).toBe('PGRST202')
   })
 })

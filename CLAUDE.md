@@ -649,8 +649,9 @@ fires BEFORE UPDATE triggers, which has already bitten this repo once.
   / it never resolved" contradiction gets shipped.
 
 Everything below is open but unranked:
-- **FOUND 2026-10-02 BY THE CENSUS SLICE'S ADVERSARIAL REVIEW, NOT FIXED — a dead parameter in
-  a live RLS predicate.** `mm_assignment_covers_me(check_matchmaker_id, check_target_group_id,
+- **FIXED IN THE REPO 2026-10-07 (`20261007010000`, signature only, behaviour unchanged; PROD
+  PENDING `migrate:prod`) — FOUND 2026-10-02 BY THE CENSUS SLICE'S ADVERSARIAL REVIEW — a dead
+  parameter in a live RLS predicate.** `mm_assignment_covers_me(check_matchmaker_id, check_target_group_id,
   check_target_user_id)` **NEVER REFERENCES ITS FIRST PARAMETER** (verified in the DEPLOYED
   body, not inferred from a migration). It returns true whenever
   `check_target_user_id = auth.uid()`, so `mm_matchmaker_assignments`' policy arm **reads as a
