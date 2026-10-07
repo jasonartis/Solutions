@@ -597,6 +597,19 @@ transactions; the fourth is partly reasoned and says so.
    every seeded question was written by an admin through the service role, so no live row
    actually demonstrates it.
 
+**EXAMINED AND CLEARED, recorded so a future sweep does not re-open it:
+`mm_shared_answers(check_other_user uuid)`.** It is SECURITY DEFINER and `authenticated`-
+executable and **takes a THIRD-PARTY uuid**, which is the docs/03 #29 shape that should always
+draw a second look — a caller-relative helper cannot answer about someone else, so one that
+does needs its gate read. **Its gate was read (the deployed body, not the migration) and it is
+sound**, with four independent conjuncts: the caller must hold `single` in that org
+(`has_module_role`), the two must be a real NON-EXCLUDED scored pair in `mm_pair_scores`, the
+question must be `approved`, and — the one that matters most — **the subject must have opted in
+per answer (`share_with_match = true`)**. So it discloses nothing the caller could not already
+reach, and it respects the subject's own choice rather than the caller's authority.
+**Worth keeping as the worked example of #29 done RIGHT**, since the other #29 cases on record
+are failures: a third-party argument is not the defect, an UNGATED third-party argument is.
+
 **The generalisable point, worth more than the four items:** closing a census on the table
 that *names* the thing does not close it on the tables that *mirror* it. `module_roles` was
 worth fixing because it was the one disclosure **bound to no purpose at all** — it answered

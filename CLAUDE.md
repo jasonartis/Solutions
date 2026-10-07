@@ -1001,9 +1001,19 @@ Everything below is open but unranked:
   `supabase start` failed, **the pipeline died before a single test on four consecutive
   commits, including a different session's**, and this session reported clean state throughout
   because nobody read CI. It had been verified only against a SEEDED database. **`supabase db
-  reset` locally, or read the CI run, before calling a migration done** — and note the repair
-  cost is permanent: editing an already-pushed migration trips the append-only guard (docs/03
-  #28) and a later migration cannot help, because the failing one runs first.
+  reset` locally, or read the CI run, before calling a migration done** — editing an
+  already-pushed migration trips the append-only guard (docs/03 #28) and a later migration
+  cannot help, because the failing one runs first.
+  **⚠ BUT "THE REPAIR COST IS PERMANENT" — what this bullet used to say — IS WRONG, AND THE
+  WORKED CASE IS IN THIS REPO'S OWN HISTORY (measured 2026-10-07).** The guard diffs only
+  `${{ github.event.before }}..${{ github.sha }}` (`ci.yml:43`), i.e. the commits in THAT PUSH,
+  so an edit to a pushed migration costs **exactly ONE red run** and the next push is clean.
+  Proven: `4f8831c` (the edit that fixed `20260928010000`) went red at 05:15 and `3497e33`
+  (the very next push) went green at 05:16. **So when a pushed migration must be fixed — and
+  sometimes it must, because a later migration cannot rescue one that raises at apply time —
+  edit it and take the one red run.** Do NOT design a guard-exception mechanism for this; one
+  was approved by the founder on 2026-09-29 and turned out to be unnecessary, because the fix
+  landed this way instead. Do NOT reach for `--no-verify` either (standing rule).
   **RED CI IS SHARED STATE.** `supabase start` is upstream of everything, so one session's bad
   migration silently blocks every other session's deploys. In this repo checking CI is not
   self-interest, it is how you find out whether you broke someone else.
@@ -1244,6 +1254,16 @@ block that contradicts itself across twenty lines is worse than one that is mere
 What is kept: docs/15 slice 2 is complete, 6 of 6 modules; the 2026-07-30 amendment fired as
 designed (seven newly-implied view-as pairs, all answered OFF); and the durable review
 finding below.
+**A TOOL CAME OUT OF THIS AND IS EASY TO MISS — `/console/positions` (2026-09-28), superadmin,
+linked from the Owner Console nav.** Every position on the platform, its rank, live grant
+counts, live `module_scope_nodes` counts, and who can appoint or remove whom — **read from
+SQL's `module_position_rank()` on every page load**, so a rank changed by a migration shows up
+with nothing to regenerate. That is the difference from `docs/rank-admission-map.md`, which
+answers the same question but is only as current as the last run of the test that writes it.
+It reads BOTH SQL and the TypeScript mirror and shows a loud banner if they ever disagree, and
+it flags any role granted that is NOT in a module's declared vocabulary (`module_roles.role`
+is free text with no CHECK). Read-only by design — ranks are immutable config. **Check it
+before building any new "who can do what" view; it probably already answers the question.**
 **BOTH ADVERSARIAL REVIEWS FOUND REAL DEFECTS, all fixed — the durable one:
 `view_as_guard_session` IS A FIFTH RANK CONSUMER the migration header missed.** It is generic
 and is the ONLY authority gate on `view_as_sessions`. Its rank arm flipped false→true for all
@@ -1329,6 +1349,44 @@ in the sections below.
   survive. Harmless for a hook Git for Windows invokes via its own shebang-detection (doesn't
   check the bit), but would matter on a real Linux/Mac clone. Not worth fighting
   `core.fileMode` repo-wide over one file; know it's cosmetic here and move on.
+- **⚠ `grep -i` COMBINED WITH `-F` RETURNS ZERO MATCHES ON THIS HOST — IT MANUFACTURES A
+  CONFIDENT "NOT FOUND" (GNU grep 3.0, Git Bash, measured 2026-10-07).** Not a quirk of one
+  file or one pattern. Reduced to a two-line file:
+  ```
+  $ printf 'Hello World\nhello world\n' > /tmp/g.txt
+  $ grep -F  'hello world' /tmp/g.txt | wc -l   # 1
+  $ grep -i  'hello world' /tmp/g.txt | wc -l   # 2
+  $ grep -iF 'hello world' /tmp/g.txt | wc -l   # 0   <-- WRONG
+  ```
+  Any combination containing both flags is affected (`-iF`, `-ilF`, `-rilF`, `-ilFw`); `-il`
+  and `-lF` are fine. **This is the vacuity rule as a TOOL DEFECT**, and it is worse than the
+  prose version because the output is an empty list rather than a wrong answer — it looks
+  exactly like the thing genuinely not existing.
+  **It bit a real staleness audit (2026-10-07):** a sweep for in-chat findings not yet written
+  down reported `mm_shared_answers` as undocumented when it already appears in **8** places,
+  and simultaneously under-reported other patterns — so it produced a false gap AND risked
+  masking real ones in the same pass. **This repo audits by grep constantly** (the "is it
+  already documented?" check before every doc edit, the staleness sweeps, docs/03's
+  search-by-mechanism rule), so the blast radius is wide.
+  → **Never pass `-i` and `-F` together.** Use `-F` alone when the pattern is literal (the
+  common case — identifiers, function names, file paths), or `-i` alone and accept regex
+  metacharacters, or ripgrep. → And when a documentation grep returns ZERO, confirm with a
+  second command in a different shape before concluding absence; CLAUDE.md already warns that
+  *a grep that HITS is not proof* — this is the inverse and it has a mechanical cause.
+- **GIT BASH SILENTLY REWRITES ANY ARGUMENT THAT LOOKS LIKE AN ABSOLUTE POSIX PATH, AND IT
+  BITES INSIDE `docker exec` AND IN `curl` FORMAT STRINGS (2026-10-02, cost two cycles).**
+  MSYS path conversion turns a leading `/foo` into `C:/Program Files/Git/foo` before the
+  program ever sees it — and the program is a LINUX one inside a container, or a format
+  string, so the rewrite is nonsense. Two shapes seen the same session:
+  1. `docker exec <c> psql ... -f /tmp/probe.sql` → **`psql: error: C:/Program Files/Git/tmp/probe.sql: No such file or directory`**. The file was copied in correctly; only the
+     ARGUMENT was mangled. Reads as a failed `docker cp`, which is the wrong thing to debug.
+  2. `curl -w "/privacy %{http_code}\n"` → printed **`C:/Program Files/Git/privacy 200/n`**.
+     Both the leading-slash label AND the `\n` were converted, so the output looks corrupted
+     rather than wrong.
+  **Fix: prefix the command with `MSYS_NO_PATHCONV=1`** (or double the leading slash:
+  `//tmp/probe.sql`). → The tell is `C:/Program Files/Git/` appearing in an error or output
+  where you never typed it. Nothing is broken — it is the shell, one layer above the tool you
+  are blaming.
 - Node module compile cache corruption makes pnpm OOM-crash at tiny heaps → delete `%TEMP%\node-compile-cache`.
 - PowerShell 5.1 `-Encoding utf8` writes a BOM; the Supabase CLI refuses BOM'd `.env` files. Write env files from Node (scripts/dev.ts) or with BOM-less UTF8.
 - After `supabase db reset`, Kong can hold a stale route to the recreated auth container (502 on `/auth/v1/*` while `rest` works) → `docker restart supabase_kong_Solutions_Platform`.
@@ -1576,7 +1634,8 @@ ode-compile-cache`. **So `--concurrency=1` is not a universal fix and "134 means
   `Mincha & Kabbolas Shabbos` is `sunset - 20, rounded DOWN to 5 minutes` — so in the weeks when
   sunset lands in 18:20-18:24 it renders *exactly* 6:00 PM and collides. **Measured 2026-10-02:
   sunset 6:24 PM, two cells reading 6:00 PM, both tests red on a diff that could not possibly
-  touch them** (one of the two needs NO LOGIN at all, which is the tell that it is not your
+  touch them — and the DRIFT IS DEMONSTRATED, not just asserted: the same two tests were GREEN
+  two days earlier on `2c90590`, when the zman landed on 6:05** (one of the two needs NO LOGIN at all, which is the tell that it is not your
   auth/RLS change). It passes again as soon as sunset drifts a few minutes — so it will look
   like a flake that "fixed itself", and come back next autumn and each spring.
   **Fixed properly rather than waited out:** both now match the row whose label cell is exactly

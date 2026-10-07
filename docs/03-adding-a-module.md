@@ -1385,6 +1385,31 @@ mechanism is proven in the managed environment, but it carries rules that are no
       (“every”, “no”, “always”) are where to look first — they are the claims a later
       reader is least likely to re-check and most likely to rely on.
 
+34. **A POLICY BODY IS A CALL SITE TOO — AND UNLIKE A FUNCTION BODY, A SECURITY DEFINER
+    WRAPPER DOES NOT PROTECT IT.** #24 established that a SQL function body is a call site.
+    The sharper case, which came up verifying `20261002010000`: before narrowing a table's
+    RLS, the natural check is *"which FUNCTIONS read this table, and are they all definers?"*
+    — 18 of 18 were, which looked like a complete answer. **It is not complete.** If a policy
+    on a DIFFERENT table inline-reads the narrowed table in its own `USING`/`WITH CHECK`
+    expression, that subquery is re-filtered by the target table's RLS at evaluation time, so
+    no definer sits between the narrowing and that policy's answer. The whole policy silently
+    changes meaning.
+    - → **Scan `pg_policy` across EVERY table, not just the one you are changing:**
+      ```sql
+      select c.relname, p.polname
+      from pg_policy p join pg_class c on c.oid = p.polrelid
+      where c.relname <> '<the table you are narrowing>'
+        and (coalesce(pg_get_expr(p.polqual, p.polrelid), '')      like '%<table>%'
+          or coalesce(pg_get_expr(p.polwithcheck, p.polrelid), '') like '%<table>%');
+      ```
+      **Carry a control** (`select count(*) from pg_policy` — 234 locally when this was run),
+      because an empty result from a broken catalog query is indistinguishable from a real
+      absence. For `module_roles` the answer was genuinely zero, which is what made the
+      definer argument sufficient *in that case* — not in general.
+    - *Found by an adversarial reviewer asking the stronger form of a question I had already
+      answered the weaker form of.* The weaker answer was true and the conclusion happened to
+      hold; it would not have held on a table any cross-table policy inline-reads.
+
 ## Hard rules
 
 1. **Never fork a platform primitive.** If the notifications/files/workflow primitive almost fits, extend it in `packages/platform` (benefiting every module) — don't copy it into the module.
