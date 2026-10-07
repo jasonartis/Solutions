@@ -720,6 +720,13 @@ that path (anyone else is stopped by the non-definer scope trigger, which cannot
 conversation they cannot see), and an active seat held by a non-member confers nothing, because
 every access predicate also requires `is_org_member`.
 
+**Known weakness of the migration's own apply-time check (adversarial review, recorded so it
+is not re-found):** the assertion that every access predicate still requires an active seat is
+a substring match (`like '%status = ''active''%'`) over each WHOLE function body, so a function
+with one active-checking arm and another arm that tests mere row existence would still pass
+it. Not a live defect — each predicate was read in full, and the RLS tests prove a pending seat
+reads nothing — but do not treat that DO block as the guard; the tests are.
+
 **Recorded, not built:** decline-and-block (after a decline the row is gone, so re-invites are
 unlimited; the only way out today is accept then self-block); an org manager can still write
 `invited_by` on an ordinary update (the manager escape predates this).

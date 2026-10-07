@@ -109,7 +109,8 @@ column that *shares its name* isn't wired to the real write path either.
 **visual-messaging — the same disconnection, plus a genuine word collision.**
 `vm_conversation_members.role` has a live CHECK constraint allowing **four** values —
 `participant`, `viewer`, `moderator`, `admin` — though only the first three have ever been
-used (0 live `moderator` rows in the roster table). **`moderator` is *also* a live
+used (0 live `moderator` rows in the roster table). *(As measured 2026-09-25. **The seat value
+is `conversation_moderator` since `20261007020000`, on prod 2026-10-07** — §4 item 4 / §6.)* **`moderator` is *also* a live
 module-level `module_roles.role`** (org-wide, gates `vm_can_moderate_org`, and per docs/20 "a
 delegated moderator sees everything and it is disclosed"). Confirmed live: `vm_can_moderate`
 (per-conversation) and `vm_can_moderate_org` (module-wide) are two separate functions. So the
