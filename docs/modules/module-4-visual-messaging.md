@@ -744,8 +744,9 @@ attempt is a **silent no-op** (no error), so it does not confirm the block to th
 against, for the same reason `addMember` swallows 23505. Blocking from an ACTIVE seat (the
 2026-09-10 self-block) sets the same marker. **Unblock** = the holder deletes their own
 self-blocked seat; after that an ordinary invite works again. Proof: `rls.test.ts` "decline and
-block", 10 tests; `scripts/prod-verify-vm-decline-and-block.mts` (16/16 local; PROD pre-apply
-7/9-fail with every control green, the expected baseline).
+block", 10 tests; `scripts/prod-verify-vm-decline-and-block.mts` (16/16 local).
+**On production and prod-verified 2026-10-08:** the same script scored 7/9-fail pre-apply and
+16/0 post-apply, every control green in both (structure only; prod has 0 conversations).
 
 **Why the old workaround did not work (found while designing this, both closed):** the spec
 said "the only way out is accept then self-block". It wasn't a way out. (1) Since

@@ -37,7 +37,11 @@ decision log, docs/03 conventions, docs/12 safeguards) — this is the chronolog
   pre-apply 3 controls pass / 29 fail as designed. **Collided with the parallel session on
   migration version `20261007040000`** (see the entry below); mine moved to `…090000`.
 - **2026-10-07 (later, Opus) — DECLINE-AND-BLOCK, per conversation (`20261007050000`), BUILT,
-  NOT DEPLOYED.** Founder picked option A (block this conversation) over B (block this person,
+  ON PROD 2026-10-08.** Applied in ONE `migrate:prod` with the account-deletion session's
+  `20261007090000` (a push cannot stop at one file), after the founder confirmed in BOTH
+  sessions; `prod-verify-vm-decline-and-block.mts` 7/9-fail pre-apply → **16/0** post-apply,
+  controls green both times; `prod-verify-migration.ts` 0 failures (2 benign trigger-function
+  warnings). The pgdelta certificate trace appeared and was benign. Founder picked option A (block this conversation) over B (block this person,
   recorded as a future enhancement in the module-4 spec). Re-reading the 10-07 accept-first
   migration before building showed the recorded workaround ("accept, then self-block") did not
   work: an admin "unban" re-invited a self-block, and an admin could delete the banned row and
