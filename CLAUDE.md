@@ -42,7 +42,11 @@ monthly event is **$0** with no VPS, TLS, coturn or patching. Self-hosting is on
 (`SPEED_DATING_VIDEO_PROVIDER=jitsi`) and wins past ~32 MAU/month. **The priced comparison is in
 docs/02 "Video" — do not re-derive it.** It also corrects docs/05's stale "+$20–40/mo VPS":
 Hetzner's 2026-06-15 change made the cheap plans EU-only and US entry is now $20.49.
-**WHAT REMAINS IS AN ACCOUNT, NOT INFRASTRUCTURE** — create a JaaS app, generate an RS256
+**UPDATE 2026-10-08: THE ACCOUNT EXISTS, THE THREE VARS ARE SET ON PROD, AND A FIRST CALL CONNECTED
+BOTH WAYS** (`scripts/prod-verify-video-call.mjs`, three browsers on prod `demo-dating`, no bug found).
+**BUT IT USED CHROMIUM'S FAKE CAMERA/MIC ON ONE MACHINE — NOT "VERIFIED" UNTIL A HUMAN TWO-DEVICE CALL.**
+Key parsing now also accepts PKCS#1/CRLF/quotes (`25475eb`). Spec's 2026-10-08 entry has detail.
+~~**WHAT REMAINS IS AN ACCOUNT, NOT INFRASTRUCTURE**~~ (superseded) — create a JaaS app, generate an RS256
 keypair, set `JAAS_APP_ID` / `JAAS_API_KEY_ID` / `JAAS_PRIVATE_KEY` (3 Vercel vars, same shape
 as the Sentry DSN). Then the one thing nothing here can prove: **a real two-browser call.**
 **NINE BUGS WERE FOUND BY READING THIS SLICE — SIX OF THEM BY ADVERSARIAL REVIEW, AND TWO OF THE

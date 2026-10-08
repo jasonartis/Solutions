@@ -613,3 +613,11 @@ because they are all testable by the same reading discipline that found the nine
   is undocumented, self-hosted and JaaS would have to agree on it, and it hides exactly the
   connection config that `connectionOptions()` exists to vary per provider. Worth revisiting
   only AFTER a real call has proven the explicit path works — not before.
+
+## 2026-10-08 — JaaS configured on production; first real call connected (synthetic media only)
+
+**Done:** JaaS app created, RS256 key generated (2048-bit PKCS#8, public/private pair verified to match), `JAAS_APP_ID` / `JAAS_API_KEY_ID` / `JAAS_PRIVATE_KEY` set in Vercel Production via the API, `SPEED_DATING_VIDEO_PROVIDER` left unset, production redeployed (READY). The private key and values also live in `.env.deploy` (gitignored).
+**Test:** `scripts/prod-verify-video-call.mjs` — three signed-in browsers (alice organizer, charlie and dana daters) on `demo-dating` in PRODUCTION, a real event created through the UI, a round started, both daters clicked **Join video**. Both reached `in_call` first try; each had a live local video track, a live remote video track (`currentTime` advancing) and a live remote audio track. **No bug was found by the call.**
+**Hardening shipped first (`25475eb`):** `JAAS_PRIVATE_KEY` now also accepts PKCS#1 (`BEGIN RSA PRIVATE KEY`, which `importPKCS8` rejected), CRLF and wrapping quotes — each tested by minting a token from a real key.
+**NOT yet established — do not call this fully verified:** the media was Chromium's FAKE camera/microphone in headless browsers on one machine, so it proves tokens, signalling, the websocket and track exchange through JaaS, not real hardware, real audio being audible, or two different networks. Audio was checked as a live track, not as non-silent samples. A human two-device call is still the final check. The orchestrator-driven round clock (worker) was not exercised; the round was started manually.
+

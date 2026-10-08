@@ -4,6 +4,12 @@ The running, dated build journal that used to live in `CLAUDE.md`'s "## Current 
 section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every session)
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
+- **2026-10-08 — JaaS VIDEO IS CONFIGURED ON PRODUCTION AND A FIRST CALL CONNECTED BOTH WAYS (synthetic media).**
+  Vars set via the Vercel API, redeploy READY, then `scripts/prod-verify-video-call.mjs` ran a real
+  event on prod `demo-dating`: both daters reached `in_call` first try with live local/remote video
+  and remote audio tracks. No bug found by the call. Key-format hardening (PKCS#1/CRLF/quotes) shipped
+  first, `25475eb`. **Caveat kept in the spec: fake media devices, one machine, headless — a human
+  two-device call remains the final check.** Detail: module-6 spec's 2026-10-08 entry.
 - **2026-10-08 — ACCOUNT DELETION AND VM DECLINE-AND-BLOCK ARE ON PRODUCTION AND
   PROD-VERIFIED.** One `migrate:prod` applied `20261007050000` and `20261007090000` together
   (backup `backups/2026-10-08T06-20-02`). The push could not stop at one, and the parallel
