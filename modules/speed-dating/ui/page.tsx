@@ -16,11 +16,19 @@ export default async function SpeedDatingPage(props: { params: Promise<{ orgSlug
     supabase.rpc('sd_can_organize', { check_org_id: org.id }),
     supabase
       .from('sd_events')
-      .select('id, name, state, scheduled_at')
+      .select('id, name, state, scheduled_at, created_at')
       .eq('org_id', org.id)
       .order('scheduled_at', { ascending: false, nullsFirst: false }),
     supabase.auth.getUser().then(({ data }) => ({ data: data.user })),
   ])
+
+  // My own registration per event (RLS: a participant reads only their own
+  // seat rows; staff read all, so filter to me explicitly). Powers the
+  // "Your events" grouping and the per-event badge.
+  const { data: mySeats } = me
+    ? await supabase.from('sd_participants').select('event_id, status').eq('user_id', me.id)
+    : { data: null }
+  const seatStatus = new Map((mySeats ?? []).map((m) => [m.event_id as string, m.status as string]))
 
   // Personal, cross-event block list (spec: "never pair me with them again").
   // Filtered to MY OWN blocks even though RLS also lets the manage tier read
@@ -50,20 +58,74 @@ export default async function SpeedDatingPage(props: { params: Promise<{ orgSlug
       <p className="mb-1 text-sm text-gray-400">{org.name}</p>
       <h1 className="mb-6 text-2xl font-semibold">Speed Dating — Events</h1>
 
-      <ul className="mb-8 space-y-2">
-        {(events ?? []).map((e) => (
+      {(() => {
+        const all = events ?? []
+        const mine = all.filter((e) => seatStatus.has(e.id))
+        const rest = all.filter((e) => !seatStatus.has(e.id))
+        const openToMe = rest.filter((e) => e.state === 'open')
+        const other = rest.filter((e) => e.state !== 'open')
+        const badge = (status: string | undefined) => {
+          if (!status) return null
+          const tone =
+            status === 'registered'
+              ? 'bg-green-100 text-green-800'
+              : status === 'waitlisted'
+                ? 'bg-amber-100 text-amber-800'
+                : 'bg-gray-100 text-gray-600'
+          return <span className={`ml-2 rounded px-1.5 py-0.5 text-xs font-medium ${tone}`}>{status}</span>
+        }
+        // Event names are NOT unique (same as Eventbrite/Meetup/Google
+        // Calendar — events are told apart by date), so every row carries a
+        // date: the scheduled time, else when it was created.
+        const row = (e: (typeof all)[number]) => (
           <li key={e.id} className="flex items-center justify-between rounded border border-gray-200 bg-white px-4 py-3">
-            <Link href={`/o/${orgSlug}/m/speed-dating/events/${e.id}`} className="text-blue-600 hover:underline">
-              {e.name}
-            </Link>
+            <span>
+              <Link href={`/o/${orgSlug}/m/speed-dating/events/${e.id}`} className="text-blue-600 hover:underline">
+                {e.name}
+              </Link>
+              {badge(seatStatus.get(e.id))}
+            </span>
             <span className="text-sm text-gray-500">
-              {e.scheduled_at ? `${fmt.format(new Date(e.scheduled_at))} · ` : ''}
+              {e.scheduled_at
+                ? `${fmt.format(new Date(e.scheduled_at))} · `
+                : `created ${fmt.format(new Date(e.created_at))} · `}
               <span className="text-xs uppercase text-gray-400">{e.state}</span>
             </span>
           </li>
-        ))}
-        {(events ?? []).length === 0 && <li className="text-gray-500">No events yet.</li>}
-      </ul>
+        )
+        const section = (title: string, list: typeof all) =>
+          list.length > 0 && (
+            <section className="mb-6">
+              <h2 className="mb-2 text-sm font-medium uppercase tracking-wide text-gray-500">{title}</h2>
+              <ul className="space-y-2">{list.map(row)}</ul>
+            </section>
+          )
+        // Organizers (and anyone with no personal seat) keep one flat list.
+        if (mine.length === 0 && !canOrganize) {
+          return (
+            <div className="mb-8">
+              {section('Open for registration', openToMe)}
+              {section('Other events', other)}
+              {all.length === 0 && <p className="text-gray-500">No events yet.</p>}
+            </div>
+          )
+        }
+        if (canOrganize) {
+          return (
+            <div className="mb-8">
+              <ul className="space-y-2">{all.map(row)}</ul>
+              {all.length === 0 && <p className="text-gray-500">No events yet.</p>}
+            </div>
+          )
+        }
+        return (
+          <div className="mb-8">
+            {section('Your events', mine)}
+            {section('Open for registration', openToMe)}
+            {section('Other events', other)}
+          </div>
+        )
+      })()}
 
       {canOrganize && (
         <section className="mb-8 rounded-lg border border-gray-200 bg-white p-5">

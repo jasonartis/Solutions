@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { redirect } from 'next/navigation'
 import { DERIVED_SCOPE_PLACEHOLDER, recordActivity } from '@platform/core'
 import {
   authorizeVideoJoin,
@@ -80,6 +81,52 @@ export async function setEventState(orgSlug: string, eventId: string, state: str
   const { error } = await supabase.from('sd_events').update({ state }).eq('id', eventId)
   fail(error, `Move event to ${state} failed`)
   revalidatePath(`/o/${orgSlug}/m/speed-dating`)
+  revalidatePath(`/o/${orgSlug}/m/speed-dating/events/${eventId}`)
+}
+
+// Organizer: delete an event. IRREVERSIBLE, so (per the platform's "warn for
+// reversible, refuse for irreversible" rule) it is REFUSED once anything of
+// consequence hangs off the event: any live registration (registered or
+// waitlisted) or any round that has run. Those events are CANCELLED instead —
+// the record, the roster and the people's own view all survive. The page only
+// offers the button when this would succeed; this check is the backstop
+// (docs/03 hard rule 6: the UI is not a gate). RLS's sd_events_delete_organize
+// is the real authority; FKs cascade whatever empty children remain.
+export async function deleteEvent(orgSlug: string, eventId: string) {
+  const supabase = await createClient()
+  const [{ count: live }, { count: rounds }] = await Promise.all([
+    supabase
+      .from('sd_participants')
+      .select('id', { count: 'exact', head: true })
+      .eq('event_id', eventId)
+      .in('status', ['registered', 'waitlisted']),
+    supabase.from('sd_rounds').select('id', { count: 'exact', head: true }).eq('event_id', eventId),
+  ])
+  if ((live ?? 0) > 0 || (rounds ?? 0) > 0) {
+    throw new Error('This event has registrations or rounds — cancel it instead of deleting it')
+  }
+  const { error } = await supabase.from('sd_events').delete().eq('id', eventId)
+  fail(error, 'Delete event failed')
+  await recordActivity(supabase, { moduleKey: 'speed-dating', action: 'event.deleted', orgSlug })
+  revalidatePath(`/o/${orgSlug}/m/speed-dating`)
+  redirect(`/o/${orgSlug}/m/speed-dating`)
+}
+
+// Organizer: put a withdrawn (or removed) person back. A person cannot do this
+// for themselves ON PURPOSE — sd_pin_participant lets a self-editor only
+// withdraw, because self-reactivation would let anyone jump a full side's
+// waitlist. The organizer tier is exempt from that pin. This does NOT check
+// capacity: reinstating is an explicit organizer decision, and the roster
+// shows the resulting count.
+export async function reinstateParticipant(orgSlug: string, participantId: string, eventId: string) {
+  const supabase = await createClient()
+  const { error } = await supabase
+    .from('sd_participants')
+    .update({ status: 'registered' })
+    .eq('id', participantId)
+    .in('status', ['withdrawn', 'removed'])
+  fail(error, 'Reinstate failed')
+  await recordActivity(supabase, { moduleKey: 'speed-dating', action: 'participant.reinstated', orgSlug })
   revalidatePath(`/o/${orgSlug}/m/speed-dating/events/${eventId}`)
 }
 

@@ -108,6 +108,8 @@ export const ACTIVITY_ACTIONS = {
     'round.interest_marked', // the core act the module exists for
     'event.created',
     'pairing_round.run',
+    'event.deleted',
+    'participant.reinstated',
     'matches.revealed',
     'report.reviewed',
   ],

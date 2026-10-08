@@ -5,9 +5,11 @@ import { requireOrgModule } from '@/lib/module-gate'
 import {
   blockUser,
   fileReport,
+  deleteEvent,
   markInterest,
   promoteNextWaitlisted,
   registerForEvent,
+  reinstateParticipant,
   revealMatches,
   reviewReport,
   runPairingRound,
@@ -89,6 +91,10 @@ export default async function EventPage(props: {
   ])
 
   const mySeat = (participants ?? []).find((p) => p.user_id === me?.id)
+  const canDeleteEvent =
+    !!canOrganize &&
+    (rounds ?? []).length === 0 &&
+    !(participants ?? []).some((p) => p.status === 'registered' || p.status === 'waitlisted')
   // docs/21 §7.5/§7.7: a deleted account renders as a former member, and a
   // revealed match whose counterparty has left (grace period or deleted) moves
   // to an archive with that reason. sd_my_departed_matches applies §7.8's
@@ -199,7 +205,29 @@ export default async function EventPage(props: {
                 <button className={btnCls}>Reveal mutual matches</button>
               </form>
             )}
+            {(event.state === 'draft' || event.state === 'open' || event.state === 'running') && (
+              <form action={setEventState.bind(null, orgSlug, eventId, 'cancelled')}>
+                <button className="rounded border border-gray-300 px-3 py-1 text-sm text-gray-700 hover:bg-gray-50">
+                  Cancel event
+                </button>
+              </form>
+            )}
+            {/* Delete is irreversible, so it is only OFFERED when nothing of
+                consequence exists (no live registrations, no rounds); the
+                action re-checks. Otherwise: cancel, which keeps the record. */}
+            {canDeleteEvent && (
+              <form action={deleteEvent.bind(null, orgSlug, eventId)}>
+                <button className="rounded border border-red-300 px-3 py-1 text-sm text-red-700 hover:bg-red-50">
+                  Delete event
+                </button>
+              </form>
+            )}
           </div>
+          {!canDeleteEvent && (
+            <p className="mb-2 text-xs text-gray-400">
+              Delete is only available for an event with no registrations and no rounds — cancel it instead.
+            </p>
+          )}
           <p className="text-xs text-gray-400">
             Rounds run: {(rounds ?? []).length} · Matches: {(matches ?? []).filter((m) => m.revealed).length} revealed / {(matches ?? []).length} total
             {activeRound && roundEndsAt && (
@@ -231,6 +259,11 @@ export default async function EventPage(props: {
                   {p.seat_type !== 'participant' ? ` · ${p.seat_type}` : ''}
                   {sides && p.pool_side ? ` · ${sides[p.pool_side as SideKey]?.label ?? p.pool_side}` : ''}
                 </span>
+                {canOrganize && (p.status === 'withdrawn' || p.status === 'removed') && (
+                  <form action={reinstateParticipant.bind(null, orgSlug, p.id, eventId)} className="ml-2 inline">
+                    <button className={linkBtn}>Reinstate</button>
+                  </form>
+                )}
               </li>
             ))}
           </ul>
@@ -339,6 +372,8 @@ export default async function EventPage(props: {
             <div className="flex items-center justify-between">
               <p className="text-sm">
                 You are <span className="font-medium">{mySeat.status}</span>.
+                {mySeat.status === 'withdrawn' && ' You withdrew from this event — ask the organizer to reinstate you if you want back in.'}
+                {mySeat.status === 'removed' && ' The organizer removed you from this event.'}
               </p>
               {mySeat.status === 'registered' && event.state === 'open' && (
                 <form action={withdrawFromEvent.bind(null, orgSlug, mySeat.id, eventId)}>
