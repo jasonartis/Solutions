@@ -285,7 +285,11 @@ export async function runPairingRound(orgSlug: string, eventId: string) {
     allowRepeats: event.allow_repeat_pairings,
     roundNumber: (rounds ?? []).length,
   })
-  if (!plan) throw new Error('Rotation complete — everyone has met. Complete the event.')
+  // An EXPECTED refusal, not a fault. Throwing from a server action gets the
+  // message REDACTED in production (docs/03 #22) — the organizer saw only the
+  // generic "Something went wrong" page. This action is a <form action>, so
+  // there is no return value to render; redirect with a notice the page shows.
+  if (!plan) redirect(`/o/${orgSlug}/m/speed-dating/events/${eventId}?notice=rotation-complete`)
 
   // Close any active round first (active -> complete is a legal transition).
   for (const r of rounds ?? []) {

@@ -38,8 +38,10 @@ const linkBtn = 'px-1 py-1.5 text-xs text-blue-600 hover:underline'
 // notes, safety reports, personal blocks), revealed matches.
 export default async function EventPage(props: {
   params: Promise<{ orgSlug: string; eventId: string }>
+  searchParams?: Promise<{ notice?: string }>
 }) {
   const { orgSlug, eventId } = await props.params
+  const notice = (await props.searchParams)?.notice
   const { supabase, org } = await requireOrgModule(orgSlug, 'speed-dating')
 
   const { data: event } = await supabase
@@ -168,6 +170,13 @@ export default async function EventPage(props: {
         </Link>
       </div>
       <p className="mb-6 text-sm uppercase tracking-wide text-gray-400">{event.state}</p>
+
+      {notice === 'rotation-complete' && (
+        <p className="mb-6 rounded border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
+          No new round was started: everyone registered has already met everyone else. Complete the event
+          (or register more people) to continue.
+        </p>
+      )}
 
       {event.state === 'open' && lobbyOpen && (
         <p className="mb-6 rounded border border-blue-100 bg-blue-50 px-4 py-2 text-sm text-blue-700">

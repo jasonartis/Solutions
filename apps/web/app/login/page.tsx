@@ -21,6 +21,10 @@ export default function LoginPage() {
   const [displayName, setDisplayName] = useState('')
   const [message, setMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  // Flips once React has taken over this page. If it never does (an old or
+  // restricted browser), the server-rendered notice below stays and fades in.
+  const [ready, setReady] = useState(false)
+  useEffect(() => setReady(true), [])
   // Set by the 'Delete my account' action on its way here (docs/21 §7.9).
   // Read from location in an effect rather than useSearchParams, which would
   // force a Suspense boundary onto this whole page.
@@ -85,6 +89,21 @@ export default function LoginPage() {
               Your account is scheduled for deletion{deletionDue ? ` on ${deletionDue}` : ''} and you have been
               signed out everywhere. Changed your mind? Sign in before then and the deletion is cancelled.
             </p>
+          )}
+
+          {!ready && (
+            <>
+              <style>{'@keyframes sp-late{to{opacity:1}}'}</style>
+              <p
+                role="alert"
+                style={{ opacity: 0, animation: 'sp-late 0s 4s forwards' }}
+                className="mb-4 rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"
+              >
+                This page hasn&apos;t finished loading. If tapping Sign in only clears the form, your browser is
+                probably too old or is blocking scripts. Update your browser or iOS/Android, turn off Private
+                Browsing, Lockdown Mode or content blockers for this site, or try another browser or device.
+              </p>
+            </>
           )}
 
           <form onSubmit={submit} className="space-y-4">
