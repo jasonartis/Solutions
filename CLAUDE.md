@@ -312,7 +312,7 @@ doc.
   failures. Prod holds 0 conversations, so the BEHAVIOUR is proven locally only. A `self_blocked` marker means nobody but the holder can lift, re-invite over
   or delete it (silently); it also closed a pre-existing hole where a moderation-banned person
   could delete their own seat and rejoin by link. **Both of its open items are BUILT
-  2026-10-08 (`20261008010000`, IN THE REPO; `migrate:prod` NOT run):** a Blocked conversations
+  2026-10-08 (`20261008010000`, ON PRODUCTION AND PROD-VERIFIED 2026-10-08, verifier 17/4 → 21/0, backup `backups/2026-10-08T06-52-45`):** a Blocked conversations
   list with Unblock, and `invited_by` pinned on the manager path and nulled on an own seat.
   Same verifier, section [5]: prod pre-apply 17/4, controls green. **ON PRODUCTION AND
   PROD-VERIFIED 2026-10-07** with the other two 2026-10-07 migrations —

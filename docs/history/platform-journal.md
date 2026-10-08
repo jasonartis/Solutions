@@ -5,7 +5,7 @@ section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every 
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
 - **2026-10-08 (Opus) — VISUAL MESSAGING: UNBLOCK SCREEN + `invited_by` PINNED EVERYWHERE
-  (`20261008010000`), BUILT, NOT DEPLOYED.** The two items decline-and-block left open. A
+  (`20261008010000`), ON PROD 2026-10-08.** Applied alone (nothing else pending) after backup `backups/2026-10-08T06-52-45`; verifier 17/4 → **21/0**, controls green both times; `prod-verify-migration.ts` 0 failures. Benign pgdelta trace again. The two items decline-and-block left open. A
   Blocked conversations list with Unblock (new definer `vm_my_blocked_conversations`, own
   self-blocks only), and `invited_by` can no longer be client-written: the pin's manager escape
   now pins it, and an own seat is null. One adversarial review, clean. Its one cosmetic point

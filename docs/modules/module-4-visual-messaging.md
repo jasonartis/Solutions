@@ -795,8 +795,8 @@ moderator created), so this makes explicit what was inferable. No screen shows i
    or the re-inviter), and an own seat is `null`.
 
 Proof: `rls.test.ts` "the unblock list, and invited_by is server-stamped everywhere", 5 tests;
-`scripts/prod-verify-vm-decline-and-block.mts` section [5] (21/21 local; PROD pre-apply 17/4,
-exactly the new section failing, controls green). Adversarial review clean. **Residuals, recorded
+`scripts/prod-verify-vm-decline-and-block.mts` section [5] (21/21 local). **On production and prod-verified 2026-10-08:** pre-apply 17/4 (exactly
+the new section failing), post-apply 21/0, controls green both times. Adversarial review clean. **Residuals, recorded
 not fixed:** `pg_trigger_depth() > 1` still skips the pin, so a FUTURE trigger on another table
 that updates seats would bypass it (none exists; the only depth-2 writer is the `invited_by`
 SET NULL); and `authenticated` keeps its table-level UPDATE, which is why this is enforced by
