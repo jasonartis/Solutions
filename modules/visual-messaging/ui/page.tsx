@@ -5,6 +5,7 @@ import {
   createConversation,
   declineAndBlockConversationInvite,
   declineConversationInvite,
+  unblockConversation,
 } from './actions'
 
 const inputCls = 'rounded border border-gray-300 px-2 py-1 text-sm'
@@ -32,6 +33,12 @@ export default async function VisualMessagingPage(props: { params: Promise<{ org
     invited_by_name: string | null
     invited_at: string
   }[]
+
+  // Conversations the caller blocked (20261008010000): their own self-blocked
+  // seats, through a definer for the same reason as invitations — a banned
+  // seat cannot read its conversation, so the title needs one.
+  const { data: blocks } = await supabase.rpc('vm_my_blocked_conversations', { check_org_id: org.id })
+  const blocked = (blocks ?? []) as { conversation_id: string; title: string; blocked_at: string }[]
 
   const fmt = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' })
 
@@ -113,6 +120,30 @@ export default async function VisualMessagingPage(props: { params: Promise<{ org
           <li className="text-sm text-gray-500">No conversations yet — start one above.</li>
         )}
       </ul>
+
+      {blocked.length > 0 && (
+        <section className="mt-10 rounded-lg border border-gray-200 bg-white p-5">
+          <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-gray-500">Blocked conversations</h2>
+          <ul className="space-y-2">
+            {blocked.map((b) => (
+              <li
+                key={b.conversation_id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded border border-gray-100 px-4 py-3"
+              >
+                {/* No date shown: blocked_at is the seat's updated_at, which a
+                    silently-reverted update by someone else still bumps. */}
+                <span className="text-sm font-medium">{b.title}</span>
+                <form action={unblockConversation.bind(null, orgSlug, b.conversation_id)}>
+                  <button className="rounded border border-gray-300 px-3 py-1 text-sm hover:bg-gray-50">Unblock</button>
+                </form>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 text-xs text-gray-500">
+            Unblocking doesn&apos;t put you back in. It only lets that conversation invite you again.
+          </p>
+        </section>
+      )}
     </div>
   )
 }

@@ -9307,3 +9307,147 @@ describe('visual messaging: decline and block (20261007050000)', () => {
     expect(await seatOf(conv, charlieId), 'the self-blocked seat outlived its conversation').toBeNull()
   })
 })
+
+describe('visual messaging: the unblock list, and invited_by is server-stamped everywhere (20261008010000)', () => {
+  // demo-visual: alice = org owner (vm_can_manage), charlie and dana = plain
+  // members, dana admins each fixture conversation.
+  const svcKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
+  const svc = () => createClient(url, svcKey, { auth: { persistSession: false } })
+  const convIds: string[] = []
+  let org = ''
+  let aliceId = ''
+  let charlieId = ''
+  let danaId = ''
+  let alice: SupabaseClient
+  let charlie: SupabaseClient
+  let dana: SupabaseClient
+
+  beforeAll(async () => {
+    org = (await svc().from('orgs').select('id').eq('slug', 'demo-visual').single()).data!.id as string
+    aliceId = await userIdOf('alice@demo.local')
+    charlieId = await userIdOf('charlie@demo.local')
+    danaId = await userIdOf('dana@demo.local')
+    alice = await signIn('alice@demo.local')
+    charlie = await signIn('charlie@demo.local')
+    dana = await signIn('dana@demo.local')
+  })
+  afterAll(async () => {
+    for (const id of convIds) await svc().from('vm_conversations').delete().eq('id', id)
+  })
+
+  const makeConv = async (title: string) => {
+    const c = await svc().from('vm_conversations').insert({ org_id: org, title, created_by: danaId }).select('id').single()
+    if (c.error) throw new Error(`fixture conversation failed: ${c.error.message}`)
+    const id = c.data!.id as string
+    convIds.push(id)
+    const s = await svc()
+      .from('vm_conversation_members')
+      .insert({ org_id: org, conversation_id: id, user_id: danaId, role: 'admin', status: 'active' })
+    if (s.error) throw new Error(`fixture admin seat failed: ${s.error.message}`)
+    return id
+  }
+  const seatOf = async (conv: string, userId: string) =>
+    (
+      await svc()
+        .from('vm_conversation_members')
+        .select('status, role, invited_by, self_blocked')
+        .eq('conversation_id', conv)
+        .eq('user_id', userId)
+        .maybeSingle()
+    ).data
+  const blockedList = async (client: SupabaseClient) => {
+    const r = await client.rpc('vm_my_blocked_conversations', { check_org_id: org })
+    expect(r.error, JSON.stringify(r.error)).toBeNull()
+    return (r.data ?? []) as { conversation_id: string; title: string; blocked_at: string }[]
+  }
+
+  it('the unblock list shows my OWN self-blocks with their titles, and nothing else', async () => {
+    const mine = await makeConv('RLS fixture - listed self-block')
+    const modBan = await makeConv('RLS fixture - moderation ban is not listed')
+    const invite = await dana.from('vm_conversation_members').insert({ org_id: org, conversation_id: mine, user_id: charlieId, role: 'participant' })
+    expect(invite.error, JSON.stringify(invite.error)).toBeNull()
+    const blk = await charlie.rpc('vm_decline_and_block_invite', { check_conversation_id: mine })
+    expect(blk.error, JSON.stringify(blk.error)).toBeNull()
+    const ban = await dana
+      .from('vm_conversation_members')
+      .insert({ org_id: org, conversation_id: modBan, user_id: charlieId, role: 'participant', status: 'banned' })
+    expect(ban.error, JSON.stringify(ban.error)).toBeNull()
+
+    const list = await blockedList(charlie)
+    const hit = list.find((b) => b.conversation_id === mine)
+    expect(hit, 'my own self-block is not listed').toBeTruthy()
+    expect(hit!.title).toBe('RLS fixture - listed self-block')
+    expect(list.some((b) => b.conversation_id === modBan), 'a MODERATION ban is listed as mine to lift').toBe(false)
+    // Someone else's self-block is not listed to dana, the admin it is against.
+    expect((await blockedList(dana)).some((b) => b.conversation_id === mine), 'the admin sees charlie’s block').toBe(false)
+  })
+
+  it('UNBLOCK as the page does it: delete my self-blocked seat; it leaves the list and an invite works again', async () => {
+    const conv = await makeConv('RLS fixture - unblock from the list')
+    await dana.from('vm_conversation_members').insert({ org_id: org, conversation_id: conv, user_id: charlieId, role: 'participant' })
+    await charlie.rpc('vm_decline_and_block_invite', { check_conversation_id: conv })
+    expect((await blockedList(charlie)).some((b) => b.conversation_id === conv), 'CONTROL: listed before unblock').toBe(true)
+    const del = await charlie
+      .from('vm_conversation_members')
+      .delete()
+      .eq('conversation_id', conv)
+      .eq('user_id', charlieId)
+      .eq('status', 'banned')
+      .eq('self_blocked', true)
+      .select('id')
+    expect(del.error, JSON.stringify(del.error)).toBeNull()
+    expect(del.data?.length, 'unblock deleted nothing').toBe(1)
+    expect((await blockedList(charlie)).some((b) => b.conversation_id === conv)).toBe(false)
+    const again = await dana.from('vm_conversation_members').insert({ org_id: org, conversation_id: conv, user_id: charlieId, role: 'participant' })
+    expect(again.error, JSON.stringify(again.error)).toBeNull()
+    expect((await seatOf(conv, charlieId))?.status).toBe('pending')
+  })
+
+  it('an ORG MANAGER can no longer rewrite who an invitation is from', async () => {
+    const conv = await makeConv('RLS fixture - manager invited_by pin')
+    await dana.from('vm_conversation_members').insert({ org_id: org, conversation_id: conv, user_id: charlieId, role: 'participant' })
+    expect((await seatOf(conv, charlieId))?.invited_by, 'CONTROL: dana sent the invitation').toBe(danaId)
+    const up = await alice
+      .from('vm_conversation_members')
+      .update({ role: 'viewer', invited_by: aliceId })
+      .eq('conversation_id', conv)
+      .eq('user_id', charlieId)
+    expect(up.error, JSON.stringify(up.error)).toBeNull()
+    const seat = await seatOf(conv, charlieId)
+    expect(seat?.role, 'CONTROL: the manager update itself landed').toBe('viewer')
+    expect(seat?.invited_by, 'an org manager rewrote who the invitation is from').toBe(danaId)
+    const inv = await charlie.rpc('vm_my_pending_invites', { check_org_id: org })
+    const shown = ((inv.data ?? []) as { conversation_id: string; invited_by_name: string | null }[]).find((i) => i.conversation_id === conv)
+    expect(shown?.invited_by_name).toBe('Dana D')
+  })
+
+  it('a manager RE-INVITE is still stamped with the manager (the pin does not break the unban path)', async () => {
+    const conv = await makeConv('RLS fixture - manager reinvite stamp')
+    await dana
+      .from('vm_conversation_members')
+      .insert({ org_id: org, conversation_id: conv, user_id: charlieId, role: 'participant', status: 'banned' })
+    const up = await alice
+      .from('vm_conversation_members')
+      .update({ status: 'active', invited_by: danaId })
+      .eq('conversation_id', conv)
+      .eq('user_id', charlieId)
+    expect(up.error, JSON.stringify(up.error)).toBeNull()
+    const seat = await seatOf(conv, charlieId)
+    expect(seat?.status).toBe('pending')
+    expect(seat?.invited_by, 'the re-invite took the client’s invited_by').toBe(aliceId)
+  })
+
+  it('your OWN seat records nobody as the inviter, whatever the client sends', async () => {
+    const c = await dana.from('vm_conversations').insert({ org_id: org, title: 'RLS fixture - own seat invited_by', created_by: danaId }).select('id').single()
+    expect(c.error, JSON.stringify(c.error)).toBeNull()
+    const conv = c.data!.id as string
+    convIds.push(conv)
+    const own = await dana
+      .from('vm_conversation_members')
+      .insert({ org_id: org, conversation_id: conv, user_id: danaId, role: 'admin', invited_by: aliceId })
+    expect(own.error, JSON.stringify(own.error)).toBeNull()
+    const seat = await seatOf(conv, danaId)
+    expect(seat?.status, 'CONTROL: the creator bootstrap seat landed active').toBe('active')
+    expect(seat?.invited_by, 'an own seat kept a client-chosen inviter').toBeNull()
+  })
+})

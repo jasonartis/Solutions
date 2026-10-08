@@ -311,8 +311,10 @@ doc.
   pre-apply → **16/0** post-apply, controls green both times; `prod-verify-migration.ts` 0
   failures. Prod holds 0 conversations, so the BEHAVIOUR is proven locally only. A `self_blocked` marker means nobody but the holder can lift, re-invite over
   or delete it (silently); it also closed a pre-existing hole where a moderation-banned person
-  could delete their own seat and rejoin by link. **Still open:** no unblock screen; an org
-  manager can still set `invited_by` on a non-reinvite update (pre-existing manager escape). **ON PRODUCTION AND
+  could delete their own seat and rejoin by link. **Both of its open items are BUILT
+  2026-10-08 (`20261008010000`, IN THE REPO; `migrate:prod` NOT run):** a Blocked conversations
+  list with Unblock, and `invited_by` pinned on the manager path and nulled on an own seat.
+  Same verifier, section [5]: prod pre-apply 17/4, controls green. **ON PRODUCTION AND
   PROD-VERIFIED 2026-10-07** with the other two 2026-10-07 migrations —
   `scripts/prod-verify-20261007.mts` 20/21-fail pre-apply → **46/0** post-apply; prod holds 0
   conversations, so the BEHAVIOUR is proven locally only (rls.test.ts), the structure on prod.

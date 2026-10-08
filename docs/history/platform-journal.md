@@ -4,6 +4,15 @@ The running, dated build journal that used to live in `CLAUDE.md`'s "## Current 
 section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every session)
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
+- **2026-10-08 (Opus) — VISUAL MESSAGING: UNBLOCK SCREEN + `invited_by` PINNED EVERYWHERE
+  (`20261008010000`), BUILT, NOT DEPLOYED.** The two items decline-and-block left open. A
+  Blocked conversations list with Unblock (new definer `vm_my_blocked_conversations`, own
+  self-blocks only), and `invited_by` can no longer be client-written: the pin's manager escape
+  now pins it, and an own seat is null. One adversarial review, clean. Its one cosmetic point
+  (the "blocked" date is really `updated_at` and can drift) was taken by showing no date.
+  Migration number claimed with the account-deletion session BEFORE writing the file, after
+  yesterday's collision. Verified in CI order on a fresh reset: db 315/315 → e2e 55/55 (a first e2e run on stale data lost 11 seed-dependent tests, none visual-messaging), typecheck 9/9, verifier section [5] 21/21 local,
+  prod pre-apply 17/4 with controls green. Detail: module-4 spec, 2026-10-08.
 - **2026-10-08 — JaaS VIDEO IS CONFIGURED ON PRODUCTION AND A FIRST CALL CONNECTED BOTH WAYS (synthetic media).**
   Vars set via the Vercel API, redeploy READY, then `scripts/prod-verify-video-call.mjs` ran a real
   event on prod `demo-dating`: both daters reached `in_call` first try with live local/remote video

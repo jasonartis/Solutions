@@ -35,6 +35,10 @@ and block** instead. Nobody in the conversation can invite you back, and they
 are not notified. The block covers that one conversation
 only; the same person can still invite you to a different one.
 
+Changed your mind? Conversations you blocked are listed under **Blocked
+conversations** at the bottom of the Visual Messaging page. **Unblock** lets
+that conversation invite you again; it doesn't put you back in.
+
 ## Join by a shared link
 
 If someone sends you a link to a conversation you're not in yet and its owner

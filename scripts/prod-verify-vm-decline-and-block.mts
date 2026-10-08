@@ -1,4 +1,5 @@
-// PROD verification for 20261007050000_vm_decline_and_block.sql.
+// PROD verification for 20261007050000_vm_decline_and_block.sql and
+// 20261008010000_vm_unblock_list_and_invited_by_pin.sql (section [5]).
 //
 //   pnpm exec tsx scripts/prod-verify-vm-decline-and-block.mts
 //   pnpm exec tsx scripts/prod-verify-vm-decline-and-block.mts --local
@@ -103,6 +104,16 @@ try {
   check('anon does NOT execute vm_decline_and_block_invite', !(await canExec('anon', 'public.vm_decline_and_block_invite(uuid)')))
   check('authenticated does NOT execute the trigger function', !(await canExec('authenticated', 'public.vm_guard_self_block()')))
   check('anon does NOT execute the trigger function', !(await canExec('anon', 'public.vm_guard_self_block()')))
+
+  // 20261008010000 — the unblock list, and invited_by pinned on every path.
+  console.log('\n[5] 20261008010000: unblock list + invited_by pin')
+  check('manager escape pins invited_by', pin.includes('Pinned here too (20261008010000)'))
+  const inv = await body('vm_invite_pending')
+  check('own-seat insert nulls invited_by', inv.includes('nobody invited you'))
+  const list = await body('vm_my_blocked_conversations')
+  check('vm_my_blocked_conversations lists only own self-blocked seats', list.includes('m.user_id = auth.uid()') && list.includes('m.self_blocked'))
+  check('authenticated executes vm_my_blocked_conversations', await canExec('authenticated', 'public.vm_my_blocked_conversations(uuid)'))
+  check('anon does NOT execute vm_my_blocked_conversations', !(await canExec('anon', 'public.vm_my_blocked_conversations(uuid)')))
 } finally {
   await sql.end()
 }

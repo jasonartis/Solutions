@@ -775,9 +775,32 @@ not touch this table.
 members of the conversation). An admin could already infer a self-block (a banned row no
 moderator created), so this makes explicit what was inferable. No screen shows it.
 
-**Not built:** an "unblock" screen. The SQL path exists (delete your own self-blocked seat),
-but nothing lists a person's blocks, so today a mistaken block can only be undone through the
-API. Cheap to add: a definer like `vm_my_pending_invites` returning own `self_blocked` seats.
+~~**Not built:** an "unblock" screen.~~ **BUILT 2026-10-08, see the next section.**
+
+## 2026-10-08 — the unblock screen, and `invited_by` is server-stamped on every path
+
+**Built (Opus), `20261008010000`, every org.** Closes both items 2026-10-07 left open.
+
+1. **Unblock.** The module page now lists **Blocked conversations** (title only) with an
+   **Unblock** button, read through a new definer `vm_my_blocked_conversations(org)`. It returns
+   only the caller's OWN `self_blocked` seats, never a moderation ban, someone else's block,
+   another org or a departed member. Unblock deletes your own self-blocked seat (the 10-07 guard
+   already allowed exactly that). It does NOT put you back in; it only lets that conversation
+   invite you again. **No date is shown**, because the function's `blocked_at` is the seat's
+   `updated_at`, which a silently-reverted update by someone else still bumps.
+2. **`invited_by` can no longer be client-written by anyone with a JWT.** Two gaps: the pin's
+   MANAGER ESCAPE returned early without pinning it (an org manager could make an invitation
+   appear to come from someone else, since that name is shown to the invitee), and an OWN seat
+   (creator bootstrap) kept whatever the client sent. Now the manager path pins it (old value,
+   or the re-inviter), and an own seat is `null`.
+
+Proof: `rls.test.ts` "the unblock list, and invited_by is server-stamped everywhere", 5 tests;
+`scripts/prod-verify-vm-decline-and-block.mts` section [5] (21/21 local; PROD pre-apply 17/4,
+exactly the new section failing, controls green). Adversarial review clean. **Residuals, recorded
+not fixed:** `pg_trigger_depth() > 1` still skips the pin, so a FUTURE trigger on another table
+that updates seats would bypass it (none exists; the only depth-2 writer is the `invited_by`
+SET NULL); and `authenticated` keeps its table-level UPDATE, which is why this is enforced by
+trigger at all (a column revoke cannot narrow a table grant, docs/20 §9 v3).
 
 ## Future enhancement: block a PERSON, not a conversation (option B, 2026-10-07, not built)
 

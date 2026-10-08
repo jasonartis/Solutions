@@ -175,6 +175,27 @@ export async function declineAndBlockConversationInvite(orgSlug: string, convers
   redirect(`/o/${orgSlug}/m/visual-messaging`)
 }
 
+// Unblock = delete your own self-blocked seat (20261008010000). The guard
+// (vm_guard_self_block) lets only the holder do this; the filters make sure
+// it can only ever hit a SELF-block, never a moderation ban. After it, the
+// conversation can invite you again.
+export async function unblockConversation(orgSlug: string, conversationId: string) {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) throw new Error('Not signed in')
+  const { error } = await supabase
+    .from('vm_conversation_members')
+    .delete()
+    .eq('conversation_id', conversationId)
+    .eq('user_id', user.id)
+    .eq('status', 'banned')
+    .eq('self_blocked', true)
+  fail(error, 'Unblock failed')
+  revalidatePath(`/o/${orgSlug}/m/visual-messaging`)
+}
+
 // A conversation admin opens or closes deep-link joining. Writes
 // settings.joinPolicy; the vm_conversations_update_admin policy gates who,
 // and vm_pin_conversation leaves settings free to change (it only pins
