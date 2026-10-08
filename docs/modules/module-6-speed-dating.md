@@ -621,3 +621,12 @@ because they are all testable by the same reading discipline that found the nine
 **Hardening shipped first (`25475eb`):** `JAAS_PRIVATE_KEY` now also accepts PKCS#1 (`BEGIN RSA PRIVATE KEY`, which `importPKCS8` rejected), CRLF and wrapping quotes — each tested by minting a token from a real key.
 **NOT yet established — do not call this fully verified:** the media was Chromium's FAKE camera/microphone in headless browsers on one machine, so it proves tokens, signalling, the websocket and track exchange through JaaS, not real hardware, real audio being audible, or two different networks. Audio was checked as a live track, not as non-silent samples. A human two-device call is still the final check. The orchestrator-driven round clock (worker) was not exercised; the round was started manually.
 
+
+## 2026-10-08 (later) — first real-use findings: event lifecycle and "what am I registered for"
+
+Found by the founder trying to run the call test by hand. No migration. **Shipped (`a0f4ea3`), prod-verified 11/11 by `scripts/prod-verify-event-lifecycle.mjs`:**
+- **Delete event** (organizer): offered ONLY when the event has no live registrations (registered/waitlisted) and no rounds; the action re-checks. Irreversible → refused otherwise; **Cancel event** (state `cancelled`, already in the CHECK) keeps the record. RLS's `sd_events_delete_organize` already existed; only the UI was missing.
+- **Reinstate** (organizer, on the roster, for withdrawn/removed). A person CANNOT re-register themselves: `sd_pin_participant` allows a self-editor only `→ withdrawn` ON PURPOSE (self-reactivation would let anyone jump a full side's waitlist), and `unique (event_id, user_id)` blocks a fresh insert. The withdrawn person is now told to ask the organizer.
+- **Duplicate event names are ALLOWED** (as Eventbrite/Meetup/Google Calendar do); every list row now shows its date (scheduled, else created).
+- **Events list shows the caller's own status** (registered / waitlisted / withdrawn / removed badge) and groups "Your events" / "Open for registration" / "Other events" for non-organizers.
+**STILL OPEN — needs a MIGRATION, deliberately not done (another session owns `supabase/migrations/` right now):** self re-registration after a SELF-withdrawal (not after `removed`). Right shape: a definer RPC that flips own `withdrawn → registered|waitlisted`, deciding capacity server-side. Until then, reinstate is organizer-only.
