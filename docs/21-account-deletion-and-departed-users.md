@@ -1,8 +1,10 @@
 # Account deletion and departed users — what survives a person leaving
 
-**Status: BUILT 2026-10-07 — migration `20261007090000`, read §7.10 for what exists and what
-is still owed. NOT ON PRODUCTION until `pnpm migrate:prod` has run AND
-`scripts/prod-verify-account-deletion.mts` passes there.** The design below is unchanged.
+**Status: BUILT, ON PRODUCTION AND PROD-VERIFIED 2026-10-08 — migration `20261007090000`, read
+§7.10 for what exists and what is still owed.** `scripts/prod-verify-account-deletion.mts` on
+prod: 3 controls pass / 29 fail pre-apply → **85/0 post-apply**. The one check still pending is
+§[6], whether pg_cron has actually run the job — it can only pass from 2026-10-09 03:17 UTC.
+The design below is unchanged.
 
 **Previous status: FULLY DECIDED, NOT BUILT (2026-10-07). READ §7 FIRST, then §7.9.** The founder's
 SILHOUETTE model (§7, 2026-09-11) supersedes §3's mechanism and §4's classification — **§4's
@@ -550,8 +552,17 @@ are refused up front.
 
 ### Still owed
 
-- **Production.** `pnpm migrate:prod` (founder's go-ahead), then the verifier; its §[6] only
-  goes green the day after, once pg_cron has actually run there.
+- ~~**Production.**~~ **DONE 2026-10-08**, founder go-ahead, backup
+  `backups/2026-10-08T06-20-02`, applied in ONE push together with the parallel session's
+  `20261007050000` (`db push` cannot apply one alone; the founder confirmed both). Verified on
+  prod: own verifier 85/0, `verify-acl-hardening.ts` 17/17, `prod-verify-migration.ts` 0
+  failures with 15 bodies matching (its 7 warnings are the benign no-api-role-EXECUTE class:
+  internal helpers and a trigger function). `migrate:prod` printed the known pgdelta
+  certificate trace AFTER both applies; a follow-up dry run reads "Remote database is up to
+  date". **STILL TO CHECK, from 2026-10-09:** re-run the verifier — its §[6] must show a
+  `succeeded` run of `account-deletions-complete-due`. Until then the cron job is proven
+  SCHEDULED on prod, not proven RUNNING. Behaviour (the silhouette itself) is proven locally
+  only, deliberately: proving it on prod means deleting a real account.
 - Telling the person (by email) that a deletion was started on their behalf — there is no SMTP
   yet (docs/18), so the founder replies to the emailed request by hand.
 - Matchmaking has the "Former member" label but no archive section like speed dating's; the

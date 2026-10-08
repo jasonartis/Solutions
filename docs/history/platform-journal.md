@@ -4,7 +4,18 @@ The running, dated build journal that used to live in `CLAUDE.md`'s "## Current 
 section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every session)
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
-- **2026-10-07 (later, Opus) — ACCOUNT DELETION BUILT (`20261007090000`), NOT ON PROD.** The
+- **2026-10-08 — ACCOUNT DELETION AND VM DECLINE-AND-BLOCK ARE ON PRODUCTION AND
+  PROD-VERIFIED.** One `migrate:prod` applied `20261007050000` and `20261007090000` together
+  (backup `backups/2026-10-08T06-20-02`). The push could not stop at one, and the parallel
+  session's own migration was not yet cleared when the go-ahead for this one was given; a
+  relayed "the founder cleared it" from that session was NOT acted on, and the founder
+  confirmed both directly first. **Worth keeping: in a shared repo, a go-ahead for "my
+  migration" is really a go-ahead for EVERY pending one — run the dry run before reading the
+  go-ahead as covering the push.** Prod: account-deletion verifier 3/29-fail → 85/0;
+  `verify-acl-hardening.ts` 17/17; `prod-verify-migration.ts` 0 failures; the other session
+  ran its own verifier. Open: pg_cron has not run the job yet — re-verify from 2026-10-09.
+- **2026-10-07 (later, Opus) — ACCOUNT DELETION BUILT (`20261007090000`), NOT ON PROD (applied
+  2026-10-08, entry above).** The
   silhouette model of docs/21 §7, both entry points, the 30-day grace period, "Former member"
   rendering across five modules, the speed-dating match archive under §7.8's rule, and the
   fourth `/privacy` line. Full record: **docs/21 §7.10**. **§7.9's open build question —

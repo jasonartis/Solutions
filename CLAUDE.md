@@ -19,16 +19,18 @@ A multi-tenant modular platform: each client engagement produces a **module** bu
      and update only the compact "Now / Next / Standing rules" below. A fresh chat must never
      pay for the full journal. See "Session hygiene". -->
 
-**ACCOUNT DELETION IS BUILT (2026-10-07, Opus, `20261007090000`) — NOT ON PRODUCTION YET.**
+**ACCOUNT DELETION IS BUILT, ON PRODUCTION AND PROD-VERIFIED (2026-10-08, `20261007090000`;
+verifier 85/0 on prod). ONE CHECK OUTSTANDING: re-run `scripts/prod-verify-account-deletion.mts`
+from 2026-10-09 — its §[6] must show pg_cron's first `succeeded` run; until then the job is
+proven scheduled, not running.**
 Read [docs/21](docs/21-account-deletion-and-departed-users.md) **§7.10** first. Self-serve on
 `/account` + superadmin on `/console/accounts`; both only START a 30-day grace period (signed
 out everywhere; signing back in cancels, DERIVED from GoTrue's `last_sign_in_at`, no trigger on
 `auth.users`). Day 30 the silhouette runs: `auth.users` is never deleted, identity scrubbed,
 memberships revoked, machine-derived rows deleted, human acts kept; others see "Former
 member". **THE EXPIRY RUNS ON `pg_cron` INSIDE THE DATABASE** (prod has no worker; docs/03 hard
-rule 5 now records the exception). **Remaining: founder go-ahead for `pnpm migrate:prod`, then
-`scripts/prod-verify-account-deletion.mts`** (prod pre-apply: 3 controls pass, 29 fail as
-expected); its §[6] only goes green the day after, once pg_cron has run there. **Six judgement
+rule 5 now records the exception). Applied 2026-10-08 in ONE push with `20261007050000`
+(backup `backups/2026-10-08T06-20-02`; prod verifier 3/29-fail → 85/0). **Six judgement
 calls are listed for founder review in §7.10** (chiefly: a salon's customer card survives
 unlinked). Same day, on prod: `20261007010000`, `20261007020000`, `20261007030000`;
 `20261007050000` (vm decline-and-block) by a parallel session — journal 2026-10-07.
@@ -299,9 +301,11 @@ doc.
   tell a moderation ban from a self-block); and an org owner could carry an active seat into a
   DIFFERENT conversation, now refused. **DECLINE-AND-BLOCK IS BUILT (`20261007050000`, per
   CONVERSATION — founder chose option A; per-PERSON blocking is recorded as a future
-  enhancement in the module-4 spec). IN THE REPO ONLY: `migrate:prod` has NOT run** — verify
-  with `scripts/prod-verify-vm-decline-and-block.mts` before and after (prod pre-apply 7/9-fail,
-  controls green). A `self_blocked` marker means nobody but the holder can lift, re-invite over
+  enhancement in the module-4 spec). ON PRODUCTION AND PROD-VERIFIED 2026-10-08** (applied in
+  one push with `20261007090000` by the account-deletion session, after backup
+  `backups/2026-10-08T06-20-02`): `scripts/prod-verify-vm-decline-and-block.mts` 7/9-fail
+  pre-apply → **16/0** post-apply, controls green both times; `prod-verify-migration.ts` 0
+  failures. Prod holds 0 conversations, so the BEHAVIOUR is proven locally only. A `self_blocked` marker means nobody but the holder can lift, re-invite over
   or delete it (silently); it also closed a pre-existing hole where a moderation-banned person
   could delete their own seat and rejoin by link. **Still open:** no unblock screen; an org
   manager can still set `invited_by` on a non-reinvite update (pre-existing manager escape). **ON PRODUCTION AND
