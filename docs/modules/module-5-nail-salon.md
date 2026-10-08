@@ -349,3 +349,10 @@ module's schema that are worth recording here, because both are easy to re-deriv
   rejection of forced-account-at-intake stands unless revisited — this analysis doesn't
   change that call, it's here so a future decision to build either mode starts from the real
   risk, not a re-derivation of it.
+  **RULE ADDED 2026-10-08, from account deletion (docs/21 §7.10): linking must NEVER copy the
+  platform account's email or any other platform identity onto the card.** When a person
+  deletes their platform account the card is kept and only unlinked, because it is the salon's
+  own record. A copied platform email would then survive as an identifier the salon never
+  collected and the platform promised to remove. Building linking is also the trigger for
+  three parked deletion features (erase-customer action, a deletion flag on the card, an
+  export prompt) — docs/21 §7.10 lists them.

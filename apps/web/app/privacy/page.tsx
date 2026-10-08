@@ -7,7 +7,7 @@
 // detailed version covering the same facts is kept at
 // docs/privacy-detailed-draft.md for later — an audit, a legal review, or a
 // larger/more regulated client that needs it.
-const LAST_UPDATED = 'October 7, 2026'
+const LAST_UPDATED = 'October 8, 2026'
 
 export default function PrivacyPage() {
   // Platform identity — filled in via .env.deploy (see scripts/dev.ts
@@ -59,7 +59,8 @@ export default function PrivacyPage() {
           review of someone's work, homework and grades that are part of a class record, or a safety
           report — because removing it would damage their records, not protect yours. It stays where it
           is, labelled as from a former member and no longer tied to your name. An organization's own
-          business records about you, like a salon's customer card, stay with that organization.
+          business records about you, like a salon's customer card, stay with that organization. To
+          have those removed, ask the organization directly — we'll help them act on your request.
         </p>
         <p>Questions? Contact {contactEmail}.</p>
       </div>

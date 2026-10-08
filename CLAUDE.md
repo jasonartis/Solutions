@@ -31,8 +31,9 @@ memberships revoked, machine-derived rows deleted, human acts kept; others see "
 member". **THE EXPIRY RUNS ON `pg_cron` INSIDE THE DATABASE** (prod has no worker; docs/03 hard
 rule 5 now records the exception). Applied 2026-10-08 in ONE push with `20261007050000`
 (backup `backups/2026-10-08T06-20-02`; prod verifier 3/29-fail → 85/0). **Six judgement
-calls are listed for founder review in §7.10** (chiefly: a salon's customer card survives
-unlinked). Same day, on prod: `20261007010000`, `20261007020000`, `20261007030000`;
+calls are listed in §7.10; the salon customer card one is REVIEWED AND CONFIRMED 2026-10-08**
+(keep it unlinked — the salon is the controller; three salon features PARKED until the first
+real linked card). Same day, on prod: `20261007010000`, `20261007020000`, `20261007030000`;
 `20261007050000` (vm decline-and-block) by a parallel session — journal 2026-10-07.
 
 **MODULE 6 VIDEO — JaaS IS THE DEFAULT PROVIDER, BUILT, AND UNVERIFIABLE FROM THIS REPO

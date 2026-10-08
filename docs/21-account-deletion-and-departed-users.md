@@ -534,9 +534,33 @@ are refused up front.
 ### JUDGEMENT CALLS MADE IN THE BUILD — the founder may want to overrule any of these
 
 - **A salon's customer card survives, unlinked** (`sal_customers.user_id` → NULL; name and
-  phone kept). Reasoning: it is the salon's own business record, as a walk-in's card is, and
-  deleting an OpenTable account does not delete the restaurant's record. The privacy line says
-  so. The alternative is scrubbing name and phone too.
+  phone kept). **REVIEWED AND CONFIRMED 2026-10-08** (prior-art research + one adversarial
+  reviewer; founder agreed). The card is the salon's own business record: under GDPR the salon
+  is the controller and the platform its processor (Art. 28), so the erasure duty is the
+  salon's, and a processor that deletes a controller's records unasked is itself in breach.
+  Square, Fresha, Booksy, Vagaro, Stripe and Shopify all work this way: deleting the consumer
+  account leaves the business's copy, and the person is sent to the business. **OpenTable is
+  the one exception** — it claims diner data as its own and makes restaurants delete it. *(An
+  earlier version of this bullet cited OpenTable as SUPPORT for keeping the card. That was
+  backwards.)* Scrubbing would not help either: deleting the card cascades away the salon's
+  appointments, bills and earnings, and `full_name` is NOT NULL, so a scrub means a placeholder
+  name across the salon's screens.
+  **Changed as a result:** `/privacy` now tells the person to ask the organization, and that
+  the platform will help it act on the request (Art. 28(3)(e)).
+  **PARKED, ONE SHARED TRIGGER — the first REAL customer card linked to a REAL account.**
+  Measured 2026-10-08: prod holds 1 card, the demo seed's, and 0 linked cards in any real org;
+  no app path writes `user_id`, `phone`, `email` or `notes` (walk-in add writes `full_name`
+  only). When that trigger fires, build:
+  1. **An erase-customer action for salon admins** (Square's Buyer Request Portal is the
+     model): clear name/phone/email/notes, keep appointments and bills for accounting.
+  2. **A flag on the card** when its linked person deletes their account (Shopify's
+     `customers/redact` is the model; GDPR Art. 19 arguably requires telling the salon).
+  3. **A pre-deletion prompt to export "my customer record"** — after the unlink, that export
+     (`modules/nail-salon/ui/export.ts`, filtered on `user_id`) can no longer find the card.
+  **AND ONE RULE FOR WHOEVER BUILDS ACCOUNT-TO-CARD LINKING:** never copy the platform account's
+  email (or any other platform identity) onto the card. The salon never collected it, so after
+  the person deletes their account it would be a platform-sourced identifier the platform
+  promised to remove. Recorded in the module-5 spec beside the linking analysis.
 - **The residual of finding 1:** a co-member who declined the person in speed dating *and*
   wrote a safety note about them keeps that pairing (a safety record outranks
   minimisation), so they can see "Former member" beside their own note.
