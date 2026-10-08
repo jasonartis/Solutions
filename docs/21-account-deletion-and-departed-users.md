@@ -564,15 +564,65 @@ are refused up front.
 - **The residual of finding 1:** a co-member who declined the person in speed dating *and*
   wrote a safety note about them keeps that pairing (a safety record outranks
   minimisation), so they can see "Former member" beside their own note.
+  **CONFIRMED BY THE FOUNDER 2026-10-08.**
 - **§7.8's "I said yes and was waiting" row is built only for MUTUAL matches.** If the viewer
   said yes and the counterparty never decided, nothing is shown. Showing "left" there but not
   after a "no" would let the viewer tell undecided from rejected — exactly the reveal guard. So
-  that case is deliberately silent.
-- **Superadmin-initiated deletions are cancelled by the person signing in**, same as
-  self-serve (§7.9 point 3 applied to both entry points).
+  that case is deliberately silent. **OPEN, founder question 2026-10-08:** show "left" for BOTH
+  no and undecided? Treating them identically does not break the reveal guard (they
+  already look the same: no match). The constraints if built: show it only once the
+  deletion has COMPLETED (not during the grace period, which is reversible and would leak a
+  pending decision to a non-match), and only after the event's reveal. Update when decided.
+- ~~**Superadmin-initiated deletions are cancelled by the person signing in**~~ **STILL TRUE
+  for a deletion at the person's request — but the founder found the gap (2026-10-08): that was
+  the superadmin's ONLY action, so a superadmin could not remove someone AGAINST their wishes**
+  (he signs in, it cancels). **Built same day: "Remove from platform", §7.11.**
 - **Uploaded files are kept** with the records that own them (submissions, layer images).
-- **A customer's past appointment with a deleted worker shows "—"**, because the customer page
-  lists only active workers; the salon's own manage page shows "Former member".
+  **CONFIRMED BY THE FOUNDER 2026-10-08.**
+- **A deleted worker's appointments — CORRECTED 2026-10-08, the original bullet described the
+  wrong screen.** The CUSTOMER never sees a worker at all ("Your appointments" lists date and
+  service only). The real gap is the salon's own **Today's board** (`modules/nail-salon/ui/page.tsx`
+  OperatorConsole): it loads only ACTIVE workers, the silhouette sets `active = false`, so the
+  Worker column shows "—" and the board's own "Former member" code can never fire. Two
+  adversarial reviews (code; product/privacy) both recommend: build the name map from ALL
+  workers, keep the pickers active-only, show "Former member" — and on a still-BOOKED
+  appointment make it a visible "needs reassigning" marker, since the silhouette never touches
+  `sal_appointments`. **Awaiting the founder's go-ahead.**
+
+## 7.11 REMOVE FROM PLATFORM (2026-10-08, `20261008020000`) — a superadmin takes someone off
+
+**Why.** The founder: "Super admins can't lack that power to remove someone from the very
+start." The only superadmin action was deletion at the person's request, which signing in
+cancels, so it could not remove an unwilling person.
+
+| | Delete at the person's request | **Remove from platform** |
+|---|---|---|
+| Sign-in | Signed out; may sign back in | **Blocked at once** (`banned_until`), all sessions, refresh tokens and one-time tokens deleted |
+| Signing in cancels it | Yes | **Never** — opted out in all three derivations, not only blocked by the ban |
+| Who undoes it | The person (sign in) or a superadmin | **A superadmin only**; undo lifts the ban |
+| Sole org admin / sole Director | Refused | **Not refused** — returned as a warning; day 30 fails visibly (retried daily) while the ban holds |
+| A superadmin as target | Refused | Refused |
+| Day 30 | Silhouette | Silhouette (identical) |
+
+A pending removal cannot be overwritten: neither the person's own self-serve request (their
+pre-removal access token lives up to an hour) nor a superadmin's "at request" action can
+downgrade it into a cancellable deletion. That hole was found while building and independently
+by the regression reviewer. Console: `/console/accounts`, a separate red **Remove from
+platform** form and an **Undo removal** button in the list. Tests: 7 in
+`account-deletion.test.ts` ("remove from platform"); e2e covers the refusal only (a real removal
+would ban a seeded user). Two adversarial reviews: no escape found.
+
+**Recorded, not built:**
+- **A removed person can sign up again on day 31 with the same address** — the silhouette
+  frees it (§7.2: a returning person is a new person). Right for a voluntary deletion, arguably
+  wrong for a removal. **FOUNDER DECISION, asked 2026-10-08.** If wanted: keep a HASH of the
+  address as a signup deny-list for removals (never the address itself; docs/18 §9's pattern).
+- Within the access token's last hour the person still holds their memberships; an org owner
+  could, for instance, make themselves sole admin so day 30 keeps failing. The ban holds, the
+  console shows the failure. Not an escape.
+- Lifting the ban outside the platform (Supabase dashboard / GoTrue admin) leaves a removal
+  row whose person can sign in. A trusted actor only; a console check could flag it.
+- `/privacy` and the draft Terms do not yet say the platform may remove an account.
 
 ### Still owed
 

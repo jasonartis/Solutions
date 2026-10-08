@@ -4,6 +4,25 @@ The running, dated build journal that used to live in `CLAUDE.md`'s "## Current 
 section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every session)
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
+- **2026-10-08 (Opus) — "REMOVE FROM PLATFORM" (`20261008020000`), BUILT, NOT DEPLOYED; and the
+  docs/21 §7.10 judgement calls reviewed with the founder.** Walking the founder through the
+  account-deletion build's judgement calls, he spotted that the superadmin's ONLY action was
+  "delete at the person's request", which the person cancels by signing in — so a superadmin
+  could not remove anyone unwilling. "Super admins can't lack that power from the very start."
+  Built same session: a separate removal that bans sign-in at once, cannot be cancelled by
+  signing in (opted out in all three derivations, not just blocked by the ban), only a
+  superadmin undoes it (lifting the ban), and is NOT refused for a sole org admin (warning; day
+  30 fails visibly while the ban holds). **Found while building and independently by review:**
+  the existing request path's upsert would have overwritten a pending removal back into a
+  cancellable deletion — reachable by the removed person's still-valid access token. Fixed.
+  The bypass reviewer added two hardening steps (refresh and one-time tokens deleted too). The
+  §7.10 review also found the salon bullet described the wrong screen: customers never see a
+  worker; the staff Today's board shows "—" because it loads active workers only. Decisions:
+  safety-note residual KEEP, uploaded files KEEP; still open: "left" for no/undecided, the
+  salon fix's go-ahead, and whether a removed person may re-sign-up with the same address.
+  Verified on a fresh reset in CI order: db 322/322 → e2e 55/55, typecheck 9/9, ACL 17/17
+  local; prod pre-apply 85/8 (exactly the new checks) with controls green. Rank map regenerated
+  (8 lines, same shape as the "at request" function). Detail: docs/21 §7.11.
 - **2026-10-08 (Opus) — VISUAL MESSAGING: UNBLOCK SCREEN + `invited_by` PINNED EVERYWHERE
   (`20261008010000`), ON PROD 2026-10-08.** Applied alone (nothing else pending) after backup `backups/2026-10-08T06-52-45`; verifier 17/4 → **21/0**, controls green both times; `prod-verify-migration.ts` 0 failures. Benign pgdelta trace again. The two items decline-and-block left open. A
   Blocked conversations list with Unblock (new definer `vm_my_blocked_conversations`, own

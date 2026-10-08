@@ -2402,4 +2402,10 @@ test('owner console: account deletions page shows the runner and the cancelled r
   await page.getByLabel('Their email address').fill('alice@demo.local')
   await page.getByRole('button', { name: 'Start deletion' }).click()
   await expect(page.getByText(/Not started: they are the only administrator of/)).toBeVisible()
+  // Remove from platform (20261008020000). Only the refusal is exercised here:
+  // a real removal would ban a seeded user the rest of the suite signs in as.
+  // The behaviour itself is proven in packages/db/src/account-deletion.test.ts.
+  await page.getByLabel('Email of the person to remove').fill('owner@demo.local')
+  await page.getByRole('button', { name: 'Remove from platform' }).click()
+  await expect(page.getByText(/Not removed: it is a platform owner account/)).toBeVisible()
 })

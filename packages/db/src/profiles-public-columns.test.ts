@@ -73,6 +73,14 @@ const EMAIL_READERS: Record<string, string> = {
     'Internal: no API role holds EXECUTE.',
   account_deletion_resume:
     'Reads the CALLER\'s own last_sign_in_at to confirm a real sign-in before recording a cancel. No address.',
+  // REMOVE FROM PLATFORM (20261008020000).
+  account_remove_from_platform:
+    'Superadmin removal. Resolves an address to a user INSIDE the function (same as ' +
+    'account_request_deletion_for_email), gated on is_superadmin(); sets auth.users.banned_until. ' +
+    'Returns ok/reason/warnings only — never the address.',
+  account_cancel_deletion:
+    'Superadmin undo. Touches auth.users only to clear banned_until when the undone row is a removal. ' +
+    'Gated on is_superadmin(); no address read or returned.',
   account_complete_due_deletions:
     'The pg_cron job. Reads last_sign_in_at to cancel rather than delete a returning person. No API role ' +
     'holds EXECUTE, and it refuses any caller with a session.',

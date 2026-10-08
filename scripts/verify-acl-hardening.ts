@@ -143,6 +143,7 @@ const FUNCTION_EXCEPTIONS: Record<string, { auth: boolean; svc: boolean }> = {
   'account_deletion_resume()': { auth: true, svc: false },
   'account_request_deletion_for_email(target_email text)': { auth: true, svc: false },
   'account_cancel_deletion(target uuid)': { auth: true, svc: false },
+  'account_remove_from_platform(target_email text)': { auth: true, svc: false },
   'account_deletion_runner_status()': { auth: true, svc: false },
   'former_members(check_user_ids uuid[])': { auth: true, svc: false },
   'sd_my_departed_matches(check_event_id uuid)': { auth: true, svc: false },

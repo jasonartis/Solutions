@@ -382,3 +382,139 @@ describe('account deletion (20261007090000)', () => {
     expect(await runJob()).toEqual({ deleted: 0, cancelled: 0, failed: 0 })
   })
 })
+
+// ---------------------------------------------------------------------------
+// REMOVE FROM PLATFORM (20261008020000). Its own throwaway cast, created and
+// hard-deleted here. In THIS file rather than its own because the daily job
+// it exercises acts on every due row in the database, and vitest runs files in
+// parallel: from a separate file it could silhouette the probes above mid-test.
+// Here it runs after them, in sequence.
+//   rex   — removed; proves the ban, the refusals, and that nothing he or an
+//           "at request" action does can turn it back into a cancellable one.
+//           A stale sign-in timestamp cannot cancel it; day 30 silhouettes him.
+//   tess  — removed, then UNDONE by the superadmin: the ban lifts.
+//   una   — the sole admin of an org: removal is NOT refused (a warning), the
+//           ban applies at once, and day 30 fails visibly while the ban holds.
+// ---------------------------------------------------------------------------
+describe('remove from platform (20261008020000)', () => {
+  const cast = {} as Record<'rex' | 'tess' | 'una', Probe>
+  let unaOrg = ''
+  let owner: SupabaseClient
+  const bannedUntil = async (id: string) =>
+    (await sql<{ b: Date | null }[]>`select banned_until as b from auth.users where id = ${id}`)[0]!.b
+  const sessions = async (id: string) =>
+    (await sql<{ n: number }[]>`select count(*)::int as n from auth.sessions where user_id = ${id}`)[0]!.n
+  const viaOf = async (id: string) =>
+    (await sql<{ v: string }[]>`select initiated_via as v from account_deletions where user_id = ${id}`)[0]?.v
+
+  beforeAll(async () => {
+    const a = admin()
+    for (const name of ['rex', 'tess', 'una'] as const) {
+      const email = `removal-${name}-${tag}@demo.local`
+      const { data, error } = await a.auth.admin.createUser({ email, password: PASSWORD, email_confirm: true })
+      if (error) throw new Error(`createUser ${name}: ${error.message}`)
+      cast[name] = { id: data.user!.id, email }
+    }
+    const [o] = await sql<{ id: string }[]>`
+      insert into orgs (name, slug) values ('Removal probe org', ${`removal-probe-${tag}`}) returning id`
+    unaOrg = o!.id
+    await sql`insert into org_members (org_id, user_id, role, status, accepted_at)
+              values (${unaOrg}, ${cast.una.id}, 'owner', 'active', now())`
+    owner = await signIn('owner@demo.local')
+  }, 60_000)
+
+  afterAll(async () => {
+    if (unaOrg) await sql`delete from orgs where id = ${unaOrg}`
+    for (const p of Object.values(cast)) {
+      const { error } = await admin().auth.admin.deleteUser(p.id)
+      expect(error, `hard-deleting probe ${p.email} failed`).toBeNull()
+    }
+  }, 60_000)
+
+  it('only a superadmin can remove someone', async () => {
+    const tess = await signIn(cast.tess.email)
+    expect(await rpc(tess, 'account_remove_from_platform', { target_email: cast.rex.email }))
+      .toMatchObject({ ok: false, reason: 'not_authorized' })
+    expect(await stateOf(cast.rex.id), 'an ordinary member removed someone').toBeNull()
+    expect(await bannedUntil(cast.rex.id)).toBeNull()
+  })
+
+  it('a superadmin cannot be removed, not even by themselves', async () => {
+    expect(await rpc(owner, 'account_remove_from_platform', { target_email: 'owner@demo.local' }))
+      .toMatchObject({ ok: false, reason: 'blocked', blockers: ['superadmin'] })
+    const [me] = await sql<{ b: Date | null }[]>`
+      select u.banned_until as b from auth.users u where lower(u.email) = 'owner@demo.local'`
+    expect(me!.b, 'the superadmin banned themselves').toBeNull()
+  })
+
+  it('removal blocks sign-in AT ONCE and signs out everywhere', async () => {
+    const before = await signIn(cast.rex.email)
+    expect(await sessions(cast.rex.id), 'CONTROL: rex has a live session').toBeGreaterThan(0)
+    expect(await rpc(owner, 'account_remove_from_platform', { target_email: cast.rex.email }))
+      .toMatchObject({ ok: true, warnings: [] })
+    expect(await stateOf(cast.rex.id)).toMatchObject({ state: 'departed' })
+    expect(await viaOf(cast.rex.id)).toBe('removal')
+    expect(await sessions(cast.rex.id), 'a session survived the removal').toBe(0)
+    const [rt] = await sql<{ n: number }[]>`
+      select count(*)::int as n from auth.refresh_tokens where user_id = ${cast.rex.id}`
+    expect(rt!.n, 'a refresh token survived the removal').toBe(0)
+    expect((await bannedUntil(cast.rex.id))!.getTime()).toBeGreaterThan(Date.now() + 365 * 86400_000)
+
+    const c = createClient(url, anonKey, { auth: { persistSession: false } })
+    const { error } = await c.auth.signInWithPassword({ email: cast.rex.email, password: PASSWORD })
+    expect(error?.message ?? '', 'a removed person signed in').toMatch(/banned/i)
+
+    // His access token from BEFORE the removal is still valid for its hour —
+    // and cannot be used to undo or downgrade the removal.
+    expect(await rpc(before, 'account_request_deletion', { confirm_email: cast.rex.email }))
+      .toMatchObject({ ok: false, reason: 'removed' })
+    expect(await rpc(before, 'account_deletion_resume')).toEqual({ cancelled: false })
+    expect(await rpc(before, 'account_cancel_deletion', { target: cast.rex.id }))
+      .toMatchObject({ ok: false, reason: 'not_authorized' })
+    expect(await viaOf(cast.rex.id), 'rex downgraded his removal').toBe('removal')
+  })
+
+  it('a superadmin "at the person\'s request" deletion does not overwrite a removal', async () => {
+    expect(await rpc(owner, 'account_request_deletion_for_email', { target_email: cast.rex.email }))
+      .toMatchObject({ ok: false, reason: 'removed' })
+    expect(await viaOf(cast.rex.id)).toBe('removal')
+  })
+
+  it('a sign-in timestamp after the request cannot cancel it: not live, not on day 30', async () => {
+    // Simulate the edge the ban should make impossible: a sign-in recorded after the request.
+    await sql`update auth.users set last_sign_in_at = now() + interval '1 minute' where id = ${cast.rex.id}`
+    const [live] = await sql<{ p: boolean }[]>`select public.account_pending_departure(${cast.rex.id}) as p`
+    expect(live!.p, 'a sign-in timestamp cancelled a removal').toBe(true)
+    await makeDue(cast.rex.id)
+    await runJob()
+    expect(await stateOf(cast.rex.id), 'the daily job cancelled a removal instead of completing it')
+      .toMatchObject({ state: 'deleted' })
+  })
+
+  it('only a superadmin undoes a removal, and undoing it lifts the ban', async () => {
+    expect(await rpc(owner, 'account_remove_from_platform', { target_email: cast.tess.email }))
+      .toMatchObject({ ok: true })
+    expect(await bannedUntil(cast.tess.id), 'CONTROL: tess is banned').not.toBeNull()
+    expect(await rpc(owner, 'account_cancel_deletion', { target: cast.tess.id }))
+      .toMatchObject({ ok: true, lifted_ban: true })
+    expect(await stateOf(cast.tess.id)).toMatchObject({ state: 'cancelled', cancel_reason: 'superadmin' })
+    expect(await bannedUntil(cast.tess.id), 'the undo left the ban in place').toBeNull()
+    await signIn(cast.tess.email) // throws if still refused
+  })
+
+  it('the sole admin of an org is removed anyway (warned); the ban holds while day 30 fails visibly', async () => {
+    const r = (await rpc(owner, 'account_remove_from_platform', { target_email: cast.una.email })) as {
+      ok: boolean
+      warnings: string[]
+    }
+    expect(r.ok, 'removal was refused for a sole admin').toBe(true)
+    expect(r.warnings).toEqual(['sole_admin:Removal probe org'])
+    expect(await bannedUntil(cast.una.id), 'the ban waited on org housekeeping').not.toBeNull()
+    await makeDue(cast.una.id)
+    await runJob()
+    const s = await stateOf(cast.una.id)
+    expect(s?.state, 'a sole-admin silhouette went through').toBe('departed')
+    expect(s?.last_error ?? '', 'the failure is not recorded').not.toBe('')
+    expect(await bannedUntil(cast.una.id), 'the ban was lost when day 30 failed').not.toBeNull()
+  })
+})

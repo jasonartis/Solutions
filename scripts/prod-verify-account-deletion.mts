@@ -59,7 +59,11 @@ const canExec = async (role: string, sig: string) =>
   (await sql<{ ok: boolean | null }[]>`
     select case when to_regprocedure(${sig}) is null then null
                 else has_function_privilege(${role}, ${sig}, 'execute') end as ok`)[0]!.ok
-const migrationText = readFileSync(resolve(root, 'supabase/migrations/20261007090000_account_deletion.sql'), 'utf8')
+// Bodies may come from either file: 20261008020000 (remove from platform)
+// restates five of these functions.
+const migrationText = ['20261007090000_account_deletion.sql', '20261008020000_account_remove_from_platform.sql']
+  .map((f) => readFileSync(resolve(root, 'supabase/migrations', f), 'utf8'))
+  .join('\n')
 
 const INTERNAL = [
   'public.account_pending_departure(uuid)',
@@ -75,6 +79,7 @@ const CALLABLE = [
   'public.account_deletion_resume()',
   'public.account_request_deletion_for_email(text)',
   'public.account_cancel_deletion(uuid)',
+  'public.account_remove_from_platform(text)',
   'public.account_deletion_runner_status()',
   'public.former_members(uuid[])',
   'public.sd_my_departed_matches(uuid)',
@@ -157,6 +162,23 @@ try {
     // Body drift: the deployed body must appear verbatim in the migration file.
     check(`${name} deployed body matches the migration file`, !!b && migrationText.includes(b.src.trim().slice(0, 400)))
   }
+
+  // 20261008020000 — remove from platform.
+  const via = (await sql<{ d: string | null }[]>`
+    select pg_get_constraintdef(oid) as d from pg_constraint
+    where conrelid = 'public.account_deletions'::regclass and conname = 'account_deletions_initiated_via_check'`)[0]?.d ?? ''
+  check('removal: initiated_via allows removal', via.includes("'removal'"), via)
+  const removalOptOut = await Promise.all(
+    ['account_pending_departure', 'account_deletion_resume', 'account_complete_due_deletions', 'account_begin_departure']
+      .map(async (n) => [n, (await body(n))?.src.includes('(20261008020000)') ?? false] as const),
+  )
+  for (const [n, ok] of removalOptOut) check(`removal: ${n} carries the removal guard`, ok)
+  const cancel = await body('account_cancel_deletion')
+  check('removal: cancelling a removal lifts the ban', !!cancel && cancel.src.includes('banned_until = null'))
+  const rem = await body('account_remove_from_platform')
+  check('removal: it bans at once and deletes sessions and refresh tokens',
+    !!rem && rem.src.includes("banned_until = now() + interval '100 years'") &&
+      rem.src.includes('delete from auth.sessions') && rem.src.includes('delete from auth.refresh_tokens'))
 
   console.log('\n[5] The schedule')
   const [ext] = await sql<{ v: string }[]>`select extversion as v from pg_extension where extname = 'pg_cron'`

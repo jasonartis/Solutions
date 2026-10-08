@@ -308,6 +308,7 @@ const ACCOUNT_DELETION_REASONS: Record<string, string> = {
   already_deleted: 'That account has already been deleted.',
   not_authorized: 'Not authorized.',
   not_pending: 'That deletion is no longer pending, so there was nothing to cancel.',
+  removed: 'That person has been removed from the platform. Undo the removal first if you mean to change it.',
 }
 
 function describeBlockers(blockers: string[] | undefined): string {
@@ -352,5 +353,37 @@ export async function cancelAccountDeletion(userId: string) {
   const r = data as { ok: boolean; reason?: string }
   if (!r.ok) redirect(`/console/accounts?error=${encodeURIComponent(ACCOUNT_DELETION_REASONS[r.reason ?? ''] ?? 'Nothing was changed.')}`)
   revalidatePath('/console/accounts')
-  redirect(`/console/accounts?notice=${encodeURIComponent('Deletion cancelled.')}`)
+  redirect(
+    `/console/accounts?notice=${encodeURIComponent(
+      (data as { lifted_ban?: boolean }).lifted_ban
+        ? 'Removal undone. They can sign in again.'
+        : 'Deletion cancelled.',
+    )}`,
+  )
+}
+
+// REMOVE FROM PLATFORM (20261008020000) — taking someone off the platform
+// against their wishes. Sign-in is blocked AT ONCE and every session ends;
+// signing in can never cancel it (they cannot sign in at all); only a
+// superadmin's Undo does, and it lifts the block. Day 30 runs the ordinary
+// deletion. Being an org's only admin does not stop it — that comes back as a
+// warning, and day 30 fails visibly until another admin is appointed.
+export async function removeFromPlatform(formData: FormData) {
+  const supabase = await requireSuperadmin()
+  const email = String(formData.get('email') ?? '').trim()
+  const { data, error } = await supabase.rpc('account_remove_from_platform', { target_email: email })
+  if (error) redirect(`/console/accounts?error=${encodeURIComponent(error.message)}`)
+  const r = data as { ok: boolean; reason?: string; blockers?: string[]; warnings?: string[]; due_at?: string }
+  if (!r.ok) {
+    const msg =
+      r.reason === 'blocked'
+        ? `Not removed: ${describeBlockers(r.blockers)}.`
+        : (ACCOUNT_DELETION_REASONS[r.reason ?? ''] ?? 'Nothing was changed.')
+    redirect(`/console/accounts?error=${encodeURIComponent(msg)}`)
+  }
+  revalidatePath('/console/accounts')
+  const warn = r.warnings?.length
+    ? ` Note: ${describeBlockers(r.warnings)}, so the final deletion on ${r.due_at?.slice(0, 10)} will wait until another administrator is appointed. They stay blocked meanwhile.`
+    : ` Their account is deleted on ${r.due_at?.slice(0, 10)}.`
+  redirect(`/console/accounts?notice=${encodeURIComponent(`${email} is removed: signed out and blocked from signing in.${warn}`)}`)
 }

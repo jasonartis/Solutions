@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { requireSuperadmin } from '@/lib/platform'
-import { cancelAccountDeletion, requestAccountDeletionFor } from '../actions'
+import { cancelAccountDeletion, removeFromPlatform, requestAccountDeletionFor } from '../actions'
 
 // ACCOUNT DELETIONS (docs/21 §7, migration 20261007090000).
 //
@@ -18,7 +18,7 @@ import { cancelAccountDeletion, requestAccountDeletionFor } from '../actions'
 type Row = {
   user_id: string
   state: 'departed' | 'cancelled' | 'deleted'
-  initiated_via: 'self' | 'superadmin'
+  initiated_via: 'self' | 'superadmin' | 'removal'
   requested_by: string | null
   requested_at: string
   due_at: string
@@ -125,10 +125,11 @@ export default async function AccountsPage(props: { searchParams: Promise<{ erro
       )}
 
       <section className="mb-8 rounded-lg border border-gray-200 bg-white p-5">
-        <h2 className="mb-1 font-medium">Start a deletion for someone who asked by email</h2>
+        <h2 className="mb-1 font-medium">Delete at the person&apos;s request</h2>
         <p className="mb-3 text-sm text-gray-500">
-          They are signed out everywhere and their account is deleted 30 days later. If they sign in before
-          then, it is cancelled — the same as if they had pressed the button themselves.
+          For someone who asked by email to be deleted. They are signed out everywhere and their account is
+          deleted 30 days later. If they sign in before then, it is cancelled — the same as if they had pressed
+          the button themselves. To take someone off the platform against their wishes, use Remove below.
         </p>
         <form action={requestAccountDeletionFor} className="flex flex-wrap items-end gap-3">
           <label className="text-sm">
@@ -141,8 +142,27 @@ export default async function AccountsPage(props: { searchParams: Promise<{ erro
         </form>
       </section>
 
+      <section className="mb-8 rounded-lg border border-red-200 bg-white p-5">
+        <h2 className="mb-1 font-medium text-red-900">Remove from platform</h2>
+        <p className="mb-3 text-sm text-gray-500">
+          Against their wishes. They are signed out everywhere and <strong>blocked from signing in at once</strong>;
+          signing in cannot cancel it. Their account is deleted 30 days later, the same way as above. Until then
+          you can undo it from the list below, which lets them sign in again. (A sign-in already in progress
+          can last up to an hour.)
+        </p>
+        <form action={removeFromPlatform} className="flex flex-wrap items-end gap-3">
+          <label className="text-sm">
+            <span className="mb-1 block text-gray-700">Email of the person to remove</span>
+            <input name="email" type="email" required autoComplete="off" className="rounded border border-gray-300 px-3 py-2 text-sm" />
+          </label>
+          <button className="rounded bg-red-800 px-4 py-2 text-sm font-medium text-white hover:bg-red-900">
+            Remove from platform
+          </button>
+        </form>
+      </section>
+
       <section className="rounded-lg border border-gray-200 bg-white p-5">
-        <h2 className="mb-3 font-medium">All requests</h2>
+        <h2 className="mb-3 font-medium">All requests and removals</h2>
         {list.length === 0 ? (
           <p className="text-sm text-gray-500">Nobody has asked to delete their account.</p>
         ) : (
@@ -162,17 +182,23 @@ export default async function AccountsPage(props: { searchParams: Promise<{ erro
                 <tr key={x.user_id} className="border-t border-gray-100">
                   <td className="py-1.5">{who(x.user_id, x.state)}</td>
                   <td>
-                    {x.state === 'departed' && (x.last_error ? 'pending — failing' : 'pending')}
+                    {x.state === 'departed' &&
+                      `${x.initiated_via === 'removal' ? 'removed, blocked — ' : ''}${x.last_error ? 'pending, failing' : 'pending'}`}
                     {x.state === 'cancelled' && `cancelled (${x.cancel_reason === 'signed_in' ? 'signed back in' : 'by owner'}) ${day(x.cancelled_at)}`}
                     {x.state === 'deleted' && `deleted ${day(x.deleted_at)}`}
                   </td>
                   <td>{day(x.requested_at)}</td>
                   <td>{x.state === 'departed' ? day(x.due_at) : '—'}</td>
-                  <td>{x.initiated_via === 'self' ? 'themselves' : who(x.requested_by)}</td>
+                  <td>
+                    {x.initiated_via === 'self' ? 'themselves' : who(x.requested_by)}
+                    {x.initiated_via === 'removal' && ' (removal)'}
+                  </td>
                   <td className="text-right">
                     {x.state === 'departed' && (
                       <form action={cancelAccountDeletion.bind(null, x.user_id)}>
-                        <button className="text-xs text-blue-600 hover:underline">Cancel</button>
+                        <button className="text-xs text-blue-600 hover:underline">
+                          {x.initiated_via === 'removal' ? 'Undo removal' : 'Cancel'}
+                        </button>
                       </form>
                     )}
                   </td>

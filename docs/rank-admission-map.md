@@ -174,6 +174,7 @@ Ladder: **4** director · **3** coordinator · **2** lead, professor · **1** ga
 | `account_complete_due_deletions` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
 | `account_deletion_blockers` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
 | `account_my_deletion_blockers` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `account_remove_from_platform` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
 | `account_request_deletion` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
 | `account_request_deletion_for_email` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
 | `account_silhouette` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
@@ -204,6 +205,7 @@ Ladder: **4** director · **3** admin, coordinator · **2** lead · **1** matchm
 | `account_complete_due_deletions` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
 | `account_deletion_blockers` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
 | `account_my_deletion_blockers` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `account_remove_from_platform` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
 | `account_request_deletion` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
 | `account_request_deletion_for_email` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
 | `account_silhouette` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
@@ -225,6 +227,7 @@ Ladder: **4** director · **3** admin, coordinator · **2** lead, manager · **1
 | `account_complete_due_deletions` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
 | `account_deletion_blockers` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
 | `account_my_deletion_blockers` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `account_remove_from_platform` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
 | `account_request_deletion` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
 | `account_request_deletion_for_email` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
 | `account_silhouette` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
@@ -253,6 +256,7 @@ Ladder: **4** director · **3** coordinator · **2** lead · **1** position · *
 | `account_complete_due_deletions` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
 | `account_deletion_blockers` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
 | `account_my_deletion_blockers` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `account_remove_from_platform` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
 | `account_request_deletion` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
 | `account_request_deletion_for_email` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
 | `account_silhouette` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
@@ -274,6 +278,7 @@ Ladder: **4** director · **3** admin, coordinator · **2** lead, organizer · *
 | `account_complete_due_deletions` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
 | `account_deletion_blockers` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
 | `account_my_deletion_blockers` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `account_remove_from_platform` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
 | `account_request_deletion` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
 | `account_request_deletion_for_email` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
 | `account_silhouette` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
@@ -305,6 +310,7 @@ Ladder: **4** director · **3** coordinator · **2** lead · **1** position · *
 | `account_complete_due_deletions` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
 | `account_deletion_blockers` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
 | `account_my_deletion_blockers` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `account_remove_from_platform` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
 | `account_request_deletion` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
 | `account_request_deletion_for_email` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
 | `account_silhouette` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
@@ -326,6 +332,7 @@ Ladder: **4** director · **3** coordinator · **2** lead · **1** maker, positi
 | `account_complete_due_deletions` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
 | `account_deletion_blockers` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
 | `account_my_deletion_blockers` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `account_remove_from_platform` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
 | `account_request_deletion` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
 | `account_request_deletion_for_email` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
 | `account_silhouette` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
@@ -347,6 +354,7 @@ Ladder: **4** director · **3** admin, coordinator · **2** lead · **1** modera
 | `account_complete_due_deletions` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
 | `account_deletion_blockers` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
 | `account_my_deletion_blockers` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `account_remove_from_platform` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
 | `account_request_deletion` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
 | `account_request_deletion_for_email` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
 | `account_silhouette` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
