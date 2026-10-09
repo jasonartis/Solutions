@@ -22,6 +22,13 @@ A multi-tenant modular platform: each client engagement produces a **module** bu
 **ACCOUNT DELETION IS BUILT, ON PRODUCTION AND PROD-VERIFIED (2026-10-08, `20261007090000`;
 verifier 85/0 on prod). THE pg_cron JOB IS PROVEN RUNNING ON PROD: 2026-10-09 the verifier read
 98/0 with §[6] showing a `succeeded` run under 2 days old. Nothing outstanding.**
+**FOLLOW-UP FIX ON PROD 2026-10-09 (`20261009030000`, backup `backups/2026-10-09T14-29-06`):
+the org and Director admin floors no longer count someone who is leaving** — before it, a
+co-admin could step down beside a departing admin and the deletion then failed every day
+forever. **The CONVERSATION floor is deliberately unchanged** (changing it trapped the
+remaining admin: no leave, no self-block); asserted and test-pinned. Prod verify 3 → 0
+failures. A live test now also proves a silhouette with a token cannot rename itself on a
+class roster (`account-deletion-silhouette-authority.test.ts`).
 Read [docs/21](docs/21-account-deletion-and-departed-users.md) **§7.10** first. Self-serve on
 `/account` + superadmin on `/console/accounts`; both only START a 30-day grace period (signed
 out everywhere; signing back in cancels, DERIVED from GoTrue's `last_sign_in_at`, no trigger on

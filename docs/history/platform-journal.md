@@ -4,6 +4,24 @@ The running, dated build journal that used to live in `CLAUDE.md`'s "## Current 
 section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every session)
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
+- **2026-10-09 (later, Opus) — ADMIN-FLOOR FIX ON PROD (`20261009030000`), and the gaps from
+  the account-deletion self-review closed.** The founder asked "did we finish everything"; the
+  honest answer found four gaps, now all closed: (1) the live `cls_set_preferred_name` probe
+  promised in §7.9 had never been written — now `account-deletion-silhouette-authority.test.ts`,
+  with a control and a teeth check (the guard removed in a rolled-back transaction lets the write
+  through). **The first teeth attempt was VACUOUS and caught:** backdating `requested_at` made the
+  job CANCEL the seeded user (they had signed in since), so the "write got through" proved
+  nothing; redone with a real silhouette. (2) CI on `ee5631e` had not been checked — green.
+  (3) "show me the changes" had been applied before shown — memory saved. (4) the post-hoc review
+  of `20261008020000` found a REAL wedge in the base design too: a departing or removed admin
+  still held the org floor, so a co-admin could step down and the deletion then failed forever.
+  Fixed for the org and Director floors. **A regression reviewer then caught the fix's own
+  overreach: applied to the CONVERSATION floor it trapped the remaining admin (no leave, no
+  self-block — the only user-level block) in exactly the abuser-removal case. That half was
+  dropped before shipping, and is now asserted at apply time and pinned by a test.** Applied in
+  ONE push with the parallel session's `20261009010000`/`20261009020000` (all three
+  founder-approved; ordering mattered because theirs sort first). Prod verify for 030000: 3 → 0
+  failures. Local db suite 341/341 before the vm revert; floor + authority tests pass after.
 - **2026-10-09 (Opus) — REMOVAL ON PROD; THREE FOUNDER ANSWERS BUILT (`20261009010000`,
   `20261009020000`, salon UI).** `20261008020000` applied after backup
   `backups/2026-10-09T04-48-52` (verifier 98/0 — which also showed pg_cron's FIRST successful
