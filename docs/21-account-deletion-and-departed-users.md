@@ -568,7 +568,7 @@ are refused up front.
 - **§7.8's "I said yes and was waiting" row is built only for MUTUAL matches.** If the viewer
   said yes and the counterparty never decided, nothing is shown. Showing "left" there but not
   after a "no" would let the viewer tell undecided from rejected — exactly the reveal guard. So
-  that case is deliberately silent. **SUPERSEDED — FOUNDER DECISION 2026-10-08, BUILT 2026-10-09
+  that case is deliberately silent. **SUPERSEDED — FOUNDER DECISION 2026-10-08, BUILT AND ON PROD 2026-10-09
   (`20261009010000`, `sd_my_departed_interests`):** "left" is now shown for BOTH no and
   undecided, identically, so the reveal guard holds (both already looked the same: no match).
   It depends ONLY on the viewer's own yes and the target's departure, never on the target's
@@ -594,7 +594,7 @@ are refused up front.
   adversarial reviews (code; product/privacy) both recommend: build the name map from ALL
   workers, keep the pickers active-only, show "Former member" — and on a still-BOOKED
   appointment make it a visible "needs reassigning" marker, since the silhouette never touches
-  `sal_appointments`. **FOUNDER GO-AHEAD 2026-10-08, BUILT 2026-10-09 (UI only):** the board's
+  `sal_appointments`. **FOUNDER GO-AHEAD 2026-10-08, BUILT AND LIVE 2026-10-09 (UI only; seen working in a real browser, Reassign included):** the board's
   name map now covers every worker; a still-booked or checked-in appointment of a deleted worker
   shows "Former member — needs reassigning" with a **Reassign** picker (active workers only; a
   new `reassignAppointmentWorker` action — operators could already change `worker_id`, the
@@ -660,7 +660,7 @@ the ability to unblock in case it was a mistake or it's reconsidered, with the a
 information and warnings." Designed against prior art (Supabase's Before User Created hook;
 hashed suppression lists under GDPR Art. 17(3) / legitimate interest; Discord, GitHub and Google
 appeal practice), then attacked by two design reviews (security; product/process) BEFORE any
-code, then one review of the built code.
+code, then one review of the built code. **ON PRODUCTION AND PROD-VERIFIED 2026-10-09** (one push with `20261009010000` and `20261009030000`, backup `backups/2026-10-09T14-29-06`): `prod-verify-account-deletion.mts` 95/10 → **121/0**, controls green both times; `verify-acl-hardening.ts` 17/17 on prod. `prod-verify-migration.ts` flags `account_email_fingerprint` as INVOKER — the known false-positive class (docs/24 §4b): a pure function that reads no tables needs no elevation. **The prod Before User Created hook is still the founder's dashboard switch.**
 
 | Piece | What it does |
 |---|---|

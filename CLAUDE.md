@@ -44,13 +44,15 @@ real linked card). Same day, on prod: `20261007010000`, `20261007020000`, `20261
 **"REMOVE FROM PLATFORM" IS ON PRODUCTION AND PROD-VERIFIED (2026-10-09, `20261008020000`,
 docs/21 §7.11; backup `backups/2026-10-09T04-48-52`, verifier 98/0).** The superadmin's other
 action: bans sign-in at once, signing in can never cancel it, only a superadmin undoes it.
-**THEN, 2026-10-09, IN THE REPO — `migrate:prod` NOT run:** `20261009010000` (speed dating:
-"someone you said yes to has left", no/undecided/unrevealed-match all identical) and
-`20261009020000` (RE-SIGNUP BLOCKS, docs/21 §7.12: a removal now needs a category + note, blocks
-the address by one-way fingerprint, enforced by a trigger on `auth.users` covering signup AND
-email change, lifted only by a superadmin with a reason). Plus the salon Today's-board "Former
-member — needs reassigning" fix (UI only). **They must reach prod in ONE push with the
-account-deletion session's `20261009030000`**, which sorts after them and is already pushed.
+**THEN, 2026-10-09, ALSO ON PRODUCTION AND PROD-VERIFIED** (one push with the account-deletion
+session's `20261009030000`, backup `backups/2026-10-09T14-29-06`; verifier 95/10 → 121/0, ACL
+17/17 on prod): `20261009010000` (speed dating: "someone you said yes to has left",
+no/undecided/unrevealed-match all identical) and `20261009020000` (RE-SIGNUP BLOCKS, docs/21
+§7.12: a removal needs a category + note, blocks the address by one-way fingerprint, enforced by
+a trigger on `auth.users` covering signup AND email change, lifted only by a superadmin with a
+reason). Plus the salon Today's-board "Former member — needs reassigning" fix (UI only, seen
+working in a real browser). `prod-verify-migration.ts` flags `account_email_fingerprint` as
+INVOKER — the known false positive (a pure function needs no elevation; docs/24 §4b).
 **ONE DASHBOARD STEP FOR THE FOUNDER:** Authentication → Hooks → Before User Created →
 `public.auth_before_user_created` (it only makes a blocked signup read "User already
 registered"; the trigger refuses either way). OPEN for the founder: whether a removed person

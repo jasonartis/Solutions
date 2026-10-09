@@ -22,8 +22,10 @@ decision log, docs/03 conventions, docs/12 safeguards) — this is the chronolog
   ONE push with the parallel session's `20261009010000`/`20261009020000` (all three
   founder-approved; ordering mattered because theirs sort first). Prod verify for 030000: 3 → 0
   failures. Local db suite 341/341 before the vm revert; floor + authority tests pass after.
-- **2026-10-09 (Opus) — REMOVAL ON PROD; THREE FOUNDER ANSWERS BUILT (`20261009010000`,
-  `20261009020000`, salon UI).** `20261008020000` applied after backup
+- **2026-10-09 (Opus) — REMOVAL ON PROD; THREE FOUNDER ANSWERS BUILT AND ON PROD
+  (`20261009010000`, `20261009020000`, salon UI).** Applied in one push with `20261009030000` by
+  the account-deletion session (founder approved all three in its window; backup
+  `backups/2026-10-09T14-29-06`); verifier 95/10 → 121/0, ACL 17/17 on prod. `20261008020000` applied after backup
   `backups/2026-10-09T04-48-52` (verifier 98/0 — which also showed pg_cron's FIRST successful
   run, closing account deletion's last open check). Then: (1) the salon Today's board shows a
   deleted worker as "Former member — needs reassigning" with a Reassign picker (the board had
