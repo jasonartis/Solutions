@@ -568,11 +568,18 @@ are refused up front.
 - **§7.8's "I said yes and was waiting" row is built only for MUTUAL matches.** If the viewer
   said yes and the counterparty never decided, nothing is shown. Showing "left" there but not
   after a "no" would let the viewer tell undecided from rejected — exactly the reveal guard. So
-  that case is deliberately silent. **OPEN, founder question 2026-10-08:** show "left" for BOTH
-  no and undecided? Treating them identically does not break the reveal guard (they
-  already look the same: no match). The constraints if built: show it only once the
-  deletion has COMPLETED (not during the grace period, which is reversible and would leak a
-  pending decision to a non-match), and only after the event's reveal. Update when decided.
+  that case is deliberately silent. **SUPERSEDED — FOUNDER DECISION 2026-10-08, BUILT 2026-10-09
+  (`20261009010000`, `sd_my_departed_interests`):** "left" is now shown for BOTH no and
+  undecided, identically, so the reveal guard holds (both already looked the same: no match).
+  It depends ONLY on the viewer's own yes and the target's departure, never on the target's
+  verdict, and only once (a) the deletion has COMPLETED — never the reversible grace period —
+  and (b) the event is complete. REVEALED mutual matches keep their own path; an UNREVEALED
+  match is returned like any other yes — the first build skipped every match, and since
+  revealing is a separate organizer step, a match missing from the list would have said "they
+  said yes too" (found by the code review, fixed before shipping). The event page's Archive
+  shows a count ("1 person you said yes to has since left the platform"); the silhouette has no
+  name to show. Tests: 5, including yes-to-a-rejecter vs yes-to-undecided giving the identical
+  answer (the test the account-deletion session asked for).
 - ~~**Superadmin-initiated deletions are cancelled by the person signing in**~~ **STILL TRUE
   for a deletion at the person's request — but the founder found the gap (2026-10-08): that was
   the superadmin's ONLY action, so a superadmin could not remove someone AGAINST their wishes**
@@ -587,7 +594,11 @@ are refused up front.
   adversarial reviews (code; product/privacy) both recommend: build the name map from ALL
   workers, keep the pickers active-only, show "Former member" — and on a still-BOOKED
   appointment make it a visible "needs reassigning" marker, since the silhouette never touches
-  `sal_appointments`. **Awaiting the founder's go-ahead.**
+  `sal_appointments`. **FOUNDER GO-AHEAD 2026-10-08, BUILT 2026-10-09 (UI only):** the board's
+  name map now covers every worker; a still-booked or checked-in appointment of a deleted worker
+  shows "Former member — needs reassigning" with a **Reassign** picker (active workers only; a
+  new `reassignAppointmentWorker` action — operators could already change `worker_id`, the
+  board just had no control). No automatic reassignment (Square and Fresha don't either).
 
 ## 7.11 REMOVE FROM PLATFORM (2026-10-08, `20261008020000`) — a superadmin takes someone off
 
@@ -613,16 +624,64 @@ platform** form and an **Undo removal** button in the list. Tests: 7 in
 would ban a seeded user). Two adversarial reviews: no escape found.
 
 **Recorded, not built:**
-- **A removed person can sign up again on day 31 with the same address** — the silhouette
-  frees it (§7.2: a returning person is a new person). Right for a voluntary deletion, arguably
-  wrong for a removal. **FOUNDER DECISION, asked 2026-10-08.** If wanted: keep a HASH of the
-  address as a signup deny-list for removals (never the address itself; docs/18 §9's pattern).
+- ~~**A removed person can sign up again on day 31 with the same address**~~ **CLOSED 2026-10-09
+  — founder: block it, with a way for the right people to unblock. §7.12.**
 - Within the access token's last hour the person still holds their memberships; an org owner
   could, for instance, make themselves sole admin so day 30 keeps failing. The ban holds, the
   console shows the failure. Not an escape.
 - Lifting the ban outside the platform (Supabase dashboard / GoTrue admin) leaves a removal
   row whose person can sign in. A trusted actor only; a console check could flag it.
-- `/privacy` and the draft Terms do not yet say the platform may remove an account.
+- ~~`/privacy` does not say the platform may remove an account~~ **Added 2026-10-09**, with the
+  fingerprint disclosure (§7.12). The draft Terms still do not.
+- **OPEN, FOUNDER QUESTION (the account-deletion session's review, 2026-10-09): for the 30 days
+  a removed person is still a live participant** — still in matchmaking pools (the rescore job
+  keeps pairing them), still registered for upcoming speed-dating events, still on rosters. For
+  a harassment removal that is visible to the people it is meant to protect. Pulling them out at
+  removal time is easy, but **Undo removal could not put those seats back**, so it is a product
+  call, not a fix.
+- Undo removal sets `banned_until = null` unconditionally, so it would also lift a ban set from
+  the dashboard or the GoTrue admin API on the same person. A trusted-actor edge case.
+- The "last admin" guards counted someone in a grace period or a removal as an admin who stays,
+  which could wedge day 30 forever. **Fixed by the account-deletion session in `20261009030000`**
+  — for `org_members_guard_last_admin` and `module_roles_guard_last_director` only. Its
+  conversation-floor half was DROPPED after a regression review: ignoring a departing vm admin
+  trapped the remaining co-admin (unable to leave or self-block), exactly in an
+  abuser-removal case. `vm_seat_holds_admin_floor` is asserted unchanged.
+- **A double failure, recorded (the account-deletion session's review, 2026-10-09):** A requests
+  deletion while B is A's co-admin; a superadmin then REMOVES B (a removal warns rather than
+  refuses on blockers); on day 30 BOTH silhouettes fail `sole_admin`. Exits: promote a third
+  member to admin, or Undo removal / cancel. The console shows both failures; nothing is lost.
+  A future refinement: refuse the removal in exactly that case.
+
+## 7.12 RE-SIGNUP BLOCKS (2026-10-09, `20261009020000`) — and how they are lifted
+
+**Why.** The founder: block a removed person from signing up again, "but give the right people
+the ability to unblock in case it was a mistake or it's reconsidered, with the appropriate
+information and warnings." Designed against prior art (Supabase's Before User Created hook;
+hashed suppression lists under GDPR Art. 17(3) / legitimate interest; Discord, GitHub and Google
+appeal practice), then attacked by two design reviews (security; product/process) BEFORE any
+code, then one review of the built code.
+
+| Piece | What it does |
+|---|---|
+| **Fingerprint** | `account_email_fingerprint()`: sha256 of lower+trim, trailing domain dot dropped, `googlemail→gmail`, `+tag` dropped for every domain, dots dropped in a Gmail local part. ONE definition used everywhere. The address itself is never stored. |
+| **The block** | `account_signup_blocks`, one row per removal: fingerprint, category (spam/fraud, abuse/harassment, organization's request, legal, other), a 10–500-char factual note, who/when, and lift who/when/why. Never deleted — a lift is a state. No API role can read it. |
+| **Removal** | Now REQUIRES the category and note (the one-argument function was dropped). Creates the block at removal time; reports how many times the address was blocked before. |
+| **Enforcement** | A BEFORE INSERT OR UPDATE OF email, email_change trigger on `auth.users`. Covers signup AND the email-CHANGE bypass the security review found (sign up with anything, then change to the blocked address). Fails OPEN on any internal error (docs/03's auth.users criticality rule) and raises only for a real block. Needs no dashboard setting. |
+| **The message** | The Before User Created hook makes a blocked signup return exactly "User already registered", so typing someone else's address does not reveal a removal. **On prod the hook is a DASHBOARD SWITCH** (Authentication → Hooks → Before User Created → Postgres → `public.auth_before_user_created`). Until it is on, the trigger still refuses, with GoTrue's generic "Database error saving new user". |
+| **Lifting** | Superadmin only, on `/console/accounts` → Re-signup blocks. Shows the category, note, who removed and when, and how many times this address was blocked; a warning (stronger for abuse/harassment, and "tell the organization" for an org request); a required reason; a confirmation tick. **Refused while the old account is still in its 30 days** (it holds the address, so a lift would do nothing; Undo removal is the action then). Undo removal lifts that removal's OWN block automatically. |
+| **Lookup** | Type an address to find its block. The database logs every lookup itself (cannot be skipped), because a lookup is itself a "was this person removed?" question. |
+| **Backfill** | Anyone removed since `20261008020000` got a block while their address still existed. |
+| **Disclosure** | `/privacy` now says the platform may remove an account, keeps a one-way fingerprint and a short note, and how to appeal (email us from that address). |
+
+**Recorded limits:** another address gets them in (inherent, on every platform); the fingerprint
+is unpeppered, so a leaked backup lets someone test a GUESSED address, and it outlives the
+deletion (disclosed on `/privacy`); non-ASCII/IDN addresses are not canonicalized; the raw API
+response CODE for a blocked signup or email change differs from GoTrue's own (identical text in
+the UI, distinguishable to someone scripting the API); the note cannot be edited; nobody is
+emailed when a block is lifted (no SMTP; the console tells the superadmin to do it by hand).
+**When a second superadmin exists:** lifting a block someone else created should need their
+acknowledgement — the same trigger docs/12 item 9 already records.
 
 ### Still owed
 

@@ -4,6 +4,24 @@ The running, dated build journal that used to live in `CLAUDE.md`'s "## Current 
 section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every session)
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
+- **2026-10-09 (Opus) — REMOVAL ON PROD; THREE FOUNDER ANSWERS BUILT (`20261009010000`,
+  `20261009020000`, salon UI).** `20261008020000` applied after backup
+  `backups/2026-10-09T04-48-52` (verifier 98/0 — which also showed pg_cron's FIRST successful
+  run, closing account deletion's last open check). Then: (1) the salon Today's board shows a
+  deleted worker as "Former member — needs reassigning" with a Reassign picker (the board had
+  loaded active workers only, so the label code could never fire); (2) speed dating now tells
+  you when someone you said yes to has left — **the code review caught a real leak in the first
+  build**: skipping every match (not just revealed ones) would have singled out "they said yes
+  too", because reveal is a separate organizer step; (3) RE-SIGNUP BLOCKS, designed from prior
+  art (Supabase's Before User Created hook, hashed suppression lists) and attacked by TWO DESIGN
+  REVIEWS BEFORE CODE — which changed the design materially: the email-CHANGE bypass made the
+  enforcement a trigger on `auth.users` rather than the hook alone; the lift is refused during
+  the grace period (it would do nothing); a lookup by typed address logs itself; the message
+  mimics "already registered" so a third party learns nothing; pending removals were backfilled.
+  The Management API token in `.env.deploy` is INVALID (401), so the prod hook is a founder
+  dashboard step and prod's email-confirmation setting is inferred from the app, not read.
+  Coordination: the account-deletion session's `20261009030000` (pushed first, sorts after
+  these) must ship in ONE `migrate:prod` with them.
 - **2026-10-08 (Opus) — "REMOVE FROM PLATFORM" (`20261008020000`), BUILT, NOT DEPLOYED; and the
   docs/21 §7.10 judgement calls reviewed with the founder.** Walking the founder through the
   account-deletion build's judgement calls, he spotted that the superadmin's ONLY action was

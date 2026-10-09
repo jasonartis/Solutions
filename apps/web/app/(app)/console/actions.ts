@@ -309,6 +309,12 @@ const ACCOUNT_DELETION_REASONS: Record<string, string> = {
   not_authorized: 'Not authorized.',
   not_pending: 'That deletion is no longer pending, so there was nothing to cancel.',
   removed: 'That person has been removed from the platform. Undo the removal first if you mean to change it.',
+  bad_category: 'Choose a category for the removal.',
+  bad_note: 'Write a short factual note (10–500 characters) saying why.',
+  bad_reason: 'Write a reason for lifting the block (10–500 characters).',
+  not_active: 'That block is not active any more.',
+  still_pending:
+    'Their old account has not been deleted yet, so it still holds the address. Use "Undo removal" in the list above instead.',
 }
 
 function describeBlockers(blockers: string[] | undefined): string {
@@ -341,7 +347,7 @@ export async function requestAccountDeletionFor(formData: FormData) {
   revalidatePath('/console/accounts')
   redirect(
     `/console/accounts?notice=${encodeURIComponent(
-      `Deletion started for ${email}. It completes on ${r.due_at?.slice(0, 10)} unless they sign in before then.`,
+      `Deletion started. It completes on ${r.due_at?.slice(0, 10)} unless they sign in before then.`,
     )}`,
   )
 }
@@ -371,9 +377,20 @@ export async function cancelAccountDeletion(userId: string) {
 export async function removeFromPlatform(formData: FormData) {
   const supabase = await requireSuperadmin()
   const email = String(formData.get('email') ?? '').trim()
-  const { data, error } = await supabase.rpc('account_remove_from_platform', { target_email: email })
+  const { data, error } = await supabase.rpc('account_remove_from_platform', {
+    target_email: email,
+    category: String(formData.get('category') ?? ''),
+    note: String(formData.get('note') ?? ''),
+  })
   if (error) redirect(`/console/accounts?error=${encodeURIComponent(error.message)}`)
-  const r = data as { ok: boolean; reason?: string; blockers?: string[]; warnings?: string[]; due_at?: string }
+  const r = data as {
+    ok: boolean
+    reason?: string
+    blockers?: string[]
+    warnings?: string[]
+    due_at?: string
+    prior_blocks?: number
+  }
   if (!r.ok) {
     const msg =
       r.reason === 'blocked'
@@ -385,5 +402,54 @@ export async function removeFromPlatform(formData: FormData) {
   const warn = r.warnings?.length
     ? ` Note: ${describeBlockers(r.warnings)}, so the final deletion on ${r.due_at?.slice(0, 10)} will wait until another administrator is appointed. They stay blocked meanwhile.`
     : ` Their account is deleted on ${r.due_at?.slice(0, 10)}.`
-  redirect(`/console/accounts?notice=${encodeURIComponent(`${email} is removed: signed out and blocked from signing in.${warn}`)}`)
+  const prior = r.prior_blocks
+    ? ` This address had been removed ${r.prior_blocks} time${r.prior_blocks === 1 ? '' : 's'} before.`
+    : ''
+  redirect(
+    `/console/accounts?notice=${encodeURIComponent(
+      // No address in the notice: it rides in the URL (history, request logs).
+      `Removed: signed out, blocked from signing in, and the address cannot be used to sign up again.${warn}${prior}`,
+    )}`,
+  )
+}
+
+// RE-SIGNUP BLOCKS (20261009020000, docs/21 §7.12). Lifting lets a removed
+// person's address create a NEW account. Superadmin only, a written reason
+// (stored with who and when), and an explicit confirmation — the database
+// refuses an empty reason and refuses a lift while the old account still
+// holds the address.
+export async function liftSignupBlock(blockId: string, formData: FormData) {
+  const supabase = await requireSuperadmin()
+  if (formData.get('confirm') !== 'yes') {
+    redirect(`/console/accounts?error=${encodeURIComponent('Tick the box to confirm you have read the warning.')}#blocks`)
+  }
+  const { data, error } = await supabase.rpc('account_lift_signup_block', {
+    block_id: blockId,
+    lift_reason: String(formData.get('lift_reason') ?? ''),
+  })
+  if (error) redirect(`/console/accounts?error=${encodeURIComponent(error.message)}`)
+  const r = data as { ok: boolean; reason?: string }
+  if (!r.ok) {
+    redirect(`/console/accounts?error=${encodeURIComponent(ACCOUNT_DELETION_REASONS[r.reason ?? ''] ?? 'Nothing was changed.')}#blocks`)
+  }
+  revalidatePath('/console/accounts')
+  redirect(
+    `/console/accounts?notice=${encodeURIComponent(
+      'Block lifted. That address can now create a new account; nothing from the old account comes back. ' +
+        'The platform does not email them — tell them yourself.',
+    )}#blocks`,
+  )
+}
+
+// Find a block by typing the address. The database logs every lookup (it is
+// itself a "was this person removed?" question), and only block ids come back.
+export async function lookupSignupBlock(formData: FormData) {
+  const supabase = await requireSuperadmin()
+  const { data, error } = await supabase.rpc('account_signup_block_lookup', {
+    target_email: String(formData.get('email') ?? ''),
+  })
+  if (error) redirect(`/console/accounts?error=${encodeURIComponent(error.message)}`)
+  const ids = (data as string[] | null) ?? []
+  if (ids.length === 0) redirect(`/console/accounts?notice=${encodeURIComponent('No block for that address.')}#blocks`)
+  redirect(`/console/accounts?blocks=${ids.join(',')}#blocks`)
 }

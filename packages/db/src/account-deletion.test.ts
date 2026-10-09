@@ -433,14 +433,14 @@ describe('remove from platform (20261008020000)', () => {
 
   it('only a superadmin can remove someone', async () => {
     const tess = await signIn(cast.tess.email)
-    expect(await rpc(tess, 'account_remove_from_platform', { target_email: cast.rex.email }))
+    expect(await rpc(tess, 'account_remove_from_platform', { target_email: cast.rex.email, category: 'other', note: 'test removal reason' }))
       .toMatchObject({ ok: false, reason: 'not_authorized' })
     expect(await stateOf(cast.rex.id), 'an ordinary member removed someone').toBeNull()
     expect(await bannedUntil(cast.rex.id)).toBeNull()
   })
 
   it('a superadmin cannot be removed, not even by themselves', async () => {
-    expect(await rpc(owner, 'account_remove_from_platform', { target_email: 'owner@demo.local' }))
+    expect(await rpc(owner, 'account_remove_from_platform', { target_email: 'owner@demo.local', category: 'other', note: 'test removal reason' }))
       .toMatchObject({ ok: false, reason: 'blocked', blockers: ['superadmin'] })
     const [me] = await sql<{ b: Date | null }[]>`
       select u.banned_until as b from auth.users u where lower(u.email) = 'owner@demo.local'`
@@ -450,7 +450,7 @@ describe('remove from platform (20261008020000)', () => {
   it('removal blocks sign-in AT ONCE and signs out everywhere', async () => {
     const before = await signIn(cast.rex.email)
     expect(await sessions(cast.rex.id), 'CONTROL: rex has a live session').toBeGreaterThan(0)
-    expect(await rpc(owner, 'account_remove_from_platform', { target_email: cast.rex.email }))
+    expect(await rpc(owner, 'account_remove_from_platform', { target_email: cast.rex.email, category: 'other', note: 'test removal reason' }))
       .toMatchObject({ ok: true, warnings: [] })
     expect(await stateOf(cast.rex.id)).toMatchObject({ state: 'departed' })
     expect(await viaOf(cast.rex.id)).toBe('removal')
@@ -492,7 +492,7 @@ describe('remove from platform (20261008020000)', () => {
   })
 
   it('only a superadmin undoes a removal, and undoing it lifts the ban', async () => {
-    expect(await rpc(owner, 'account_remove_from_platform', { target_email: cast.tess.email }))
+    expect(await rpc(owner, 'account_remove_from_platform', { target_email: cast.tess.email, category: 'other', note: 'test removal reason' }))
       .toMatchObject({ ok: true })
     expect(await bannedUntil(cast.tess.id), 'CONTROL: tess is banned').not.toBeNull()
     expect(await rpc(owner, 'account_cancel_deletion', { target: cast.tess.id }))
@@ -503,7 +503,7 @@ describe('remove from platform (20261008020000)', () => {
   })
 
   it('the sole admin of an org is removed anyway (warned); the ban holds while day 30 fails visibly', async () => {
-    const r = (await rpc(owner, 'account_remove_from_platform', { target_email: cast.una.email })) as {
+    const r = (await rpc(owner, 'account_remove_from_platform', { target_email: cast.una.email, category: 'other', note: 'test removal reason' })) as {
       ok: boolean
       warnings: string[]
     }
@@ -516,5 +516,298 @@ describe('remove from platform (20261008020000)', () => {
     expect(s?.state, 'a sole-admin silhouette went through').toBe('departed')
     expect(s?.last_error ?? '', 'the failure is not recorded').not.toBe('')
     expect(await bannedUntil(cast.una.id), 'the ban was lost when day 30 failed').not.toBeNull()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// "SOMEONE YOU SAID YES TO HAS LEFT" (20261009010000, founder decision
+// 2026-10-08). The reveal guard: the answer depends ONLY on the viewer's own
+// yes and the target's COMPLETED departure — never on the target's verdict.
+//   vic — the viewer; said yes to all four below.
+//   xan — said NO to vic.        Deleted.
+//   yul — never decided.          Deleted.
+//   zed — never decided.          Only in the GRACE period (reversible).
+//   wes — said yes back (match).  Deleted — reported via the MATCH path only.
+// Account rows are written straight to account_deletions: this function reads
+// only `state`, and the silhouette itself is covered above.
+// ---------------------------------------------------------------------------
+describe('someone you said yes to has left (20261009010000)', () => {
+  const who = {} as Record<'vic' | 'xan' | 'yul' | 'zed' | 'wes', Probe>
+  const seatOf = {} as Record<keyof typeof who, string>
+  let ev = ''
+  let liveEv = ''
+  let vicLiveSeat = ''
+  let xanLiveSeat = ''
+  let vic: SupabaseClient
+
+  beforeAll(async () => {
+    const a = admin()
+    for (const name of ['vic', 'xan', 'yul', 'zed', 'wes'] as const) {
+      const email = `interests-${name}-${tag}@demo.local`
+      const { data, error } = await a.auth.admin.createUser({ email, password: PASSWORD, email_confirm: true })
+      if (error) throw new Error(`createUser ${name}: ${error.message}`)
+      who[name] = { id: data.user!.id, email }
+      await sql`insert into org_members (org_id, user_id, role, status, accepted_at)
+                values (${datingOrg}, ${data.user!.id}, 'member', 'active', now())`
+    }
+    const [e1] = await sql<{ id: string }[]>`
+      insert into sd_events (org_id, name, state) values (${datingOrg}, ${`Interests probe ${tag}`}, 'complete') returning id`
+    ev = e1!.id
+    const [e2] = await sql<{ id: string }[]>`
+      insert into sd_events (org_id, name, state) values (${datingOrg}, ${`Interests live ${tag}`}, 'running') returning id`
+    liveEv = e2!.id
+    for (const name of Object.keys(who) as (keyof typeof who)[]) {
+      const [s] = await sql<{ id: string }[]>`
+        insert into sd_participants (org_id, event_id, user_id, status, pool_side)
+        values (${datingOrg}, ${ev}, ${who[name].id}, 'registered', ${name === 'vic' ? 'a' : 'b'}) returning id`
+      seatOf[name] = s!.id
+    }
+    const v = seatOf.vic
+    await sql`insert into sd_interest (org_id, event_id, rater_participant_id, target_participant_id, verdict) values
+              (${datingOrg}, ${ev}, ${v}, ${seatOf.xan}, 'interested'),
+              (${datingOrg}, ${ev}, ${v}, ${seatOf.yul}, 'interested'),
+              (${datingOrg}, ${ev}, ${v}, ${seatOf.zed}, 'interested'),
+              (${datingOrg}, ${ev}, ${v}, ${seatOf.wes}, 'interested'),
+              (${datingOrg}, ${ev}, ${seatOf.xan}, ${v}, 'not_interested'),
+              (${datingOrg}, ${ev}, ${seatOf.wes}, ${v}, 'interested')`
+    // The same yes, in an event that is still RUNNING.
+    const [vl] = await sql<{ id: string }[]>`
+      insert into sd_participants (org_id, event_id, user_id, status, pool_side)
+      values (${datingOrg}, ${liveEv}, ${who.vic.id}, 'registered', 'a') returning id`
+    const [xl] = await sql<{ id: string }[]>`
+      insert into sd_participants (org_id, event_id, user_id, status, pool_side)
+      values (${datingOrg}, ${liveEv}, ${who.xan.id}, 'registered', 'b') returning id`
+    vicLiveSeat = vl!.id
+    xanLiveSeat = xl!.id
+    await sql`insert into sd_interest (org_id, event_id, rater_participant_id, target_participant_id, verdict)
+              values (${datingOrg}, ${liveEv}, ${vicLiveSeat}, ${xanLiveSeat}, 'interested')`
+
+    for (const name of ['xan', 'yul', 'wes'] as const) {
+      await sql`insert into account_deletions (user_id, state, initiated_via, requested_at, due_at, deleted_at)
+                values (${who[name].id}, 'deleted', 'self', now() - interval '31 days', now() - interval '1 day', now())`
+    }
+    await sql`insert into account_deletions (user_id, state, initiated_via, requested_at, due_at)
+              values (${who.zed.id}, 'departed', 'self', now(), now() + interval '30 days')`
+    vic = await signIn(who.vic.email)
+  }, 60_000)
+
+  afterAll(async () => {
+    await sql`delete from sd_events where id in (${ev}, ${liveEv})`
+    for (const p of Object.values(who)) {
+      const { error } = await admin().auth.admin.deleteUser(p.id)
+      expect(error, `hard-deleting probe ${p.email} failed`).toBeNull()
+    }
+  }, 60_000)
+
+  it('CONTROL: the premise — wes is a match, xan/yul/zed are not', async () => {
+    const [n] = await sql<{ n: number }[]>`
+      select count(*)::int as n from sd_matches where event_id = ${ev}
+        and ${seatOf.vic} in (participant_a_id, participant_b_id)`
+    expect(n!.n, 'expected exactly one match (vic–wes)').toBe(1)
+  })
+
+  it('a yes to someone who said NO and a yes to someone UNDECIDED get the identical answer', async () => {
+    const got = (await rpc(vic, 'sd_my_departed_interests', { check_event_id: ev })) as string[]
+    expect(got, 'a no and an undecided were not treated identically').toEqual(expect.arrayContaining([seatOf.xan, seatOf.yul]))
+  })
+
+  it('an UNREVEALED match is returned exactly like a no or an undecided (no "they said yes too" leak)', async () => {
+    // The event is complete but the organizer has not revealed matches yet.
+    const [m] = await sql<{ revealed: boolean }[]>`
+      select revealed from sd_matches where event_id = ${ev}
+        and ${seatOf.vic} in (participant_a_id, participant_b_id)`
+    expect(m!.revealed, 'CONTROL: the vic–wes match starts unrevealed').toBe(false)
+    const got = ((await rpc(vic, 'sd_my_departed_interests', { check_event_id: ev })) as string[]).sort()
+    expect(got, 'an unrevealed match was singled out by its absence').toEqual([seatOf.xan, seatOf.yul, seatOf.wes].sort())
+  })
+
+  it('once REVEALED, the match leaves this list for its own path; the grace period is never reported', async () => {
+    await sql`update sd_matches set revealed = true where event_id = ${ev}
+              and ${seatOf.vic} in (participant_a_id, participant_b_id)`
+    const got = (await rpc(vic, 'sd_my_departed_interests', { check_event_id: ev })) as string[]
+    expect(got, 'a revealed match was reported twice').not.toContain(seatOf.wes)
+    expect(got, 'a reversible departure leaked to a non-match').not.toContain(seatOf.zed)
+    expect(await rpc(vic, 'sd_my_departed_matches', { check_event_id: ev }), 'CONTROL: the match path reports it').toHaveLength(1)
+  })
+
+  it('nothing is reported while the event is still running', async () => {
+    expect(await rpc(vic, 'sd_my_departed_interests', { check_event_id: liveEv })).toEqual([])
+    // CONTROL: the row it would otherwise report exists.
+    const [n] = await sql<{ n: number }[]>`
+      select count(*)::int as n from sd_interest where event_id = ${liveEv} and verdict = 'interested'`
+    expect(n!.n).toBe(1)
+  })
+
+  it('only the caller’s OWN yeses: someone else asking about the same event gets nothing', async () => {
+    // zed said nothing to anyone, and asks about the event vic's yeses are in.
+    const zed = await signIn(who.zed.email)
+    expect(await rpc(zed, 'sd_my_departed_interests', { check_event_id: ev })).toEqual([])
+  })
+})
+
+// ---------------------------------------------------------------------------
+// RE-SIGNUP BLOCKS (20261009020000, docs/21 §7.12). Its own throwaway cast.
+//   kai — removed for abuse; completes day 30; the address is then refused
+//         (exact, case and +tag variants, and through an email CHANGE), until a
+//         superadmin lifts it with a reason; then a NEW account works, and
+//         removing that new account shows the history.
+//   mia — removed, then undone during the grace period: her block is lifted.
+//   lee — an unrelated account, used for the email-change bypass attempt.
+// These go through GoTrue for real (signUp / updateUser), because the
+// enforcement is a trigger on auth.users and the message comes from the hook.
+// ---------------------------------------------------------------------------
+describe('re-signup blocks (20261009020000)', () => {
+  const cast = {} as Record<'kai' | 'mia' | 'lee', Probe>
+  const created: string[] = [] // accounts made by signUp during the tests
+  let owner: SupabaseClient
+  const list = async (client: SupabaseClient) =>
+    (await rpc(client, 'account_signup_blocks_list')) as {
+      id: string; user_id: string | null; category: string; note: string; lifted_at: string | null
+      lift_reason: string | null; account_state: string | null; times_blocked: number
+    }[]
+  const blockOf = async (userId: string) => (await list(owner)).find((b) => b.user_id === userId && !b.lifted_at)
+  const trySignUp = async (email: string) => {
+    const c = createClient(url, anonKey, { auth: { persistSession: false } })
+    const { data, error } = await c.auth.signUp({ email, password: PASSWORD })
+    if (data.user?.id) created.push(data.user.id)
+    return { error, id: data.user?.id ?? null }
+  }
+
+  beforeAll(async () => {
+    const a = admin()
+    for (const name of ['kai', 'mia', 'lee'] as const) {
+      const email = `blocks-${name}-${tag}@demo.local`
+      const { data, error } = await a.auth.admin.createUser({ email, password: PASSWORD, email_confirm: true })
+      if (error) throw new Error(`createUser ${name}: ${error.message}`)
+      cast[name] = { id: data.user!.id, email }
+    }
+    owner = await signIn('owner@demo.local')
+  }, 60_000)
+
+  afterAll(async () => {
+    for (const id of [...Object.values(cast).map((p) => p.id), ...created]) {
+      const { error } = await admin().auth.admin.deleteUser(id)
+      expect(error, `hard-deleting probe ${id} failed`).toBeNull()
+    }
+    // Blocks are never deleted by the app; these are test rows.
+    await sql`delete from account_signup_blocks where note like 'BLOCKS-TEST %'`
+  }, 60_000)
+
+  it('a removal now requires a category and a short factual note', async () => {
+    expect(await rpc(owner, 'account_remove_from_platform', { target_email: cast.kai.email, category: 'nope', note: 'BLOCKS-TEST long enough' }))
+      .toMatchObject({ ok: false, reason: 'bad_category' })
+    expect(await rpc(owner, 'account_remove_from_platform', { target_email: cast.kai.email, category: 'other', note: 'short' }))
+      .toMatchObject({ ok: false, reason: 'bad_note' })
+    expect(await stateOf(cast.kai.id), 'a refused removal left a row').toBeNull()
+  })
+
+  it('removing creates a block with the reason; the list shows it and never the address', async () => {
+    const r = await rpc(owner, 'account_remove_from_platform', {
+      target_email: cast.kai.email, category: 'abuse_or_harassment', note: 'BLOCKS-TEST repeated abusive messages',
+    })
+    expect(r).toMatchObject({ ok: true, prior_blocks: 0 })
+    const b = await blockOf(cast.kai.id)
+    expect(b).toMatchObject({ category: 'abuse_or_harassment', note: 'BLOCKS-TEST repeated abusive messages', account_state: 'departed', times_blocked: 1 })
+    expect(JSON.stringify(b), 'the list leaked the address or the fingerprint').not.toMatch(/@|fingerprint/)
+    // Nobody but a superadmin sees blocks at all.
+    const lee = await signIn(cast.lee.email)
+    expect(await list(lee)).toEqual([])
+  })
+
+  it('during the grace period a lift is refused — "Undo removal" is the action then', async () => {
+    const b = await blockOf(cast.kai.id)
+    expect(await rpc(owner, 'account_lift_signup_block', { block_id: b!.id, lift_reason: 'BLOCKS-TEST trying too early' }))
+      .toMatchObject({ ok: false, reason: 'still_pending' })
+  })
+
+  it('after day 30 the address is refused: exact, case and +tag variants, with the already-registered wording', async () => {
+    await makeDue(cast.kai.id)
+    await runJob()
+    expect(await stateOf(cast.kai.id), 'CONTROL: kai was deleted, so the address is free in auth.users').toMatchObject({ state: 'deleted' })
+    const [local, domain] = cast.kai.email.split('@')
+    for (const variant of [cast.kai.email, cast.kai.email.toUpperCase(), `${local}+again@${domain}`]) {
+      const { error, id } = await trySignUp(variant)
+      expect(id, `${variant} signed up despite the block`).toBeNull()
+      expect(error?.message ?? '', `${variant}: a distinctive message would reveal the removal`).toBe('User already registered')
+    }
+    // CONTROL: a different address signs up fine, so the refusals above are the block.
+    const ok = await trySignUp(`blocks-free-${tag}@demo.local`)
+    expect(ok.error, JSON.stringify(ok.error)).toBeNull()
+    expect(ok.id).not.toBeNull()
+  })
+
+  it('an email CHANGE to the blocked address is refused too (the creation hook alone would miss it)', async () => {
+    const lee = await signIn(cast.lee.email)
+    const { error } = await lee.auth.updateUser({ email: cast.kai.email })
+    expect(error, 'lee took over a removed person\'s address').not.toBeNull()
+    const [u] = await sql<{ email: string; email_change: string }[]>`
+      select email, coalesce(email_change, '') as email_change from auth.users where id = ${cast.lee.id}`
+    expect(u!.email).toBe(cast.lee.email)
+    expect(u!.email_change).toBe('')
+  })
+
+  it('only the address being SET is judged: an account whose current address matches a block can still move off it', async () => {
+    // A false-positive shape (e.g. a +tag host without subaddressing): lee's OWN
+    // current address matches a block that is not lee's.
+    await sql`insert into account_signup_blocks (email_fingerprint, category, note)
+              values (account_email_fingerprint(${cast.lee.email}), 'other', 'BLOCKS-TEST false positive on lee')`
+    const lee = await signIn(cast.lee.email)
+    const { error } = await lee.auth.updateUser({ email: `blocks-lee-moved-${tag}@demo.local` })
+    expect(error, `lee could not move off a blocked current address: ${JSON.stringify(error)}`).toBeNull()
+    await sql`delete from account_signup_blocks where note = 'BLOCKS-TEST false positive on lee'`
+  })
+
+  it('a lookup by typed address finds it, and every lookup is logged; others get nothing and leave no log', async () => {
+    const before = (await sql<{ n: number }[]>`select count(*)::int as n from account_signup_block_lookups`)[0]!.n
+    const ids = (await rpc(owner, 'account_signup_block_lookup', { target_email: cast.kai.email.toUpperCase() })) as string[]
+    expect(ids).toContain((await list(owner)).find((b) => b.user_id === cast.kai.id)!.id)
+    const lee = await signIn(cast.lee.email)
+    expect(await rpc(lee, 'account_signup_block_lookup', { target_email: cast.kai.email })).toEqual([])
+    const after = (await sql<{ n: number }[]>`select count(*)::int as n from account_signup_block_lookups`)[0]!.n
+    expect(after - before, 'exactly the superadmin lookup was logged').toBe(1)
+  })
+
+  it('the hook and the fingerprint are not callable by an ordinary user (no "was X removed?" oracle)', async () => {
+    const lee = await signIn(cast.lee.email)
+    const hook = await lee.rpc('auth_before_user_created', { event: { user: { email: cast.kai.email } } })
+    expect(hook.error, 'an ordinary user can call the signup hook').not.toBeNull()
+    const fp = await lee.rpc('account_email_fingerprint', { addr: cast.kai.email })
+    expect(fp.error, 'an ordinary user can compute fingerprints').not.toBeNull()
+  })
+
+  it('a superadmin lifts it with a reason; then a NEW account can be made, and removing it shows the history', async () => {
+    const b = (await list(owner)).find((x) => x.user_id === cast.kai.id && !x.lifted_at)!
+    expect(await rpc(owner, 'account_lift_signup_block', { block_id: b.id, lift_reason: 'short' }))
+      .toMatchObject({ ok: false, reason: 'bad_reason' })
+    const lee = await signIn(cast.lee.email)
+    expect(await rpc(lee, 'account_lift_signup_block', { block_id: b.id, lift_reason: 'BLOCKS-TEST not my call' }))
+      .toMatchObject({ ok: false, reason: 'not_authorized' })
+    expect(await rpc(owner, 'account_lift_signup_block', { block_id: b.id, lift_reason: 'BLOCKS-TEST appeal received and accepted' }))
+      .toMatchObject({ ok: true })
+
+    const fresh = await trySignUp(cast.kai.email)
+    expect(fresh.error, `the lifted address still cannot sign up: ${JSON.stringify(fresh.error)}`).toBeNull()
+    expect(fresh.id, 'a lift must give a NEW account, never the old one back').not.toBe(cast.kai.id)
+
+    const again = await rpc(owner, 'account_remove_from_platform', {
+      target_email: cast.kai.email, category: 'spam_or_fraud', note: 'BLOCKS-TEST back and spamming',
+    })
+    expect(again, 'the history was not reported at removal time').toMatchObject({ ok: true, prior_blocks: 1 })
+    expect((await list(owner)).find((x) => x.user_id === fresh.id && !x.lifted_at)?.times_blocked).toBe(2)
+    // The old, lifted row is kept, with who/why.
+    expect((await list(owner)).find((x) => x.id === b.id)).toMatchObject({ lift_reason: 'BLOCKS-TEST appeal received and accepted' })
+  })
+
+  it('undoing a removal during the grace period lifts THAT removal\'s block, and only it', async () => {
+    expect(await rpc(owner, 'account_remove_from_platform', {
+      target_email: cast.mia.email, category: 'other', note: 'BLOCKS-TEST removed by mistake',
+    })).toMatchObject({ ok: true })
+    const mine = await blockOf(cast.mia.id)
+    expect(mine, 'CONTROL: mia has an active block').toBeTruthy()
+    const otherActive = (await list(owner)).filter((x) => x.user_id !== cast.mia.id && !x.lifted_at).length
+    expect(await rpc(owner, 'account_cancel_deletion', { target: cast.mia.id })).toMatchObject({ ok: true, lifted_ban: true })
+    expect((await list(owner)).find((x) => x.id === mine!.id)).toMatchObject({ lift_reason: 'Removal undone before the account was deleted.' })
+    expect((await list(owner)).filter((x) => x.user_id !== cast.mia.id && !x.lifted_at).length, 'undo lifted someone else\'s block')
+      .toBe(otherActive)
   })
 })

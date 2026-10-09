@@ -62,6 +62,13 @@ export default function PrivacyPage() {
           business records about you, like a salon's customer card, stay with that organization. To
           have those removed, ask the organization directly — we'll help them act on your request.
         </p>
+        <p>
+          We may also remove an account that breaks our rules. When we do, you're signed out and can&apos;t
+          sign back in, and the account is deleted 30 days later in the same way. To stop the same person
+          simply signing up again, we keep a one-way fingerprint of that email address — not the address
+          itself — along with a short note of why it was removed. If you think we got it wrong, contact
+          us from that address and we&apos;ll review it.
+        </p>
         <p>Questions? Contact {contactEmail}.</p>
       </div>
 

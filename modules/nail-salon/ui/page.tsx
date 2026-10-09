@@ -6,6 +6,7 @@ import {
   createBillForAppointment,
   customerBookAppointment,
   markBillPaid,
+  reassignAppointmentWorker,
   setAppointmentState,
   walkInAdd,
 } from './actions'
@@ -104,7 +105,7 @@ async function OperatorConsole(props: {
   const supabase = await createClient()
   const { start, end } = todayRange()
 
-  const [{ data: appts }, { data: services }, { data: customers }, { data: workers }] = await Promise.all([
+  const [{ data: appts }, { data: services }, { data: customers }, { data: allWorkers }] = await Promise.all([
     supabase
       .from('sal_appointments')
       .select('id, state, scheduled_start, worker_id, customer:sal_customers(full_name), service:sal_services(name, price)')
@@ -114,8 +115,12 @@ async function OperatorConsole(props: {
       .order('scheduled_start'),
     supabase.from('sal_services').select('id, name, price').eq('location_id', props.locationId).eq('active', true).order('sort'),
     supabase.from('sal_customers').select('id, full_name').eq('location_id', props.locationId).order('full_name'),
-    supabase.from('sal_worker_profiles').select('user_id, display_name').eq('location_id', props.locationId).eq('active', true),
+    // ALL workers, not only active ones: a worker who deleted their account is
+    // set inactive (docs/21 §7.10) but still owns appointments here, and the
+    // name map must find them. The pickers below use the active subset.
+    supabase.from('sal_worker_profiles').select('user_id, display_name, active').eq('location_id', props.locationId),
   ])
+  const workers = (allWorkers ?? []).filter((w) => w.active)
   const apptRows = (appts ?? []) as unknown as Appt[]
   const apptIds = apptRows.map((a) => a.id)
   const { data: bills } = apptIds.length
@@ -124,9 +129,9 @@ async function OperatorConsole(props: {
   const billByAppt = new Map((bills ?? []).map((b) => [b.appointment_id, b as Bill]))
   // A deleted worker's profile row is kept with its name blanked (docs/21 §7.4),
   // so past appointments and earnings still have someone to belong to. Label it.
-  const formerWorkers = await loadFormerMembers(supabase, (workers ?? []).map((w) => w.user_id))
+  const formerWorkers = await loadFormerMembers(supabase, (allWorkers ?? []).map((w) => w.user_id))
   const workerName = new Map(
-    (workers ?? []).map((w) => [w.user_id, formerWorkers.has(w.user_id) ? FORMER_MEMBER_LABEL : w.display_name]),
+    (allWorkers ?? []).map((w) => [w.user_id, formerWorkers.has(w.user_id) ? FORMER_MEMBER_LABEL : w.display_name]),
   )
 
   return (
@@ -156,7 +161,28 @@ async function OperatorConsole(props: {
                     <td className="py-2 pr-3">{props.timeFmt.format(new Date(a.scheduled_start))}</td>
                     <td className="py-2 pr-3">{a.customer?.full_name ?? '—'}</td>
                     <td className="py-2 pr-3">{a.service?.name ?? '—'}</td>
-                    <td className="py-2 pr-3 text-gray-500">{a.worker_id ? workerName.get(a.worker_id) ?? '—' : 'unassigned'}</td>
+                    <td className="py-2 pr-3 text-gray-500">
+                      {a.worker_id && formerWorkers.has(a.worker_id) && ['booked', 'checked_in'].includes(a.state) ? (
+                        // Still to happen, and the worker has left: make it impossible to miss.
+                        <form
+                          action={reassignAppointmentWorker.bind(null, props.orgSlug, a.id)}
+                          className="flex flex-wrap items-center gap-1"
+                        >
+                          <span className="font-medium text-red-700">{FORMER_MEMBER_LABEL} — needs reassigning</span>
+                          <select name="workerId" className={inputCls} defaultValue="">
+                            <option value="">Any worker</option>
+                            {workers.map((w) => (
+                              <option key={w.user_id} value={w.user_id}>{w.display_name}</option>
+                            ))}
+                          </select>
+                          <button className={linkBtn}>Reassign</button>
+                        </form>
+                      ) : a.worker_id ? (
+                        workerName.get(a.worker_id) ?? '—'
+                      ) : (
+                        'unassigned'
+                      )}
+                    </td>
                     <td className="py-2 pr-3 text-xs uppercase text-gray-400">{a.state.replace('_', ' ')}</td>
                     <td className="py-2 pr-3">
                       <div className="flex flex-wrap items-center gap-2">

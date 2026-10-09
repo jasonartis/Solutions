@@ -2406,6 +2406,8 @@ test('owner console: account deletions page shows the runner and the cancelled r
   // a real removal would ban a seeded user the rest of the suite signs in as.
   // The behaviour itself is proven in packages/db/src/account-deletion.test.ts.
   await page.getByLabel('Email of the person to remove').fill('owner@demo.local')
+  await page.getByLabel('Why').selectOption('other')
+  await page.getByLabel(/Note for whoever reviews this later/).fill('e2e: refusal check only')
   await page.getByRole('button', { name: 'Remove from platform' }).click()
   await expect(page.getByText(/Not removed: it is a platform owner account/)).toBeVisible()
 })

@@ -81,6 +81,18 @@ const EMAIL_READERS: Record<string, string> = {
   account_cancel_deletion:
     'Superadmin undo. Touches auth.users only to clear banned_until when the undone row is a removal. ' +
     'Gated on is_superadmin(); no address read or returned.',
+  // RE-SIGNUP BLOCKS (20261009020000, docs/21 §7.12). Each turns an address into a
+  // one-way FINGERPRINT; none stores or returns an address.
+  account_email_fingerprint:
+    'Pure function: normalizes an address and returns its sha256. No table read. No API-role EXECUTE.',
+  account_signup_block_guard:
+    'Trigger on auth.users: fingerprints NEW.email/email_change and refuses a blocked one. Returns nothing.',
+  auth_before_user_created:
+    'GoTrue\'s Before User Created hook: fingerprints the incoming address; EXECUTE for supabase_auth_admin only.',
+  account_signup_block_lookup:
+    'Superadmin lookup by typed address — fingerprints it and returns block ids only; logs every call.',
+  account_signup_blocks_list:
+    'Superadmin list of blocks. Matches only because its body names email_fingerprint; returns no address.',
   account_complete_due_deletions:
     'The pg_cron job. Reads last_sign_in_at to cancel rather than delete a returning person. No API role ' +
     'holds EXECUTE, and it refuses any caller with a session.',

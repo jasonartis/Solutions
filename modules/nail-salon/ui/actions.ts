@@ -156,6 +156,20 @@ export async function setAppointmentState(orgSlug: string, appointmentId: string
   revalidatePath(`/o/${orgSlug}/m/nail-salon`)
 }
 
+// Reassign an appointment to another worker (or to "any worker", null). Offered
+// on the Today's board for an appointment whose worker has DELETED their
+// account (docs/21 §7.10): the deletion never touches sal_appointments, so the
+// salon decides — reassign, or call the customer. Operators may change
+// worker_id (sal_pin_appointment's first branch); sal_appointments_before_write
+// still refuses a worker with no profile at the location.
+export async function reassignAppointmentWorker(orgSlug: string, appointmentId: string, formData: FormData) {
+  const workerId = String(formData.get('workerId') ?? '') || null
+  const supabase = await createClient()
+  const { error } = await supabase.from('sal_appointments').update({ worker_id: workerId }).eq('id', appointmentId)
+  fail(error, 'Reassign failed')
+  revalidatePath(`/o/${orgSlug}/m/nail-salon`)
+}
+
 // Generate a bill from the appointment's service and mark the appointment
 // billed. One bill per appointment (unique) — safe to call once.
 export async function createBillForAppointment(orgSlug: string, appointmentId: string) {

@@ -79,7 +79,11 @@ const CALLABLE = [
   'public.account_deletion_resume()',
   'public.account_request_deletion_for_email(text)',
   'public.account_cancel_deletion(uuid)',
-  'public.account_remove_from_platform(text)',
+  'public.account_remove_from_platform(text, text, text)',
+  'public.account_lift_signup_block(uuid, text)',
+  'public.account_signup_blocks_list()',
+  'public.account_signup_block_lookup(text)',
+  'public.sd_my_departed_interests(uuid)',
   'public.account_deletion_runner_status()',
   'public.former_members(uuid[])',
   'public.sd_my_departed_matches(uuid)',
@@ -179,6 +183,27 @@ try {
   check('removal: it bans at once and deletes sessions and refresh tokens',
     !!rem && rem.src.includes("banned_until = now() + interval '100 years'") &&
       rem.src.includes('delete from auth.sessions') && rem.src.includes('delete from auth.refresh_tokens'))
+
+  // 20261009020000 — re-signup blocks.
+  check('blocks: removal records a block', !!rem && rem.src.includes('insert into public.account_signup_blocks'))
+  check('blocks: the reason-less removal is gone',
+    (await sql<{ p: string | null }[]>`select to_regprocedure('public.account_remove_from_platform(text)')::text as p`)[0]!.p === null)
+  const guard = await sql<{ n: number }[]>`
+    select count(*)::int as n from pg_trigger
+    where tgrelid = 'auth.users'::regclass and tgname = 'account_signup_block_guard' and tgenabled <> 'D'`
+  check('blocks: the auth.users guard trigger is BOUND and enabled', guard[0]!.n === 1)
+  for (const t of ['account_signup_blocks', 'account_signup_block_lookups']) {
+    const g = await sql<{ any: boolean }[]>`
+      select bool_or(has_table_privilege(r, ${'public.' + t}, 'select')) as any
+      from unnest(array['anon', 'authenticated', 'service_role']) r
+      where to_regclass(${'public.' + t}) is not null`
+    check(`blocks: no api role can read ${t}`, g[0]?.any === false, JSON.stringify(g))
+  }
+  check('blocks: the signup hook is callable by GoTrue', await canExec('supabase_auth_admin', 'public.auth_before_user_created(jsonb)'))
+  check('blocks: the signup hook is NOT callable by authenticated (no oracle)',
+    !(await canExec('authenticated', 'public.auth_before_user_created(jsonb)')))
+  console.log('  NOTE  the Before User Created hook must ALSO be switched on in the dashboard (Authentication → Hooks);')
+  console.log('        this script cannot read auth config. Without it the trigger still refuses, with a generic error.')
 
   console.log('\n[5] The schedule')
   const [ext] = await sql<{ v: string }[]>`select extversion as v from pg_extension where extname = 'pg_cron'`

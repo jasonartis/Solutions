@@ -255,6 +255,25 @@ export const platformDataBrowser = declareDataBrowser({
         'all, because their name is already gone. The durable record of who ran what lives in ' +
         'syn_zmanim_fetch_log, which IS declared (synagogue-schedules, below).',
     },
+    {
+      table: 'account_signup_blocks',
+      columns: ['user_id', 'created_by', 'lifted_by'],
+      why:
+        'Re-signup blocks for accounts removed from the platform (docs/21 §7.12). NO API role ' +
+        'can read this table — not even a superadmin through RLS (no policy at all; only ' +
+        'definers touch it) — so a generic select here would always return zero rows and ' +
+        'read as "nothing held", which is false. The superadmin sees blocks on ' +
+        '/console/accounts through account_signup_blocks_list(), which is where a ' +
+        'subject-access answer about a removal belongs.',
+    },
+    {
+      table: 'account_signup_block_lookups',
+      columns: ['actor'],
+      why:
+        'An oversight log of superadmins looking a signup block up by typed address. It names ' +
+        'only the superadmin who looked, never whose address was typed (the address is never ' +
+        'stored), so it is not a record ABOUT any subject. Unreadable to every API role.',
+    },
   ],
   neverReadable: [],
 })

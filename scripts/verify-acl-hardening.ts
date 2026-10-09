@@ -93,6 +93,10 @@ const TABLE_EXCEPTIONS: Record<string, string[]> = {
   // authenticated (own row, or every row for a superadmin); every write is a
   // SECURITY DEFINER that re-checks its own gate.
   account_deletions: ['SELECT'],
+  // Re-signup blocks (20261009020000, docs/21 §7.12). NO api role holds anything:
+  // fingerprints only, read and written through superadmin definers.
+  account_signup_blocks: [],
+  account_signup_block_lookups: [],
 }
 
 // Functions whose intended EXECUTE differs from the blanket
@@ -143,10 +147,19 @@ const FUNCTION_EXCEPTIONS: Record<string, { auth: boolean; svc: boolean }> = {
   'account_deletion_resume()': { auth: true, svc: false },
   'account_request_deletion_for_email(target_email text)': { auth: true, svc: false },
   'account_cancel_deletion(target uuid)': { auth: true, svc: false },
-  'account_remove_from_platform(target_email text)': { auth: true, svc: false },
+  'account_remove_from_platform(target_email text, category text, note text)': { auth: true, svc: false },
+  // Re-signup blocks (20261009020000). Superadmin definers: authenticated only.
+  // The fingerprint, the trigger and the hook: NO api role — the hook is
+  // granted to supabase_auth_admin alone, or it would be a 'was X removed?' oracle.
+  'account_lift_signup_block(block_id uuid, lift_reason text)': { auth: true, svc: false },
+  'account_signup_blocks_list()': { auth: true, svc: false },
+  'account_signup_block_lookup(target_email text)': { auth: true, svc: false },
+  'account_email_fingerprint(addr text)': { auth: false, svc: false },
+  'auth_before_user_created(event jsonb)': { auth: false, svc: false },
   'account_deletion_runner_status()': { auth: true, svc: false },
   'former_members(check_user_ids uuid[])': { auth: true, svc: false },
   'sd_my_departed_matches(check_event_id uuid)': { auth: true, svc: false },
+  'sd_my_departed_interests(check_event_id uuid)': { auth: true, svc: false },
 }
 const FULL_CRUD = ['SELECT', 'INSERT', 'UPDATE', 'DELETE']
 // `settings` moved to `public.user_private` with the email slice (2026-09-17,
@@ -514,6 +527,9 @@ async function main() {
     // 20261007090000 revokes service_role and never re-grants: the worker has no
     // business with deletion requests, and the expiry runs in pg_cron as postgres.
     account_deletions: [],
+    // 20261009020000: the worker has no business with re-signup blocks either.
+    account_signup_blocks: [],
+    account_signup_block_lookups: [],
   }
   const svcLost = tables.filter((t) => {
     const want = SVC_EXCEPTIONS[t.relname] ?? FULL_CRUD

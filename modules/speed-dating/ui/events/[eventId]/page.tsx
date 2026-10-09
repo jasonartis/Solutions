@@ -102,13 +102,21 @@ export default async function EventPage(props: {
   // to an archive with that reason. sd_my_departed_matches applies §7.8's
   // rule — it only ever returns MUTUAL, revealed matches, so a person this
   // viewer declined (or who declined them) is never reported as having left.
-  const [formerIds, { data: departedMatchRows }] = await Promise.all([
+  // sd_my_departed_interests (20261009010000) adds the people this viewer said
+  // YES to with no match — whether the other said no or never decided, which
+  // it reports identically — once their deletion has COMPLETED and the event
+  // is complete. Only a count is shown: the silhouette has no name.
+  const [formerIds, { data: departedMatchRows }, { data: departedInterestRows }] = await Promise.all([
     loadFormerMembers(supabase, (participants ?? []).map((p) => p.user_id)),
     mySeat
       ? supabase.rpc('sd_my_departed_matches', { check_event_id: eventId })
       : Promise.resolve({ data: [] as string[] }),
+    mySeat
+      ? supabase.rpc('sd_my_departed_interests', { check_event_id: eventId })
+      : Promise.resolve({ data: [] as string[] }),
   ])
   const departedMatchIds = new Set(((departedMatchRows as string[] | null) ?? []))
+  const departedInterestCount = ((departedInterestRows as string[] | null) ?? []).length
   const seatName = (participantId: string | null) => {
     if (!participantId) return 'Someone'
     const seat = (participants ?? []).find((p) => p.id === participantId)
@@ -582,7 +590,8 @@ export default async function EventPage(props: {
             </section>
           )}
 
-          {(matches ?? []).filter((m) => m.revealed && departedMatchIds.has(m.id)).length > 0 && (
+          {((matches ?? []).filter((m) => m.revealed && departedMatchIds.has(m.id)).length > 0 ||
+            departedInterestCount > 0) && (
             <section data-testid="match-archive" className="rounded-lg border border-gray-200 bg-gray-50 p-5">
               <h2 className="mb-1 text-sm font-medium uppercase tracking-wide text-gray-600">Archive</h2>
               <p className="mb-3 text-xs text-gray-500">
@@ -600,6 +609,13 @@ export default async function EventPage(props: {
                       </li>
                     )
                   })}
+                {departedInterestCount > 0 && (
+                  <li data-testid="departed-interests">
+                    {departedInterestCount === 1
+                      ? '1 person you said yes to has since left the platform.'
+                      : `${departedInterestCount} people you said yes to have since left the platform.`}
+                  </li>
+                )}
               </ul>
             </section>
           )}

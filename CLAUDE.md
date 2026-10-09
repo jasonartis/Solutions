@@ -34,12 +34,20 @@ calls are listed in §7.10; the salon customer card one is REVIEWED AND CONFIRME
 (keep it unlinked — the salon is the controller; three salon features PARKED until the first
 real linked card). Same day, on prod: `20261007010000`, `20261007020000`, `20261007030000`;
 `20261007050000` (vm decline-and-block) by a parallel session — journal 2026-10-07.
-**"REMOVE FROM PLATFORM" IS BUILT (2026-10-08, `20261008020000`, docs/21 §7.11) — IN THE REPO;
-`migrate:prod` NOT run (verifier pre-apply 85/8, controls green).** The superadmin's other
+**"REMOVE FROM PLATFORM" IS ON PRODUCTION AND PROD-VERIFIED (2026-10-09, `20261008020000`,
+docs/21 §7.11; backup `backups/2026-10-09T04-48-52`, verifier 98/0).** The superadmin's other
 action: bans sign-in at once, signing in can never cancel it, only a superadmin undoes it.
-§7.10 status after the founder review: safety-note residual and uploaded files CONFIRMED;
-OPEN for the founder: "left" shown for no/undecided alike, the salon Today's-board "Former
-member" fix, and whether a removed person may re-sign-up with the same address.
+**THEN, 2026-10-09, IN THE REPO — `migrate:prod` NOT run:** `20261009010000` (speed dating:
+"someone you said yes to has left", no/undecided/unrevealed-match all identical) and
+`20261009020000` (RE-SIGNUP BLOCKS, docs/21 §7.12: a removal now needs a category + note, blocks
+the address by one-way fingerprint, enforced by a trigger on `auth.users` covering signup AND
+email change, lifted only by a superadmin with a reason). Plus the salon Today's-board "Former
+member — needs reassigning" fix (UI only). **They must reach prod in ONE push with the
+account-deletion session's `20261009030000`**, which sorts after them and is already pushed.
+**ONE DASHBOARD STEP FOR THE FOUNDER:** Authentication → Hooks → Before User Created →
+`public.auth_before_user_created` (it only makes a blocked signup read "User already
+registered"; the trigger refuses either way). OPEN for the founder: whether a removed person
+should be pulled out of pools/upcoming events at once (docs/21 §7.11).
 
 **MODULE 6 VIDEO — JaaS IS THE DEFAULT PROVIDER, BUILT, AND UNVERIFIABLE FROM THIS REPO
 (2026-10-02, no migration).** Founder chose **JaaS (8x8-hosted Jitsi)** over a self-hosted VPS:

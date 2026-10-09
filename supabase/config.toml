@@ -276,9 +276,14 @@ max_frequency = "5s"
 # inactivity_timeout = "8h"
 
 # This hook runs before a new user is created and allows developers to reject the request based on the incoming user object.
-# [auth.hook.before_user_created]
-# enabled = true
-# uri = "pg-functions://postgres/auth/before-user-created-hook"
+# Re-signup block for accounts removed from the platform (20261009020000, docs/21 §7.12). It only
+# shapes the MESSAGE (a blocked address looks exactly like an already-registered one); the
+# enforcement is the account_signup_block_guard trigger on auth.users, which needs no setting.
+# On PROD this is a dashboard switch: Authentication → Hooks → Before User Created → Postgres
+# function public.auth_before_user_created.
+[auth.hook.before_user_created]
+enabled = true
+uri = "pg-functions://postgres/public/auth_before_user_created"
 
 # This hook runs before a token is issued and allows you to add additional claims based on the authentication method used.
 # [auth.hook.custom_access_token]
