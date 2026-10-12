@@ -503,6 +503,30 @@ cascade or SET NULL fires (`vm_pin_conversation` never sees one), and the org-me
 is a direct delete that `org_members_guard_last_admin` would refuse — which is why sole admins
 are refused up front.
 
+### Alternatives considered and REJECTED in the build — read before re-proposing one
+
+- **A Vercel cron hitting a guarded route, instead of pg_cron** (§7.9 listed it). Rejected: the
+  route would need database authority to run the silhouette, which means putting a
+  service-role key, or an equivalent secret, into Vercel. That breaks the standing invariant
+  "service-role key only in the worker" (CLAUDE.md, Key standing decisions). pg_cron needs no
+  credential at all.
+- **A lazy check on sign-in or page load, as the runner.** Rejected: it never fires for the
+  person who simply never comes back, who is exactly the case the expiry exists for.
+- **Revoking memberships at the START of the grace period.** Rejected: signing back in must
+  be a pure restore, so nothing is taken away until day 30. Revoking early would also mean
+  restoring seats, roles and module grants on cancel, which cannot be done faithfully because
+  `module_roles` has no history. (The same reasoning is why a REMOVAL, 20261008020000, also
+  keeps memberships until day 30.)
+- **Storing the speed-dating archive state (an `archived_at` / reason column).** Rejected for a
+  READ-TIME derivation (`sd_my_departed_matches`): a stored flag would have to be un-set on
+  cancel, and would go stale the moment a departure is cancelled by a sign-in. Derived, it
+  is always right.
+- **A trigger on `auth.users` to cancel a departure on sign-in.** Rejected: see "Why no trigger
+  on `auth.users`" above.
+- **Typed confirmation = a fixed phrase, or the password.** Rejected for the person's own email
+  address, checked inside SQL: a password check would need GoTrue, and a fixed phrase would
+  prove nothing about which account is being deleted.
+
 ### Auth-layer facts the silhouette rests on (measured or decided 2026-10-07)
 
 - **MEASURED ON PROD before building: `postgres` may write the `auth` schema.** It is not a
