@@ -681,7 +681,58 @@ response CODE for a blocked signup or email change differs from GoTrue's own (id
 the UI, distinguishable to someone scripting the API); the note cannot be edited; nobody is
 emailed when a block is lifted (no SMTP; the console tells the superadmin to do it by hand).
 **When a second superadmin exists:** lifting a block someone else created should need their
-acknowledgement — the same trigger docs/12 item 9 already records.
+acknowledgement — the same trigger docs/12 item 9 already records. **No console view of
+`account_signup_block_lookups` exists yet** — the log is written, nothing reads it.
+
+### 7.12.1 NEXT WORK ITEM (founder, 2026-10-12): close the "was this person removed?" gap
+
+**Opus tier, fresh chat. Read this subsection, then §7.12's table. Nothing here is built.**
+
+**The gap, measured.** Prod has **confirm-email ON** (`mailer_autoconfirm = false`, read
+2026-10-12 via the Management API). Under confirm-email, GoTrue answers a signup for an
+ALREADY-REGISTERED address with a **fake success** (an obfuscated user, HTTP 200, no session) —
+its anti-enumeration behaviour. A BLOCKED address instead gets:
+- today (hook OFF on prod): the `account_signup_block_guard` trigger raises, so GoTrue returns
+  a 500 "Database error saving new user";
+- if the hook were switched on as built: a 422 "User already registered".
+
+Either way a stranger who types a specific address can tell "removed" from "taken". The
+message names nothing, so this is milder than a "you were removed" page — but it is the exact
+oracle §7.12 set out to remove, and it is why **the hook must stay OFF on prod as built.**
+
+**Goal (acceptance).** On a project with confirm-email ON, a signup for a blocked address must
+be **indistinguishable at the HTTP level** from a signup for a taken address — same status, same
+body shape, same headers that matter — **and** must create no `auth.users` row and send no email.
+The email-CHANGE path should be checked against GoTrue's own behaviour for a taken address under
+`mailer_secure_email_change_enabled = true` (prod's value) and matched if feasible; if not,
+record why (it needs a signed-in account, a smaller oracle).
+
+**Approaches to test, in this order — measure, do not assume (docs/03 "Measure GoTrue"):**
+1. **First, capture the target:** with confirmations ON locally, record the exact response for a
+   taken address (status, body, headers). Everything below is compared against it, byte for byte.
+2. **Hook returns allow + trigger returns NULL** (a BEFORE INSERT trigger returning NULL silently
+   skips the row). Unknown: does GoTrue then error (it may read the row back), or answer as if
+   created — and does it SEND a confirmation email to the address? An email to a removed person
+   saying "confirm your account" for an account that does not exist is wrong too.
+3. **Hook returns an error shaped like GoTrue's own fake-success path** — check the hook
+   contract (http_code/message only?) and whether any shape reproduces the fake success.
+4. **If nothing mimics it:** document the residual honestly and decide with the founder whether
+   the milder generic 500 is acceptable. Do NOT turn on a hook that makes it worse.
+
+**How to test locally.** In `supabase/config.toml` set `[auth.email] enable_confirmations = true`
+(and keep the hook block), then `supabase stop` + `supabase start -x studio` (Studio's container
+fails to mount on this host after a restart — see CLAUDE.md gotchas). Emails land in Inbucket
+(http://127.0.0.1:54324) — that is how to prove "no email sent". **Restore
+`enable_confirmations = false` afterwards**, or the seed/e2e flows that sign up break.
+
+**Shipping.** A migration if the trigger/hook changes (claim the version with any concurrent
+session first — 2026-10-07's collision). Prod hook switch via the Management API with the token
+in `.env.deploy` (`PATCH /v1/projects/{ref}/config/auth`, `hook_before_user_created_enabled` +
+`hook_before_user_created_uri = pg-functions://postgres/public/auth_before_user_created`) — the
+token is scoped to auth config and **expires ~2026-11-11**; regenerate at
+supabase.com/dashboard/account/tokens if it 401s (Auth = Full access, everything else None).
+Prove it on prod with a CONTROL: a signup for a taken throwaway address vs a blocked throwaway
+address, compared byte for byte — and clean both up.
 
 ### Still owed
 

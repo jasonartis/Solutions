@@ -19,6 +19,11 @@ A multi-tenant modular platform: each client engagement produces a **module** bu
      and update only the compact "Now / Next / Standing rules" below. A fresh chat must never
      pay for the full journal. See "Session hygiene". -->
 
+**NEXT WORK ITEM, PICKED BY THE FOUNDER 2026-10-12 (Opus, fresh chat): close the re-signup
+block's "was this person removed?" gap — [docs/21 §7.12.1](docs/21-account-deletion-and-departed-users.md)
+is the full brief** (prod has confirm-email ON, so a blocked signup must mimic GoTrue's fake
+success; measure locally with confirmations on first; the signup hook stays OFF until then).
+
 **ACCOUNT DELETION IS BUILT, ON PRODUCTION AND PROD-VERIFIED (2026-10-08, `20261007090000`;
 verifier 85/0 on prod). THE pg_cron JOB IS PROVEN RUNNING ON PROD: 2026-10-09 the verifier read
 98/0 with §[6] showing a `succeeded` run under 2 days old. Nothing outstanding.**
@@ -1272,8 +1277,10 @@ pg-boss cron job, so like docs/17's prunes it fires only while `pnpm worker:prod
 is why the year was loaded by script rather than by the sweep, and why the action buttons stay
 out of v1.
 
-**FOUNDER PICKED THE NEXT WORK ITEM (2026-09-25): THE CROSS-MODULE USER/POSITION MODEL,
-at FABLE tier.** Broad scope, chosen deliberately over the narrow version: settle what an
+**(HISTORICAL — NOT the current next item; see the top of this section.) FOUNDER PICKED THE
+NEXT WORK ITEM (2026-09-25): THE CROSS-MODULE USER/POSITION MODEL, at FABLE tier.** Its
+rank-mapping and census halves are SHIPPED; the speed-dating audience/mentor half still waits
+on docs/24 §7's founder choice. Broad scope, chosen deliberately over the narrow version: settle what an
 audience/mentor seat means in speed dating AND align the user model across all six modules,
 **including rank-mapping matchmaking, synagogue-schedules and visual-messaging** — which are
 unmapped today and which block the `module_roles` census leak. **Start at docs/19's
@@ -1457,6 +1464,12 @@ in the sections below.
   `//tmp/probe.sql`). → The tell is `C:/Program Files/Git/` appearing in an error or output
   where you never typed it. Nothing is broken — it is the shell, one layer above the tool you
   are blaming.
+- **AFTER `supabase stop`, `supabase start` CAN FAIL ON STUDIO'S MOUNT (2026-10-09):**
+  `failed to start docker container "supabase_studio_..." ... mkdir /run/desktop/mnt/host/d: file
+  exists`. A Docker Desktop host-mount quirk on D:, not a broken stack; a retry fails the same
+  way. **Use `supabase start -x studio`** — tests and the app never need Studio. Note that AUTH
+  settings in `config.toml` (e.g. `[auth.hook.*]`, `enable_confirmations`) only load on a
+  stop/start, not on `db reset`.
 - Node module compile cache corruption makes pnpm OOM-crash at tiny heaps → delete `%TEMP%\node-compile-cache`.
 - PowerShell 5.1 `-Encoding utf8` writes a BOM; the Supabase CLI refuses BOM'd `.env` files. Write env files from Node (scripts/dev.ts) or with BOM-less UTF8.
 - After `supabase db reset`, Kong can hold a stale route to the recreated auth container (502 on `/auth/v1/*` while `rest` works) → `docker restart supabase_kong_Solutions_Platform`.
