@@ -53,10 +53,14 @@ a trigger on `auth.users` covering signup AND email change, lifted only by a sup
 reason). Plus the salon Today's-board "Former member — needs reassigning" fix (UI only, seen
 working in a real browser). `prod-verify-migration.ts` flags `account_email_fingerprint` as
 INVOKER — the known false positive (a pure function needs no elevation; docs/24 §4b).
-**ONE DASHBOARD STEP FOR THE FOUNDER:** Authentication → Hooks → Before User Created →
-`public.auth_before_user_created` (it only makes a blocked signup read "User already
-registered"; the trigger refuses either way). OPEN for the founder: whether a removed person
-should be pulled out of pools/upcoming events at once (docs/21 §7.11).
+**⚠ DO NOT SWITCH ON THE SIGNUP HOOK ON PROD (corrected 2026-10-12).** Prod has CONFIRM-EMAIL
+ON (`mailer_autoconfirm = false`, read via the Management API — an earlier "inferred off" was
+wrong), so prod answers a taken address with a FAKE SUCCESS and the hook's 422 would single out
+a removed one. Hook is off; the trigger still refuses. OPEN (Opus): mimic the fake success,
+proven locally with confirmations on. The `SUPABASE_ACCESS_TOKEN` in `.env.deploy` was replaced
+2026-10-12 (scoped to auth config, 30-day expiry; the old one was rejected, cause unknown —
+nothing uses it routinely, so an expiry breaks nothing). OPEN for the founder: whether a
+removed person should be pulled out of pools/upcoming events at once (docs/21 §7.11).
 
 **MODULE 6 VIDEO — JaaS IS THE DEFAULT PROVIDER, BUILT, AND UNVERIFIABLE FROM THIS REPO
 (2026-10-02, no migration).** Founder chose **JaaS (8x8-hosted Jitsi)** over a self-hosted VPS:
