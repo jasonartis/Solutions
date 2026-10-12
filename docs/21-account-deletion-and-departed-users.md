@@ -503,6 +503,37 @@ cascade or SET NULL fires (`vm_pin_conversation` never sees one), and the org-me
 is a direct delete that `org_members_guard_last_admin` would refuse — which is why sole admins
 are refused up front.
 
+### Auth-layer facts the silhouette rests on (measured or decided 2026-10-07)
+
+- **MEASURED ON PROD before building: `postgres` may write the `auth` schema.** It is not a
+  superuser (`rolsuper=false`, `rolbypassrls=true`), yet holds SELECT/UPDATE/DELETE on
+  `auth.users`, `identities`, `sessions`, `refresh_tokens`, `mfa_factors`, `one_time_tokens`,
+  `webauthn_credentials`, `oauth_consents` and `flow_state` (`has_table_privilege`, read-only
+  probe). Every SECURITY DEFINER here is owned by `postgres`, so the scrub works on hosted
+  Supabase, not just locally. If a Supabase upgrade ever revokes that, the daily job will start
+  recording `last_error` on every row — the console shows it.
+- **`auth.refresh_tokens` cascades from `auth.sessions`** (measured), so deleting a person's
+  sessions signs them out everywhere — no GoTrue API call or service-role key needed.
+- **The ban is `now() + 100 years`, not `'infinity'`.** GoTrue loads `banned_until` into a Go
+  `time.Time`, and an infinite timestamp may fail to load — REASONED, not measured, and not
+  worth measuring, because a failure there could break admin listing for everyone. 100 years
+  matches the duration commonly passed to GoTrue's ban API (`876000h`).
+- **Email and phone become NULL, not a placeholder address** (§7.4 said "tombstone value"; NULL
+  is the stronger tombstone). Both are nullable in GoTrue's model (phone-only and email-only
+  users exist). A placeholder would have flowed OUT of every email definer
+  (`mm_mutual_matches`, `sd_match_contacts`, `superadmin_user_emails`…); NULL returns nothing.
+  It also frees the address for a fresh signup — until `20261009020000`'s re-signup block,
+  which applies to REMOVED accounts only.
+- **GoTrue's own soft-delete is NOT used, and `auth.users.deleted_at` is NOT set.** Soft-delete
+  is reachable only through the admin API with the service-role key, which the web app must
+  never hold and pg_cron cannot call. Setting `deleted_at` by hand would opt the row into GoTrue
+  soft-delete semantics nobody has tested here; the platform's own record of deletion is
+  `account_deletions.state`, and `superadmin_user_emails` already filters on `deleted_at`, so
+  leaving it NULL keeps that function's behaviour unchanged.
+- **GoTrue's token columns are blanked, never NULLed** — some are scanned into plain Go strings,
+  and a NULL there breaks loading the user (a well-known failure when inserting users by SQL).
+  The test `GoTrue can still load the silhouette` (`admin.getUserById`) guards it.
+
 ### Rendering (§7.5, §7.7, §7.8)
 
 - **"Former member"** — `former_members(ids)` + `packages/platform/src/former-members.ts`, wired
