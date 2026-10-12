@@ -542,7 +542,18 @@ are refused up front.
   account leaves the business's copy, and the person is sent to the business. **OpenTable is
   the one exception** — it claims diner data as its own and makes restaurants delete it. *(An
   earlier version of this bullet cited OpenTable as SUPPORT for keeping the card. That was
-  backwards.)* Scrubbing would not help either: deleting the card cascades away the salon's
+  backwards.)* **Sources, as found 2026-10-08** (so this need not be re-researched): Square
+  help 6450 (GDPR buyer request portal — "you are the data controller"), 6417 (GDPR FAQ), 6754
+  (CCPA for customers of Square sellers — "contact them directly"), 6762 (how sellers handle a
+  request); Fresha's DPA at terms.fresha.com/data-protection (Partner = controller, Fresha =
+  processor, including client-entered data); Booksy's information-obligation page (Partner is a
+  "separate controller"; app deletion erases Booksy's copy only); Vagaro's privacy policy
+  (business-held data "controlled by the Businesses"); Stripe (end customers routed to the
+  merchant); Shopify's `customers/redact` webhook (shopify.dev changelog, "apps now need to use
+  GDPR webhooks"); OpenTable's 2019 terms change (Nation's Restaurant News). Mindbody: nothing
+  definitive found. Relevant GDPR articles: 17 (erasure binds the controller; 17(3)(b)/(e)
+  retention), 19 (notify recipients of an erasure), 28(3)(a) (processor acts only on
+  instructions), 28(3)(e) (processor must assist). Scrubbing would not help either: deleting the card cascades away the salon's
   appointments, bills and earnings, and `full_name` is NOT NULL, so a scrub means a placeholder
   name across the salon's screens.
   **Changed as a result:** `/privacy` now tells the person to ask the organization, and that
@@ -651,7 +662,18 @@ would ban a seeded user). Two adversarial reviews: no escape found.
   deletion while B is A's co-admin; a superadmin then REMOVES B (a removal warns rather than
   refuses on blockers); on day 30 BOTH silhouettes fail `sole_admin`. Exits: promote a third
   member to admin, or Undo removal / cancel. The console shows both failures; nothing is lost.
-  A future refinement: refuse the removal in exactly that case.
+  ~~A future refinement: refuse the removal in exactly that case.~~ **ASSESSED 2026-10-12 and
+  DELIBERATELY NOT BUILT (founder agreed).** Of the three ways to "cover" it, two are worse
+  than the problem: *refusing the removal* makes an abuser's ban wait on org housekeeping (the
+  reason a removal only warns on blockers in the first place), and *letting both silhouettes
+  complete* leaves the org with no admin — a silent, permanent state traded for a visible,
+  fixable one. The current behaviour is the right answer, not a gap: the ban is immediate;
+  the superadmin is warned at removal time ("they are the only administrator of X, so the
+  final deletion will wait until another administrator is appointed"); both failures are on
+  `/console/accounts` and retry daily; one promotion of any other member unwedges both. The
+  only cheap addition (the warning also naming the OTHER pending deletion) was offered and
+  not taken. Revisit only if it actually happens with a real org — today every prod
+  owner/admin is the founder's own account.
 
 ## 7.12 RE-SIGNUP BLOCKS (2026-10-09, `20261009020000`) — and how they are lifted
 

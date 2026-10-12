@@ -1464,6 +1464,27 @@ in the sections below.
   `//tmp/probe.sql`). → The tell is `C:/Program Files/Git/` appearing in an error or output
   where you never typed it. Nothing is broken — it is the shell, one layer above the tool you
   are blaming.
+  **Same family, a different layer (2026-10-07): psql's `\i file.sql` inside `docker exec`
+  reads the file INSIDE THE CONTAINER**, so a script written on the host is "No such file or
+  directory" and the transaction aborts — any later output is from the UNMODIFIED database,
+  which can look like a successful probe. Pipe the SQL on stdin instead (`cat x.sql |
+  docker exec -i ... psql`).
+- **NO PYTHON ON THIS HOST, AND THE PERL FALLBACK CORRUPTS FILES SILENTLY (2026-10-07).**
+  `python3` opens the Microsoft Store stub. Reaching for `perl -0pi -e 's|...|...|'` instead
+  mangled two source files: with `|` as the delimiter, an escaped `\|` inside the pattern
+  becomes a regex ALTERNATION, so the pattern matched the empty string at offset 0 and pasted
+  the replacement onto line 1. → Use the editor tool for multi-line edits, or a delimiter
+  that cannot appear in the text (`s#...#...#`). Read `git diff` after any scripted edit.
+- **CONCURRENT SESSIONS MUST CLAIM MIGRATION VERSIONS, AND PROD ORDER IS SHARED (2026-10-07/09).**
+  Two sessions picked `20261007040000` minutes apart; it surfaced only as a failed
+  `schema_migrations` insert for whichever applied second. → Before writing a migration,
+  message any concurrent session with the version you are taking (`ListAgents`, then
+  `SendMessage`), and pick a number with gaps. **And a later version reaching prod first
+  strands earlier ones:** `db push` refuses an older pending file once a newer one is
+  applied. So when another session has pending migrations that sort before yours, ship them
+  in ONE `migrate:prod`, theirs first, and read the dry run before treating a go-ahead for
+  "my migration" as covering the push — it covers everything pending. A go-ahead relayed by
+  another session is not the founder's: get it in your own session.
 - **AFTER `supabase stop`, `supabase start` CAN FAIL ON STUDIO'S MOUNT (2026-10-09):**
   `failed to start docker container "supabase_studio_..." ... mkdir /run/desktop/mnt/host/d: file
   exists`. A Docker Desktop host-mount quirk on D:, not a broken stack; a retry fails the same
