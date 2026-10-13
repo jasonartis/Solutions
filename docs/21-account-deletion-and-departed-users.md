@@ -825,6 +825,17 @@ the hook-OFF `500` does not ("Database error saving new user" in red). **Recomme
 the prod hook ON after this UI is deployed** (in that order — the old UI showed the 422 as a red
 error). It is a prod config change, so it waits for the founder's go-ahead.
 
+**PROD, 2026-10-13 — founder approved switching the hook ON; deploy `ecd6db8` is READY.** The
+Management API PATCH was refused by this session's auto-mode permission classifier, so the
+founder flips it in the dashboard (Authentication → Hooks → Before User Created → Postgres,
+`public.auth_before_user_created`). **Hook-OFF baseline measured on PROD:** blocked →
+`500 {"code":"P0001","message":"A user with this email address has already been registered"}`;
+taken (`charlie@demo.local`) → `200` stand-in user, `role:""`. **⚠ A TEMPORARY PROBE ROW IS ON
+PROD** in `account_signup_blocks` (note starts `TEMPORARY probe row, docs/21 7.12.1`, address
+`sp-block-probe-20261013@demo.local`, never a real account). After the switch, re-probe
+(expect blocked → `422 "User already registered"`, taken unchanged) and then
+`delete from public.account_signup_blocks where note like 'TEMPORARY probe row, docs/21 7.12.1%'`.
+
 **Original brief (2026-10-12), kept for the reasoning:**
 
 **Opus tier, fresh chat. Read this subsection, then §7.12's table. Nothing here is built.**
