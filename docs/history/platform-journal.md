@@ -4,6 +4,22 @@ The running, dated build journal that used to live in `CLAUDE.md`'s "## Current 
 section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every session)
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
+- **2026-10-13 (Opus) — SIGNUP "CHECK YOUR EMAIL" + THE RE-SIGNUP ORACLE MEASURED (docs/21
+  §7.12.1 RESULT; app only, no migration).** Local Supabase was restarted with prod's auth
+  settings (both concurrent sessions OK'd it) and every candidate measured. **Local only
+  matches prod once `[auth.sms] enable_confirmations` is ALSO true**: GoTrue returns the real
+  422 for a taken address if either mailer OR sms autoconfirm is on. Prod's fake success
+  cannot be reproduced for a blocked address without a confirmed `auth.users` row holding the
+  address (a hook only returns GoTrue's error envelope, and its `error_code` is always
+  "unknown"; a trigger `return null` gives `500 "Database error loading user after
+  sign-up"`). So the screen was made identical instead: one neutral notice for taken, blocked
+  and fresh, seen in a real browser. **Found along the way: prod's DEFAULT templates send
+  `?code=` links, and `/auth/confirm` only read `token_hash`**, so emailed links on prod were
+  very likely all bouncing to `/login` (fixed; also closed an open redirect via `?next=`).
+  **Prod's built-in sender is capped at 2 emails/hour** (docs/18 item 7). Local config keeps a
+  wider `additional_redirect_urls` so local email links work. Prod hook switch: still OFF,
+  founder's go-ahead. Verified: tsc clean; e2e "delete my account" (signs up via this screen)
+  passes with confirmations off.
 - **2026-10-09 (later, Opus) — ADMIN-FLOOR FIX ON PROD (`20261009030000`), and the gaps from
   the account-deletion self-review closed.** The founder asked "did we finish everything"; the
   honest answer found four gaps, now all closed: (1) the live `cls_set_preferred_name` probe

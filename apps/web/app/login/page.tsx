@@ -20,6 +20,8 @@ export default function LoginPage() {
   // `profiles.email` is gone; it is the only identity a co-member ever sees.
   const [displayName, setDisplayName] = useState('')
   const [message, setMessage] = useState<string | null>(null)
+  // A neutral "go and check your email" line, shown in place of an error.
+  const [notice, setNotice] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   // Flips once React has taken over this page. If it never does (an old or
   // restricted browser), the server-rendered notice below stays and fades in.
@@ -32,12 +34,17 @@ export default function LoginPage() {
   useEffect(() => {
     const q = new URLSearchParams(window.location.search)
     if (q.get('deletion') === 'scheduled') setDeletionDue(q.get('due') ?? '')
+    // Set by /auth/confirm when GoTrue confirmed the address but no session
+    // could be started here (typically: the link was opened in another browser).
+    if (q.get('confirmed') === '1') setNotice('Your email address is confirmed. Sign in to continue.')
+    if (q.get('confirm') === 'failed') setMessage('That link has expired or was already used. Sign in, or request a new link.')
   }, [])
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
     setBusy(true)
     setMessage(null)
+    setNotice(null)
 
     if (mode === 'magic') {
       // A magic link both signs in an existing user and creates a new one, so
@@ -50,20 +57,46 @@ export default function LoginPage() {
           ...(displayName.trim() ? { data: { display_name: displayName.trim() } } : {}),
         },
       })
-      setMessage(error ? error.message : 'Check your email for the sign-in link.')
+      if (error) setMessage(error.message)
+      else setNotice('Check your email for the sign-in link.')
       setBusy(false)
       return
     }
 
-    const { error } =
-      mode === 'signin'
-        ? await supabase.auth.signInWithPassword({ email, password })
-        : await supabase.auth.signUp({
-            email,
-            password,
-            options: { data: { display_name: displayName.trim() } },
-          })
+    if (mode === 'signup') {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: `${location.origin}/auth/confirm`,
+          data: { display_name: displayName.trim() },
+        },
+      })
+      // With confirm-email ON (production), a new address gets no session until
+      // the emailed link is clicked — and GoTrue answers an ALREADY-registered
+      // address the same way (a fake success, no email sent). A re-signup-blocked
+      // address gets 422 "User already registered" from the Before User Created
+      // hook (docs/21 §7.12.1); GoTrue itself never says that while confirm-email
+      // is on, so treating it as the same outcome keeps a removed person's
+      // address looking exactly like any other on this screen. The wording is
+      // true for all three cases.
+      if (!error && data.session) {
+        router.push('/dashboard')
+        router.refresh()
+        return
+      }
+      if (!error || error.message === 'User already registered') {
+        setNotice(
+          'Check your email. If this address can be used for a new account, we have sent it a link to confirm it. Already have an account? Sign in instead.',
+        )
+      } else {
+        setMessage(error.message)
+      }
+      setBusy(false)
+      return
+    }
 
+    const { error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) {
       setMessage(error.message)
       setBusy(false)
@@ -164,6 +197,11 @@ export default function LoginPage() {
             </button>
           </form>
 
+          {notice && (
+            <p role="status" className="mt-4 rounded border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+              {notice}
+            </p>
+          )}
           {message && <p className="mt-4 text-sm text-red-600">{message}</p>}
 
           <div className="mt-6 flex justify-between text-sm text-blue-600">

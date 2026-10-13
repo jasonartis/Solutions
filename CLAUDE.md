@@ -19,10 +19,17 @@ A multi-tenant modular platform: each client engagement produces a **module** bu
      and update only the compact "Now / Next / Standing rules" below. A fresh chat must never
      pay for the full journal. See "Session hygiene". -->
 
-**NEXT WORK ITEM, PICKED BY THE FOUNDER 2026-10-12 (Opus, fresh chat): close the re-signup
-block's "was this person removed?" gap — [docs/21 §7.12.1](docs/21-account-deletion-and-departed-users.md)
-is the full brief** (prod has confirm-email ON, so a blocked signup must mimic GoTrue's fake
-success; measure locally with confirmations on first; the signup hook stays OFF until then).
+**2026-10-13: THE RE-SIGNUP "WAS THIS PERSON REMOVED?" GAP IS MEASURED AND CLOSED ON SCREEN
+(app only, no migration) — [docs/21 §7.12.1 RESULT](docs/21-account-deletion-and-departed-users.md).**
+Exact HTTP parity with GoTrue's fake success is IMPOSSIBLE without storing the address (not
+adopted); the signup screen now shows one identical "check your email" notice for taken,
+blocked and fresh addresses. **OPEN, FOUNDER: switch the prod Before User Created hook ON**
+(recommended, after this UI deploys). **To reproduce prod's auth locally, BOTH `[auth.email]`
+and `[auth.sms]` `enable_confirmations` must be true** — SMS autoconfirm alone makes GoTrue
+return the real 422. Same session fixed `/auth/confirm` ignoring `?code=` (prod's default
+templates use it, so emailed links on prod were very likely all bouncing to `/login`), and
+measured **prod's built-in email sender at 2 emails/HOUR** — docs/18 item 7 is now a blocker
+for onboarding a client's users, not a volume concern.
 
 **ACCOUNT DELETION IS BUILT, ON PRODUCTION AND PROD-VERIFIED (2026-10-08, `20261007090000`;
 verifier 85/0 on prod). THE pg_cron JOB IS PROVEN RUNNING ON PROD: 2026-10-09 the verifier read

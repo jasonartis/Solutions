@@ -745,7 +745,7 @@ code, then one review of the built code. **ON PRODUCTION AND PROD-VERIFIED 2026-
 | **The block** | `account_signup_blocks`, one row per removal: fingerprint, category (spam/fraud, abuse/harassment, organization's request, legal, other), a 10–500-char factual note, who/when, and lift who/when/why. Never deleted — a lift is a state. No API role can read it. |
 | **Removal** | Now REQUIRES the category and note (the one-argument function was dropped). Creates the block at removal time; reports how many times the address was blocked before. |
 | **Enforcement** | A BEFORE INSERT OR UPDATE OF email, email_change trigger on `auth.users`. Covers signup AND the email-CHANGE bypass the security review found (sign up with anything, then change to the blocked address). Fails OPEN on any internal error (docs/03's auth.users criticality rule) and raises only for a real block. Needs no dashboard setting. |
-| **The message** | **DO NOT ENABLE THE HOOK ON PROD AS BUILT — CORRECTED 2026-10-12.** Locally (confirm-email OFF) GoTrue answers an existing address with 422 "User already registered", and the hook mimics that. **PROD HAS CONFIRM-EMAIL ON** (`mailer_autoconfirm = false`, read via the Management API 2026-10-12 — the earlier "inferred off" reading was WRONG), so prod answers an existing address with a FAKE SUCCESS, and the hook's 422 would single out a removed address. Prod today: hook OFF; the trigger refuses with GoTrue's generic "Database error saving new user" — also distinguishable from the fake success, a milder form of the same oracle. **Open (Opus):** make a blocked signup mimic the fake success under confirm-email, proven locally with confirmations ON before any prod change. |
+| **The message** | **DO NOT ENABLE THE HOOK ON PROD AS BUILT — CORRECTED 2026-10-12.** Locally (confirm-email OFF) GoTrue answers an existing address with 422 "User already registered", and the hook mimics that. **PROD HAS CONFIRM-EMAIL ON** (`mailer_autoconfirm = false`, read via the Management API 2026-10-12 — the earlier "inferred off" reading was WRONG), so prod answers an existing address with a FAKE SUCCESS, and the hook's 422 would single out a removed address. Prod today: hook OFF; the trigger refuses with GoTrue's generic "Database error saving new user" — also distinguishable from the fake success, a milder form of the same oracle. ~~**Open (Opus):** make a blocked signup mimic the fake success~~ **Measured 2026-10-13: impossible at the HTTP level without storing the address; the SCREEN is now identical (§7.12.1 RESULT). Hook ON is recommended once that UI is deployed — founder's go-ahead.** |
 | **Lifting** | Superadmin only, on `/console/accounts` → Re-signup blocks. Shows the category, note, who removed and when, and how many times this address was blocked; a warning (stronger for abuse/harassment, and "tell the organization" for an org request); a required reason; a confirmation tick. **Refused while the old account is still in its 30 days** (it holds the address, so a lift would do nothing; Undo removal is the action then). Undo removal lifts that removal's OWN block automatically. |
 | **Lookup** | Type an address to find its block. The database logs every lookup itself (cannot be skipped), because a lookup is itself a "was this person removed?" question. |
 | **Backfill** | Anyone removed since `20261008020000` got a block while their address still existed. |
@@ -776,6 +776,54 @@ acknowledgement — the same trigger docs/12 item 9 already records. **No consol
 `account_signup_block_lookups` exists yet** — the log is written, nothing reads it.
 
 ### 7.12.1 NEXT WORK ITEM (founder, 2026-10-12): close the "was this person removed?" gap
+
+**RESULT 2026-10-13 (Opus) — MEASURED; exact HTTP parity is IMPOSSIBLE with a fingerprint-only
+design; SCREEN parity is BUILT. Prod hook still OFF, waiting on the founder's go-ahead.**
+
+**Local was NOT a faithful copy of prod until a second setting changed.** With only
+`[auth.email] enable_confirmations = true`, a taken address still got `422
+user_already_exists` — because GoTrue returns the REAL error when *either*
+`GOTRUE_MAILER_AUTOCONFIRM` *or* **`GOTRUE_SMS_AUTOCONFIRM`** is true, and local's
+`[auth.sms] enable_confirmations = false` makes SMS autoconfirm true. Prod has
+`sms_autoconfirm = false` (Management API, 2026-10-13). **To reproduce prod, set BOTH
+`enable_confirmations` to true** (`[auth.email]` and `[auth.sms]`).
+
+Measured on local GoTrue v2.193.0 with both ON (prod's settings):
+| Request | Response |
+|---|---|
+| signup, taken (confirmed) address — **the target** | `200`, body is a stand-in user: random `id`, `role:""`, `identities:[]`, the submitted `user_metadata`, `confirmation_sent_at` = now. No email, no row. |
+| signup, taken but UNCONFIRMED address | `200`, the REAL user (role `authenticated`, identities populated); a confirmation email IS re-sent |
+| signup, fresh address | `200`, real user, identities populated, one email |
+| signup, BLOCKED, hook ON as built | `422 {"code":422,"error_code":"unknown","msg":"User already registered"}`, no email, no row |
+| hook returning `http_code: 200` | `200 {"code":200,"error_code":"unknown","msg":"ok"}` — the status is settable, the BODY is always GoTrue's error envelope |
+| hook returning an `error_code` field | ignored: `error_code` is always `"unknown"` (tried `over_email_send_rate_limit` with 429) |
+| hook allows, trigger `return null` (approach 2) | `500 {"code":500,"error_code":"unexpected_failure","msg":"Database error loading user after sign-up"}` — GoTrue re-reads the row by id |
+| email change → taken address | `422 email_exists` "A user with this email address has already been registered" (GoTrue's own enumeration, under secure change too) |
+| email change → BLOCKED (trigger) | `500`, body `{"code":"P0001","message":"A user with this email address has already been registered"}` |
+
+**Why parity is impossible:** GoTrue produces the fake success only when
+`FindUserByEmailAndAudience` finds a CONFIRMED row in `auth.users` holding that exact
+address. A hook can only return GoTrue's error envelope, and a trigger can only raise or drop
+the row (both non-200). The one design that would match byte for byte is keeping a confirmed
+placeholder row holding the address, **which contradicts §7.12's fingerprint-only promise and
+`/privacy`'s disclosure — not adopted.** The email-change half has no hook at all and needs a
+signed-in account; the app has no email-change screen, so it is raw-API only.
+
+**What was built instead (app only, no migration):** `/login`'s signup now shows ONE neutral
+notice for "no session" (taken or fresh) AND for the hook's `422 "User already registered"`
+(which GoTrue itself never sends while confirm-email is on): *"Check your email. If this
+address can be used for a new account, we have sent it a link to confirm it. Already have an
+account? Sign in instead."* — true in all three cases. Seen in a real browser with prod's
+settings: taken, blocked and fresh all render the identical notice.
+
+**Residual, stated plainly:** someone scripting the raw API can still tell a blocked address
+(`422`, or `500` with the hook off) from a taken one (`200`). The hook ON does not make that
+worse than today's hook-OFF `500` — both are one bit — and it makes the SCREEN identical, which
+the hook-OFF `500` does not ("Database error saving new user" in red). **Recommendation: switch
+the prod hook ON after this UI is deployed** (in that order — the old UI showed the 422 as a red
+error). It is a prod config change, so it waits for the founder's go-ahead.
+
+**Original brief (2026-10-12), kept for the reasoning:**
 
 **Opus tier, fresh chat. Read this subsection, then §7.12's table. Nothing here is built.**
 

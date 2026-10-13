@@ -230,6 +230,21 @@ database — a compromised GitHub account defeats every safeguard in docs/12. Fi
 docs/12 item 7: Supabase's built-in sender is rate-limited and unsuitable for real signup
 volume. Needs a sending domain and a provider account.
 
+**MEASURED 2026-10-13 — THE BUILT-IN SENDER IS CAPPED AT 2 EMAILS PER HOUR FOR THE WHOLE
+PROJECT** (`rate_limit_email_sent = 2`, all `smtp_*` null, Management API). With confirm-email
+ON, every signup, every email sign-in link and every password reset draws on those 2. A third
+new user in the same hour gets `429 email rate limit exceeded`. That makes this item a hard
+blocker for onboarding a client's users in one sitting, not a "real volume" concern. Once
+custom SMTP is set, Supabase lets the limit be raised (`rate_limit_email_sent`).
+
+**FIXED 2026-10-13 (the signup UX below, and a related break):** signup now shows a "check
+your email" notice instead of pushing to `/dashboard` with no session; and `/auth/confirm`
+now handles `?code=`, which is what prod's DEFAULT email templates produce. Before this it
+only understood `token_hash`, so **every emailed link on prod (signup confirmation AND the
+"Email link" sign-in) bounced to `/login` with no session** — inferred from the route's code
+plus prod's template settings, then the fixed route was proven end to end locally with prod's
+settings. docs/21 §7.12.1 has the measurements.
+
 **MEASURED 2026-10-12, worth checking before a real client: prod has CONFIRM-EMAIL ON**
 (`mailer_autoconfirm = false`, read via the Management API). So a new signup gets NO session
 until they click the emailed link — sent by that rate-limited built-in sender. But
