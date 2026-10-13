@@ -33,6 +33,28 @@ export async function setDisplayName(formData: FormData) {
   return { ok: true as const }
 }
 
+// Set a new password for the signed-in account. Also the second half of
+// "Forgot password?": the emailed reset link signs the person in through
+// /auth/confirm and lands them on /account?reset=1, where this form is shown
+// first. GoTrue enforces the real rules (minimum length, "must differ from
+// the old one"); its message is passed straight through.
+export async function setPassword(formData: FormData) {
+  const password = String(formData.get('password') ?? '')
+  const confirm = String(formData.get('confirm') ?? '')
+  if (password.length < 6) return { ok: false as const, reason: 'Use at least 6 characters.' }
+  if (password !== confirm) return { ok: false as const, reason: 'The two passwords do not match.' }
+
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { ok: false as const, reason: 'Not signed in.' }
+
+  const { error } = await supabase.auth.updateUser({ password })
+  if (error) return { ok: false as const, reason: error.message }
+  return { ok: true as const }
+}
+
 // DELETE MY ACCOUNT (docs/21 §7.9, migration 20261007090000).
 //
 // This only STARTS the 30-day grace period. Nothing is removed today: the

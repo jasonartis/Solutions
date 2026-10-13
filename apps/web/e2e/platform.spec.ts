@@ -2391,6 +2391,68 @@ test('delete my account: scheduled, signed out, and signing back in cancels it',
   await expect(page.getByRole('heading', { name: 'Your account' })).toBeVisible()
 })
 
+// The newest email to `to` in the local Supabase mail catcher (Mailpit, part of
+// `supabase start`), as the first link in its body. Polls: GoTrue sends async.
+async function latestEmailLink(to: string): Promise<string> {
+  const api = 'http://127.0.0.1:54324/api/v1'
+  for (let i = 0; i < 30; i++) {
+    const list = await (await fetch(`${api}/search?query=${encodeURIComponent(`to:"${to}"`)}`)).json()
+    if (list.messages?.length) {
+      const msg = await (await fetch(`${api}/message/${list.messages[0].ID}`)).json()
+      const href = /href="([^"]+)"/.exec(msg.HTML)?.[1]
+      if (href) return href.replace(/&amp;/g, '&')
+    }
+    await new Promise((r) => setTimeout(r, 500))
+  }
+  throw new Error(`no email reached ${to}`)
+}
+
+// FORGOT PASSWORD (2026-10-13). A fresh account, never a seeded one: this
+// changes the password. Proves the whole loop a locked-out client user needs:
+// request -> email -> link signs them in -> new password -> it works, the old
+// one does not.
+test('forgot password: reset link signs you in, the new password works and the old one does not', async ({
+  page,
+}) => {
+  const email = `e2e-reset-${Date.now()}@demo.local`
+  await page.goto('/login')
+  await page.getByRole('button', { name: 'Create account' }).click()
+  await page.getByLabel('Email').fill(email)
+  await page.getByLabel('Display name').fill('E2E Reset')
+  await page.getByLabel('Password').fill('old-password-1')
+  await page.getByRole('button', { name: 'Sign up' }).click()
+  await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible({ timeout: 15_000 })
+  await page.context().clearCookies()
+
+  await page.goto('/login')
+  await page.getByRole('button', { name: 'Forgot password?' }).click()
+  await page.getByLabel('Email').fill(email)
+  await page.getByRole('button', { name: 'Send reset link' }).click()
+  await expect(page.getByRole('status')).toContainText('we have sent it a link to choose a new password')
+
+  // Same browser, as the notice asks: the link carries a PKCE code whose
+  // verifier is this browser's cookie.
+  await page.goto(await latestEmailLink(email))
+  await expect(page).toHaveURL(/\/account\?reset=1/, { timeout: 15_000 })
+  await expect(page.getByRole('heading', { name: 'Choose a new password' })).toBeVisible()
+  await page.getByLabel('New password', { exact: true }).fill('new-password-2')
+  await page.getByLabel('Confirm new password').fill('new-password-2')
+  await page.getByRole('button', { name: 'Save password' }).click()
+  await expect(page.getByText('Password changed.')).toBeVisible()
+  await page.context().clearCookies()
+
+  // The OLD password is refused...
+  await page.goto('/login')
+  await page.getByLabel('Email').fill(email)
+  await page.getByLabel('Password').fill('old-password-1')
+  await page.getByRole('button', { name: 'Sign in' }).click()
+  await expect(page.getByText('Invalid login credentials')).toBeVisible()
+  // ...and the new one signs in.
+  await page.getByLabel('Password').fill('new-password-2')
+  await page.getByRole('button', { name: 'Sign in' }).click()
+  await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible({ timeout: 15_000 })
+})
+
 test('owner console: account deletions page shows the runner and the cancelled request', async ({ page }) => {
   await signIn(page, 'owner@demo.local')
   await page.goto('/console/accounts')

@@ -31,7 +31,9 @@ and `[auth.sms]` `enable_confirmations` must be true** — SMS autoconfirm alone
 return the real 422. Same session fixed `/auth/confirm` ignoring `?code=` (prod's default
 templates use it, so emailed links on prod were very likely all bouncing to `/login`), and
 measured **prod's built-in email sender at 2 emails/HOUR** — docs/18 item 7 is now a blocker
-for onboarding a client's users, not a volume concern.
+for onboarding a client's users, not a volume concern. **Also 2026-10-13: "Forgot password?"
+and "Change password" now exist** (there was NO password recovery anywhere before); e2e
+covers the full loop via Mailpit, docs/18 item 7.
 
 **ACCOUNT DELETION IS BUILT, ON PRODUCTION AND PROD-VERIFIED (2026-10-08, `20261007090000`;
 verifier 85/0 on prod). THE pg_cron JOB IS PROVEN RUNNING ON PROD: 2026-10-09 the verifier read

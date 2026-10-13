@@ -4,6 +4,15 @@ The running, dated build journal that used to live in `CLAUDE.md`'s "## Current 
 section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every session)
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
+- **2026-10-13 (later, Opus) — FORGOT PASSWORD + CHANGE PASSWORD (app only, no migration).**
+  Picked by the founder as "a win you can do alone". The app had NO password recovery or
+  change anywhere — a client user who forgot theirs could only use Email link and could
+  never set a new password. Built: `/login` "Forgot password?" mode (neutral notice, never
+  says whether an account exists), `/account` password form (shown first and highlighted on
+  `?reset=1`), `setPassword` server action returning `{ok, reason}` (docs/03 #22).
+  `/auth/confirm`'s failed-exchange message now covers reset as well as signup
+  (`?link=other-browser`). New e2e test drives the full loop through Mailpit; teeth proven
+  (breaking the code exchange turned it red at the redirect), then green again. docs/18.
 - **2026-10-13 (Opus) — SIGNUP "CHECK YOUR EMAIL" + THE RE-SIGNUP ORACLE MEASURED (docs/21
   §7.12.1 RESULT; app only, no migration).** Local Supabase was restarted with prod's auth
   settings (both concurrent sessions OK'd it) and every candidate measured. **Local only

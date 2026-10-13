@@ -2,8 +2,11 @@ import { createClient } from '@/lib/supabase/server'
 import { getProfile } from '@/lib/platform'
 import DisplayNameForm from './display-name-form'
 import DeleteAccountForm from './delete-account-form'
+import PasswordForm from './password-form'
 
-export default async function AccountPage() {
+export default async function AccountPage({ searchParams }: { searchParams: Promise<{ reset?: string }> }) {
+  // Set by the "Forgot password?" email link (login page -> /auth/confirm).
+  const reset = (await searchParams).reset === '1'
   const supabase = await createClient()
   const {
     data: { user },
@@ -19,6 +22,8 @@ export default async function AccountPage() {
         Your display name is how other members of your organizations see you.
       </p>
 
+      {reset && <PasswordForm reset />}
+
       <DisplayNameForm initial={profile?.display_name ?? ''} />
 
       <div className="rounded border border-gray-200 bg-white p-4">
@@ -31,6 +36,12 @@ export default async function AccountPage() {
           Other members of your organizations can see your display name. They cannot see your email address.
         </p>
       </div>
+
+      {!reset && (
+        <div className="mt-8">
+          <PasswordForm reset={false} />
+        </div>
+      )}
 
       <DeleteAccountForm email={user?.email ?? ''} blockers={(blockers as string[] | null) ?? []} />
     </div>

@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { SiteFooter } from '@/components/site-footer'
 
-type Mode = 'signin' | 'signup' | 'magic'
+type Mode = 'signin' | 'signup' | 'magic' | 'reset'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -36,7 +36,10 @@ export default function LoginPage() {
     if (q.get('deletion') === 'scheduled') setDeletionDue(q.get('due') ?? '')
     // Set by /auth/confirm when GoTrue confirmed the address but no session
     // could be started here (typically: the link was opened in another browser).
-    if (q.get('confirmed') === '1') setNotice('Your email address is confirmed. Sign in to continue.')
+    if (q.get('link') === 'other-browser')
+      setNotice(
+        'That link was opened in a different browser from the one that asked for it. If you were confirming a new account, it is confirmed: sign in below. If you were resetting your password, ask for a new link from this browser.',
+      )
     if (q.get('confirm') === 'failed') setMessage('That link has expired or was already used. Sign in, or request a new link.')
   }, [])
 
@@ -45,6 +48,23 @@ export default function LoginPage() {
     setBusy(true)
     setMessage(null)
     setNotice(null)
+
+    if (mode === 'reset') {
+      // GoTrue answers an unknown address exactly like a known one (it never
+      // says whether an account exists), so the notice must not either. The
+      // link goes through /auth/confirm, which signs the person in and sends
+      // them to /account?reset=1, where the new-password form is shown first.
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${location.origin}/auth/confirm?next=${encodeURIComponent('/account?reset=1')}`,
+      })
+      if (error) setMessage(error.message)
+      else
+        setNotice(
+          'If an account uses this address, we have sent it a link to choose a new password. Open it in this browser.',
+        )
+      setBusy(false)
+      return
+    }
 
     if (mode === 'magic') {
       // A magic link both signs in an existing user and creates a new one, so
@@ -118,6 +138,7 @@ export default function LoginPage() {
             {mode === 'signin' && 'Sign in to your account'}
             {mode === 'signup' && 'Create an account'}
             {mode === 'magic' && 'Get a sign-in link by email'}
+            {mode === 'reset' && 'Reset your password'}
           </p>
 
           {deletionDue !== null && (
@@ -154,7 +175,7 @@ export default function LoginPage() {
               />
             </label>
 
-            {mode !== 'signin' && (
+            {(mode === 'signup' || mode === 'magic') && (
               <label className="block">
                 <span className="mb-1 block text-sm font-medium">
                   Display name{mode === 'magic' && <span className="text-gray-400"> (new accounts)</span>}
@@ -171,7 +192,7 @@ export default function LoginPage() {
               </label>
             )}
 
-            {mode !== 'magic' && (
+            {(mode === 'signin' || mode === 'signup') && (
               <label className="block">
                 <span className="mb-1 block text-sm font-medium">Password</span>
                 <input
@@ -196,8 +217,19 @@ export default function LoginPage() {
                   ? 'Sign in'
                   : mode === 'signup'
                     ? 'Sign up'
-                    : 'Send link'}
+                    : mode === 'reset'
+                      ? 'Send reset link'
+                      : 'Send link'}
             </button>
+            {mode === 'signin' && (
+              <button
+                type="button"
+                onClick={() => setMode('reset')}
+                className="text-sm text-blue-600 hover:underline"
+              >
+                Forgot password?
+              </button>
+            )}
           </form>
 
           {notice && (

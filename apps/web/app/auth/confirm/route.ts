@@ -8,10 +8,11 @@ import { createClient } from '@/lib/supabase/server'
 // Two link shapes arrive here:
 // - `?code=...` — what Supabase's DEFAULT email templates produce (production
 //   uses them; measured 2026-10-13 via the Management API). GoTrue has already
-//   verified the address at its own /verify endpoint before redirecting, so a
-//   failed code exchange still means the address IS confirmed — the usual cause
-//   is the link being opened in a different browser from the one that asked for
-//   it (the PKCE verifier lives in that browser's cookie).
+//   verified the link at its own /verify endpoint before redirecting, so after
+//   a failed code exchange a SIGNUP address is still confirmed (a password
+//   reset, though, needs a new link). The usual cause is the link being opened
+//   in a different browser from the one that asked for it (the PKCE verifier
+//   lives in that browser's cookie).
 // - `?token_hash=...&type=...` — what a custom template pointing straight here
 //   would produce. Kept so either template style works.
 export async function GET(request: NextRequest) {
@@ -28,7 +29,9 @@ export async function GET(request: NextRequest) {
     const supabase = await createClient()
     const { error } = await supabase.auth.exchangeCodeForSession(code)
     if (!error) redirect(next)
-    redirect('/login?confirmed=1')
+    // Signup confirmation or password reset — the route cannot tell which, so
+    // the login page's wording covers both.
+    redirect('/login?link=other-browser')
   }
 
   if (tokenHash && type) {

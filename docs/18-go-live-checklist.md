@@ -245,6 +245,16 @@ only understood `token_hash`, so **every emailed link on prod (signup confirmati
 plus prod's template settings, then the fixed route was proven end to end locally with prod's
 settings. docs/21 §7.12.1 has the measurements.
 
+**ADDED 2026-10-13: "Forgot password?" + "Change password".** Before this there was NO way to
+recover or change a password anywhere in the app. Now: `/login` → Forgot password? →
+`resetPasswordForEmail` → the link goes through `/auth/confirm` to `/account?reset=1`, which
+shows the new-password form first; `/account` also has Change password for anyone signed in.
+The notice never says whether an account exists. **e2e covers the whole loop** ("forgot
+password: …"), reading the email from the local Mailpit at `127.0.0.1:54324`; it depends on
+`supabase/config.toml`'s `additional_redirect_urls` including `http://localhost:3000/**`
+(without it GoTrue redirects to `site_url` and the test fails). Each reset uses one of prod's
+2 emails/hour until custom SMTP exists.
+
 **MEASURED 2026-10-12, worth checking before a real client: prod has CONFIRM-EMAIL ON**
 (`mailer_autoconfirm = false`, read via the Management API). So a new signup gets NO session
 until they click the emailed link — sent by that rate-limited built-in sender. But
