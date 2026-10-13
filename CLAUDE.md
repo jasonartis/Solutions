@@ -63,7 +63,7 @@ ON (`mailer_autoconfirm = false`, read via the Management API — an earlier "in
 wrong), so prod answers a taken address with a FAKE SUCCESS and the hook's 422 would single out
 a removed one. Hook is off; the trigger still refuses. OPEN (Opus): mimic the fake success,
 proven locally with confirmations on. The `SUPABASE_ACCESS_TOKEN` in `.env.deploy` was replaced
-2026-10-12 (scoped to auth config, 30-day expiry; the old one was rejected, cause unknown —
+2026-10-12 (scoped to auth config; expiry as the founder chose it — 30 days was the recommendation, the actual choice was NOT recorded, so a 401 means regenerate; the old one was rejected, cause unknown —
 nothing uses it routinely, so an expiry breaks nothing). OPEN for the founder: whether a
 removed person should be pulled out of pools/upcoming events at once (docs/21 §7.11).
 

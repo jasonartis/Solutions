@@ -230,6 +230,16 @@ database — a compromised GitHub account defeats every safeguard in docs/12. Fi
 docs/12 item 7: Supabase's built-in sender is rate-limited and unsuitable for real signup
 volume. Needs a sending domain and a provider account.
 
+**MEASURED 2026-10-12, worth checking before a real client: prod has CONFIRM-EMAIL ON**
+(`mailer_autoconfirm = false`, read via the Management API). So a new signup gets NO session
+until they click the emailed link — sent by that rate-limited built-in sender. But
+`apps/web/app/login/page.tsx`'s signup branch does `router.push('/dashboard')` straight after
+`signUp()` with no "check your email" step, so a brand-new user plausibly lands on a redirect
+back to the login page with no explanation. **Not verified end to end** (it needs a real
+signup against prod); the code path and the setting are what was read. Either show "check your
+email" after signup, or turn confirm-email off deliberately — but note docs/21 §7.12.1 depends
+on which: the re-signup block's indistinguishability work assumes confirm-email ON.
+
 ## 8. Onboarding rehearsal — **DONE 2026-09-02**
 
 Rehearsed end to end against **real production**, signed in as the actual superadmin (not a

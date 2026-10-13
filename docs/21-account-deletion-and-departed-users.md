@@ -751,6 +751,20 @@ code, then one review of the built code. **ON PRODUCTION AND PROD-VERIFIED 2026-
 | **Backfill** | Anyone removed since `20261008020000` got a block while their address still existed. |
 | **Disclosure** | `/privacy` now says the platform may remove an account, keeps a one-way fingerprint and a short note, and how to appeal (email us from that address). |
 
+**Review points NOT adopted, recorded so they are not re-derived (2026-10-09):**
+- The product review suggested showing the appeal contact on the **sign-in screen** for an
+  account that is removed (banned during its 30 days). Not built: today a removed person gets
+  GoTrue's own "User is banned"-style error with no contact; the appeal route is only on
+  `/privacy`.
+- The lift screen does not show **which** organization asked for an org-request removal, nor any
+  related abuse reports (`sd_reports`, `vm_flags`) — only the category and note.
+- The lift's **confirmation tick** is enforced only in the server action; a superadmin calling
+  `account_lift_signup_block` directly skips it (the reason check and the grace-period refusal
+  are in SQL and still apply).
+- Untested (code review): PostgREST's `Prefer: tx=rollback` might let a superadmin's lookup
+  roll back its own log row, if the project's `db-tx-end` allows overrides. A GET is read-only,
+  so the log INSERT errors there rather than being skipped.
+
 **Recorded limits:** another address gets them in (inherent, on every platform); the fingerprint
 is unpeppered, so a leaked backup lets someone test a GUESSED address, and it outlives the
 deletion (disclosed on `/privacy`); non-ASCII/IDN addresses are not canonicalized; the raw API
@@ -784,6 +798,16 @@ The email-CHANGE path should be checked against GoTrue's own behaviour for a tak
 `mailer_secure_email_change_enabled = true` (prod's value) and matched if feasible; if not,
 record why (it needs a signed-in account, a smaller oracle).
 
+**Already MEASURED, LOCAL GoTrue with confirm-email OFF (2026-10-09) — the baseline to diff
+against once confirmations are ON:**
+| Request | Response |
+|---|---|
+| signup, address already registered | `422 {"code":422,"error_code":"user_already_exists","msg":"User already registered"}` |
+| signup, BLOCKED address, hook ON | `422 {"code":422,"error_code":"unknown","msg":"User already registered"}` — note `error_code` differs |
+| email change to an address already registered | `422 {"code":422,"error_code":"email_exists","msg":"A user with this email address has already been registered"}` |
+| email change to a BLOCKED address (trigger) | `{"code":"P0001","message":"A user with this email address has already been registered"}` — different SHAPE |
+| case / `+tag` variants of a blocked address | refused identically to the exact address |
+
 **Approaches to test, in this order — measure, do not assume (docs/03 "Measure GoTrue"):**
 1. **First, capture the target:** with confirmations ON locally, record the exact response for a
    taken address (status, body, headers). Everything below is compared against it, byte for byte.
@@ -806,7 +830,7 @@ fails to mount on this host after a restart — see CLAUDE.md gotchas). Emails l
 session first — 2026-10-07's collision). Prod hook switch via the Management API with the token
 in `.env.deploy` (`PATCH /v1/projects/{ref}/config/auth`, `hook_before_user_created_enabled` +
 `hook_before_user_created_uri = pg-functions://postgres/public/auth_before_user_created`) — the
-token is scoped to auth config and **expires ~2026-11-11**; regenerate at
+token is scoped to auth config; its EXPIRY WAS NOT RECORDED (30 days was recommended, which would be ~2026-11-11), so treat a 401 as "expired" and regenerate at
 supabase.com/dashboard/account/tokens if it 401s (Auth = Full access, everything else None).
 Prove it on prod with a CONTROL: a signup for a taken throwaway address vs a blocked throwaway
 address, compared byte for byte — and clean both up.
