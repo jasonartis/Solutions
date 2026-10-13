@@ -745,7 +745,7 @@ code, then one review of the built code. **ON PRODUCTION AND PROD-VERIFIED 2026-
 | **The block** | `account_signup_blocks`, one row per removal: fingerprint, category (spam/fraud, abuse/harassment, organization's request, legal, other), a 10–500-char factual note, who/when, and lift who/when/why. Never deleted — a lift is a state. No API role can read it. |
 | **Removal** | Now REQUIRES the category and note (the one-argument function was dropped). Creates the block at removal time; reports how many times the address was blocked before. |
 | **Enforcement** | A BEFORE INSERT OR UPDATE OF email, email_change trigger on `auth.users`. Covers signup AND the email-CHANGE bypass the security review found (sign up with anything, then change to the blocked address). Fails OPEN on any internal error (docs/03's auth.users criticality rule) and raises only for a real block. Needs no dashboard setting. |
-| **The message** | **DO NOT ENABLE THE HOOK ON PROD AS BUILT — CORRECTED 2026-10-12.** Locally (confirm-email OFF) GoTrue answers an existing address with 422 "User already registered", and the hook mimics that. **PROD HAS CONFIRM-EMAIL ON** (`mailer_autoconfirm = false`, read via the Management API 2026-10-12 — the earlier "inferred off" reading was WRONG), so prod answers an existing address with a FAKE SUCCESS, and the hook's 422 would single out a removed address. Prod today: hook OFF; the trigger refuses with GoTrue's generic "Database error saving new user" — also distinguishable from the fake success, a milder form of the same oracle. ~~**Open (Opus):** make a blocked signup mimic the fake success~~ **Measured 2026-10-13: impossible at the HTTP level without storing the address; the SCREEN is now identical (§7.12.1 RESULT). Hook ON is recommended once that UI is deployed — founder's go-ahead.** |
+| **The message** | **2026-10-13: HOOK ON IN PROD AND VERIFIED — the login screen now hides its 422 (§7.12.1 RESULT). The 2026-10-12 warning that follows is SUPERSEDED.** ~~DO NOT ENABLE THE HOOK ON PROD AS BUILT — CORRECTED 2026-10-12.~~ Locally (confirm-email OFF) GoTrue answers an existing address with 422 "User already registered", and the hook mimics that. **PROD HAS CONFIRM-EMAIL ON** (`mailer_autoconfirm = false`, read via the Management API 2026-10-12 — the earlier "inferred off" reading was WRONG), so prod answers an existing address with a FAKE SUCCESS, and the hook's 422 would single out a removed address. Prod today: hook OFF; the trigger refuses with GoTrue's generic "Database error saving new user" — also distinguishable from the fake success, a milder form of the same oracle. ~~**Open (Opus):** make a blocked signup mimic the fake success~~ **Measured 2026-10-13: impossible at the HTTP level without storing the address; the SCREEN is now identical (§7.12.1 RESULT). Hook ON is recommended once that UI is deployed — founder's go-ahead.** |
 | **Lifting** | Superadmin only, on `/console/accounts` → Re-signup blocks. Shows the category, note, who removed and when, and how many times this address was blocked; a warning (stronger for abuse/harassment, and "tell the organization" for an org request); a required reason; a confirmation tick. **Refused while the old account is still in its 30 days** (it holds the address, so a lift would do nothing; Undo removal is the action then). Undo removal lifts that removal's OWN block automatically. |
 | **Lookup** | Type an address to find its block. The database logs every lookup itself (cannot be skipped), because a lookup is itself a "was this person removed?" question. |
 | **Backfill** | Anyone removed since `20261008020000` got a block while their address still existed. |
@@ -778,7 +778,8 @@ acknowledgement — the same trigger docs/12 item 9 already records. **No consol
 ### 7.12.1 NEXT WORK ITEM (founder, 2026-10-12): close the "was this person removed?" gap
 
 **RESULT 2026-10-13 (Opus) — MEASURED; exact HTTP parity is IMPOSSIBLE with a fingerprint-only
-design; SCREEN parity is BUILT. Prod hook still OFF, waiting on the founder's go-ahead.**
+design; SCREEN parity is BUILT. Prod hook ON and verified the same day (see the PROD
+paragraph below).**
 
 **Local was NOT a faithful copy of prod until a second setting changed.** With only
 `[auth.email] enable_confirmations = true`, a taken address still got `422
@@ -832,9 +833,16 @@ founder flips it in the dashboard (Authentication → Hooks → Before User Crea
 `500 {"code":"P0001","message":"A user with this email address has already been registered"}`;
 taken (`charlie@demo.local`) → `200` stand-in user, `role:""`. **⚠ A TEMPORARY PROBE ROW IS ON
 PROD** in `account_signup_blocks` (note starts `TEMPORARY probe row, docs/21 7.12.1`, address
-`sp-block-probe-20261013@demo.local`, never a real account). After the switch, re-probe
-(expect blocked → `422 "User already registered"`, taken unchanged) and then
-`delete from public.account_signup_blocks where note like 'TEMPORARY probe row, docs/21 7.12.1%'`.
+`sp-block-probe-20261013@demo.local`, never a real account). ~~After the switch, re-probe and
+delete it.~~ **DONE 2026-10-13: THE HOOK IS ON IN PROD AND VERIFIED.** The founder enabled it in
+the dashboard (schema `public`; the dashboard's own grant/revoke statements matched the
+migration's ACL). Management API reads `hook_before_user_created_enabled = true`. Prod probe:
+blocked → `422 {"code":422,"error_code":"unknown","msg":"User already registered"}`, no
+`auth.users` row; taken → `200` stand-in, unchanged. **The real prod `/login` screen, in a
+browser:** Create account for the blocked and the taken address render the identical
+"Check your email…" notice, and Email link for the blocked address renders "Check your email
+for the sign-in link." (no-email cases only, because of the 2/hour cap). The probe row is
+deleted (0 rows) and no probe account exists.
 
 **Original brief (2026-10-12), kept for the reasoning:**
 

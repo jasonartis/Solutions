@@ -23,8 +23,10 @@ A multi-tenant modular platform: each client engagement produces a **module** bu
 (app only, no migration) — [docs/21 §7.12.1 RESULT](docs/21-account-deletion-and-departed-users.md).**
 Exact HTTP parity with GoTrue's fake success is IMPOSSIBLE without storing the address (not
 adopted); the signup screen now shows one identical "check your email" notice for taken,
-blocked and fresh addresses. **OPEN, FOUNDER: switch the prod Before User Created hook ON**
-(recommended, after this UI deploys). **To reproduce prod's auth locally, BOTH `[auth.email]`
+blocked and fresh addresses. **THE PROD Before User Created HOOK IS ON AND VERIFIED
+(2026-10-13, founder enabled it in the dashboard after deploy `ecd6db8`; prod probe + the real
+prod `/login` screen checked, temp probe row deleted).** Residual, accepted: a raw-API script
+can still tell blocked (422) from taken (200). **To reproduce prod's auth locally, BOTH `[auth.email]`
 and `[auth.sms]` `enable_confirmations` must be true** — SMS autoconfirm alone makes GoTrue
 return the real 422. Same session fixed `/auth/confirm` ignoring `?code=` (prod's default
 templates use it, so emailed links on prod were very likely all bouncing to `/login`), and
@@ -65,11 +67,9 @@ a trigger on `auth.users` covering signup AND email change, lifted only by a sup
 reason). Plus the salon Today's-board "Former member — needs reassigning" fix (UI only, seen
 working in a real browser). `prod-verify-migration.ts` flags `account_email_fingerprint` as
 INVOKER — the known false positive (a pure function needs no elevation; docs/24 §4b).
-**⚠ DO NOT SWITCH ON THE SIGNUP HOOK ON PROD (corrected 2026-10-12).** Prod has CONFIRM-EMAIL
-ON (`mailer_autoconfirm = false`, read via the Management API — an earlier "inferred off" was
-wrong), so prod answers a taken address with a FAKE SUCCESS and the hook's 422 would single out
-a removed one. Hook is off; the trigger still refuses. OPEN (Opus): mimic the fake success,
-proven locally with confirmations on. The `SUPABASE_ACCESS_TOKEN` in `.env.deploy` was replaced
+~~**DO NOT SWITCH ON THE SIGNUP HOOK ON PROD (2026-10-12).**~~ **SUPERSEDED 2026-10-13: the
+hook is ON in prod, deliberately** — the login screen now renders its 422 as the same "check
+your email" notice as a taken address (docs/21 §7.12.1 RESULT). Do not switch it off. The `SUPABASE_ACCESS_TOKEN` in `.env.deploy` was replaced
 2026-10-12 (scoped to auth config; expiry as the founder chose it — 30 days was the recommendation, the actual choice was NOT recorded, so a 401 means regenerate; the old one was rejected, cause unknown —
 nothing uses it routinely, so an expiry breaks nothing). OPEN for the founder: whether a
 removed person should be pulled out of pools/upcoming events at once (docs/21 §7.11).

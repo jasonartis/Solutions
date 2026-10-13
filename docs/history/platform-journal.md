@@ -17,8 +17,10 @@ decision log, docs/03 conventions, docs/12 safeguards) — this is the chronolog
   `?code=` links, and `/auth/confirm` only read `token_hash`**, so emailed links on prod were
   very likely all bouncing to `/login` (fixed; also closed an open redirect via `?next=`).
   **Prod's built-in sender is capped at 2 emails/hour** (docs/18 item 7). Local config keeps a
-  wider `additional_redirect_urls` so local email links work. Prod hook switch: still OFF,
-  founder's go-ahead. Verified: tsc clean; e2e "delete my account" (signs up via this screen)
+  wider `additional_redirect_urls` so local email links work. **Prod hook: ON, same day** —
+  founder approved; the session's Management API PATCH was refused by its auto-mode
+  classifier, so the founder flipped it in the dashboard; verified on prod (blocked 422, taken
+  200, identical notice on the real prod `/login` for both tabs; temp probe row deleted). Verified: tsc clean; e2e "delete my account" (signs up via this screen)
   passes with confirmations off.
 - **2026-10-09 (later, Opus) — ADMIN-FLOOR FIX ON PROD (`20261009030000`), and the gaps from
   the account-deletion self-review closed.** The founder asked "did we finish everything"; the
