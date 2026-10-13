@@ -57,7 +57,10 @@ export default function LoginPage() {
           ...(displayName.trim() ? { data: { display_name: displayName.trim() } } : {}),
         },
       })
-      if (error) setMessage(error.message)
+      // A magic link for a NEW address creates the account, so the re-signup
+      // hook answers a blocked one with 422 "User already registered" — shown
+      // as the same notice, for the same reason as the signup branch below.
+      if (error && error.message !== 'User already registered') setMessage(error.message)
       else setNotice('Check your email for the sign-in link.')
       setBusy(false)
       return

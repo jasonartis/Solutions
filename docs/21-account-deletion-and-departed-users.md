@@ -814,7 +814,9 @@ notice for "no session" (taken or fresh) AND for the hook's `422 "User already r
 (which GoTrue itself never sends while confirm-email is on): *"Check your email. If this
 address can be used for a new account, we have sent it a link to confirm it. Already have an
 account? Sign in instead."* — true in all three cases. Seen in a real browser with prod's
-settings: taken, blocked and fresh all render the identical notice.
+settings: taken, blocked and fresh all render the identical notice. **The "Email link" tab
+creates accounts too** (a magic link for a new address), so it maps the same 422 to its own
+"Check your email for the sign-in link." notice (added the same day, after the first push).
 
 **Residual, stated plainly:** someone scripting the raw API can still tell a blocked address
 (`422`, or `500` with the hook off) from a taken one (`200`). The hook ON does not make that
