@@ -1216,9 +1216,12 @@ Everything below is open but unranked:
   wording" is NOT accurately "genuinely open."** `apps/web/app/privacy/page.tsx` already
   carries a full DRAFT Terms of Service (short version, acceptable use, no-warranty/liability,
   changes clause) below the privacy content, on the same page — Claude's first pass, explicitly
-  marked not founder-reviewed and not linked from any nav (docs/18 item 3). What's actually
-  open: founder review/edit of the drafted wording, and linking the page once approved — not
-  "nothing has been written."
+  marked not founder-reviewed (docs/18 item 3). **⚠ CORRECTED 2026-10-12: the page IS
+  linked — `components/site-footer.tsx` puts "Privacy & Terms" on every page, live on
+  `/login`; only the page's own header comment says otherwise.** What's actually open:
+  founder review of the drafted wording, INCLUDING the account-deletion paragraphs added
+  2026-10-07 → 10-09 (docs/18 item 3 lists them) — they are reachable by real users now,
+  under the DRAFT banner.
 
 **MYZMANIM IS DOWN AND THE SYNAGOGUE MODULE HAS BEEN SILENTLY ON HEBCAL FALLBACK (found
 2026-09-23; two connector bugs FIXED, the ACCOUNT is still the blocker).** The module spec had

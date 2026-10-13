@@ -192,6 +192,20 @@ never updated to match. What's still genuinely open is only the TERMS half's fou
 (docs/12 item 6's 2026-09-23 correction) and the page's stale "DRAFT, not linked" banner
 (the footer does link it) — neither of those is "the wording doesn't exist yet."
 
+**⚠ ADDED 2026-10-12 — NEW PRIVACY WORDING AWAITING FOUNDER REVIEW, AND IT IS ALREADY LIVE.**
+The account-deletion build added paragraphs to `apps/web/app/privacy/page.tsx` that the founder
+has not read as published copy. They are reachable now: the footer links the page on every
+screen (verified on the live `/login`). Review these specifically:
+1. **The deletion paragraph (2026-10-07)** — self-serve, 30 days, signing in cancels, what is
+   removed, what is kept and why.
+2. **Its last sentence (2026-10-08)** — an organization's own records (a salon's customer
+   card) stay with it, and the person should ask the organization, "we'll help them act on
+   your request". The founder confirmed the POLICY behind it (docs/21 §7.10), not the wording.
+3. **The removal paragraph (2026-10-09, the parallel session)** — platform removal, the
+   one-way fingerprint of the address, and the appeal route.
+Also stale, and worth fixing in the same pass: the page's header comment ("not linked from any
+nav yet") and the "DRAFT — not yet published or linked anywhere" banner, which real users see.
+
 ## 4. Worker on a real host
 
 docs/10 holds the deploy runbook (~30 minutes, a small VPS). Until it runs somewhere real,
