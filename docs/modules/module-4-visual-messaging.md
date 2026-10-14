@@ -848,6 +848,10 @@ replayed on prod as `authenticated` in a rolled-back transaction, succeeds.
    Transformer.
 4. **X-ray** fades only the saved layers, never the draft being drawn; and it listens to
    `onMouseDown/Up` only, so it can never work on a phone. Use pointer events, include the draft.
+   **⚠ ALSO REPORTED AND NOT YET EXPLAINED:** after a reply had SAVED (conversation "tempw"),
+   the founder held X-ray and "everything lightened but the pen markings did not". A saved
+   layer's strokes render in the `<Layer opacity={xray ? 0.15 : 1}>` blocks, so by reading
+   they SHOULD fade — reproduce it in a browser before assuming the draft fix covers it.
 5. **Images over 1 MB fail** (root picture AND stamps): no `serverActions.bodySizeLimit`, so
    Next's 1 MB default applies while the code says "max 8MB" (and Vercel caps request bodies
    at ~4.5 MB anyway). Fix: shrink in the browser before upload.
