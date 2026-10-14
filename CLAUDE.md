@@ -19,6 +19,15 @@ A multi-tenant modular platform: each client engagement produces a **module** bu
      and update only the compact "Now / Next / Standing rules" below. A fresh chat must never
      pay for the full journal. See "Session hygiene". -->
 
+**NEXT WORK (founder, 2026-10-14): VISUAL MESSAGING FIX BATCH — two sessions, can run in
+parallel. Brief: [docs/modules/module-4-visual-messaging.md](docs/modules/module-4-visual-messaging.md)
+"2026-10-14" sections.** SONNET: UI phases 1–7 (no migration). OPUS: viewers may react
+(`vm_reactions_insert_own` migration). **⚠ PLATFORM-WIDE, found the same day: every Tailwind
+class used ONLY in `modules/*/ui` is MISSING from the built CSS** — `globals.css`'s
+`@source "../../../modules/*/ui";` scans 0 files (measured). That is why the pen colour
+swatches were invisible; other modules' screens are likely affected too. Phase 1 of the
+Sonnet brief.
+
 **2026-10-13: THE RE-SIGNUP "WAS THIS PERSON REMOVED?" GAP IS MEASURED AND CLOSED ON SCREEN
 (app only, no migration) — [docs/21 §7.12.1 RESULT](docs/21-account-deletion-and-departed-users.md).**
 Exact HTTP parity with GoTrue's fake success is IMPOSSIBLE without storing the address (not

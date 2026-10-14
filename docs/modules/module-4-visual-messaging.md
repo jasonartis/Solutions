@@ -865,3 +865,65 @@ swipe should follow the finger with the incoming layer see-through, finishing pa
 and snapping back before it (today it only animates after release).
 **"No colour choices for the pen" — NOT reproduced by reading:** `COLORS` renders six swatches
 when Pen is active. Needs a look in a real browser.
+
+### 2026-10-14 (later) — more findings, founder decisions, and the BUILD BRIEF for the next sessions
+
+**Two more findings, both measured:**
+7. **Module UI styling is partly MISSING platform-wide — not just visual messaging.** The
+   live stylesheet has no `.h-8`, `.w-8`, `ring-[3px]`, `bg-black/40`, `max-w-[640px]` or
+   `h-2.5` rules — every class used ONLY inside `modules/*/ui` is absent; classes the main
+   app also uses happen to work. **This is why the founder saw NO pen colour circles** (six
+   `h-8 w-8` swatch buttons rendering at 0×0). Local prod build (2026-10-09) is the same, so
+   it is not a deploy quirk. Cause (measured with `@tailwindcss/oxide`'s `Scanner`):
+   `apps/web/app/globals.css` has `@source "../../../modules/*/ui";` — a scan shaped like
+   that finds **0 files**; base `modules` + pattern `*/ui/**/*` finds **49** (and
+   `bg-black/40`, `h-8`). Likely fix: `@source "../../../modules/*/ui/**/*";` (or
+   `@source "../../../modules";`). **Verify by building and grepping the emitted CSS for
+   `bg-black\/40` and `.h-8{`** — not by reading. Then look at EVERY module's screens: things
+   may have looked "fine" only by luck.
+8. **"Server Action … was not found on the server"** on every send: the tab was opened
+   before a new deploy (action IDs change per build); reloading fixes it. Still worth
+   handling: catch it and show "The site was updated — reload to continue", keeping the
+   draft (Vercel's Skew Protection would also prevent it, but it is a paid-plan feature).
+
+**Founder decisions (2026-10-14):**
+- **Viewers CAN react** (option A) — a reaction is not a post. `vm_reactions_insert_own`
+  must accept a viewer seat (member, not banned/pending) instead of `vm_can_post`. Migration
+  → OPUS session, docs/03 #12 rhythm.
+- **Undo/Redo now: Ctrl+Z and Ctrl+Shift+Z** (and buttons, for phones). **Select-and-edit pen
+  strokes is wanted too** — build it in this batch after the bugs (tap a stroke to select;
+  drag to move; Delete removes it; resize/rotate with the same handles as the others).
+- **The Delete (and Backspace) key deletes the selected item**, alongside the button —
+  except while typing in the text box.
+- **Live resize/rotate handles** on placed emoji/text/image/strokes; drop the pre-placement
+  size/rotation sliders where handles replace them. **Paste an image (Ctrl+V)** as well as
+  choosing a file.
+
+**BUILD BRIEF — SONNET session (UI; no migration). Phases in order; commit after each:**
+1. Styling (#7): fix `@source`, prove it with the built CSS, eyeball each module.
+2. Crash (#1), errors as `{ok, reason}` shown inline keeping the draft (#2, docs/03 #22 —
+   every action in `ui/actions.ts`), stale-deploy message (#8), Transformer anchors (#3),
+   X-ray on pointer events + fades the draft (#4).
+3. Images (#5): shrink in the browser before upload (root picture AND stamps; e.g. longest
+   side ≤ 2048px, JPEG/WebP), keep PNG transparency; clear message if still too big.
+4. File pickers styled as real buttons; label the pen-size slider; "Delete selected" in a
+   fixed place; Undo/Redo + keys; Delete key; Ctrl+V paste.
+5. Live handles; select/move/delete/resize pen strokes.
+6. Rename a conversation (check `vm_conversations` UPDATE policy first: if the admin can
+   already update `title`, it is UI only; if not, STOP — that is an Opus migration).
+7. Swipe that follows the finger: incoming layer see-through, attached to the pointer,
+   completes past halfway, snaps back before. Needs the neighbour layer's content rendered
+   during the drag (today navigation is a page load per layer). May spill into its own session.
+**Testing:** e2e per phase where it can be asserted (the existing `visual messaging:` tests
+are the template); mouse AND touch via pointer events; the founder does a phone pass after.
+**Local machine warning:** Windows' commit memory was nearly exhausted on 2026-10-14
+(dev server's Turbopack died with "memory allocation … failed"); check
+`(Get-CimInstance Win32_OperatingSystem).FreeVirtualMemory` before blaming code.
+
+**BUILD BRIEF — OPUS session (viewer reactions; migration):** new migration changing
+`vm_reactions_insert_own` so any ACTIVE member seat, including `viewer`, may react
+(keep `user_id = auth.uid()`; keep the org-membership conjunct the seat-authority work
+added — read docs/19 and the vm_ predicates before writing; a self-blocked or banned seat
+must NOT react). RLS tests: viewer can react, pending invitee cannot, banned cannot,
+non-member cannot, delete-own still works. Prod: backup → `migrate:prod` (founder
+go-ahead) → a policy-aware prod verifier (template: `scripts/prod-verify-vm-*.mts`).
