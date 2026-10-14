@@ -1,13 +1,14 @@
-// DRAFT — not linked from any nav yet (docs/18 item 3). Founder owns the
-// final wording; this is Claude's first pass for review, not published
-// copy. Reachable directly at /privacy for review purposes only.
+// LIVE and linked from every page's footer ("Privacy & Terms"). Founder owns
+// the wording (docs/18 item 3); the founder reviewed and edited it 2026-10-14
+// — notably: no mechanism details for re-signup blocking (say WHAT is kept and
+// WHY, not HOW), and no module-specific examples (a reader may not use them).
 //
 // Deliberately kept SHORT and plain-language (founder feedback, 2026-09-02:
 // a fuller legal-style version reads as scary to regular users). A more
 // detailed version covering the same facts is kept at
 // docs/privacy-detailed-draft.md for later — an audit, a legal review, or a
 // larger/more regulated client that needs it.
-const LAST_UPDATED = 'October 8, 2026'
+const LAST_UPDATED = 'October 14, 2026'
 
 export default function PrivacyPage() {
   // Platform identity — filled in via .env.deploy (see scripts/dev.ts
@@ -20,7 +21,7 @@ export default function PrivacyPage() {
   return (
     <main className="mx-auto max-w-2xl px-4 py-12 text-gray-800">
       <p className="mb-6 rounded border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900">
-        DRAFT — for founder review, not yet published or linked anywhere.
+        This policy is still being finalized and may change.
       </p>
 
       <h1 className="mb-2 text-2xl font-semibold">Privacy Policy</h1>
@@ -35,7 +36,7 @@ export default function PrivacyPage() {
         <p>
           Other members of an organization you belong to can see your display name. They cannot
           see your email address. Your address is only ever shared where you'd expect it — with
-          your organization's administrators, and where a feature exists to put two people in
+          your organizations' administrators, and where a feature exists to put two people in
           touch and you've both opted in.
         </p>
         <p>
@@ -55,18 +56,17 @@ export default function PrivacyPage() {
           away: you're signed out, and your account is deleted 30 days later. If you sign back in before
           then, the deletion is cancelled. When it goes through, your name, email address and sign-in are
           removed, you leave every organization, and records like your sign-in history are deleted. What
-          we keep is anything you did that other people rely on — a reply in a shared conversation, a
-          review of someone's work, homework and grades that are part of a class record, or a safety
-          report — because removing it would damage their records, not protect yours. It stays where it
-          is, labelled as from a former member and no longer tied to your name. An organization's own
-          business records about you, like a salon's customer card, stay with that organization. To
-          have those removed, ask the organization directly — we'll help them act on your request.
+          we keep is anything you contributed that other people rely on, because removing it would damage
+          their records, not protect yours. It stays where it is, labelled as from a former member and no
+          longer tied to your name. Records an organization keeps about you for its own business stay
+          with that organization. To have those removed, ask the organization directly — we&apos;ll help
+          them act on your request.
         </p>
         <p>
           We may also remove an account that breaks our rules. When we do, you're signed out and can&apos;t
           sign back in, and the account is deleted 30 days later in the same way. To stop the same person
-          simply signing up again, we keep a one-way fingerprint of that email address — not the address
-          itself — along with a short note of why it was removed. If you think we got it wrong, contact
+          simply signing up again, we keep enough to recognize that email address, and the reason the
+          account was removed. If you think we got it wrong, contact
           us from that address and we&apos;ll review it.
         </p>
         <p>Questions? Contact {contactEmail}.</p>
@@ -79,8 +79,8 @@ export default function PrivacyPage() {
 
       <Section title="The short version">
         <p>
-          This platform is provided by {companyName} to power the organization you're a member of
-          (shown in your account). Your organization's administrators manage your membership and
+          This platform is provided by {companyName} to power the organizations you're a member of
+          (shown on your dashboard). Your organizations' administrators manage your membership and
           access; we provide the underlying technology and are responsible for keeping it running
           and your data secure.
         </p>
@@ -105,7 +105,7 @@ export default function PrivacyPage() {
       <Section title="Changes">
         <p>
           We may update these terms or the privacy policy as the platform evolves. Material
-          changes will be reflected here with an updated date.
+          changes will be reflected here.
         </p>
       </Section>
     </main>

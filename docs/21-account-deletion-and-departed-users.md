@@ -749,7 +749,7 @@ code, then one review of the built code. **ON PRODUCTION AND PROD-VERIFIED 2026-
 | **Lifting** | Superadmin only, on `/console/accounts` → Re-signup blocks. Shows the category, note, who removed and when, and how many times this address was blocked; a warning (stronger for abuse/harassment, and "tell the organization" for an org request); a required reason; a confirmation tick. **Refused while the old account is still in its 30 days** (it holds the address, so a lift would do nothing; Undo removal is the action then). Undo removal lifts that removal's OWN block automatically. |
 | **Lookup** | Type an address to find its block. The database logs every lookup itself (cannot be skipped), because a lookup is itself a "was this person removed?" question. |
 | **Backfill** | Anyone removed since `20261008020000` got a block while their address still existed. |
-| **Disclosure** | `/privacy` now says the platform may remove an account, keeps a one-way fingerprint and a short note, and how to appeal (email us from that address). |
+| **Disclosure** | `/privacy` now says the platform may remove an account, keeps a one-way fingerprint and a short note, and how to appeal (email us from that address). **Reworded 2026-10-14 by founder decision: the page no longer names the mechanism** — it says "we keep enough to recognize that email address, and the reason the account was removed" (what and why, not how; docs/18 item 3). |
 
 **Review points NOT adopted, recorded so they are not re-derived (2026-10-09):**
 - The product review suggested showing the appeal contact on the **sign-in screen** for an

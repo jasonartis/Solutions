@@ -206,6 +206,20 @@ screen (verified on the live `/login`). Review these specifically:
 Also stale, and worth fixing in the same pass: the page's header comment ("not linked from any
 nav yet") and the "DRAFT — not yet published or linked anywhere" banner, which real users see.
 
+**✅ REVIEWED BY THE FOUNDER 2026-10-14, with edits applied the same day.** He read the live
+page as a newly signed-up member and changed: (a) "your organization's administrators" →
+"your organizations' administrators" (both places; the Terms' "the organization you're a
+member of" made plural to match); (b) the removal paragraph no longer names the mechanism —
+the founder did not want to publicise how blocking works; Claude kept WHAT is kept and WHY
+("we keep enough to recognize that email address, and the reason the account was removed")
+because a policy should still say that something is retained after deletion; (c) the deletion
+paragraph's module-specific examples (shared-conversation replies, reviews, class records,
+safety reports, a salon's customer card) replaced with general wording, since a reader may
+use none of those modules; (d) "with an updated date" dropped from Changes. The banner now
+reads "This policy is still being finalized and may change." and `LAST_UPDATED` moved to
+October 14, 2026. **Still open: whether the founder considers the WHOLE page final** (he
+commented on these passages only), which is what would let the banner go.
+
 ## 4. Worker on a real host
 
 docs/10 holds the deploy runbook (~30 minutes, a small VPS). Until it runs somewhere real,
