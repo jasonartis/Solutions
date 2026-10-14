@@ -8,9 +8,21 @@
 // detailed version covering the same facts is kept at
 // docs/privacy-detailed-draft.md for later — an audit, a legal review, or a
 // larger/more regulated client that needs it.
+import { createClient } from '@/lib/supabase/server'
+import { getProfile } from '@/lib/platform'
+import { AppHeader } from '@/components/app-header'
+
 const LAST_UPDATED = 'October 14, 2026'
 
-export default function PrivacyPage() {
+export default async function PrivacyPage() {
+  // Public page, but signed-in people reach it from the footer too: give them
+  // the same top bar as the rest of the app (signed out: a "Sign in" link).
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  const profile = user ? await getProfile() : null
+
   // Platform identity — filled in via .env.deploy (see scripts/dev.ts
   // platformIdentityEnv()) rather than hardcoded, since these aren't
   // finalized yet. Falls back to a visible placeholder so an unset value
@@ -19,6 +31,8 @@ export default function PrivacyPage() {
   const contactEmail = process.env.NEXT_PUBLIC_PLATFORM_CONTACT_EMAIL || '[CONTACT EMAIL NOT SET]'
 
   return (
+    <>
+    <AppHeader user={user} displayName={profile?.display_name} isSuperadmin={profile?.is_superadmin} />
     <main className="mx-auto max-w-2xl px-4 py-12 text-gray-800">
       <p className="mb-6 rounded border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900">
         This policy is still being finalized and may change.
@@ -63,11 +77,9 @@ export default function PrivacyPage() {
           them act on your request.
         </p>
         <p>
-          We may also remove an account that breaks our rules. When we do, you're signed out and can&apos;t
-          sign back in, and the account is deleted 30 days later in the same way. To stop the same person
-          simply signing up again, we keep enough to recognize that email address, and the reason the
-          account was removed. If you think we got it wrong, contact
-          us from that address and we&apos;ll review it.
+          We may also remove an account that breaks our rules. When we do, you&apos;re signed out and
+          can&apos;t sign back in, and the account is deleted. If you think we got it wrong, contact us
+          from the email address on that account and we&apos;ll review it.
         </p>
         <p>Questions? Contact {contactEmail}.</p>
       </div>
@@ -109,6 +121,7 @@ export default function PrivacyPage() {
         </p>
       </Section>
     </main>
+    </>
   )
 }
 

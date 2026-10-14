@@ -212,7 +212,9 @@ page as a newly signed-up member and changed: (a) "your organization's administr
 member of" made plural to match); (b) the removal paragraph no longer names the mechanism —
 the founder did not want to publicise how blocking works; Claude kept WHAT is kept and WHY
 ("we keep enough to recognize that email address, and the reason the account was removed")
-because a policy should still say that something is retained after deletion; (c) the deletion
+because a policy should still say that something is retained after deletion — **then, on a
+second pass the same day, the founder removed that sentence too** (decision recorded in docs/21
+§7.12's Disclosure row; revisit with a legal review); (c) the deletion
 paragraph's module-specific examples (shared-conversation replies, reviews, class records,
 safety reports, a salon's customer card) replaced with general wording, since a reader may
 use none of those modules; (d) "with an updated date" dropped from Changes. The banner now
