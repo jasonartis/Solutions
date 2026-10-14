@@ -223,8 +223,8 @@ no promise on an organization's behalf about its own records); (d) "with an upda
 dropped from Changes. The page also gained the app's top bar for signed-in readers
 (`components/app-header.tsx`; signed out it shows the platform name and "Sign in"). The banner now
 reads "This policy is still being finalized and may change." and `LAST_UPDATED` moved to
-October 14, 2026. **Still open: whether the founder considers the WHOLE page final** (he
-commented on these passages only), which is what would let the banner go.
+October 14, 2026. **Still open — founder, 2026-10-14: "it still needs work."** The page is NOT final; the
+"still being finalized" banner stays until he says otherwise.
 
 ## 4. Worker on a real host
 
