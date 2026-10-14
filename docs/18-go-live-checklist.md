@@ -265,7 +265,9 @@ only understood `token_hash`, so **every emailed link on prod (signup confirmati
 plus prod's template settings, then the fixed route was proven end to end locally with prod's
 settings. docs/21 §7.12.1 has the measurements. **VERIFIED ON PROD 2026-10-14 by the
 founder:** a real signup with a new address → confirmation email arrived → the link landed on
-the Dashboard signed in ("not a member of any organization yet", as expected).
+the Dashboard signed in ("not a member of any organization yet", as expected). **That created a
+real prod account — the founder's own, display name `jasonartisenergy2`, in no organization** —
+so prod user counts measured before 2026-10-14 are one lower.
 
 **ADDED 2026-10-13: "Forgot password?" + "Change password".** Before this there was NO way to
 recover or change a password anywhere in the app. Now: `/login` → Forgot password? →
