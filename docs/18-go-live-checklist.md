@@ -217,7 +217,11 @@ second pass the same day, the founder removed that sentence too** (decision reco
 §7.12's Disclosure row; revisit with a legal review); (c) the deletion
 paragraph's module-specific examples (shared-conversation replies, reviews, class records,
 safety reports, a salon's customer card) replaced with general wording, since a reader may
-use none of those modules; (d) "with an updated date" dropped from Changes. The banner now
+use none of those modules — and then, also by the founder, "To have those removed, ask the
+organization directly — we'll help them act on your request." was removed (the platform makes
+no promise on an organization's behalf about its own records); (d) "with an updated date"
+dropped from Changes. The page also gained the app's top bar for signed-in readers
+(`components/app-header.tsx`; signed out it shows the platform name and "Sign in"). The banner now
 reads "This policy is still being finalized and may change." and `LAST_UPDATED` moved to
 October 14, 2026. **Still open: whether the founder considers the WHOLE page final** (he
 commented on these passages only), which is what would let the banner go.

@@ -73,8 +73,7 @@ export default async function PrivacyPage() {
           we keep is anything you contributed that other people rely on, because removing it would damage
           their records, not protect yours. It stays where it is, labelled as from a former member and no
           longer tied to your name. Records an organization keeps about you for its own business stay
-          with that organization. To have those removed, ask the organization directly — we&apos;ll help
-          them act on your request.
+          with that organization.
         </p>
         <p>
           We may also remove an account that breaks our rules. When we do, you&apos;re signed out and
