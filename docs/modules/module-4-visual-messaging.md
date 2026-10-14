@@ -825,3 +825,43 @@ do.
 **Trigger to build it:** a real user being nagged through new conversations. Until then A is
 enough (extract-don't-speculate).
 
+
+## 2026-10-14 — founder's desktop walkthrough on PROD: findings (diagnosed, NOT yet fixed)
+
+The founder used it on a desktop browser as Alice (demo-visual, conversations "test" and
+"tempw") and Charlie. **Phone testing is still to come**; fixes below are to be built for
+mouse AND touch (Konva pointer events) and then checked on a phone. Measured on prod
+(read-only): "test" has 0 replies (every send failed), "tempw" 1 reply, 0 reactions anywhere;
+Charlie's "tempw" seat is `viewer`. **The DB is NOT the problem:** Alice's exact reply insert,
+replayed on prod as `authenticated` in a rolled-back transaction, succeeds.
+
+**BUGS — cause found:**
+1. **"K.current is not iterable" crash while drawing, losing the draft** (`layer-canvas.tsx`
+   `handleMove`): the `setDraft` updater spreads `activeStroke.current` LATE (React runs
+   updaters at render); a fast pointer-up in between nulls it. Fix: copy the points outside
+   the updater.
+2. **Every action THROWS** (`ui/actions.ts` `fail()` and friends) — docs/03 #22: a thrown
+   message is REDACTED in production and the error boundary replaces the page, so the person
+   sees a generic error and loses the draft. Convert to `{ok, reason}` and show it inline.
+3. **Transformer handles don't work:** a pointer-down on a Transformer anchor reaches
+   `handleDown`, which deselects and places a NEW emoji. Bail when the target belongs to the
+   Transformer.
+4. **X-ray** fades only the saved layers, never the draft being drawn; and it listens to
+   `onMouseDown/Up` only, so it can never work on a phone. Use pointer events, include the draft.
+5. **Images over 1 MB fail** (root picture AND stamps): no `serverActions.bodySizeLimit`, so
+   Next's 1 MB default applies while the code says "max 8MB" (and Vercel caps request bodies
+   at ~4.5 MB anyway). Fix: shrink in the browser before upload.
+6. **Reactions fail for a viewer:** `vm_reactions_insert_own` requires `vm_can_post`, which a
+   viewer seat lacks, yet the buttons show; the refusal is thrown (item 2) — the likely source
+   of Charlie's "Something didn't go through" page. **Needs a founder call** (below).
+
+**UX the founder asked for:** file pickers that look clickable; rename a conversation after
+creating it; a label on the pen-size slider; undo (button + Ctrl-Z) and a way to select /
+move / delete a pen stroke; resize/rotate LIVE with handles on the placed emoji/text/image
+instead of guessing with sliders beforehand (founder: "paste it, choose it, move it, rotate
+and resize live" — prior art: Instagram stories, Canva, PowerPoint all do exactly this);
+"Delete selected" in a consistent place (it wraps to a new line after the emoji row); and the
+swipe should follow the finger with the incoming layer see-through, finishing past halfway
+and snapping back before it (today it only animates after release).
+**"No colour choices for the pen" — NOT reproduced by reading:** `COLORS` renders six swatches
+when Pen is active. Needs a look in a real browser.
