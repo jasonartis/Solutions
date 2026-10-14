@@ -243,7 +243,9 @@ now handles `?code=`, which is what prod's DEFAULT email templates produce. Befo
 only understood `token_hash`, so **every emailed link on prod (signup confirmation AND the
 "Email link" sign-in) bounced to `/login` with no session** — inferred from the route's code
 plus prod's template settings, then the fixed route was proven end to end locally with prod's
-settings. docs/21 §7.12.1 has the measurements.
+settings. docs/21 §7.12.1 has the measurements. **VERIFIED ON PROD 2026-10-14 by the
+founder:** a real signup with a new address → confirmation email arrived → the link landed on
+the Dashboard signed in ("not a member of any organization yet", as expected).
 
 **ADDED 2026-10-13: "Forgot password?" + "Change password".** Before this there was NO way to
 recover or change a password anywhere in the app. Now: `/login` → Forgot password? →
