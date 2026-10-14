@@ -1490,6 +1490,25 @@ in the sections below.
   directory" and the transaction aborts — any later output is from the UNMODIFIED database,
   which can look like a successful probe. Pipe the SQL on stdin instead (`cat x.sql |
   docker exec -i ... psql`).
+- **"memory allocation of N bytes failed" FROM `next dev`, OR ITS BACKGROUND TASK EXITING 127,
+  OR EVEN `cat` RETURNING EXIT 45 WITH NO OUTPUT = WINDOWS' COMMIT LIMIT IS EXHAUSTED, NOT
+  YOUR CODE (2026-10-14).** RAM looked free (10.5 GB) while `FreeVirtualMemory` was **0.3 GB
+  of 39.4 GB** — 423 processes, led by VS Code (64 procs, 13.3 GB), Docker's `vmmem` (4.7 GB)
+  and 8 Claude sessions (3.6 GB). Turbopack (Rust) dies first, then the shell. Check
+  `(Get-CimInstance Win32_OperatingSystem).FreeVirtualMemory` before debugging; the fix is the
+  founder closing apps/sessions — never kill processes that are not yours. CI is unaffected,
+  so a pushed change still gets its e2e run there.
+- **NO LOG ACCESS FROM THE TERMINAL FOR PAST PROD ERRORS (tried 2026-10-14, don't retry blind):**
+  the Management API `analytics/endpoints/logs.all` is REMOVED (410); its replacement
+  `.../analytics/endpoints/logs` answers `Table "postgres_logs" does not exist` with our
+  auth-scoped token; Vercel's `/v1/projects/{id}/deployments/{id}/runtime-logs` only STREAMS
+  live lines (times out with nothing for the past). What worked instead: read the data
+  read-only through the pooler, and REPLAY the failing write as `authenticated` inside a
+  rolled-back transaction (`set local role authenticated` + `request.jwt.claims`) to get the
+  database's real error. Sentry has the app errors but no API token is configured here.
+- **Git Bash quoted heredocs (`<<'EOF'`) can still collapse `\\` to `\`** in a script body
+  (hit 2026-10-14: a JS regex `/\\/g` arrived as `/\/g`). Write such files with the editor
+  tool, or avoid the backslash (`String.fromCharCode(92)`).
 - **NO PYTHON ON THIS HOST, AND THE PERL FALLBACK CORRUPTS FILES SILENTLY (2026-10-07).**
   `python3` opens the Microsoft Store stub. Reaching for `perl -0pi -e 's|...|...|'` instead
   mangled two source files: with `|` as the delimiter, an escaped `\|` inside the pattern

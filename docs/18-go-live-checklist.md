@@ -275,7 +275,9 @@ The notice never says whether an account exists. **e2e covers the whole loop** (
 password: …"), reading the email from the local Mailpit at `127.0.0.1:54324`; it depends on
 `supabase/config.toml`'s `additional_redirect_urls` including `http://localhost:3000/**`
 (without it GoTrue redirects to `site_url` and the test fails). Each reset uses one of prod's
-2 emails/hour until custom SMTP exists.
+2 emails/hour until custom SMTP exists. **Local does NOT enforce its own `email_sent = 2`**
+(measured 2026-10-14: 4+ emails within minutes, no 429), so a local run can never reproduce
+prod's rate limit — test that only on prod, deliberately.
 
 **MEASURED 2026-10-12, worth checking before a real client: prod has CONFIRM-EMAIL ON**
 (`mailer_autoconfirm = false`, read via the Management API). So a new signup gets NO session

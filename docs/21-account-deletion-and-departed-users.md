@@ -699,6 +699,11 @@ would ban a seeded user). Two adversarial reviews: no escape found.
   row whose person can sign in. A trusted actor only; a console check could flag it.
 - ~~`/privacy` does not say the platform may remove an account~~ **Added 2026-10-09**, with the
   fingerprint disclosure (§7.12). The draft Terms still do not.
+- **COPY RULE (founder, 2026-10-14): never promise that cancelling a deletion restores
+  everything "as you left it".** Removed from `/account` and the dashboard's welcome-back
+  banner: others already see a departing person as having left during the grace period
+  (§7.2), and the platform may later pull a leaver out of pools/upcoming events (the open
+  question below), which cancelling would not undo. Say only that the deletion is cancelled.
 - **OPEN, FOUNDER QUESTION (the account-deletion session's review, 2026-10-09): for the 30 days
   a removed person is still a live participant** — still in matchmaking pools (the rescore job
   keeps pairing them), still registered for upcoming speed-dating events, still on rosters. For
