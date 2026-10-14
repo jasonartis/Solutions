@@ -2422,6 +2422,10 @@ test('forgot password: reset link signs you in, the new password works and the o
   await page.getByLabel('Password').fill('old-password-1')
   await page.getByRole('button', { name: 'Sign up' }).click()
   await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible({ timeout: 15_000 })
+  // A brand-new account belongs to nothing: the dashboard names the exact
+  // address an admin needs, and offers a message to send them.
+  await expect(page.getByText(`ask its administrator to add you using this email address: ${email}`)).toBeVisible()
+  await expect(page.getByTestId('join-message')).toContainText(`My account email address is ${email}.`)
   await page.context().clearCookies()
 
   await page.goto('/login')

@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { getOrgsWithModules, getPendingOrgInvites } from '@/lib/platform'
 import { createClient } from '@/lib/supabase/server'
 import { acceptInvite, declineInvite, leaveOrg } from './actions'
+import JoinHelp from './join-help'
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -71,11 +72,7 @@ export default async function DashboardPage() {
         </div>
       )}
 
-      {orgs.length === 0 && invites.length === 0 && (
-        <p className="text-gray-500">
-          You are not a member of any organization yet. Ask your administrator for access.
-        </p>
-      )}
+      {orgs.length === 0 && invites.length === 0 && <JoinHelp email={auth.user?.email ?? ''} />}
 
       <div className="space-y-6">
         {orgs.map((org) => (

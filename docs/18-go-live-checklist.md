@@ -289,6 +289,18 @@ on which: the re-signup block's indistinguishability work assumes confirm-email 
 
 ## 8. Onboarding rehearsal — **DONE 2026-09-02**
 
+**2026-10-14 — what a self-signed-up person with no organization sees (founder decision).**
+The dashboard now says "To join one, ask its administrator to add you using this email
+address: <their address>", with a ready-made message and a Copy button
+(`app/(app)/dashboard/join-help.tsx`). The flow it describes is the real one: the person
+signs up → an ORG ADMIN (no superadmin needed) adds that exact address on `/o/<slug>/members`
+→ a pending invitation appears on the person's dashboard → they accept. **Considered and
+rejected for now:** a "find your organization" picker or search (lists or probes which
+clients use the platform), and "email the admin" from the platform (would spend prod's 2
+emails/hour and let any signup email client admins). **The right future upgrade is an
+admin-shared INVITE LINK** (Slack/WhatsApp prior art) — docs/15 §11's deferred
+"request-approval" joinPolicy; build it when a real client needs it.
+
 Rehearsed end to end against **real production**, signed in as the actual superadmin (not a
 service-role bypass — this exercises the exact RLS-gated path the console UI uses):
 create org → enable a module → resolve an existing member by email → add them active →
