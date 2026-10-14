@@ -38,8 +38,7 @@ export default async function DashboardPage() {
 
       {deletionCancelled && (
         <p className="mb-6 rounded border border-green-200 bg-green-50 p-3 text-sm text-green-800">
-          Welcome back. Because you signed in, your account deletion has been cancelled and your
-          account is exactly as you left it.
+          Welcome back. Because you signed in, your account deletion has been cancelled.
         </p>
       )}
 

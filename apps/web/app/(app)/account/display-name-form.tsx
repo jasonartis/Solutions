@@ -27,7 +27,7 @@ export default function DisplayNameForm({ initial }: { initial: string }) {
           required
           maxLength={80}
           defaultValue={initial}
-          placeholder="How others in your organization see you"
+          placeholder="Your display name"
           className={inputCls}
         />
       </label>

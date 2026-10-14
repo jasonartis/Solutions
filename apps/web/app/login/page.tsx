@@ -186,7 +186,7 @@ export default function LoginPage() {
                   maxLength={80}
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
-                  placeholder="How others in your organization see you"
+                  placeholder="Your display name"
                   className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
                 />
               </label>

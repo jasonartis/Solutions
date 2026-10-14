@@ -23,7 +23,7 @@ export default function DeleteAccountForm({ email, blockers }: { email: string; 
       <h2 className="mb-1 text-sm font-medium text-red-800">Delete my account</h2>
       <p className="mb-3 text-sm text-gray-600">
         You will be signed out everywhere. Your account is deleted <strong>30 days</strong> later. If you sign
-        in again before then, the deletion is cancelled and everything is as you left it.
+        in again before then, the deletion is cancelled.
       </p>
       <p className="mb-3 text-sm text-gray-600">
         After 30 days your name, email address and sign-in are removed for good, and you leave every

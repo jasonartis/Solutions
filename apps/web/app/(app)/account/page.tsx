@@ -17,10 +17,7 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
 
   return (
     <div className="max-w-lg">
-      <h1 className="mb-1 text-2xl font-semibold">Your account</h1>
-      <p className="mb-6 text-sm text-gray-500">
-        Your display name is how other members of your organizations see you.
-      </p>
+      <h1 className="mb-6 text-2xl font-semibold">Your account</h1>
 
       {reset && <PasswordForm reset />}
 
