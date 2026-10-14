@@ -841,7 +841,11 @@ PROD** in `account_signup_blocks` (note starts `TEMPORARY probe row, docs/21 7.1
 `sp-block-probe-20261013@demo.local`, never a real account). ~~After the switch, re-probe and
 delete it.~~ **DONE 2026-10-13: THE HOOK IS ON IN PROD AND VERIFIED.** The founder enabled it in
 the dashboard (schema `public`; the dashboard's own grant/revoke statements matched the
-migration's ACL). Management API reads `hook_before_user_created_enabled = true`. Prod probe:
+migration's ACL — **except one it ADDS that no migration does:** `grant usage on schema public
+to supabase_auth_admin`, run on PROD by the dashboard 2026-10-14. If an ACL audit ever flags
+that grant as prod-only drift, this is its origin; it is needed for the hook to resolve the
+function and is harmless (USAGE on a schema grants no table access). It may already have
+existed; not measured before the click). Management API reads `hook_before_user_created_enabled = true`. Prod probe:
 blocked → `422 {"code":422,"error_code":"unknown","msg":"User already registered"}`, no
 `auth.users` row; taken → `200` stand-in, unchanged. **The real prod `/login` screen, in a
 browser:** Create account for the blocked and the taken address render the identical
