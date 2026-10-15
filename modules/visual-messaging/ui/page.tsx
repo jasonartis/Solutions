@@ -93,7 +93,14 @@ export default async function VisualMessagingPage(props: { params: Promise<{ org
         </h2>
         <ActionForm action={createConversation.bind(null, orgSlug)} resetOnSuccess shrinkImageField="image" className="flex flex-wrap items-center gap-2">
           <input name="title" required placeholder="Title" className={`${inputCls} min-w-56`} />
-          <input name="image" type="file" accept="image/*" required className="text-sm" />
+          <input
+            name="image"
+            type="file"
+            accept="image/*"
+            required
+            aria-label="starting picture"
+            className="cursor-pointer text-sm text-gray-600 file:mr-3 file:cursor-pointer file:rounded file:border-0 file:bg-blue-50 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-blue-700 hover:file:bg-blue-100"
+          />
           <button className={btnCls}>Create</button>
         </ActionForm>
         <p className="mt-2 text-xs text-gray-400">

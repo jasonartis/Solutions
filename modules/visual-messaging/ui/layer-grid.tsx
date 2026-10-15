@@ -144,6 +144,7 @@ export default function LayerGrid(props: {
                             fontSize={st.fontSize}
                             x={st.x}
                             y={st.y}
+                            rotation={st.angle ?? 0}
                             offsetX={st.fontSize / 2}
                             offsetY={st.fontSize / 2}
                           />

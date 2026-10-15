@@ -1404,16 +1404,16 @@ test('visual messaging: create from a picture, draw a reply, membership gates ac
   // it selects it (shows "Delete selected"), and dragging it doesn't crash
   // or accidentally drop a second copy. "Delete selected" actually removes
   // it: with nothing else queued, Send goes back to disabled.
-  await expect(page.getByRole('button', { name: 'Delete selected' })).not.toBeVisible()
+  await expect(page.getByRole('button', { name: 'Delete selected' })).toBeEnabled() // fixed-place button; a newly placed item is selected at once (2026-10-14)
   await page.mouse.click(box.x + 300, box.y + 60) // tap the emoji just placed
-  await expect(page.getByRole('button', { name: 'Delete selected' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Delete selected' })).toBeEnabled()
   await page.mouse.move(box.x + 300, box.y + 60)
   await page.mouse.down()
   await page.mouse.move(box.x + 340, box.y + 100, { steps: 4 })
   await page.mouse.up()
   await expect(page.getByRole('button', { name: 'Send reply' })).toBeEnabled()
   await page.getByRole('button', { name: 'Delete selected' }).click()
-  await expect(page.getByRole('button', { name: 'Delete selected' })).not.toBeVisible()
+  await expect(page.getByRole('button', { name: 'Delete selected' })).toBeDisabled()
   await expect(page.getByRole('button', { name: 'Send reply' })).toBeDisabled()
   // Place it again so the rest of this reply (text/image/stroke below) sends.
   await page.mouse.click(box.x + 300, box.y + 60)
@@ -1430,14 +1430,14 @@ test('visual messaging: create from a picture, draw a reply, membership gates ac
   // Image tool: a tap does nothing until an image is uploaded; uploading
   // updates the placement hint; a tap after that drops it.
   await page.getByRole('button', { name: 'Image', exact: true }).click()
-  await expect(page.getByText('upload an image first')).toBeVisible()
+  await expect(page.getByText('choose a picture, or paste one with Ctrl+V')).toBeVisible()
   await page.mouse.click(box.x + 200, box.y + 60) // no-op: nothing uploaded yet
   await page.setInputFiles('input[aria-label="upload image"]', {
     name: 'stamp.svg',
     mimeType: 'image/svg+xml',
     buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="100" height="80"><circle cx="50" cy="40" r="30" fill="#16a34a"/></svg>'),
   })
-  await expect(page.getByText('tap the picture to place it')).toBeVisible()
+  await expect(page.getByText(/placed in the middle/)).toBeVisible()
   await page.mouse.click(box.x + 200, box.y + 60)
 
   // Back to the pen for a stroke.

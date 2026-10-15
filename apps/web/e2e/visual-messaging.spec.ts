@@ -104,7 +104,7 @@ test('visual messaging: a fast stroke does not crash, X-ray fades the draft (mou
   // before that still misses the shape. Two frames is the settled state.
   await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))))
   await page.mouse.click(box.x + 300, box.y + 200) // select it
-  await expect(page.getByRole('button', { name: 'Delete selected' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Delete selected' })).toBeEnabled()
   const anchor = await page.evaluate(() => {
     const K = (window as any).Konva
     const a = K.stages[0].findOne('.bottom-right')
@@ -115,7 +115,7 @@ test('visual messaging: a fast stroke does not crash, X-ray fades the draft (mou
   await page.mouse.down()
   await page.mouse.move(box.x + anchor.x + 30, box.y + anchor.y + 30, { steps: 5 })
   await page.mouse.up()
-  await expect(page.getByRole('button', { name: 'Delete selected' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Delete selected' })).toBeEnabled()
   const stamps = await page.evaluate(() => {
     const K = (window as any).Konva
     return K.stages[0].find('Text').length
@@ -212,6 +212,181 @@ test('visual messaging: a multi-megabyte picture is shrunk in the browser and up
   await page.getByRole('button', { name: 'Draw a reply' }).click()
   await page.getByRole('button', { name: 'Image', exact: true }).click()
   await page.setInputFiles('input[aria-label="upload image"]', { name: 'sticker.png', mimeType: 'image/png', buffer: sticker })
-  await expect(page.getByText('tap the picture to place it')).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByText(/placed in the middle/)).toBeVisible({ timeout: 30_000 })
   await expect(page.locator('p[role="alert"]')).toHaveCount(0)
+})
+
+// ---- the draft model: undo/redo, keys, paste, select + live handles --------
+
+// What the stage holds in its DRAFT layer (index 3: photo, base, current, draft).
+const draftCount = (page: Page, className: 'Line' | 'Text' | 'Image') =>
+  page.evaluate((c) => (window as any).Konva.stages[0].getLayers()[3].find(c).length, className)
+
+async function openDrawing(page: Page, title: string) {
+  await startConversation(page, title)
+  await page.getByRole('button', { name: 'Draw a reply' }).click()
+  const canvas = page.locator('canvas').first()
+  await expect(canvas).toBeVisible()
+  return (await canvas.boundingBox())!
+}
+
+async function inkStroke(page: Page, box: { x: number; y: number }, from: [number, number], to: [number, number]) {
+  await page.mouse.move(box.x + from[0], box.y + from[1])
+  await page.mouse.down()
+  await page.mouse.move(box.x + to[0], box.y + to[1], { steps: 10 })
+  await page.mouse.up()
+}
+
+// Konva redraws its hit canvas on the next animation frame; a press before that
+// still misses the shape.
+const settle = (page: Page) =>
+  page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))))
+
+test('visual messaging: undo/redo (buttons and keys), Delete key, and typing keeps its own keys', async ({ page }) => {
+  test.slow()
+  const box = await openDrawing(page, 'Undo ' + Date.now())
+  const undo = page.getByRole('button', { name: 'Undo' })
+  const redo = page.getByRole('button', { name: 'Redo' })
+  await expect(undo).toBeDisabled()
+  await expect(redo).toBeDisabled()
+
+  await inkStroke(page, box, [40, 40], [200, 60])
+  await inkStroke(page, box, [40, 120], [200, 140])
+  await expect.poll(() => draftCount(page, 'Line')).toBe(2)
+
+  // Button, then Ctrl+Z / Ctrl+Shift+Z.
+  await undo.click()
+  await expect.poll(() => draftCount(page, 'Line')).toBe(1)
+  await expect(redo).toBeEnabled()
+  await redo.click()
+  await expect.poll(() => draftCount(page, 'Line')).toBe(2)
+  await page.keyboard.press('Control+z')
+  await expect.poll(() => draftCount(page, 'Line')).toBe(1)
+  await page.keyboard.press('Control+Shift+z')
+  await expect.poll(() => draftCount(page, 'Line')).toBe(2)
+
+  // A new action after an undo clears the redo stack.
+  await page.keyboard.press('Control+z')
+  await inkStroke(page, box, [40, 200], [200, 220])
+  await expect(redo).toBeDisabled()
+
+  // Delete key removes the selected emoji; Ctrl+Z brings it back.
+  await page.getByRole('button', { name: 'Emoji', exact: true }).click()
+  await page.mouse.click(box.x + 300, box.y + 60)
+  await expect.poll(() => draftCount(page, 'Text')).toBe(1)
+  await expect(page.getByRole('button', { name: 'Delete selected' })).toBeEnabled()
+  await page.keyboard.press('Delete')
+  await expect.poll(() => draftCount(page, 'Text')).toBe(0)
+  await expect(page.getByRole('button', { name: 'Delete selected' })).toBeDisabled()
+  await page.keyboard.press('Control+z')
+  await expect.poll(() => draftCount(page, 'Text')).toBe(1)
+
+  // While typing in the text box, Backspace edits the text — it must NOT also
+  // delete the selected item.
+  await page.getByRole('button', { name: 'Text', exact: true }).click()
+  await page.getByLabel('text content').fill('abc')
+  await page.mouse.click(box.x + 100, box.y + 250)
+  await expect.poll(() => draftCount(page, 'Text')).toBe(2)
+  await page.getByLabel('text content').press('End')
+  await page.getByLabel('text content').press('Backspace')
+  await expect(page.getByLabel('text content')).toHaveValue('ab')
+  await expect(page.getByRole('button', { name: 'Delete selected' })).toBeEnabled()
+  expect(await draftCount(page, 'Text')).toBe(2)
+})
+
+test('visual messaging: Ctrl+V pastes a picture, placed in the middle with handles', async ({ page }) => {
+  test.slow()
+  await openDrawing(page, 'Paste ' + Date.now())
+  await page.evaluate(() => {
+    const c = document.createElement('canvas')
+    c.width = c.height = 80
+    const ctx = c.getContext('2d')!
+    ctx.fillStyle = '#16a34a'
+    ctx.fillRect(0, 0, 80, 80)
+    return new Promise<void>((resolve) =>
+      c.toBlob((b) => {
+        const dt = new DataTransfer()
+        dt.items.add(new File([b!], 'pasted.png', { type: 'image/png' }))
+        window.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }))
+        resolve()
+      }, 'image/png'),
+    )
+  })
+  await expect(page.getByText(/placed in the middle/)).toBeVisible({ timeout: 30_000 })
+  await expect.poll(() => draftCount(page, 'Image')).toBe(1)
+  await expect(page.getByRole('button', { name: 'Delete selected' })).toBeEnabled()
+})
+
+test('visual messaging: select, move and delete a pen stroke; resize + rotate an emoji live and it is sent that way', async ({
+  page,
+}) => {
+  test.slow()
+  const box = await openDrawing(page, 'Handles ' + Date.now())
+
+  // A stroke can be inked across, but is only grabbed in the Select tool.
+  await inkStroke(page, box, [60, 100], [220, 100])
+  await expect.poll(() => draftCount(page, 'Line')).toBe(1)
+  const strokeX = () =>
+    page.evaluate(() => (window as any).Konva.stages[0].getLayers()[3].findOne('Line').points()[0] as number)
+  const x0 = await strokeX()
+  await page.getByRole('button', { name: 'Select', exact: true }).click()
+  await settle(page)
+  await page.mouse.move(box.x + 140, box.y + 100)
+  await page.mouse.down()
+  await page.mouse.move(box.x + 190, box.y + 130, { steps: 6 })
+  await page.mouse.up()
+  // The move is baked into the points (a stored stroke stays plain points).
+  await expect.poll(strokeX).toBeGreaterThan(x0 + 30)
+  await expect(page.getByRole('button', { name: 'Delete selected' })).toBeEnabled()
+  await page.keyboard.press('Delete')
+  await expect.poll(() => draftCount(page, 'Line')).toBe(0)
+  await page.getByRole('button', { name: 'Undo' }).click()
+  await expect.poll(() => draftCount(page, 'Line')).toBe(1)
+
+  // Emoji: placed, selected at once, then resized and rotated with the handles.
+  await page.getByRole('button', { name: 'Emoji', exact: true }).click()
+  await page.mouse.click(box.x + 300, box.y + 200)
+  await expect.poll(() => draftCount(page, 'Text')).toBe(1)
+  await settle(page)
+  const point = (name: string) =>
+    page.evaluate((n) => {
+      const p = (window as any).Konva.stages[0].findOne(n).getAbsolutePosition()
+      return { x: p.x as number, y: p.y as number }
+    }, name)
+  const fontSize = () =>
+    page.evaluate(() => (window as any).Konva.stages[0].getLayers()[3].findOne('Text').fontSize() as number)
+  const rotation = () =>
+    page.evaluate(() => (window as any).Konva.stages[0].getLayers()[3].findOne('Text').rotation() as number)
+  const drag = async (from: { x: number; y: number }, to: { x: number; y: number }) => {
+    await page.mouse.move(box.x + from.x, box.y + from.y)
+    await page.mouse.down()
+    await page.mouse.move(box.x + to.x, box.y + to.y, { steps: 8 })
+    await page.mouse.up()
+  }
+  const size0 = await fontSize()
+  const br = await point('.bottom-right')
+  await drag(br, { x: br.x + 40, y: br.y + 40 })
+  await expect.poll(fontSize).toBeGreaterThan(size0 + 8)
+
+  await settle(page)
+  const rot = await point('.rotater')
+  const centre = await page.evaluate(() => {
+    const p = (window as any).Konva.stages[0].getLayers()[3].findOne('Text').getAbsolutePosition()
+    return { x: p.x as number, y: p.y as number }
+  })
+  // Swing the rotation handle from straight above the emoji to straight right of it: ~90 degrees.
+  await drag(rot, { x: centre.x + 90, y: centre.y })
+  await expect.poll(async () => Math.abs(await rotation())).toBeGreaterThan(45)
+  const sentSize = await fontSize()
+  const sentAngle = await rotation()
+
+  // Send it: the stored reply carries the live size and angle.
+  await page.getByRole('button', { name: 'Send reply' }).click()
+  await expect(page.getByText('1.1', { exact: true })).toBeVisible()
+  const saved = await page.evaluate(() => {
+    const t = (window as any).Konva.stages[0].getLayers()[2].findOne('Text')
+    return { fontSize: t.fontSize() as number, rotation: t.rotation() as number }
+  })
+  expect(Math.abs(saved.fontSize - sentSize)).toBeLessThan(0.5)
+  expect(Math.abs(saved.rotation - sentAngle)).toBeLessThan(0.5)
 })

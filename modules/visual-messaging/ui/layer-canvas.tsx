@@ -11,6 +11,12 @@
 //          browser until Send.
 // Stroke points are stored in IMAGE pixel space, so layers stay registered
 // at any display scale (the plans/zoom use case).
+//
+// THE DRAFT IS ONE LIST (founder walkthrough 2026-10-14). Strokes, emoji, text
+// and pictures all live in `doc.items`, each with an id, so one mechanism gives
+// all of them: undo/redo (a snapshot history), tap-to-select, drag, live
+// resize/rotate handles (Konva Transformer), and Delete. Pointer events only —
+// the same code serves a mouse and a finger.
 
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
@@ -22,8 +28,9 @@ import { prepareImage } from './image-shrink'
 export type Stroke = { points: number[][]; color: string; size: number }
 // x/y are the placed CENTER point in image pixel space (matches Stroke's
 // registration approach); fontSize is also in image pixels, so stamps stay
-// registered at any display scale, same as strokes.
-export type Stamp = { emoji: string; x: number; y: number; fontSize: number }
+// registered at any display scale, same as strokes. angle (degrees) is
+// optional: replies sent before live rotation existed have none.
+export type Stamp = { emoji: string; x: number; y: number; fontSize: number; angle?: number }
 // Styled text (spec: "styled text (color, angle)") — angle is degrees, same
 // rotation convention as Konva's `rotation` prop.
 export type TextStamp = { text: string; color: string; x: number; y: number; fontSize: number; angle: number }
@@ -42,15 +49,20 @@ export type ImageStamp = {
 }
 export type ResolvedImageStamp = ImageStamp & { url: string }
 
-// Draft-only local ids (founder feedback, 2026-07-11: placed stamps/text/
-// images should be selectable, draggable, resizable, rotatable, and
-// deletable before Send — not locked in place the instant they're tapped
-// down). Ids exist purely for the Konva Transformer/selection wiring on
-// this client and are stripped before the payload is sent.
-type DraftStamp = Stamp & { id: string }
-type DraftTextStamp = TextStamp & { id: string }
-type DraftImageStamp = ImageStamp & { id: string }
-type Selection = { kind: 'stamp' | 'text' | 'image'; id: string } | null
+// Draft-only items. The id exists purely for selection / the Transformer on
+// this client and is stripped before the payload is sent.
+type DraftStroke = Stroke & { kind: 'stroke'; id: string }
+type DraftStamp = Stamp & { kind: 'stamp'; id: string }
+type DraftText = TextStamp & { kind: 'text'; id: string }
+type DraftImage = ImageStamp & { kind: 'image'; id: string }
+type DraftItem = DraftStroke | DraftStamp | DraftText | DraftImage
+// The draft plus its undo/redo history, in ONE state value so a handler can
+// never see items and history out of step.
+type Doc = { items: DraftItem[]; past: DraftItem[][]; future: DraftItem[][] }
+const EMPTY_DOC: Doc = { items: [], past: [], future: [] }
+const HISTORY_LIMIT = 100
+
+type Tool = 'pen' | 'select' | 'emoji' | 'text' | 'image'
 
 export type LayerNav = {
   parentId: string | null
@@ -66,6 +78,11 @@ export type LayerNav = {
 const COLORS = ['#e11d48', '#2563eb', '#16a34a', '#f59e0b', '#111111', '#ffffff']
 const EMOJIS = ['😀', '😍', '😂', '😢', '😡', '👍', '👎', '❤️', '🔥', '🎉', '⭐', '✅', '❌', '🤔']
 const SWIPE_MIN = 60 // px of drag before a gesture counts as a swipe
+const EMOJI_SIZE = 48 // placed size, in image pixels — the handles change it live
+const TEXT_SIZE = 32
+
+const btn =
+  'rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:hover:bg-white'
 
 function strokeToPolygon(stroke: Stroke): number[] {
   const outline = getStroke(stroke.points, { size: stroke.size, thinning: 0.6, smoothing: 0.5 })
@@ -121,29 +138,21 @@ export default function LayerCanvas(props: {
   const pathname = usePathname()
   const [img, setImg] = useState<HTMLImageElement | null>(null)
   const [mode, setMode] = useState<'view' | 'draw'>('view')
-  const [tool, setTool] = useState<'pen' | 'emoji' | 'text' | 'image'>('pen')
+  const [tool, setTool] = useState<Tool>('pen')
   const [drawing, setDrawing] = useState(false)
-  const [draft, setDraft] = useState<Stroke[]>([])
+  const [doc, setDoc] = useState<Doc>(EMPTY_DOC)
   // The stroke being drawn RIGHT NOW, kept apart from the finished ones so a
   // half-drawn line is never mistaken for (or sent as) a finished stroke.
   const [liveStroke, setLiveStroke] = useState<Stroke | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
-  const [stampDraft, setStampDraft] = useState<DraftStamp[]>([])
-  const [textDraft, setTextDraft] = useState<DraftTextStamp[]>([])
-  const [imageDraft, setImageDraft] = useState<DraftImageStamp[]>([])
-  const [selected, setSelected] = useState<Selection>(null)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
   const [color, setColor] = useState(COLORS[0]!)
   const [size, setSize] = useState(6)
   const [selectedEmoji, setSelectedEmoji] = useState(EMOJIS[0]!)
-  const [stampSize, setStampSize] = useState(48)
   const [textValue, setTextValue] = useState('')
   const [textColor, setTextColor] = useState(COLORS[0]!)
-  const [textFontSize, setTextFontSize] = useState(32)
-  const [textAngle, setTextAngle] = useState(0)
   const [stagedImage, setStagedImage] = useState<{ path: string; naturalW: number; naturalH: number } | null>(null)
   const [imageObjectUrls, setImageObjectUrls] = useState<Record<string, string>>({})
-  const [imageScale, setImageScale] = useState(1)
-  const [imageRotation, setImageRotation] = useState(0)
   const [uploadingImage, setUploadingImage] = useState(false)
   const [xray, setXray] = useState(false)
   const [pending, startTransition] = useTransition()
@@ -165,21 +174,61 @@ export default function LayerCanvas(props: {
     transition: 'none',
   })
 
+  const items = doc.items
+  // Undo/redo can remove the selected item; derive rather than trust the state.
+  const selected = items.find((i) => i.id === selectedId) ?? null
+
   const imageCache = useImageCache([
     ...props.baseImages.flatMap((layer) => layer.map((i) => i.url)),
     ...props.currentImages.map((i) => i.url),
     ...Object.values(imageObjectUrls),
   ])
 
-  // Attach the Transformer's resize/rotate handles to whichever draft shape
-  // is selected (or detach when nothing is).
+  // ---- the draft: every change goes through commit() so undo sees it -------
+  const commit = (change: (items: DraftItem[]) => DraftItem[]) =>
+    setDoc((d) => ({
+      items: change(d.items),
+      past: [...d.past, d.items].slice(-HISTORY_LIMIT),
+      future: [],
+    }))
+  const undo = () =>
+    setDoc((d) =>
+      d.past.length === 0
+        ? d
+        : { items: d.past[d.past.length - 1]!, past: d.past.slice(0, -1), future: [d.items, ...d.future] },
+    )
+  const redo = () =>
+    setDoc((d) =>
+      d.future.length === 0 ? d : { items: d.future[0]!, past: [...d.past, d.items], future: d.future.slice(1) },
+    )
+  const deleteSelected = () => {
+    if (!selected) return
+    commit((all) => all.filter((i) => i.id !== selected.id))
+    setSelectedId(null)
+  }
+  const clearDraft = () => {
+    if (items.length === 0) return
+    commit(() => [])
+    setSelectedId(null)
+  }
+  const resetDraft = () => {
+    setDoc(EMPTY_DOC)
+    setLiveStroke(null)
+    setSelectedId(null)
+    Object.values(imageObjectUrls).forEach((url) => URL.revokeObjectURL(url))
+    setImageObjectUrls({})
+    setStagedImage(null)
+  }
+
+  // Attach the Transformer's resize/rotate handles to whichever draft item is
+  // selected (or detach when nothing is).
   useEffect(() => {
     const tr = transformerRef.current
     if (!tr) return
     const node = selected ? shapeRefs.current[selected.id] : null
     tr.nodes(node ? [node] : [])
     tr.getLayer()?.batchDraw()
-  }, [selected, stampDraft, textDraft, imageDraft])
+  }, [selected, items, mode])
 
   // Runs after navigation actually lands on a new layer (props.currentLayerId
   // changed) — start the incoming view offset in the direction it swiped
@@ -209,106 +258,50 @@ export default function LayerCanvas(props: {
     })
   }, [props.currentLayerId])
 
-  const selectShape = (kind: 'stamp' | 'text' | 'image', id: string) => {
-    setSelected({ kind, id })
-  }
-
-  const deleteSelected = () => {
-    if (!selected) return
-    if (selected.kind === 'stamp') setStampDraft((d) => d.filter((s) => s.id !== selected.id))
-    if (selected.kind === 'text') setTextDraft((d) => d.filter((t) => t.id !== selected.id))
-    if (selected.kind === 'image') setImageDraft((d) => d.filter((im) => im.id !== selected.id))
-    setSelected(null)
-  }
-
-  // A resize/rotate on the Transformer changes the underlying Konva node's
-  // scaleX/scaleY/rotation directly — translate that into our data model
-  // (fontSize for text-like shapes, width/height for images) and reset the
-  // node's own scale back to 1 so it doesn't compound on the next transform.
-  const onStampTransformEnd = (id: string) => {
+  // A drag or a resize/rotate changes the Konva NODE (x/y/scale/rotation);
+  // translate that back into our data and reset the node so nothing compounds.
+  //   emoji/text: scale -> fontSize, plus angle
+  //   picture:    scale -> width/height, plus rotation
+  //   stroke:     the whole transform is BAKED into the points (so a stored
+  //               stroke is still plain points, nothing the renderers need to
+  //               know about) and the node goes back to identity.
+  const commitNode = (id: string) => {
     const node = shapeRefs.current[id]
-    if (!node) return
-    const scale = (node.scaleX() + node.scaleY()) / 2
-    node.scaleX(1)
-    node.scaleY(1)
-    setStampDraft((d) =>
-      d.map((s) => (s.id === id ? { ...s, fontSize: Math.max(8, s.fontSize * scale), x: node.x(), y: node.y() } : s)),
-    )
-  }
-  const onTextTransformEnd = (id: string) => {
-    const node = shapeRefs.current[id]
-    if (!node) return
-    const scale = (node.scaleX() + node.scaleY()) / 2
-    const rotation = node.rotation()
-    node.scaleX(1)
-    node.scaleY(1)
-    setTextDraft((d) =>
-      d.map((t) =>
-        t.id === id ? { ...t, fontSize: Math.max(8, t.fontSize * scale), angle: rotation, x: node.x(), y: node.y() } : t,
-      ),
-    )
-  }
-  const onImageTransformEnd = (id: string) => {
-    const node = shapeRefs.current[id]
-    if (!node) return
+    const item = items.find((i) => i.id === id)
+    if (!node || !item) return
     const scaleX = node.scaleX()
     const scaleY = node.scaleY()
+    const avg = (scaleX + scaleY) / 2
     const rotation = node.rotation()
-    node.scaleX(1)
-    node.scaleY(1)
-    setImageDraft((d) =>
-      d.map((im) =>
-        im.id === id
-          ? {
-              ...im,
-              width: Math.max(16, im.width * scaleX),
-              height: Math.max(16, im.height * scaleY),
-              rotation,
-              x: node.x(),
-              y: node.y(),
-            }
-          : im,
-      ),
-    )
-  }
-
-  const resetImageTool = () => {
-    Object.values(imageObjectUrls).forEach((url) => URL.revokeObjectURL(url))
-    setImageObjectUrls({})
-    setStagedImage(null)
-    setImageScale(1)
-    setImageRotation(0)
-  }
-
-  const handleImageFile = async (picked: File | null) => {
-    if (!picked || !props.onUploadImage) return
-    setUploadingImage(true)
-    setActionError(null)
-    try {
-      // Shrink first: a Server Action's request body is capped (image-shrink.ts).
-      const prepared = await prepareImage(picked)
-      if (!prepared.ok) {
-        setActionError(prepared.reason)
-        return
+    const x = node.x()
+    const y = node.y()
+    let next: DraftItem
+    if (item.kind === 'stroke') {
+      const tr = node.getTransform()
+      next = {
+        ...item,
+        points: item.points.map((p) => {
+          const q = tr.point({ x: p[0]!, y: p[1]! })
+          return [q.x, q.y]
+        }),
+        size: Math.max(1, item.size * avg),
       }
-      const file = prepared.file
-      const uploaded = await runAction(() => props.onUploadImage!(file))
-      if (!uploaded.ok) {
-        setActionError((uploaded as { reason: string }).reason)
-        return
+      node.setAttrs({ x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1 })
+    } else if (item.kind === 'image') {
+      next = {
+        ...item,
+        width: Math.max(16, item.width * scaleX),
+        height: Math.max(16, item.height * scaleY),
+        rotation,
+        x,
+        y,
       }
-      const path = (uploaded as { ok: true; path: string }).path
-      const url = URL.createObjectURL(file)
-      const naturalSize = await new Promise<{ w: number; h: number }>((resolve) => {
-        const el = new window.Image()
-        el.onload = () => resolve({ w: el.naturalWidth, h: el.naturalHeight })
-        el.src = url
-      })
-      setImageObjectUrls((m) => ({ ...m, [path]: url }))
-      setStagedImage({ path, naturalW: naturalSize.w, naturalH: naturalSize.h })
-    } finally {
-      setUploadingImage(false)
+      node.setAttrs({ scaleX: 1, scaleY: 1 })
+    } else {
+      next = { ...item, fontSize: Math.max(8, item.fontSize * avg), x, y, angle: rotation }
+      node.setAttrs({ scaleX: 1, scaleY: 1 })
     }
+    commit((all) => all.map((i) => (i.id === id ? next : i)))
   }
 
   useMemo(() => {
@@ -342,6 +335,109 @@ export default function LayerCanvas(props: {
   const scale = displayW / natural.w
   const displayH = natural.h * scale
 
+  const placeImage = (path: string, naturalW: number, naturalH: number, cx: number, cy: number) => {
+    const width = natural.w * props.imageStampMaxFraction
+    const height = width * (naturalH / naturalW)
+    const id = genId()
+    commit((all) => [
+      ...all,
+      {
+        kind: 'image',
+        id,
+        path,
+        x: cx - width / 2,
+        y: cy - height / 2,
+        width,
+        height,
+        rotation: 0,
+        opacity: props.imageStampOpacity,
+      },
+    ])
+    setSelectedId(id)
+  }
+
+  // A picture (chosen or pasted): shrink it, upload it, then drop it in the
+  // middle of the canvas already selected, so the handles are right there to
+  // move, resize and rotate it live.
+  const handleImageFile = async (picked: File | null) => {
+    if (!picked || !props.onUploadImage) return
+    setUploadingImage(true)
+    setActionError(null)
+    try {
+      // Shrink first: a Server Action's request body is capped (image-shrink.ts).
+      const prepared = await prepareImage(picked)
+      if (!prepared.ok) {
+        setActionError(prepared.reason)
+        return
+      }
+      const file = prepared.file
+      const uploaded = await runAction(() => props.onUploadImage!(file))
+      if (!uploaded.ok) {
+        setActionError((uploaded as { reason: string }).reason)
+        return
+      }
+      const path = (uploaded as { ok: true; path: string }).path
+      const url = URL.createObjectURL(file)
+      const naturalSize = await new Promise<{ w: number; h: number }>((resolve) => {
+        const el = new window.Image()
+        el.onload = () => resolve({ w: el.naturalWidth, h: el.naturalHeight })
+        el.src = url
+      })
+      setImageObjectUrls((m) => ({ ...m, [path]: url }))
+      setStagedImage({ path, naturalW: naturalSize.w, naturalH: naturalSize.h })
+      placeImage(path, naturalSize.w, naturalSize.h, natural.w / 2, natural.h / 2)
+    } finally {
+      setUploadingImage(false)
+    }
+  }
+
+  // Keyboard + paste while drawing. The handlers are re-made every render, so
+  // the listeners read them through a ref instead of re-attaching each time.
+  const latest = useRef({ mode, undo, redo, deleteSelected, handleImageFile, drawable: props.drawable })
+  latest.current = { mode, undo, redo, deleteSelected, handleImageFile, drawable: props.drawable }
+  useEffect(() => {
+    const typingIn = (t: EventTarget | null) => {
+      const el = t as HTMLElement | null
+      return (
+        !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable)
+      )
+    }
+    const onKey = (e: KeyboardEvent) => {
+      const L = latest.current
+      if (L.mode !== 'draw' || !L.drawable) return
+      // While typing (the text box), Ctrl-Z / Delete / Backspace belong to the field.
+      if (typingIn(e.target)) return
+      const mod = e.ctrlKey || e.metaKey
+      const key = e.key.toLowerCase()
+      if (mod && key === 'z') {
+        e.preventDefault()
+        if (e.shiftKey) L.redo()
+        else L.undo()
+      } else if (mod && key === 'y') {
+        e.preventDefault()
+        L.redo()
+      } else if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault()
+        L.deleteSelected()
+      }
+    }
+    const onPaste = (e: ClipboardEvent) => {
+      const L = latest.current
+      if (L.mode !== 'draw' || !L.drawable) return
+      const file = Array.from(e.clipboardData?.files ?? []).find((f) => f.type.startsWith('image/'))
+      if (!file) return // plain text paste (into the text box) is not ours
+      e.preventDefault()
+      setTool('image')
+      void L.handleImageFile(file)
+    }
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('paste', onPaste)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('paste', onPaste)
+    }
+  }, [])
+
   const goTo = (layerId: string | null, dir?: 'left' | 'right' | 'up' | 'down') => {
     if (!layerId) return // no target — don't touch lastSwipeDir, a no-op swipe shouldn't taint the next real one
     if (dir) lastSwipeDir.current = dir
@@ -360,58 +456,57 @@ export default function LayerCanvas(props: {
     }
     return false
   }
+  const draftIdOf = (node: any): string | null => {
+    for (const [id, n] of Object.entries(shapeRefs.current)) if (n === node) return id
+    return null
+  }
 
   const handleDown = (e: any) => {
     const stage = e.target.getStage()
     if (mode === 'draw' && props.drawable) {
-      // A tap that landed on an already-placed stamp/text/image is a
-      // SELECT, not a new placement — that shape's own onClick handles it
-      // (fires on pointer up). Bail out here so we don't also drop a new
-      // item at the same spot or start inking a stroke underneath it.
-      // NOTE: e.target !== stage is the WRONG check — the background photo
-      // is itself a KonvaImage node covering the whole canvas, so almost
-      // every tap would hit it (not the bare Stage) and this branch would
-      // never place anything. Only bail for taps that hit one of OUR
-      // tracked draft shapes specifically.
-      if (Object.values(shapeRefs.current).includes(e.target)) return
       // A press on one of the Transformer's handles (resize/rotate) belongs to
       // the Transformer — without this it deselected the shape and dropped a
       // NEW emoji/stroke under the handle.
       if (isTransformerPart(e.target)) return
-      if (selected) setSelected(null) // tapping empty canvas deselects
+      // A press on an already-placed item SELECTS it (and Konva starts the drag)
+      // — never places a new item or starts inking underneath it.
+      // NOTE: e.target !== stage is the WRONG check — the background photo
+      // is itself a KonvaImage node covering the whole canvas, so almost
+      // every press would hit it (not the bare Stage). Only our tracked draft
+      // shapes count. (Strokes are only targets in the Select tool.)
+      const hitId = draftIdOf(e.target)
+      if (hitId) {
+        setSelectedId(hitId)
+        return
+      }
+      setSelectedId(null) // pressing empty canvas deselects
 
       const pt = toImageSpace(stage)
       if (!pt) return
+      if (tool === 'select') return
       if (tool === 'emoji') {
-        setStampDraft((d) => [...d, { id: genId(), emoji: selectedEmoji, x: pt[0]!, y: pt[1]!, fontSize: stampSize }])
+        const id = genId()
+        commit((all) => [
+          ...all,
+          { kind: 'stamp', id, emoji: selectedEmoji, x: pt[0]!, y: pt[1]!, fontSize: EMOJI_SIZE, angle: 0 },
+        ])
+        setSelectedId(id)
         return
       }
       if (tool === 'text') {
         const text = textValue.trim()
         if (!text) return // nothing typed yet — a tap does nothing
-        setTextDraft((d) => [
-          ...d,
-          { id: genId(), text, color: textColor, x: pt[0]!, y: pt[1]!, fontSize: textFontSize, angle: textAngle },
+        const id = genId()
+        commit((all) => [
+          ...all,
+          { kind: 'text', id, text, color: textColor, x: pt[0]!, y: pt[1]!, fontSize: TEXT_SIZE, angle: 0 },
         ])
+        setSelectedId(id)
         return
       }
       if (tool === 'image') {
         if (!stagedImage) return // nothing uploaded yet — a tap does nothing
-        const baseW = natural.w * props.imageStampMaxFraction * imageScale
-        const baseH = baseW * (stagedImage.naturalH / stagedImage.naturalW)
-        setImageDraft((d) => [
-          ...d,
-          {
-            id: genId(),
-            path: stagedImage.path,
-            x: pt[0]! - baseW / 2,
-            y: pt[1]! - baseH / 2,
-            width: baseW,
-            height: baseH,
-            rotation: imageRotation,
-            opacity: props.imageStampOpacity,
-          },
-        ])
+        placeImage(stagedImage.path, stagedImage.naturalW, stagedImage.naturalH, pt[0]!, pt[1]!)
         return
       }
       activeStroke.current = [pt]
@@ -441,7 +536,10 @@ export default function LayerCanvas(props: {
       setDrawing(false)
       setLiveStroke(null)
       // A single tap leaves one point — not a line; drop it.
-      if (pts.length >= 2) setDraft((d) => [...d, { points: pts, color, size }])
+      if (pts.length >= 2) {
+        const id = genId()
+        commit((all) => [...all, { kind: 'stroke', id, points: pts, color, size }])
+      }
       return
     }
     // VIEW mode: resolve the swipe (spec: left = descend, right = back up,
@@ -462,18 +560,18 @@ export default function LayerCanvas(props: {
     }
   }
 
+  const strokeItems = items.filter((i): i is DraftStroke => i.kind === 'stroke')
+  const stampItems = items.filter((i): i is DraftStamp => i.kind === 'stamp')
+  const textItems = items.filter((i): i is DraftText => i.kind === 'text')
+  const imageItems = items.filter((i): i is DraftImage => i.kind === 'image')
+
   const send = () => {
-    const strokes = draft.filter((s) => s.points.length >= 2)
-    if (
-      !props.onSend ||
-      (strokes.length === 0 && stampDraft.length === 0 && textDraft.length === 0 && imageDraft.length === 0)
-    ) {
-      return
-    }
-    // Strip the local-only selection id — the server has no use for it.
-    const stamps = stampDraft.map(({ id: _id, ...s }) => s)
-    const texts = textDraft.map(({ id: _id, ...t }) => t)
-    const images = imageDraft.map(({ id: _id, ...im }) => im)
+    if (!props.onSend || items.length === 0) return
+    // Strip the local-only kind/id — the server has no use for them.
+    const strokes = strokeItems.map(({ kind: _k, id: _i, ...s }) => s)
+    const stamps = stampItems.map(({ kind: _k, id: _i, ...s }) => s)
+    const texts = textItems.map(({ kind: _k, id: _i, ...t }) => t)
+    const images = imageItems.map(({ kind: _k, id: _i, ...im }) => im)
     const payload = JSON.stringify({ strokes, stamps, texts, images })
     setActionError(null)
     startTransition(async () => {
@@ -484,16 +582,29 @@ export default function LayerCanvas(props: {
         return
       }
       const newLayerId = (result as { ok: true; layerId: string }).layerId
-      setDraft([])
-      setStampDraft([])
-      setTextDraft([])
-      setImageDraft([])
-      setSelected(null)
-      resetImageTool()
+      resetDraft()
       setMode('view')
       goTo(newLayerId) // land on the reply just sent, not the parent
     })
   }
+
+  const reg = (id: string) => (node: any) => {
+    if (node) shapeRefs.current[id] = node
+    else delete shapeRefs.current[id]
+  }
+
+  const toolBtn = (t: Tool, label: string) => (
+    <button
+      type="button"
+      onClick={() => {
+        setTool(t)
+        setSelectedId(null)
+      }}
+      className={tool === t ? 'bg-blue-600 px-2 py-1 text-white' : 'bg-white px-2 py-1 text-gray-600'}
+    >
+      {label}
+    </button>
+  )
 
   return (
     <div>
@@ -594,6 +705,7 @@ export default function LayerCanvas(props: {
                   fontSize={st.fontSize}
                   x={st.x}
                   y={st.y}
+                  rotation={st.angle ?? 0}
                   offsetX={st.fontSize / 2}
                   offsetY={st.fontSize / 2}
                 />
@@ -641,6 +753,7 @@ export default function LayerCanvas(props: {
                 fontSize={st.fontSize}
                 x={st.x}
                 y={st.y}
+                rotation={st.angle ?? 0}
                 offsetX={st.fontSize / 2}
                 offsetY={st.fontSize / 2}
               />
@@ -673,38 +786,49 @@ export default function LayerCanvas(props: {
             )}
           </Layer>
           <Layer opacity={xray ? 0.15 : 1}>
-            {[...draft, ...(liveStroke ? [liveStroke] : [])]
-              .filter((s) => s.points.length >= 2)
-              .map((s, i) => (
-                <Line key={`d${i}`} points={strokeToPolygon(s)} closed fill={s.color} />
-              ))}
-            {stampDraft.map((st) => (
+            {/* The draft, in the same order the sent reply composes: strokes,
+                then emoji, text, pictures. Each is selectable + draggable;
+                strokes only listen in the Select tool, because the Pen has to
+                be able to ink ACROSS an existing line. */}
+            {strokeItems.map((s) => (
+              <Line
+                key={s.id}
+                ref={reg(s.id)}
+                points={strokeToPolygon(s)}
+                closed
+                fill={s.color}
+                stroke={s.color}
+                strokeWidth={1}
+                hitStrokeWidth={Math.max(24 / scale, 1)}
+                listening={tool === 'select'}
+                draggable={tool === 'select'}
+                onDragEnd={() => commitNode(s.id)}
+                onTransformEnd={() => commitNode(s.id)}
+              />
+            ))}
+            {liveStroke && liveStroke.points.length >= 2 && (
+              <Line points={strokeToPolygon(liveStroke)} closed fill={liveStroke.color} listening={false} />
+            )}
+            {stampItems.map((st) => (
               <KonvaText
                 key={st.id}
-                ref={(node: any) => {
-                  if (node) shapeRefs.current[st.id] = node
-                }}
+                ref={reg(st.id)}
                 text={st.emoji}
                 fontSize={st.fontSize}
                 x={st.x}
                 y={st.y}
+                rotation={st.angle ?? 0}
                 offsetX={st.fontSize / 2}
                 offsetY={st.fontSize / 2}
                 draggable
-                onClick={() => selectShape('stamp', st.id)}
-                onTap={() => selectShape('stamp', st.id)}
-                onDragEnd={(e: any) =>
-                  setStampDraft((d) => d.map((s) => (s.id === st.id ? { ...s, x: e.target.x(), y: e.target.y() } : s)))
-                }
-                onTransformEnd={() => onStampTransformEnd(st.id)}
+                onDragEnd={() => commitNode(st.id)}
+                onTransformEnd={() => commitNode(st.id)}
               />
             ))}
-            {textDraft.map((t) => (
+            {textItems.map((t) => (
               <KonvaText
                 key={t.id}
-                ref={(node: any) => {
-                  if (node) shapeRefs.current[t.id] = node
-                }}
+                ref={reg(t.id)}
                 text={t.text}
                 fontSize={t.fontSize}
                 fill={t.color}
@@ -712,24 +836,18 @@ export default function LayerCanvas(props: {
                 x={t.x}
                 y={t.y}
                 draggable
-                onClick={() => selectShape('text', t.id)}
-                onTap={() => selectShape('text', t.id)}
-                onDragEnd={(e: any) =>
-                  setTextDraft((d) => d.map((s) => (s.id === t.id ? { ...s, x: e.target.x(), y: e.target.y() } : s)))
-                }
-                onTransformEnd={() => onTextTransformEnd(t.id)}
+                onDragEnd={() => commitNode(t.id)}
+                onTransformEnd={() => commitNode(t.id)}
               />
             ))}
-            {imageDraft.map((im) => {
+            {imageItems.map((im) => {
               const url = imageObjectUrls[im.path]
               const el = url ? imageCache[url] : undefined
               return (
                 el && (
                   <KonvaImage
                     key={im.id}
-                    ref={(node: any) => {
-                      if (node) shapeRefs.current[im.id] = node
-                    }}
+                    ref={reg(im.id)}
                     image={el}
                     x={im.x}
                     y={im.y}
@@ -738,19 +856,13 @@ export default function LayerCanvas(props: {
                     rotation={im.rotation}
                     opacity={im.opacity}
                     draggable
-                    onClick={() => selectShape('image', im.id)}
-                    onTap={() => selectShape('image', im.id)}
-                    onDragEnd={(e: any) =>
-                      setImageDraft((d) =>
-                        d.map((s) => (s.id === im.id ? { ...s, x: e.target.x(), y: e.target.y() } : s)),
-                      )
-                    }
-                    onTransformEnd={() => onImageTransformEnd(im.id)}
+                    onDragEnd={() => commitNode(im.id)}
+                    onTransformEnd={() => commitNode(im.id)}
                   />
                 )
               )
             })}
-            {mode === 'draw' && <Transformer ref={transformerRef} rotateEnabled />}
+            {mode === 'draw' && <Transformer ref={transformerRef} rotateEnabled keepRatio anchorSize={14} />}
           </Layer>
         </Stage>
         </div>
@@ -783,6 +895,9 @@ export default function LayerCanvas(props: {
         </p>
       )}
 
+      {/* Toolbar. Draw mode is three fixed rows — tools, the chosen tool's
+          options, and actions — so nothing jumps around as items are placed
+          or selected (Delete used to appear and wrap onto a new line). */}
       <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
         <button
           type="button"
@@ -819,38 +934,19 @@ export default function LayerCanvas(props: {
         )}
 
         {mode === 'draw' && props.drawable && (
-          <>
-            <div className="flex overflow-hidden rounded border border-gray-300 text-xs">
-              <button
-                type="button"
-                onClick={() => { setTool('pen'); setSelected(null) }}
-                className={tool === 'pen' ? 'bg-blue-600 px-2 py-1 text-white' : 'bg-white px-2 py-1 text-gray-600'}
-              >
-                Pen
-              </button>
-              <button
-                type="button"
-                onClick={() => { setTool('emoji'); setSelected(null) }}
-                className={tool === 'emoji' ? 'bg-blue-600 px-2 py-1 text-white' : 'bg-white px-2 py-1 text-gray-600'}
-              >
-                Emoji
-              </button>
-              <button
-                type="button"
-                onClick={() => { setTool('text'); setSelected(null) }}
-                className={tool === 'text' ? 'bg-blue-600 px-2 py-1 text-white' : 'bg-white px-2 py-1 text-gray-600'}
-              >
-                Text
-              </button>
-              <button
-                type="button"
-                onClick={() => { setTool('image'); setSelected(null) }}
-                className={tool === 'image' ? 'bg-blue-600 px-2 py-1 text-white' : 'bg-white px-2 py-1 text-gray-600'}
-              >
-                Image
-              </button>
-            </div>
+          <div className="flex overflow-hidden rounded border border-gray-300 text-xs">
+            {toolBtn('pen', 'Pen')}
+            {toolBtn('select', 'Select')}
+            {toolBtn('emoji', 'Emoji')}
+            {toolBtn('text', 'Text')}
+            {toolBtn('image', 'Image')}
+          </div>
+        )}
+      </div>
 
+      {mode === 'draw' && props.drawable && (
+        <>
+          <div className="mt-2 flex min-h-9 flex-wrap items-center gap-2 text-sm">
             {tool === 'pen' && (
               <>
                 {COLORS.map((c) => (
@@ -867,22 +963,26 @@ export default function LayerCanvas(props: {
                     aria-pressed={c === color}
                   />
                 ))}
-                <span
-                  className="h-8 w-8 rounded-full border-2 border-gray-300"
-                  style={{ backgroundColor: color }}
-                  aria-label="current pen color"
-                  title="Current color"
-                />
-                <input
-                  type="range"
-                  min={2}
-                  max={24}
-                  value={size}
-                  onChange={(e) => setSize(Number(e.target.value))}
-                  className="w-24"
-                  aria-label="pen size"
-                />
+                <label className="flex items-center gap-2 text-xs text-gray-600">
+                  Pen size
+                  <input
+                    type="range"
+                    min={2}
+                    max={24}
+                    value={size}
+                    onChange={(e) => setSize(Number(e.target.value))}
+                    className="w-24"
+                    aria-label="pen size"
+                  />
+                  <span className="w-5 tabular-nums">{size}</span>
+                </label>
               </>
+            )}
+
+            {tool === 'select' && (
+              <span className="text-[11px] text-gray-400">
+                tap a pen stroke, emoji, text or picture to select it — drag to move, use the handles to resize and rotate
+              </span>
             )}
 
             {tool === 'emoji' && (
@@ -901,16 +1001,9 @@ export default function LayerCanvas(props: {
                     {e}
                   </button>
                 ))}
-                <input
-                  type="range"
-                  min={24}
-                  max={120}
-                  value={stampSize}
-                  onChange={(e) => setStampSize(Number(e.target.value))}
-                  className="w-24"
-                  aria-label="emoji size"
-                />
-                <span className="text-[11px] text-gray-400">tap the picture to place {selectedEmoji}</span>
+                <span className="text-[11px] text-gray-400">
+                  tap the picture to place {selectedEmoji}, then resize it with the handles
+                </span>
               </>
             )}
 
@@ -938,30 +1031,6 @@ export default function LayerCanvas(props: {
                     aria-pressed={c === textColor}
                   />
                 ))}
-                <span
-                  className="h-8 w-8 rounded-full border-2 border-gray-300"
-                  style={{ backgroundColor: textColor }}
-                  aria-label="current text color"
-                  title="Current color"
-                />
-                <input
-                  type="range"
-                  min={12}
-                  max={96}
-                  value={textFontSize}
-                  onChange={(e) => setTextFontSize(Number(e.target.value))}
-                  className="w-20"
-                  aria-label="text size"
-                />
-                <input
-                  type="range"
-                  min={-180}
-                  max={180}
-                  value={textAngle}
-                  onChange={(e) => setTextAngle(Number(e.target.value))}
-                  className="w-20"
-                  aria-label="text angle"
-                />
                 <span className="text-[11px] text-gray-400">
                   {textValue.trim() ? `tap the picture to place "${textValue.trim()}"` : 'type something first'}
                 </span>
@@ -973,91 +1042,71 @@ export default function LayerCanvas(props: {
                 <input
                   type="file"
                   accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
-                  onChange={(e) => handleImageFile(e.target.files?.[0] ?? null)}
+                  onChange={(e) => {
+                    const input = e.target
+                    void handleImageFile(input.files?.[0] ?? null)
+                    input.value = '' // so picking the same file again still fires
+                  }}
                   aria-label="upload image"
-                  className="w-40 text-xs"
-                />
-                <span className="text-[11px] text-gray-500">Size</span>
-                <input
-                  type="range"
-                  min={50}
-                  max={250}
-                  value={Math.round(imageScale * 100)}
-                  onChange={(e) => setImageScale(Number(e.target.value) / 100)}
-                  className="w-20"
-                  aria-label="image size"
-                />
-                <span className="text-[11px] text-gray-500">Rotate</span>
-                <input
-                  type="range"
-                  min={-180}
-                  max={180}
-                  value={imageRotation}
-                  onChange={(e) => setImageRotation(Number(e.target.value))}
-                  className="w-20"
-                  aria-label="image rotation"
+                  className="w-56 cursor-pointer text-xs text-gray-600 file:mr-3 file:cursor-pointer file:rounded file:border-0 file:bg-blue-50 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-blue-700 hover:file:bg-blue-100"
                 />
                 <span className="text-[11px] text-gray-400">
                   {uploadingImage
                     ? 'uploading…'
                     : stagedImage
-                      ? 'tap the picture to place it'
-                      : 'upload an image first'}
+                      ? 'placed in the middle — tap the picture to add another copy (Ctrl+V also pastes)'
+                      : 'choose a picture, or paste one with Ctrl+V'}
                 </span>
               </>
             )}
+          </div>
 
-            {selected && (
-              <button
-                type="button"
-                onClick={deleteSelected}
-                className="rounded border border-red-300 px-2 py-1 text-xs text-red-600 hover:bg-red-50"
-              >
-                Delete selected
-              </button>
-            )}
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+            <button type="button" onClick={undo} disabled={doc.past.length === 0} className={btn} title="Undo (Ctrl+Z)">
+              Undo
+            </button>
             <button
               type="button"
-              onClick={() => {
-                setDraft([])
-                setStampDraft([])
-                setTextDraft([])
-                setImageDraft([])
-                setSelected(null)
-              }}
-              className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-600"
+              onClick={redo}
+              disabled={doc.future.length === 0}
+              className={btn}
+              title="Redo (Ctrl+Shift+Z)"
             >
+              Redo
+            </button>
+            <button
+              type="button"
+              onClick={deleteSelected}
+              disabled={!selected}
+              className="rounded border border-red-300 px-2 py-1 text-xs text-red-600 hover:bg-red-50 disabled:opacity-40 disabled:hover:bg-white"
+              title="Delete the selected item (Delete key)"
+            >
+              Delete selected
+            </button>
+            <button type="button" onClick={clearDraft} disabled={items.length === 0} className={btn}>
               Clear draft
             </button>
             <button
               type="button"
               onClick={() => {
-                setDraft([])
-                setStampDraft([])
-                setTextDraft([])
-                setImageDraft([])
-                setSelected(null)
-                resetImageTool()
+                resetDraft()
                 setMode('view')
               }}
-              className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-600"
+              className={btn}
             >
               Cancel
             </button>
             <button
               type="button"
               onClick={send}
-              disabled={
-                pending ||
-                (draft.length === 0 && stampDraft.length === 0 && textDraft.length === 0 && imageDraft.length === 0)
-              }
+              disabled={pending || items.length === 0}
               className="rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
             >
               {pending ? 'Sending…' : 'Send reply'}
             </button>
-          </>
-        )}
-      </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }

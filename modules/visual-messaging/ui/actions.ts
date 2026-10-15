@@ -25,7 +25,7 @@ const failure = (error: { message: string } | null, what: string) =>
 // emoji stamps, both drawn in IMAGE pixel space so every zoom level stays
 // registered.
 export type Stroke = { points: number[][]; color: string; size: number }
-export type Stamp = { emoji: string; x: number; y: number; fontSize: number }
+export type Stamp = { emoji: string; x: number; y: number; fontSize: number; angle?: number }
 export type TextStamp = { text: string; color: string; x: number; y: number; fontSize: number; angle: number }
 // path is a vm-images storage object (uploaded via uploadImageStamp, private
 // bucket — the page resolves it to a signed URL for rendering); x/y are the
@@ -356,7 +356,8 @@ export async function replyWithDrawing(
       st.emoji.length > 8 ||
       typeof st.x !== 'number' ||
       typeof st.y !== 'number' ||
-      typeof st.fontSize !== 'number'
+      typeof st.fontSize !== 'number' ||
+      (st.angle !== undefined && typeof st.angle !== 'number')
     ) {
       return refuse('Malformed stamp')
     }
