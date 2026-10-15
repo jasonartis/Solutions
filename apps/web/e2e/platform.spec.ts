@@ -1416,6 +1416,7 @@ test('visual messaging: create from a picture, draw a reply, membership gates ac
   await expect(page.getByRole('button', { name: 'Delete selected' })).toBeDisabled()
   await expect(page.getByRole('button', { name: 'Send reply' })).toBeDisabled()
   // Place it again so the rest of this reply (text/image/stroke below) sends.
+  await page.getByRole('button', { name: 'Emoji', exact: true }).click() // placing returns to Select, so pick Emoji again
   await page.mouse.click(box.x + 300, box.y + 60)
 
   // Text tool: a tap does nothing until something is typed; typing updates
@@ -1437,7 +1438,7 @@ test('visual messaging: create from a picture, draw a reply, membership gates ac
     mimeType: 'image/svg+xml',
     buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="100" height="80"><circle cx="50" cy="40" r="30" fill="#16a34a"/></svg>'),
   })
-  await expect(page.getByText(/placed in the middle/)).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Delete selected' })).toBeEnabled() // placed + selected
   await page.mouse.click(box.x + 200, box.y + 60)
 
   // Back to the pen for a stroke.

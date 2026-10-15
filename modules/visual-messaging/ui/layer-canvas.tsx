@@ -91,7 +91,7 @@ const SWIPE_MIN = 60 // px of drag before a quick flick counts as a swipe
 const SWIPE_AXIS_LOCK = 10 // px before a drag picks horizontal or vertical
 const FLICK_SPEED = 0.4 // px/ms — a fast flick completes even before halfway
 const SWIPE_SETTLE_MS = 160
-const EMOJI_SIZE = 48 // placed size, in image pixels — the handles change it live
+const EMOJI_SIZE = 64 // placed size, in image pixels — the handles change it live
 const TEXT_SIZE = 32
 
 const btn =
@@ -136,8 +136,10 @@ export default function LayerCanvas(props: {
   currentImages: ResolvedImageStamp[]
   drawable: boolean
   nav: LayerNav
-  /** content of the layer each swipe direction leads to (null = nowhere to go) */
-  neighbours: Record<SwipeDir, LayerContent | null>
+  /** what a layer ADDED (its own ink only, not the picture or its ancestors'),
+   *  for the layer each of these swipes leads to. Right (back up) needs none: it
+   *  slides the CURRENT layer's own ink away. */
+  neighbours: Record<'left' | 'up' | 'down', LayerContent | null>
   // Both return {ok, ...} rather than throwing (docs/03 #22) — a refusal shows
   // inline and the draft stays on the canvas.
   onSend?: (payloadJson: string) => Promise<{ ok: true; layerId: string } | { ok: false; reason: string }>
@@ -386,6 +388,7 @@ export default function LayerCanvas(props: {
       },
     ])
     setSelectedId(id)
+    setTool('select')
   }
 
   // A picture (chosen or pasted): shrink it, upload it, then drop it in the
@@ -473,7 +476,9 @@ export default function LayerCanvas(props: {
   const goTo = (layerId: string | null, dir?: 'left' | 'right' | 'up' | 'down') => {
     if (!layerId) return // no target — don't touch lastSwipeDir, a no-op swipe shouldn't taint the next real one
     if (dir) lastSwipeDir.current = dir
-    router.push(`${pathname}?layer=${layerId}`)
+    // scroll:false — a swipe changes the layer, not the page; without it the
+    // browser jumped back to the top whenever you were scrolled down a little.
+    router.push(`${pathname}?layer=${layerId}`, { scroll: false })
   }
 
   const toImageSpace = (stage: any): number[] | null => {
@@ -523,6 +528,7 @@ export default function LayerCanvas(props: {
           { kind: 'stamp', id, emoji: selectedEmoji, x: pt[0]!, y: pt[1]!, fontSize: EMOJI_SIZE, angle: 0 },
         ])
         setSelectedId(id)
+        setTool('select') // placed: the next press selects/moves, it does not stamp another
         return
       }
       if (tool === 'text') {
@@ -534,6 +540,7 @@ export default function LayerCanvas(props: {
           { kind: 'text', id, text, color: textColor, x: pt[0]!, y: pt[1]!, fontSize: TEXT_SIZE, angle: 0 },
         ])
         setSelectedId(id)
+        setTool('select')
         return
       }
       if (tool === 'image') {
@@ -660,6 +667,10 @@ export default function LayerCanvas(props: {
     releaseSwipe()
   }
 
+  // A swipe that moves the current layer's own ink out of the way (not 'left',
+  // which brings a child's ink IN over the top).
+  const outgoing = swipe && swipe.dir !== 'left' ? swipe : null
+
   const strokeItems = items.filter((i): i is DraftStroke => i.kind === 'stroke')
   const stampItems = items.filter((i): i is DraftStamp => i.kind === 'stamp')
   const textItems = items.filter((i): i is DraftText => i.kind === 'text')
@@ -696,10 +707,9 @@ export default function LayerCanvas(props: {
   const toolBtn = (t: Tool, label: string) => (
     <button
       type="button"
-      onClick={() => {
-        setTool(t)
-        setSelectedId(null)
-      }}
+      // Switching tools keeps the selection (handles stay) — pressing empty
+      // canvas is what deselects.
+      onClick={() => setTool(t)}
       className={tool === t ? 'bg-blue-600 px-2 py-1 text-white' : 'bg-white px-2 py-1 text-gray-600'}
     >
       {label}
@@ -734,9 +744,11 @@ export default function LayerCanvas(props: {
                 type="button"
                 onClick={() => goTo(props.nav.firstChildId, 'left')}
                 aria-label={`swipe left: ${props.nav.swipeCounts.left} deeper`}
-                className="absolute left-1 top-1/2 z-10 flex -translate-y-1/2 items-center gap-1 rounded-full bg-black/40 px-2 py-1 text-sm text-white hover:bg-black/60"
+                // Replies are pulled in from the RIGHT, so the marker sits on the
+                // right edge pointing right: "N layers waiting that way".
+                className="absolute right-1 top-1/2 z-10 flex -translate-y-1/2 items-center gap-1 rounded-full bg-black/40 px-2 py-1 text-sm text-white hover:bg-black/60"
               >
-                ← <span className="rounded-full bg-white/90 px-1.5 text-[10px] font-semibold text-gray-800">{props.nav.swipeCounts.left}</span>
+                <span className="rounded-full bg-white/90 px-1.5 text-[10px] font-semibold text-gray-800">{props.nav.swipeCounts.left}</span> →
               </button>
             )}
             {props.nav.swipeCounts.right > 0 && (
@@ -744,9 +756,9 @@ export default function LayerCanvas(props: {
                 type="button"
                 onClick={() => goTo(props.nav.parentId, 'right')}
                 aria-label={`swipe right: ${props.nav.swipeCounts.right} back up`}
-                className="absolute right-1 top-1/2 z-10 flex -translate-y-1/2 items-center gap-1 rounded-full bg-black/40 px-2 py-1 text-sm text-white hover:bg-black/60"
+                className="absolute left-1 top-1/2 z-10 flex -translate-y-1/2 items-center gap-1 rounded-full bg-black/40 px-2 py-1 text-sm text-white hover:bg-black/60"
               >
-                <span className="rounded-full bg-white/90 px-1.5 text-[10px] font-semibold text-gray-800">{props.nav.swipeCounts.right}</span> →
+                ← <span className="rounded-full bg-white/90 px-1.5 text-[10px] font-semibold text-gray-800">{props.nav.swipeCounts.right}</span>
               </button>
             )}
             {props.nav.swipeCounts.up > 0 && (
@@ -754,9 +766,9 @@ export default function LayerCanvas(props: {
                 type="button"
                 onClick={() => goTo(props.nav.nextSiblingId, 'up')}
                 aria-label={`swipe up: ${props.nav.swipeCounts.up} siblings`}
-                className="absolute left-1/2 top-1 z-10 flex -translate-x-1/2 items-center gap-1 rounded-full bg-black/40 px-2 py-1 text-sm text-white hover:bg-black/60"
+                className="absolute bottom-1 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1 rounded-full bg-black/40 px-2 py-1 text-sm text-white hover:bg-black/60"
               >
-                ↑ <span className="rounded-full bg-white/90 px-1.5 text-[10px] font-semibold text-gray-800">{props.nav.swipeCounts.up}</span>
+                ↓ <span className="rounded-full bg-white/90 px-1.5 text-[10px] font-semibold text-gray-800">{props.nav.swipeCounts.up}</span>
               </button>
             )}
             {props.nav.swipeCounts.down > 0 && (
@@ -764,9 +776,9 @@ export default function LayerCanvas(props: {
                 type="button"
                 onClick={() => goTo(props.nav.prevSiblingId, 'down')}
                 aria-label={`swipe down: ${props.nav.swipeCounts.down} siblings`}
-                className="absolute bottom-1 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1 rounded-full bg-black/40 px-2 py-1 text-sm text-white hover:bg-black/60"
+                className="absolute left-1/2 top-1 z-10 flex -translate-x-1/2 items-center gap-1 rounded-full bg-black/40 px-2 py-1 text-sm text-white hover:bg-black/60"
               >
-                <span className="rounded-full bg-white/90 px-1.5 text-[10px] font-semibold text-gray-800">{props.nav.swipeCounts.down}</span> ↓
+                <span className="rounded-full bg-white/90 px-1.5 text-[10px] font-semibold text-gray-800">{props.nav.swipeCounts.down}</span> ↑
               </button>
             )}
           </>
@@ -846,7 +858,16 @@ export default function LayerCanvas(props: {
               ),
             )}
           </Layer>
-          <Layer opacity={xray ? 0.15 : 1}>
+          <Layer
+            // What THIS layer added. On a right/up/down swipe it is what slides
+            // away with the pointer, leaving the layer underneath (the parent's
+            // picture) showing; on a left swipe it stays put.
+            x={outgoing && outgoing.dir === 'right' ? outgoing.offset / scale : 0}
+            y={outgoing && (outgoing.dir === 'up' || outgoing.dir === 'down') ? outgoing.offset / scale : 0}
+            opacity={
+              xray ? 0.15 : outgoing ? 1 - 0.45 * Math.min(1, Math.abs(outgoing.offset) / extentOf(outgoing.dir)) : 1
+            }
+          >
             {props.currentStrokes.map((s, i) => (
               <Line key={`c${i}`} points={strokeToPolygon(s)} closed fill={s.color} />
             ))}
@@ -966,24 +987,32 @@ export default function LayerCanvas(props: {
                 )
               )
             })}
-            {mode === 'draw' && <Transformer ref={transformerRef} rotateEnabled keepRatio anchorSize={14} />}
+            {mode === 'draw' && <Transformer
+                ref={transformerRef}
+                rotateEnabled
+                keepRatio
+                // Corner handles only: with keepRatio the side handles do the same
+                // job, and eight of them swamped a small emoji. Translucent so the
+                // item stays visible underneath (founder 2026-10-14).
+                enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right']}
+                anchorSize={12}
+                anchorCornerRadius={6}
+                anchorFill="rgba(255,255,255,0.55)"
+                anchorStroke="rgba(37,99,235,0.75)"
+                borderStroke="rgba(37,99,235,0.6)"
+                borderDash={[4, 3]}
+              />}
           </Layer>
-          {swipe && props.neighbours[swipe.dir] && (
-            // The layer being swiped TO, as a see-through card that rides the
-            // pointer in from the side it will arrive from. It firms up as it
-            // gets closer (0.55 -> 1.0).
+          {swipe && swipe.dir !== 'right' && props.neighbours[swipe.dir] && (
+            // The layer being swiped TO — just what it ADDED, as a see-through
+            // sheet with no picture of its own — riding the pointer in from the
+            // side it will arrive from. It firms up as it gets closer (0.55 -> 1.0).
             <Layer
               listening={false}
               opacity={0.55 + 0.45 * Math.pow(Math.min(1, Math.abs(swipe.offset) / extentOf(swipe.dir)), 2)}
             >
               <Group
-                x={
-                  swipe.dir === 'left'
-                    ? natural.w + swipe.offset / scale
-                    : swipe.dir === 'right'
-                      ? -natural.w + swipe.offset / scale
-                      : 0
-                }
+                x={swipe.dir === 'left' ? natural.w + swipe.offset / scale : 0}
                 y={
                   swipe.dir === 'up'
                     ? natural.h + swipe.offset / scale
@@ -992,7 +1021,6 @@ export default function LayerCanvas(props: {
                       : 0
                 }
               >
-                {img && <KonvaImage image={img} width={natural.w} height={natural.h} />}
                 {props.neighbours[swipe.dir]!.strokes.map((s, i) => (
                   <Line key={`ns${i}`} points={strokeToPolygon(s)} closed fill={s.color} />
                 ))}
@@ -1107,13 +1135,17 @@ export default function LayerCanvas(props: {
         )}
 
         {mode === 'draw' && props.drawable && (
-          <div className="flex overflow-hidden rounded border border-gray-300 text-xs">
-            {toolBtn('pen', 'Pen')}
-            {toolBtn('select', 'Select')}
-            {toolBtn('emoji', 'Emoji')}
-            {toolBtn('text', 'Text')}
-            {toolBtn('image', 'Image')}
-          </div>
+          <>
+            {/* Select is not a drawing tool, so it stands apart from them. */}
+            <div className="flex overflow-hidden rounded border border-gray-300 text-xs">{toolBtn('select', 'Select')}</div>
+            <span className="text-xs text-gray-400">Add:</span>
+            <div className="flex overflow-hidden rounded border border-gray-300 text-xs">
+              {toolBtn('pen', 'Pen')}
+              {toolBtn('emoji', 'Emoji')}
+              {toolBtn('text', 'Text')}
+              {toolBtn('image', 'Image')}
+            </div>
+          </>
         )}
       </div>
 
@@ -1227,7 +1259,7 @@ export default function LayerCanvas(props: {
                   {uploadingImage
                     ? 'uploading…'
                     : stagedImage
-                      ? 'placed in the middle — tap the picture to add another copy (Ctrl+V also pastes)'
+                      ? 'tap the picture to place another copy of the last picture (Ctrl+V pastes a new one)'
                       : 'choose a picture, or paste one with Ctrl+V'}
                 </span>
               </>

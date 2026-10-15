@@ -1032,3 +1032,25 @@ tests in `platform.spec.ts` (five assertions updated, see 4). **Not yet checked 
 **Test-harness note:** `window.Konva` exists in the browser, so e2e reads layer opacities, handle
 positions and node counts straight from the stage instead of guessing from pixels. The draft layer
 is `getLayers()[3]`; a swipe adds a 5th.
+
+### 2026-10-14 (founder desktop + touch-screen test of the build) — fixes
+
+Founder findings and what changed (commit after `5d3aa64`):
+- **Invite gave no feedback.** `ActionForm` can now own its submit button (`submitLabel`/`doneLabel`/
+  `successMessage`): it reads "Invited ✓" in green, shows a status line, and stays disabled until a
+  field is edited. Same for Save name and Flag. The invite message is identical whether the person
+  was added, already in, or self-blocked (addMember deliberately does not say which).
+- **Select vs stamp.** Placing an emoji/text/picture now returns to **Select** (so the next press
+  selects/moves instead of stamping another); choose the tool again to add more. **Select** is its
+  own control, apart from the "Add:" group (Pen/Emoji/Text/Image). Switching tools keeps the selection.
+- **Handles swamped small items:** corner handles only (side ones did the same job under keepRatio),
+  smaller, translucent; default emoji 48 → 64. Left for feedback, as the founder suggested.
+- **Swipe scrolled the page to the top:** `router.push(..., { scroll: false })`.
+- **Swipe showed the picture with the layer.** A reply stores ONLY its own ink (never the picture or
+  ancestors). The swipe now matches: forward brings in a sheet of just the child's ink (no picture,
+  see-through) over the current view; back slides the CURRENT layer's own ink away to reveal the parent;
+  up/down slide the current ink out while the sibling's own ink slides in. The page now sends each
+  neighbour's OWN content only.
+- **Count markers were backwards:** each now sits on the side the layers are pulled in FROM, arrow
+  pointing there (replies: right edge →; back up: left edge ←; next sibling: bottom ↓; previous: top ↑).
+  aria-labels and the swipe-direction hint text are unchanged (they describe the finger's direction).

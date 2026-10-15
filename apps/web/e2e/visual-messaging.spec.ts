@@ -212,7 +212,7 @@ test('visual messaging: a multi-megabyte picture is shrunk in the browser and up
   await page.getByRole('button', { name: 'Draw a reply' }).click()
   await page.getByRole('button', { name: 'Image', exact: true }).click()
   await page.setInputFiles('input[aria-label="upload image"]', { name: 'sticker.png', mimeType: 'image/png', buffer: sticker })
-  await expect(page.getByText(/placed in the middle/)).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByRole('button', { name: 'Delete selected' })).toBeEnabled({ timeout: 30_000 })
   await expect(page.locator('p[role="alert"]')).toHaveCount(0)
 })
 
@@ -287,6 +287,8 @@ test('visual messaging: undo/redo (buttons and keys), Delete key, and typing kee
   await page.getByLabel('text content').fill('abc')
   await page.mouse.click(box.x + 100, box.y + 250)
   await expect.poll(() => draftCount(page, 'Text')).toBe(2)
+  // Placing returned to Select; reopen the Text tool (the selection stays) to type.
+  await page.getByRole('button', { name: 'Text', exact: true }).click()
   await page.getByLabel('text content').press('End')
   await page.getByLabel('text content').press('Backspace')
   await expect(page.getByLabel('text content')).toHaveValue('ab')
@@ -312,7 +314,7 @@ test('visual messaging: Ctrl+V pastes a picture, placed in the middle with handl
       }, 'image/png'),
     )
   })
-  await expect(page.getByText(/placed in the middle/)).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByRole('button', { name: 'Delete selected' })).toBeEnabled({ timeout: 30_000 })
   await expect.poll(() => draftCount(page, 'Image')).toBe(1)
   await expect(page.getByRole('button', { name: 'Delete selected' })).toBeEnabled()
 })
@@ -405,49 +407,167 @@ test('visual messaging: the conversation admin can rename it', async ({ page }) 
   await expect(page.getByRole('link', { name: title })).toHaveCount(0)
 })
 
-test('visual messaging: the swipe follows the pointer with the incoming layer see-through; past halfway completes, short of it snaps back', async ({
+test('visual messaging: swipe back slides THIS layer\'s ink away, leaving the picture below; short of halfway snaps back', async ({
   page,
 }) => {
   test.slow()
-  const box = await openDrawing(page, 'Swipe ' + Date.now())
+  const box = await openDrawing(page, 'Swipe back ' + Date.now())
   await inkStroke(page, box, [60, 60], [220, 140])
   await page.getByRole('button', { name: 'Send reply' }).click()
   await expect(page.getByText('1.1', { exact: true })).toBeVisible() // now on the reply
   await expect(page.getByText('Replies to this layer (0)')).toBeVisible()
 
-  const layerCount = () => page.evaluate(() => (window as any).Konva.stages[0].getLayers().length as number)
-  const card = () =>
+  const layers = () =>
     page.evaluate(() => {
-      const layers = (window as any).Konva.stages[0].getLayers()
-      const l = layers[layers.length - 1]
-      return { count: layers.length as number, opacity: l.opacity() as number, x: l.findOne('Group')?.x() as number }
+      const ls = (window as any).Konva.stages[0].getLayers()
+      return { count: ls.length as number, ownX: ls[2].x() as number, ownOpacity: ls[2].opacity() as number }
     })
   const b = (await page.locator('canvas').first().boundingBox())!
 
-  // Drag RIGHT (back up to the root) about 30% of the way and hold: the card
-  // from the left is on screen, translucent, riding the pointer.
+  // Drag RIGHT ~30% and hold: the reply's own ink (layer index 2) rides the
+  // pointer and fades a little; the photo (0) and ancestors (1) stay put, and no
+  // extra sheet is added.
   await page.mouse.move(b.x + 80, b.y + 120)
   await page.mouse.down()
   await page.mouse.move(b.x + 80 + 120, b.y + 122, { steps: 6 })
-  await expect.poll(async () => (await card()).count).toBe(5)
-  const mid = await card()
-  expect(mid.opacity).toBeGreaterThan(0.5)
-  expect(mid.opacity).toBeLessThan(0.8)
-  // The photo is 400px wide at scale 1: the card started at x = -400 and has been dragged 120px.
-  expect(Math.abs(mid.x - (-400 + 120))).toBeLessThan(40)
+  await expect.poll(async () => (await layers()).ownX).toBeGreaterThan(80)
+  const mid = await layers()
+  expect(Math.abs(mid.ownX - 120)).toBeLessThan(40) // photo is 400px wide at scale 1
+  expect(mid.ownOpacity).toBeLessThan(1)
+  expect(mid.ownOpacity).toBeGreaterThan(0.5)
+  expect(mid.count).toBe(4)
 
-  // Let go short of halfway, and slowly (no flick): it snaps back, no navigation.
+  // Let go short of halfway, slowly (no flick): back in place, no navigation.
   await page.waitForTimeout(300)
   await page.mouse.up()
-  await expect.poll(layerCount).toBe(4)
-  await expect(page.getByText('Replies to this layer (0)')).toBeVisible() // still on the reply
+  await expect.poll(async () => (await layers()).ownX).toBe(0)
+  await expect(page.getByText('Replies to this layer (0)')).toBeVisible()
 
-  // Drag the same way ~70% and let go slowly: it completes.
+  // ~70%, slowly: completes, landing on the root.
   await page.mouse.move(b.x + 40, b.y + 120)
   await page.mouse.down()
   await page.mouse.move(b.x + 40 + 280, b.y + 122, { steps: 8 })
   await page.waitForTimeout(300)
   await page.mouse.up()
-  await expect(page.getByText('Replies to this layer (1)')).toBeVisible() // arrived at the root
-  await expect.poll(layerCount).toBe(4) // the sliding card is gone
+  await expect(page.getByText('Replies to this layer (1)')).toBeVisible()
+})
+
+test('visual messaging: swipe forward brings in ONLY what the reply added (no picture), see-through; scroll position is kept', async ({
+  page,
+}) => {
+  test.slow()
+  const box = await openDrawing(page, 'Swipe fwd ' + Date.now())
+  await inkStroke(page, box, [60, 60], [220, 140])
+  await page.getByRole('button', { name: 'Send reply' }).click()
+  await expect(page.getByText('1.1', { exact: true })).toBeVisible()
+  // Back to the root (button), so the reply is one swipe away.
+  await page.getByRole('button', { name: /swipe right/ }).click()
+  await expect(page.getByText('Replies to this layer (1)')).toBeVisible()
+
+  const sheet = () =>
+    page.evaluate(() => {
+      const ls = (window as any).Konva.stages[0].getLayers()
+      const last = ls[ls.length - 1]
+      return {
+        count: ls.length as number,
+        opacity: last.opacity() as number,
+        x: last.findOne('Group')?.x() as number,
+        images: last.find('Image').length as number,
+        lines: last.find('Line').length as number,
+      }
+    })
+  const b = (await page.locator('canvas').first().boundingBox())!
+
+  // Make the page tall and scroll a little, as when the picture is partly off-screen.
+  await page.evaluate(() => {
+    document.body.style.minHeight = '3000px'
+    window.scrollTo(0, 120)
+  })
+  const scrolled = await page.evaluate(() => window.scrollY)
+  expect(scrolled).toBeGreaterThan(50)
+  const b2 = (await page.locator('canvas').first().boundingBox())!
+
+  // Drag LEFT ~30% and hold: a see-through sheet holding just the reply's stroke
+  // (no photo node) rides in from the right.
+  await page.mouse.move(b2.x + 300, b2.y + 120)
+  await page.mouse.down()
+  await page.mouse.move(b2.x + 300 - 120, b2.y + 122, { steps: 6 })
+  await expect.poll(async () => (await sheet()).count).toBe(5)
+  const mid = await sheet()
+  expect(mid.images).toBe(0)
+  expect(mid.lines).toBe(1)
+  expect(mid.opacity).toBeGreaterThan(0.5)
+  expect(mid.opacity).toBeLessThan(0.8)
+  expect(Math.abs(mid.x - (400 - 120))).toBeLessThan(40)
+  await page.waitForTimeout(300)
+  await page.mouse.up()
+  await expect.poll(async () => (await sheet()).count).toBe(4) // snapped back
+
+  // Complete it (~70%): the soft navigation must NOT jump to the top of the page.
+  await page.mouse.move(b2.x + 340, b2.y + 120)
+  await page.mouse.down()
+  await page.mouse.move(b2.x + 340 - 280, b2.y + 122, { steps: 8 })
+  await page.waitForTimeout(300)
+  await page.mouse.up()
+  await expect(page.getByText('Replies to this layer (0)')).toBeVisible() // on the reply
+  expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(50)
+  void b
+})
+
+test('visual messaging: the layer-count markers sit on the side the layers come from', async ({ page }) => {
+  test.slow()
+  const box = await openDrawing(page, 'Markers ' + Date.now())
+  await inkStroke(page, box, [60, 60], [220, 140])
+  await page.getByRole('button', { name: 'Send reply' }).click()
+  await expect(page.getByText('1.1', { exact: true })).toBeVisible()
+  const canvasBox = (await page.locator('canvas').first().boundingBox())!
+  const centreX = canvasBox.x + canvasBox.width / 2
+
+  // On the reply, the way up is back to the parent: pulled in from the LEFT.
+  const back = page.getByRole('button', { name: /swipe right: 1 back up/ })
+  await expect(back).toContainText('←')
+  expect((await back.boundingBox())!.x).toBeLessThan(centreX)
+
+  await back.click()
+  await expect(page.getByText('Replies to this layer (1)')).toBeVisible()
+  // On the root, the reply is pulled in from the RIGHT.
+  const deeper = page.getByRole('button', { name: /swipe left: 1 deeper/ })
+  await expect(deeper).toContainText('→')
+  expect((await deeper.boundingBox())!.x).toBeGreaterThan(centreX)
+})
+
+test('visual messaging: after placing an item the next press selects instead of stamping another; Select stands apart', async ({
+  page,
+}) => {
+  test.slow()
+  const box = await openDrawing(page, 'Select after ' + Date.now())
+  await page.getByRole('button', { name: 'Emoji', exact: true }).click()
+  await page.mouse.click(box.x + 300, box.y + 200)
+  await expect.poll(() => draftCount(page, 'Text')).toBe(1)
+  await settle(page)
+  // Empty canvas: deselects, adds nothing (the tool went back to Select).
+  await page.mouse.click(box.x + 60, box.y + 60)
+  await expect.poll(() => draftCount(page, 'Text')).toBe(1)
+  await expect(page.getByRole('button', { name: 'Delete selected' })).toBeDisabled()
+  // Press on the emoji: selects it, still one emoji.
+  await page.mouse.click(box.x + 300, box.y + 200)
+  await expect(page.getByRole('button', { name: 'Delete selected' })).toBeEnabled()
+  expect(await draftCount(page, 'Text')).toBe(1)
+  // Choosing Emoji again lets the next press stamp a second one.
+  await page.getByRole('button', { name: 'Emoji', exact: true }).click()
+  await page.mouse.click(box.x + 60, box.y + 60)
+  await expect.poll(() => draftCount(page, 'Text')).toBe(2)
+})
+
+test('visual messaging: inviting confirms, and the button stays done until the email changes', async ({ page }) => {
+  await startConversation(page, 'Invite confirm ' + Date.now())
+  await page.getByPlaceholder('member@email').fill('charlie@demo.local')
+  await page.getByRole('button', { name: 'Invite member' }).click()
+  const done = page.getByRole('button', { name: 'Invited ✓' })
+  await expect(done).toBeDisabled()
+  await expect(page.locator('p[role="status"]')).toContainText('Invitation sent')
+  // Changing the address re-arms it.
+  await page.getByPlaceholder('member@email').fill('dana@demo.local')
+  await expect(page.getByRole('button', { name: 'Invite member' })).toBeEnabled()
+  await expect(page.locator('p[role="status"]')).toHaveCount(0)
 })

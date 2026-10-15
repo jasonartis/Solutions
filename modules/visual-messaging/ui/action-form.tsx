@@ -44,18 +44,30 @@ export function ActionForm(props: {
   /** name of a file field to shrink in the browser before sending (a Server
    *  Action's request body is capped; see image-shrink.ts) */
   shrinkImageField?: string
+  /** Render the submit button here (instead of as a child) so it can confirm:
+   *  after a success it reads `doneLabel`, shows `successMessage`, and stays
+   *  disabled until a field is edited — so a second click cannot repeat it. */
+  submitLabel?: string
+  doneLabel?: string
+  submitClassName?: string
+  doneClassName?: string
+  successMessage?: string
 }) {
   const [error, setError] = useState<string | null>(null)
+  const [done, setDone] = useState(false)
   const [pending, startTransition] = useTransition()
 
   return (
     <form
       className={props.className}
+      // Editing any field re-arms the button (an `input` event bubbles up from it).
+      onInput={() => setDone(false)}
       onSubmit={(e) => {
         e.preventDefault()
         const form = e.currentTarget
         const formData = new FormData(form)
         setError(null)
+        setDone(false)
         startTransition(async () => {
           const field = props.shrinkImageField
           const picked = field ? formData.get(field) : null
@@ -69,13 +81,26 @@ export function ActionForm(props: {
           }
           const result = await runAction(() => props.action(formData))
           if (!result.ok) setError((result as { reason: string }).reason)
-          else if (props.resetOnSuccess) form.reset()
+          else {
+            if (props.resetOnSuccess) form.reset()
+            setDone(true)
+          }
         })
       }}
     >
       <fieldset disabled={pending} className="contents">
         {props.children}
+        {props.submitLabel && (
+          <button type="submit" disabled={pending || done} className={done ? (props.doneClassName ?? props.submitClassName) : props.submitClassName + ' disabled:cursor-default disabled:opacity-60'}>
+            {done ? (props.doneLabel ?? props.submitLabel) : props.submitLabel}
+          </button>
+        )}
       </fieldset>
+      {done && props.successMessage && (
+        <p role="status" className="w-full text-sm text-green-700">
+          {props.successMessage}
+        </p>
+      )}
       {error && (
         <p role="alert" className="w-full text-sm text-red-600">
           {error}

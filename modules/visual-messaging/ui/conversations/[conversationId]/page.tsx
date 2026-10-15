@@ -259,25 +259,20 @@ export default async function ConversationPage(props: {
   // the canvas can slide the incoming layer in under the finger. (The whole
   // conversation is already loaded above; this only re-shapes it. Fine for
   // conversation-sized trees — a very large one would want this fetched lazily.)
-  const contentOf = (layer: LayerRow) => {
-    const lineage: LayerRow[] = []
-    for (let l: LayerRow | undefined = layer; l; l = l.parent_layer_id ? byId.get(l.parent_layer_id) : undefined) {
-      lineage.unshift(l)
-    }
-    return {
-      strokes: lineage.flatMap((l) => l.content.strokes ?? []),
-      stamps: lineage.flatMap((l) => l.content.stamps ?? []),
-      texts: lineage.flatMap((l) => l.content.texts ?? []),
-      images: lineage.flatMap((l) => resolveImages(l.content.images ?? [])),
-    }
-  }
+  // Only what the layer itself ADDED — a reply is stored as its own ink, with no
+  // copy of the picture or of its ancestors, and the swipe shows exactly that.
+  const contentOf = (layer: LayerRow) => ({
+    strokes: layer.content.strokes ?? [],
+    stamps: layer.content.stamps ?? [],
+    texts: layer.content.texts ?? [],
+    images: resolveImages(layer.content.images ?? []),
+  })
   const neighbourOf = (id: string | null) => {
     const layer = id ? byId.get(id) : undefined
     return layer ? contentOf(layer) : null
   }
   const neighbours = {
     left: neighbourOf(nav.firstChildId),
-    right: neighbourOf(nav.parentId),
     up: neighbourOf(nav.nextSiblingId),
     down: neighbourOf(nav.prevSiblingId),
   }
@@ -322,6 +317,10 @@ export default async function ConversationPage(props: {
           <ActionForm
             action={renameConversation.bind(null, orgSlug, conversationId)}
             className="mt-2 flex flex-wrap items-center gap-2"
+            submitLabel="Save name"
+            doneLabel="Saved ✓"
+            submitClassName="rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700"
+            doneClassName="rounded bg-green-600 px-3 py-1 text-sm font-medium text-white disabled:opacity-100"
           >
             <input
               name="title"
@@ -331,9 +330,6 @@ export default async function ConversationPage(props: {
               aria-label="conversation name"
               className="min-w-56 rounded border border-gray-300 px-2 py-1 text-sm"
             />
-            <button className="rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700">
-              Save name
-            </button>
           </ActionForm>
         </details>
       )}
@@ -421,6 +417,11 @@ export default async function ConversationPage(props: {
           <ActionForm
             action={flagLayer.bind(null, orgSlug, conversationId, current.id)}
             className="mt-2 flex flex-col gap-2 rounded border border-gray-200 p-3 sm:flex-row sm:items-center"
+            submitLabel="Flag"
+            doneLabel="Flagged ✓"
+            successMessage="Thanks — a moderator will take a look."
+            submitClassName="rounded border border-gray-300 px-3 py-1 text-sm text-gray-700 hover:bg-gray-50"
+            doneClassName="rounded border border-green-600 bg-green-50 px-3 py-1 text-sm text-green-700"
           >
             <select name="reason" required className="rounded border border-gray-300 px-2 py-1 text-sm">
               <option value="">Reason…</option>
@@ -434,9 +435,6 @@ export default async function ConversationPage(props: {
               placeholder="Details (optional)"
               className="flex-1 rounded border border-gray-300 px-2 py-1 text-sm"
             />
-            <button className="rounded border border-gray-300 px-3 py-1 text-sm text-gray-700 hover:bg-gray-50">
-              Flag
-            </button>
           </ActionForm>
         </details>
       )}
@@ -565,7 +563,17 @@ export default async function ConversationPage(props: {
                 </ActionForm>
               </div>
 
-              <ActionForm action={addMember.bind(null, orgSlug, conversationId)} className="flex flex-wrap items-center gap-2">
+              <ActionForm
+                action={addMember.bind(null, orgSlug, conversationId)}
+                className="flex flex-wrap items-center gap-2"
+                submitLabel="Invite member"
+                doneLabel="Invited ✓"
+                // Same words whether they were added, already in, or blocked this
+                // conversation — the action deliberately does not tell the admin which.
+                successMessage="Invitation sent. They will see it in their Visual Messaging list once they open it."
+                submitClassName="rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700"
+            doneClassName="rounded bg-green-600 px-3 py-1 text-sm font-medium text-white disabled:opacity-100"
+              >
                 <input
                   name="email"
                   type="email"
@@ -573,9 +581,6 @@ export default async function ConversationPage(props: {
                   placeholder="member@email"
                   className="rounded border border-gray-300 px-2 py-1 text-sm"
                 />
-                <button className="rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700">
-                  Invite member
-                </button>
               </ActionForm>
             </>
           )}
