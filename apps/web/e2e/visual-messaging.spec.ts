@@ -54,7 +54,7 @@ test('visual messaging: module styling reaches the browser (pen swatches have a 
   }
 })
 
-test('visual messaging: a fast stroke does not crash, X-ray fades the draft (mouse and touch), handles do not place stamps', async ({
+test('visual messaging: a fast stroke does not crash, X-ray fades what is below the draft in three levels, handles do not place stamps', async ({
   page,
 }) => {
   test.slow()
@@ -75,22 +75,20 @@ test('visual messaging: a fast stroke does not crash, X-ray fades the draft (mou
   await expect(page.getByRole('button', { name: 'Send reply' })).toBeEnabled()
   expect(pageErrors).toEqual([])
 
-  // X-ray, mouse: every layer above the photo fades — including the DRAFT
-  // layer holding the stroke just drawn (it used to stay solid).
-  const xray = page.getByRole('button', { name: 'Hold to X-ray' })
+  // X-ray is a three-level toggle (off -> 50% -> full -> off). While DRAWING it
+  // fades everything BELOW the reply (photo + the layers under it) and never the
+  // draft itself. Layers: [photo, ancestors, this layer, draft].
+  const xray = page.getByRole('button', { name: /^X-ray/ })
   expect(await layerOpacities(page)).toEqual([1, 1, 1, 1])
-  const xb = (await xray.boundingBox())!
-  await page.mouse.move(xb.x + xb.width / 2, xb.y + xb.height / 2)
-  await page.mouse.down()
-  await expect.poll(() => layerOpacities(page)).toEqual([1, 0.15, 0.15, 0.15])
-  await page.mouse.up()
+  await xray.click()
+  await expect.poll(() => layerOpacities(page)).toEqual([0.5, 0.5, 0.5, 1])
+  await expect(xray).toHaveAttribute('aria-label', 'X-ray: 50%')
+  await xray.click()
+  await expect.poll(() => layerOpacities(page)).toEqual([0.15, 0.15, 0.15, 1])
+  // A touch tap arrives as a click too.
+  await xray.dispatchEvent('click')
   await expect.poll(() => layerOpacities(page)).toEqual([1, 1, 1, 1])
-
-  // X-ray, touch: only pointer events fire for a finger (mouse events never do).
-  await xray.dispatchEvent('pointerdown', { pointerType: 'touch', isPrimary: true })
-  await expect.poll(() => layerOpacities(page)).toEqual([1, 0.15, 0.15, 0.15])
-  await xray.dispatchEvent('pointerup', { pointerType: 'touch', isPrimary: true })
-  await expect.poll(() => layerOpacities(page)).toEqual([1, 1, 1, 1])
+  await expect(xray).toHaveAttribute('aria-label', 'X-ray: off')
 
   // Transformer handles: pressing one must NOT deselect the shape or drop a
   // second emoji under it. Place an emoji, select it, press a corner handle.
@@ -590,4 +588,24 @@ test('visual messaging: the edge markers update at once on a swipe, not after th
   await expect(page.getByRole('button', { name: /swipe right/ })).toHaveCount(0) // root: nowhere further back
   await page.unroute(/_rsc=/)
   await expect(page.getByText('Replies to this layer (1)')).toBeVisible({ timeout: 15_000 })
+})
+
+test('visual messaging: X-ray while viewing fades the replies, not the picture, and resets when drawing starts', async ({
+  page,
+}) => {
+  test.slow()
+  const box = await openDrawing(page, 'Xray view ' + Date.now())
+  await inkStroke(page, box, [60, 60], [220, 140])
+  await page.getByRole('button', { name: 'Send reply' }).click()
+  await expect(page.getByText('1.1', { exact: true })).toBeVisible()
+  const xray = page.getByRole('button', { name: /^X-ray/ })
+  await xray.click()
+  // Viewing: the picture stays solid, the ink of the replies fades.
+  await expect.poll(() => layerOpacities(page)).toEqual([1, 0.5, 0.5, 1])
+  await xray.click()
+  await expect.poll(() => layerOpacities(page)).toEqual([1, 0.15, 0.15, 1])
+  // Starting a reply resets it, since it now means something else.
+  await page.getByRole('button', { name: 'Draw a reply' }).click()
+  await expect(xray).toHaveAttribute('aria-label', 'X-ray: off')
+  await expect.poll(() => layerOpacities(page)).toEqual([1, 1, 1, 1])
 })

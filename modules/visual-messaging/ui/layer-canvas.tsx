@@ -67,6 +67,35 @@ const HISTORY_LIMIT = 100
 
 type Tool = 'pen' | 'select' | 'emoji' | 'text' | 'image'
 
+// X-ray (founder 2026-10-15): a three-level toggle, not a hold. Level 0 = off,
+// 1 = half, 2 = full. What it fades depends on the mode: VIEWING fades the
+// replies so the picture shows through; DRAWING fades everything BELOW the reply
+// being made (the picture and every layer under it), so what you are adding
+// stands out and it is clear the lower layers are not yours to edit.
+type XrayLevel = 0 | 1 | 2
+const XRAY_FACTOR: Record<XrayLevel, number> = { 0: 1, 1: 0.5, 2: 0.15 }
+const XRAY_LABEL: Record<XrayLevel, string> = { 0: 'off', 1: '50%', 2: 'full' }
+
+// An eye whose lid shows the level: wide open (off), half-lidded (50%), shut (full).
+function XrayEye({ level }: { level: XrayLevel }) {
+  return (
+    <svg width="22" height="16" viewBox="0 0 22 16" aria-hidden="true" className="shrink-0">
+      {level === 2 ? (
+        <>
+          <path d="M2 8 Q11 15 20 8" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          <path d="M5 11.5 L3.5 14 M11 13 L11 15.5 M17 11.5 L18.5 14" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+        </>
+      ) : (
+        <>
+          <path d="M1 8 Q11 -1 21 8 Q11 17 1 8 Z" fill="none" stroke="currentColor" strokeWidth="1.5" />
+          <circle cx="11" cy="8" r="3" fill="currentColor" />
+          {level === 1 && <path d="M1 8 Q11 -1 21 8 L21 8 L1 8 Z" fill="currentColor" opacity="0.35" />}
+        </>
+      )}
+    </svg>
+  )
+}
+
 // Everything a layer shows, composed along its path from the root (flat): what
 // the swipe slides in from a neighbouring layer while the finger is still down.
 export type LayerContent = {
@@ -165,7 +194,10 @@ export default function LayerCanvas(props: {
   const [stagedImage, setStagedImage] = useState<{ path: string; naturalW: number; naturalH: number } | null>(null)
   const [imageObjectUrls, setImageObjectUrls] = useState<Record<string, string>>({})
   const [uploadingImage, setUploadingImage] = useState(false)
-  const [xray, setXray] = useState(false)
+  const [xrayLevel, setXrayLevel] = useState<XrayLevel>(0)
+  const xrayFactor = XRAY_FACTOR[xrayLevel]
+  // Entering or leaving drawing changes what X-ray means, so start each mode clear.
+  useEffect(() => setXrayLevel(0), [mode])
   const [pending, startTransition] = useTransition()
   const activeStroke = useRef<number[][] | null>(null)
   // A swipe in progress: where it began, which axis it locked to, and recent
@@ -811,10 +843,10 @@ export default function LayerCanvas(props: {
           onPointerMove={handleMove}
           onPointerUp={handleUp}
         >
-          <Layer>
+          <Layer opacity={mode === 'draw' ? xrayFactor : 1}>
             {img && <KonvaImage image={img} width={natural.w} height={natural.h} />}
           </Layer>
-          <Layer opacity={xray ? 0.15 : 1}>
+          <Layer opacity={xrayFactor}>
             {props.baseLayers.flatMap((layerStrokes, li) =>
               layerStrokes.map((s, si) => (
                 <Line key={`b${li}-${si}`} points={strokeToPolygon(s)} closed fill={s.color} />
@@ -872,7 +904,8 @@ export default function LayerCanvas(props: {
             x={outgoing && outgoing.dir === 'right' ? outgoing.offset / scale : 0}
             y={outgoing && (outgoing.dir === 'up' || outgoing.dir === 'down') ? outgoing.offset / scale : 0}
             opacity={
-              xray ? 0.15 : outgoing ? 1 - 0.45 * Math.min(1, Math.abs(outgoing.offset) / extentOf(outgoing.dir)) : 1
+              xrayFactor *
+              (outgoing ? 1 - 0.45 * Math.min(1, Math.abs(outgoing.offset) / extentOf(outgoing.dir)) : 1)
             }
           >
             {props.currentStrokes.map((s, i) => (
@@ -917,7 +950,7 @@ export default function LayerCanvas(props: {
                 ),
             )}
           </Layer>
-          <Layer opacity={xray ? 0.15 : 1}>
+          <Layer>
             {/* The draft, in the same order the sent reply composes: strokes,
                 then emoji, text, pictures. Each is selectable + draggable;
                 strokes only listen in the Select tool, because the Pen has to
@@ -1109,19 +1142,23 @@ export default function LayerCanvas(props: {
       <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
         <button
           type="button"
-          // Pointer events, not mouse events: those never fire for a finger.
-          // touch-action none + no context menu stop a long press selecting
-          // text or opening the browser's menu instead of holding the button.
-          onPointerDown={() => setXray(true)}
-          onPointerUp={() => setXray(false)}
-          onPointerLeave={() => setXray(false)}
-          onPointerCancel={() => setXray(false)}
-          onContextMenu={(e) => e.preventDefault()}
-          style={{ touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none' }}
-          className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-600"
-          title="Press and hold to fade the layers"
+          // A plain click, so it works for a finger as well as a mouse; each click
+          // goes off -> 50% -> full -> off.
+          onClick={() => setXrayLevel((l) => ((l + 1) % 3) as XrayLevel)}
+          aria-label={`X-ray: ${XRAY_LABEL[xrayLevel]}`}
+          data-xray-level={xrayLevel}
+          title={
+            mode === 'draw'
+              ? 'X-ray: fade everything below your reply (click to change: off, 50%, full)'
+              : 'X-ray: fade the replies so the picture shows through (click to change: off, 50%, full)'
+          }
+          className={
+            'flex items-center gap-1.5 rounded border px-2 py-1 text-xs ' +
+            (xrayLevel === 0 ? 'border-gray-300 text-gray-600' : 'border-blue-500 bg-blue-50 text-blue-700')
+          }
         >
-          Hold to X-ray
+          <XrayEye level={xrayLevel} />
+          <span>X-ray {XRAY_LABEL[xrayLevel]}</span>
         </button>
 
         {mode === 'view' && (

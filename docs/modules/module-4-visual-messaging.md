@@ -1110,3 +1110,17 @@ the same correction 20260922030000 made one dimension over. db 363/363;
 `prod-verify-vm-module-role.mts` local 28/0, **prod pre-apply 4 pass / 20 fail, every CONTROL
 green**. Two adversarial reviews: A found no widening (112/112 pairs equal); B found the three
 forgery paths above, all fixed and tested.
+
+### 2026-10-15 — X-ray is a three-level toggle (founder decision)
+
+Replaces "hold to X-ray". One button cycles **off → 50% → full → off**; the eye icon's lid shows the
+level (open / half-lidded / shut) and the label says it. **What it fades depends on the mode:**
+viewing fades the replies' ink (the picture stays solid); drawing fades everything BELOW the reply
+being made — the picture and every layer under it — and never the draft. The level resets when
+drawing starts or ends. Founder explicitly rejected an automatic dim of lower layers while drawing
+(option "C"); more levels can be added later (`XRAY_FACTOR` in `layer-canvas.tsx`).
+Also: the edge markers now update client-side the instant a swipe completes (`layer-nav.ts`,
+shared with the server page). **Open design discussion, NOT built:** pending invites for people
+not yet on the platform/org (founder: 30 days; "anyone may pre-invite to what they can invite to";
+each invite takes effect when its prerequisites are met) — see the brief to be written for the
+Opus session.
