@@ -129,7 +129,9 @@ try {
   const inserts = pols.filter((p) => p.cmd === 'INSERT').map((p) => p.policyname)
   check('exactly two INSERT policies (own + manage)', inserts.length === 2, inserts.join(','))
   const manage = pols.find((p) => p.policyname === 'vm_reactions_insert_manage')
-  check('vm_reactions_insert_manage unchanged (vm_can_manage(org_id))', manage?.with_check === 'vm_can_manage(org_id)', manage?.with_check ?? '')
+  // 20261015010000 later added `user_id = auth.uid()` to this arm (no
+  // forging another person's reaction), so only its manager gate is asserted.
+  check('vm_reactions_insert_manage still gates on vm_can_manage(org_id)', /vm_can_manage\(org_id\)/.test(manage?.with_check ?? ''), manage?.with_check ?? '')
 
   console.log('\n[3] Behaviour — a real viewer reacts, replayed and ROLLED BACK')
   const viewers = await sql<{ user_id: string; conversation_id: string; layer_id: string; kind: string }[]>`

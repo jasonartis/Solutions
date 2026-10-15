@@ -969,7 +969,8 @@ gets an active `viewer` seat (`vm_join_conversation`), so every module member ca
 in every open conversation. That is the decision working as intended, stated so it is not
 a surprise.
 
-**Found, NOT changed, all pre-existing — open:**
+**Found, NOT changed, all pre-existing — open:** *(items 1 and 2 BUILT 2026-10-15,
+`20261015010000` — see that entry below)*
 1. **`vm_reactions_insert_manage` never checks `user_id`** — an org admin or vm `admin` can
    insert a reaction AS ANOTHER PERSON (since `20260709100000`). Same shape likely on
    `vm_layers_insert_manage` (`author_id`) — unchecked. A forgery hole for managers; Opus
@@ -1054,3 +1055,38 @@ Founder findings and what changed (commit after `5d3aa64`):
 - **Count markers were backwards:** each now sits on the side the layers are pulled in FROM, arrow
   pointing there (replies: right edge →; back up: left edge ←; next sibling: bottom ↓; previous: top ↑).
   aria-labels and the swipe-direction hint text are unchanged (they describe the finger's direction).
+
+### 2026-10-15 — seats need the module role; no credit forgery (`20261015010000`, Opus)
+
+Closes items 1 and 2 of the 2026-10-14 "Found, NOT changed" list (founder: "go ahead with
+both"). Item 3 (a banned person can delete their own past reactions) is deliberately left.
+
+**(A) A seat needs the visual-messaging ROLE.** docs/19's 2026-10-15 section has the
+reasoning. Effect: someone removed from the module but still in the org loses every
+conversation (read, post, react, moderate, admin, images), and a creator without the role
+stops seeing their conversation. **Measured first: 0 of 6 active prod seats lose access.**
+**Recorded change:** a role-less member can no longer self-block; they can still leave.
+
+**(B) Nobody credits a row to someone else — managers included.** Before, an org owner/admin
+or vm `admin` could, by INSERT or UPDATE, make a reaction, layer, conversation or flag appear
+to come from another person, move someone's reaction to a different layer, write anyone as
+the "removed by" of a layer without removing it, or write anyone as a flag's reviewer (any
+moderator could do the last, too, while leaving the state unchanged; and the review time could
+be backdated). Now the person is always the caller on insert, and on update the author /
+reactor / creator / reporter are fixed and the removed-by and reviewed-by stamps are written
+by the server from whoever actually changed the state. The app always credited the signed-in
+user, so no screen changes. Review B found the flag and stamp cases in the first draft.
+
+**Side effect: deletion landmine (2) closed** (`vm_pin_conversation` lets the FK's SET NULL
+through). Its recorded symptom was wrong — measured, the delete succeeded and left
+`created_by` dangling at a deleted account; prod had 0 such rows.
+
+**Evidence:** 10 RLS tests in "a seat needs the MODULE ROLE, and nobody credits a row to
+someone else" (a throwaway probe account, never a seeded one): 6 red before / all green after;
+an equivalence test that `vm_is_module_member` answers as before for every seeded user × org.
+One older fixture ("THE USER-DELETION CASCADE") needed a vm grant for its throwaway admin —
+the same correction 20260922030000 made one dimension over. db 363/363;
+`verify-acl-hardening.ts` local 17/17 (new `FUNCTION_EXCEPTIONS` entry);
+`prod-verify-vm-module-role.mts` local 28/0, **prod pre-apply 4 pass / 20 fail, every CONTROL
+green**. Two adversarial reviews: A found no widening (112/112 pairs equal); B found the three
+forgery paths above, all fixed and tested.

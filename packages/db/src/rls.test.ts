@@ -7220,6 +7220,14 @@ describe('visual messaging: the last conversation admin cannot LEAVE (2026091402
       .from('org_members')
       .insert({ org_id: laOrg, user_id: doomedId, role: 'member', status: 'active' })
     expect(orgSeat.error, `fixture org membership failed: ${orgSeat.error?.message}`).toBeNull()
+    // ...and must hold the visual-messaging ROLE. ADDED 2026-10-15 with
+    // 20261015010000, for the same reason one dimension further: the floor now
+    // counts only seats whose holder holds the module role, so without this
+    // grant the handover is (correctly) refused. Cascades away with the user.
+    const roleGrant = await laAdmin
+      .from('module_roles')
+      .insert({ org_id: laOrg, user_id: doomedId, module_key: 'visual-messaging', role: 'member' })
+    expect(roleGrant.error, `fixture vm role failed: ${roleGrant.error?.message}`).toBeNull()
 
     // Make the doomed user the SOLE admin. Order matters and the first draft of
     // this test got it wrong in an instructive way: it deleted charlie's seat
@@ -9641,4 +9649,279 @@ describe('visual messaging: a VIEWER may react, nobody without an active seat ma
     expect(del.data, "a viewer deleted dana's reaction").toEqual([])
     expect(await reactionsOn(layer)).toEqual([danaId])
   })
+})
+
+describe('visual messaging: a seat needs the MODULE ROLE, and nobody credits a row to someone else (20261015010000)', () => {
+  // docs/19 founder decision 1 (full symmetry), applied to visual messaging.
+  // The subject is a THROWAWAY probe account, not a seeded user: revoking a
+  // seeded user's grant mid-run would break any other suite (or a concurrent
+  // e2e run) that signs in as them. demo-visual: alice = org owner (a manager),
+  // dana = plain member holding the vm `member` grant.
+  const svcKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
+  const svc = () => createClient(url, svcKey, { auth: { persistSession: false } })
+  const raw = postgres(ownerDbUrl, { prepare: false, max: 1 })
+  const convIds: string[] = []
+  const probeIds: string[] = []
+  let org = ''
+  let aliceId = ''
+  let danaId = ''
+  let probeId = ''
+  let alice: SupabaseClient
+  let dana: SupabaseClient
+  let probe: SupabaseClient
+
+  const makeProbeUser = async (label: string) => {
+    const tag = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+    const email = `vm-role-${label}-${tag}@demo.local`
+    const u = await svc().auth.admin.createUser({ email, password: 'password123', email_confirm: true })
+    if (u.error) throw new Error(`createUser: ${u.error.message}`)
+    probeIds.push(u.data.user!.id)
+    return { id: u.data.user!.id, email }
+  }
+  const grantRole = async (userId: string) => {
+    const g = await svc().from('module_roles').insert({ org_id: org, user_id: userId, module_key: 'visual-messaging', role: 'member' })
+    if (g.error) throw new Error(`grant: ${g.error.message}`)
+  }
+  const revokeRole = async (userId: string) => {
+    const r = await svc().from('module_roles').delete().eq('org_id', org).eq('user_id', userId).eq('module_key', 'visual-messaging')
+    if (r.error) throw new Error(`revoke: ${r.error.message}`)
+  }
+  const makeConv = async (title: string, createdBy: string) => {
+    const c = await svc().from('vm_conversations').insert({ org_id: org, title, created_by: createdBy }).select('id').single()
+    if (c.error) throw new Error(`fixture conversation failed: ${c.error.message}`)
+    const conv = c.data!.id as string
+    convIds.push(conv)
+    const l = await svc()
+      .from('vm_layers')
+      .insert({ org_id: org, conversation_id: conv, author_id: danaId, path: 'server-assigned', content: {} })
+      .select('id')
+      .single()
+    if (l.error) throw new Error(`fixture layer failed: ${l.error.message}`)
+    return { conv, layer: l.data!.id as string }
+  }
+  const seat = async (conv: string, userId: string, role: string) => {
+    const r = await svc().from('vm_conversation_members').insert({ org_id: org, conversation_id: conv, user_id: userId, role, status: 'active' })
+    if (r.error) throw new Error(`fixture seat failed: ${r.error.message}`)
+  }
+
+  beforeAll(async () => {
+    org = (await svc().from('orgs').select('id').eq('slug', 'demo-visual').single()).data!.id as string
+    aliceId = await userIdOf('alice@demo.local')
+    danaId = await userIdOf('dana@demo.local')
+    alice = await signIn('alice@demo.local')
+    dana = await signIn('dana@demo.local')
+    const p = await makeProbeUser('subject')
+    probeId = p.id
+    const m = await svc().from('org_members').insert({ org_id: org, user_id: probeId, role: 'member', status: 'active' })
+    if (m.error) throw new Error(`probe membership: ${m.error.message}`)
+    const st = await svc().from('org_members').select('status').eq('org_id', org).eq('user_id', probeId).single()
+    expect(st.data?.status, 'CONTROL: the probe is an ACTIVE org member').toBe('active')
+    await grantRole(probeId)
+    probe = await signIn(p.email)
+  })
+  afterAll(async () => {
+    try {
+      for (const id of convIds) await svc().from('vm_conversations').delete().eq('id', id)
+      for (const id of probeIds) {
+        const { error } = await svc().auth.admin.deleteUser(id)
+        expect(error, `could not delete probe ${id}: ${error?.message}`).toBeNull()
+      }
+    } finally {
+      await raw.end()
+    }
+  })
+
+  it('vm_is_module_member answers EXACTLY as before for every seeded user in every org', async () => {
+    // The function is now a wrapper over vm_user_is_module_member. The old
+    // expression is still callable, so compare the two as each real user.
+    const users = await raw<{ id: string }[]>`select id from auth.users where email like '%@demo.local' and email not like 'vm-role-%'`
+    const orgs = await raw<{ id: string }[]>`select id from public.orgs`
+    expect(users.length, 'CONTROL: seeded users exist').toBeGreaterThan(5)
+    const mismatches: string[] = []
+    let trues = 0
+    for (const u of users) {
+      await raw.begin(async (tx) => {
+        await tx`select set_config('request.jwt.claims', ${JSON.stringify({ sub: u.id, role: 'authenticated' })}, true)`
+        const rows = await tx<{ org: string; now: boolean; old: boolean }[]>`
+          select o.id as org, public.vm_is_module_member(o.id) as now,
+                 (public.has_module_role(o.id, 'visual-messaging', 'member') or public.vm_can_moderate_org(o.id)) as old
+          from public.orgs o`
+        for (const r of rows) {
+          if (r.now) trues++
+          if (r.now !== r.old) mismatches.push(`${u.id}/${r.org}: now=${r.now} old=${r.old}`)
+        }
+      })
+    }
+    expect(mismatches).toEqual([])
+    expect(trues, 'CONTROL: some user really is a module member somewhere').toBeGreaterThan(0)
+    expect(orgs.length).toBeGreaterThan(1)
+  })
+
+  it('an org member whose vm ROLE is revoked loses the conversation; restoring the role restores it', async () => {
+    const { conv, layer } = await makeConvWithLayerFor('RLS fixture - role revoked')
+    await seat(conv, probeId, 'participant')
+    // CONTROL: with the role, the seat works for read, react and post.
+    expect((await probe.from('vm_layers').select('id').eq('id', layer)).data?.length, 'CONTROL: probe cannot read with the role').toBe(1)
+    const r1 = await probe.from('vm_reactions').insert({ org_id: org, conversation_id: conv, layer_id: layer, user_id: probeId, kind: 'heart' })
+    expect(r1.error, `CONTROL: probe cannot react with the role: ${JSON.stringify(r1.error)}`).toBeNull()
+
+    await revokeRole(probeId)
+    try {
+      const st = await svc().from('org_members').select('status').eq('org_id', org).eq('user_id', probeId).single()
+      expect(st.data?.status, 'CONTROL: still an active org member - only the ROLE changed').toBe('active')
+      expect((await probe.from('vm_layers').select('id').eq('id', layer)).data, 'a role-less seat still reads layers').toEqual([])
+      expect((await probe.from('vm_conversations').select('id').eq('id', conv)).data, 'a role-less seat still reads the conversation').toEqual([])
+      const r2 = await probe.from('vm_reactions').insert({ org_id: org, conversation_id: conv, layer_id: layer, user_id: probeId, kind: 'laugh' })
+      expect(r2.error?.code, 'a role-less seat reacted').toBe('42501')
+      const p2 = await probe.from('vm_layers').insert({
+        org_id: org, conversation_id: conv, parent_layer_id: layer, author_id: probeId, path: 'server-assigned', content: {},
+      })
+      expect(p2.error?.code, 'a role-less seat posted').toBe('42501')
+    } finally {
+      await grantRole(probeId)
+    }
+    expect((await probe.from('vm_layers').select('id').eq('id', layer)).data?.length, 'restoring the role did not restore access').toBe(1)
+  })
+
+  it("the CREATOR arm needs the role too: a role-less creator stops reading their conversation", async () => {
+    const { conv } = await makeConv('RLS fixture - role-less creator', probeId)
+    expect((await probe.from('vm_conversations').select('id').eq('id', conv)).data?.length, 'CONTROL: the creator reads it with the role').toBe(1)
+    await revokeRole(probeId)
+    try {
+      expect((await probe.from('vm_conversations').select('id').eq('id', conv)).data, 'a role-less creator still reads it').toEqual([])
+      const s = await probe
+        .from('vm_conversation_members')
+        .insert({ org_id: org, conversation_id: conv, user_id: probeId, role: 'admin', status: 'active' })
+      expect(s.error, 'a role-less creator re-seated themselves as admin').not.toBeNull()
+    } finally {
+      await grantRole(probeId)
+    }
+  })
+
+  it('the last-admin floor: a role-less admin seat no longer props it open', async () => {
+    const { conv } = await makeConv('RLS fixture - role-less admin and the floor', danaId)
+    await seat(conv, danaId, 'admin')
+    await seat(conv, probeId, 'admin')
+    await revokeRole(probeId)
+    try {
+      const leave = await dana.from('vm_conversation_members').delete().eq('conversation_id', conv).eq('user_id', danaId)
+      expect(leave.error?.message ?? '', 'the only EFFECTIVE admin left while a role-less admin was seated').toContain('at least one admin')
+    } finally {
+      await grantRole(probeId)
+    }
+    // CONTROL: with the role back, the second admin counts and dana may leave.
+    const ok = await dana.from('vm_conversation_members').delete().eq('conversation_id', conv).eq('user_id', danaId).select('id')
+    expect(ok.error, JSON.stringify(ok.error)).toBeNull()
+    expect(ok.data?.length).toBe(1)
+  })
+
+  it('a MANAGER cannot INSERT a reaction, layer or conversation credited to someone else - but still can as themselves', async () => {
+    const { conv, layer } = await makeConv('RLS fixture - manager forgery insert', danaId)
+    const fr = await alice.from('vm_reactions').insert({ org_id: org, conversation_id: conv, layer_id: layer, user_id: danaId, kind: 'heart' })
+    expect(fr.error?.code, 'alice reacted as dana').toBe('42501')
+    const fl = await alice.from('vm_layers').insert({
+      org_id: org, conversation_id: conv, parent_layer_id: layer, author_id: danaId, path: 'server-assigned', content: {},
+    })
+    expect(fl.error?.code, 'alice posted as dana').toBe('42501')
+    const fc = await alice.from('vm_conversations').insert({ org_id: org, title: 'RLS fixture - forged creator', created_by: danaId })
+    expect(fc.error?.code, 'alice created a conversation as dana').toBe('42501')
+    // CONTROL: the same manager, crediting herself, is unaffected.
+    const ok = await alice.from('vm_reactions').insert({ org_id: org, conversation_id: conv, layer_id: layer, user_id: aliceId, kind: 'heart' })
+    expect(ok.error, `CONTROL: the manager lost her own INSERT: ${JSON.stringify(ok.error)}`).toBeNull()
+  })
+
+  it('a MANAGER cannot UPDATE a row onto someone else (author, reactor, layer, creator are pinned); other manager edits still land', async () => {
+    const a = await makeConv('RLS fixture - manager forgery update A', danaId)
+    const b = await makeConv('RLS fixture - manager forgery update B', danaId)
+    const rx = await svc()
+      .from('vm_reactions')
+      .insert({ org_id: org, conversation_id: a.conv, layer_id: a.layer, user_id: danaId, kind: 'heart' })
+      .select('id')
+      .single()
+    if (rx.error) throw new Error(rx.error.message)
+
+    await alice.from('vm_layers').update({ author_id: aliceId }).eq('id', a.layer)
+    await alice.from('vm_reactions').update({ user_id: aliceId, layer_id: b.layer }).eq('id', rx.data!.id)
+    await alice.from('vm_conversations').update({ created_by: aliceId, title: 'RLS fixture - renamed by manager' }).eq('id', a.conv)
+
+    const layer = (await svc().from('vm_layers').select('author_id').eq('id', a.layer).single()).data
+    expect(layer?.author_id, 'a manager re-credited a layer').toBe(danaId)
+    const reaction = (await svc().from('vm_reactions').select('user_id, layer_id').eq('id', rx.data!.id).single()).data
+    expect(reaction, 'a manager moved or re-credited a reaction').toEqual({ user_id: danaId, layer_id: a.layer })
+    const c = (await svc().from('vm_conversations').select('created_by, title').eq('id', a.conv).single()).data
+    expect(c?.created_by, 'a manager re-credited a conversation').toBe(danaId)
+    expect(c?.title, 'CONTROL: the manager lost UPDATE altogether').toBe('RLS fixture - renamed by manager')
+  })
+
+  it("LANDMINE CLOSED: deleting the account of someone who CREATED a conversation succeeds, and the conversation survives with no creator", async () => {
+    const creator = await makeProbeUser('creator')
+    const { conv } = await makeConv('RLS fixture - creator account deleted', creator.id)
+    const del = await svc().auth.admin.deleteUser(creator.id)
+    expect(del.error, `deleting a conversation creator failed: ${del.error?.message}`).toBeNull()
+    probeIds.splice(probeIds.indexOf(creator.id), 1)
+    const c = (await svc().from('vm_conversations').select('id, created_by').eq('id', conv).maybeSingle()).data
+    expect(c, 'the conversation was lost with its creator').toEqual({ id: conv, created_by: null })
+  })
+
+  it('FLAGS: a manager cannot file one as someone else, re-credit the reporter, or write a reviewer; a state change stamps the caller', async () => {
+    const { conv, layer } = await makeConv('RLS fixture - flag forgery', danaId)
+    const forged = await alice
+      .from('vm_flags')
+      .insert({ org_id: org, conversation_id: conv, layer_id: layer, reporter_user_id: danaId, reason: 'spam' })
+    expect(forged.error?.code, 'alice filed a flag as dana').toBe('42501')
+    const f = await svc()
+      .from('vm_flags')
+      .insert({ org_id: org, conversation_id: conv, layer_id: layer, reporter_user_id: danaId, reason: 'spam' })
+      .select('id')
+      .single()
+    if (f.error) throw new Error(f.error.message)
+    const flagOf = async () =>
+      (await svc().from('vm_flags').select('reporter_user_id, reviewed_by, reviewed_at, state').eq('id', f.data!.id).single()).data!
+
+    await alice.from('vm_flags').update({ reporter_user_id: aliceId, reviewed_by: danaId }).eq('id', f.data!.id)
+    let now = await flagOf()
+    expect(now.reporter_user_id, 'a manager re-credited the reporter').toBe(danaId)
+    expect(now.reviewed_by, 'a reviewer was written with the state unchanged').toBeNull()
+
+    const up = await alice
+      .from('vm_flags')
+      .update({ state: 'dismissed', reviewed_by: danaId, reviewed_at: '2001-01-01T00:00:00Z' })
+      .eq('id', f.data!.id)
+    expect(up.error, JSON.stringify(up.error)).toBeNull()
+    now = await flagOf()
+    expect(now.state, 'CONTROL: the manager can still review').toBe('dismissed')
+    expect(now.reviewed_by, 'the review was credited to someone else').toBe(aliceId)
+    expect(new Date(now.reviewed_at as string).getFullYear(), 'the review was backdated').toBeGreaterThan(2020)
+  })
+
+  it('LAYERS: a manager cannot write "removed by" without removing; removing stamps the caller', async () => {
+    const { layer } = await makeConv('RLS fixture - tombstone stamp', danaId)
+    await alice.from('vm_layers').update({ tombstoned_by: danaId }).eq('id', layer)
+    let l = (await svc().from('vm_layers').select('tombstoned, tombstoned_by').eq('id', layer).single()).data
+    expect(l, 'a "removed by" was forged on a live layer').toEqual({ tombstoned: false, tombstoned_by: null })
+    const t = await alice.from('vm_layers').update({ tombstoned: true, tombstoned_by: danaId }).eq('id', layer)
+    expect(t.error, JSON.stringify(t.error)).toBeNull()
+    l = (await svc().from('vm_layers').select('tombstoned, tombstoned_by').eq('id', layer).single()).data
+    expect(l, 'the removal was credited to someone else').toEqual({ tombstoned: true, tombstoned_by: aliceId })
+  })
+
+  it('RECORDED CHANGE: a role-less member cannot self-block (the conversation no longer resolves) but can still leave', async () => {
+    const { conv } = await makeConv('RLS fixture - role-less self-block', danaId)
+    await seat(conv, danaId, 'admin')
+    await seat(conv, probeId, 'participant')
+    await revokeRole(probeId)
+    try {
+      const b = await probe.from('vm_conversation_members').update({ status: 'banned' }).eq('conversation_id', conv).eq('user_id', probeId)
+      expect(b.error, 'a role-less member self-blocked - the recorded behaviour changed').not.toBeNull()
+      const st = (await svc().from('vm_conversation_members').select('status').eq('conversation_id', conv).eq('user_id', probeId).single()).data
+      expect(st?.status).toBe('active')
+      const leave = await probe.from('vm_conversation_members').delete().eq('conversation_id', conv).eq('user_id', probeId).select('id')
+      expect(leave.error, JSON.stringify(leave.error)).toBeNull()
+      expect(leave.data?.length, 'a role-less member could not leave').toBe(1)
+    } finally {
+      await grantRole(probeId)
+    }
+  })
+
+  const makeConvWithLayerFor = (title: string) => makeConv(title, danaId)
 })

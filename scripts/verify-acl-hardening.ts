@@ -117,6 +117,10 @@ const FUNCTION_EXCEPTIONS: Record<string, { auth: boolean; svc: boolean }> = {
   // (20260922030000, docs/03 #31) — only ever called from inside other
   // definers and a trigger, so it holds nothing.
   'vm_seat_holds_admin_floor(check_member_id uuid)': { auth: false, svc: false },
+  // "Holds the visual-messaging role" for ANY user (20261015010000). Called
+  // only from definers (vm_is_module_member, the floor helper); granting it
+  // would hand every member a role-census oracle.
+  'vm_user_is_module_member(check_org_id uuid, check_user_id uuid)': { auth: false, svc: false },
   // The ONE write path for platform_settings (20260923010000, docs/23 §6).
   // authenticated only, and NOT service_role: the function re-checks
   // is_superadmin(), which service_role is not — the worker writes its

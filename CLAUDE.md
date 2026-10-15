@@ -28,6 +28,13 @@ CSS. Founder: look at the salon, speed-dating and classroom screens, which may h
 by luck.** Also: every vm action returns `{ok, reason}` (inline errors, draft kept), emoji carry
 an `angle`, `next.config.ts` has `serverActions.bodySizeLimit: '4mb'`. Open: "X-ray does not fade
 pen marks on a SAVED reply" was not reproduced.
+**2026-10-15 (Opus): `20261015010000` BUILT — vm seats now need the module ROLE (docs/19 decision
+1 reaches vm), and nobody, managers included, can credit a reaction/layer/conversation/flag or a
+review/removal stamp to someone else. Also closes deletion landmine (2). db 363/363, local
+verifier 28/0; prod pre-apply 4/20 (controls green), 0 of 6 active prod seats lose access.
+PROD APPLY AWAITS THE FOUNDER** → then `scripts/prod-verify-vm-module-role.mts`,
+`prod-verify-migration.ts`, `verify-acl-hardening.ts` (its new exception entry reads "dead"
+until the apply). Spec: module-4 "2026-10-15".
 
 **2026-10-13: THE RE-SIGNUP "WAS THIS PERSON REMOVED?" GAP IS MEASURED AND CLOSED ON SCREEN
 (app only, no migration) — [docs/21 §7.12.1 RESULT](docs/21-account-deletion-and-departed-users.md).**
@@ -707,10 +714,12 @@ urgent — **there is no account-deletion feature at all** (`deleteUser` appears
 but `/privacy` already promises deletion on request. Trap named in the doc: `ON DELETE SET NULL`
 fires BEFORE UPDATE triggers, which has already bitten this repo once.
 
-- **TWO DELETION LANDMINES, found 2026-09-14 — (1) FIXED by `20260928010000`; (2) still
-  present but OFF the account-deletion path, because the silhouette never deletes `auth.users`
-  (verified 2026-10-07, docs/21 §7.10). It still bites a raw `auth.admin.deleteUser` of a
-  conversation creator. Both are the SAME recorded gotcha (a foreign key's cascade/SET-NULL action fires the
+- **TWO DELETION LANDMINES, found 2026-09-14 — (1) FIXED by `20260928010000`; (2) FIXED by
+  `20261015010000` (`vm_pin_conversation` now lets depth > 1 through). ⚠ (2)'s description
+  below was WRONG IN ITS SYMPTOM, measured 2026-10-15: the delete did NOT abort — it SUCCEEDED
+  and left `created_by` pointing at the deleted account (Postgres skips the FK re-check when
+  the pin makes the key "unchanged"). Silent dangling reference, not an error. Prod had 0
+  such rows (`prod-verify-vm-module-role.mts` now checks). Both are the SAME recorded gotcha (a foreign key's cascade/SET-NULL action fires the
   child's BEFORE triggers).** (1) **Deleting an ORG is impossible**: the cascade into
   `org_members` trips `org_members_guard_last_admin`, which has no cascade escape. (2)
   **Deleting a user who CREATED any conversation is impossible**: `vm_pin_conversation` is a

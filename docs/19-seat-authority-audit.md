@@ -1299,3 +1299,29 @@ and then `Finished supabase db push.` **The push SUCCEEDED** — the error comes
 from a pgdelta preview step, not the apply. Confirmed by re-running `--dry-run`
 ("Remote database is up to date") and by both verifiers above. Do not read that
 trace as a failed migration, and do not re-run the push on account of it.
+
+## 2026-10-15 — VISUAL MESSAGING joins the module-role half (`20261015010000`)
+
+Founder decision 1 above ("full symmetry, no per-module exceptions") had been applied to
+matchmaking, nail salon and classroom by `20260915010000`; **visual messaging was never
+included.** Its five seat predicates (`vm_can_post`, `vm_can_react`, `vm_is_conv_member`,
+`vm_can_moderate`, `vm_is_conv_admin`) checked only `is_org_member`, so a person whose vm
+grant was revoked but who stayed in the org kept using every seat. Fixed by ADDING
+`vm_is_module_member(m.org_id)` beside `is_org_member` — **not replacing it**:
+`vm_is_module_member` is true for a superadmin in any org, so a swap would have WIDENED.
+The two inline creator arms (`vm_conversations_select`, `vm_members_insert`) and the
+last-admin floor got the same conjunct. "Holds the vm role" now has ONE definition,
+`vm_user_is_module_member(org, user)`, used for the caller and for third parties (#29, #31);
+review A measured 112/112 seeded user×org pairs answering exactly as before.
+
+**Measured before writing: prod 0 of 6 active seats lose access (control: the predicate
+recognises all 6), 0 role-less creators, 0 stranded conversations.** Shipped with
+`scripts/prod-verify-vm-module-role.mts`. Same migration closes manager credit-forgery
+across all four vm tables — see the module-4 spec's 2026-10-15 entry.
+
+**Recorded behaviour change:** a role-less member can no longer self-block (the non-definer
+scope trigger cannot resolve a conversation they cannot read — the `vm_members_scope`
+mechanism of 2026-09-11 again); they can still delete their seat to leave. Tested.
+
+**Speed dating remains the one module without the role conjunct** (STILL-OPEN item 1, a
+founder decision).

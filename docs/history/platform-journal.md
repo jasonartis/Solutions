@@ -4,6 +4,18 @@ The running, dated build journal that used to live in `CLAUDE.md`'s "## Current 
 section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every session)
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
+- **2026-10-15 (Opus) — VISUAL MESSAGING: SEATS NEED THE MODULE ROLE; NO CREDIT FORGERY
+  (`20261015010000`).** The two open findings from the day before, founder said "go ahead with
+  both". (A) docs/19 decision 1 (full symmetry) had never reached vm: role conjunct ADDED beside
+  `is_org_member` in five predicates, two creator arms and the floor (a swap would have widened
+  a superadmin's reach); one shared definition `vm_user_is_module_member`. (B) managers could
+  credit rows to others on INSERT and UPDATE across reactions, layers, conversations and — found
+  by review B — flags and the tombstone/review stamps; all pinned or server-stamped. Side
+  effect: deletion landmine (2) closed, and its recorded symptom was wrong (measured: a
+  silent dangling `created_by`, not an abort). Review A: no widening, 112/112 pairs equivalent;
+  one recorded change (a role-less member cannot self-block). Prod measured first: 0 of 6
+  active seats lose access. Tests 10 (6 red before); one older fixture needed the vm grant
+  (same story as 2026-09-22). db 363/363; ACL 17/17 local. Detail: module-4 spec + docs/19.
 - **2026-10-14 (Opus) — VISUAL MESSAGING: VIEWERS MAY REACT (`20261014020000`) — ON
   PRODUCTION AND PROD-VERIFIED** (founder go-ahead; backup `backups/2026-10-15T01-50-35`;
   verifier 8/14 → 22/0; `prod-verify-migration.ts` 0 failures). Note: the auto-mode
