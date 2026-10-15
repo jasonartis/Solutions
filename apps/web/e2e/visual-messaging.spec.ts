@@ -96,6 +96,13 @@ test('visual messaging: a fast stroke does not crash, X-ray fades the draft (mou
   // second emoji under it. Place an emoji, select it, press a corner handle.
   await page.getByRole('button', { name: 'Emoji', exact: true }).click()
   await page.mouse.click(box.x + 300, box.y + 200)
+  // Wait for the placement to mount, or the select tap lands on empty canvas.
+  await expect
+    .poll(() => page.evaluate(() => (window as any).Konva.stages[0].find('Text').length))
+    .toBe(1)
+  // Konva redraws its hit-detection canvas on the next animation frame; a tap
+  // before that still misses the shape. Two frames is the settled state.
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))))
   await page.mouse.click(box.x + 300, box.y + 200) // select it
   await expect(page.getByRole('button', { name: 'Delete selected' })).toBeVisible()
   const anchor = await page.evaluate(() => {
@@ -153,4 +160,58 @@ test('visual messaging: a refused form action shows inline and keeps what was ty
   await page.getByRole('button', { name: 'Invite member' }).click()
   await expect(page.locator('p[role="alert"]')).toContainText('No user found with email nobody-here@demo.local')
   await expect(page.getByPlaceholder('member@email')).toHaveValue('nobody-here@demo.local')
+})
+
+// A noisy picture compresses badly, so it stays large however it is saved —
+// exactly what a phone photo does to a 1 MB request-body cap. Built in the
+// browser (no image library in Node) and handed back as bytes.
+async function noisyPicture(page: Page, side: number, mime: 'image/jpeg' | 'image/png', alpha: number) {
+  const base64 = await page.evaluate(
+    async ({ side, mime, alpha }) => {
+      const c = document.createElement('canvas')
+      c.width = c.height = side
+      const ctx = c.getContext('2d')!
+      const img = ctx.createImageData(side, side)
+      for (let i = 0; i < img.data.length; i += 4) {
+        img.data[i] = Math.random() * 255
+        img.data[i + 1] = Math.random() * 255
+        img.data[i + 2] = Math.random() * 255
+        img.data[i + 3] = alpha
+      }
+      ctx.putImageData(img, 0, 0)
+      const blob: Blob = await new Promise((r) => c.toBlob((b) => r(b!), mime, 1))
+      const buf = new Uint8Array(await blob.arrayBuffer())
+      let s = ''
+      for (let i = 0; i < buf.length; i += 0x8000) s += String.fromCharCode(...buf.subarray(i, i + 0x8000))
+      return btoa(s)
+    },
+    { side, mime, alpha },
+  )
+  return Buffer.from(base64, 'base64')
+}
+
+test('visual messaging: a multi-megabyte picture is shrunk in the browser and uploads (root and stamp)', async ({
+  page,
+}) => {
+  test.slow()
+  await signIn(page, 'alice@demo.local')
+  await page.goto('/o/demo-visual/m/visual-messaging')
+  const title = 'Big photo ' + Date.now()
+  const big = await noisyPicture(page, 3000, 'image/jpeg', 255)
+  expect(big.length).toBeGreaterThan(4_500_000) // over BOTH the 1 MB default and Vercel's ceiling
+
+  await page.getByPlaceholder('Title').fill(title)
+  await page.setInputFiles('input[name="image"]', { name: 'big.jpg', mimeType: 'image/jpeg', buffer: big })
+  await page.getByRole('button', { name: 'Create' }).click()
+  await page.getByRole('link', { name: title }).click()
+  await expect(page.getByRole('heading', { name: title })).toBeVisible()
+
+  // A big picture WITH transparency as an image stamp: shrunk, and still a PNG.
+  const sticker = await noisyPicture(page, 1400, 'image/png', 128)
+  expect(sticker.length).toBeGreaterThan(4_000_000)
+  await page.getByRole('button', { name: 'Draw a reply' }).click()
+  await page.getByRole('button', { name: 'Image', exact: true }).click()
+  await page.setInputFiles('input[aria-label="upload image"]', { name: 'sticker.png', mimeType: 'image/png', buffer: sticker })
+  await expect(page.getByText('tap the picture to place it')).toBeVisible({ timeout: 30_000 })
+  await expect(page.locator('p[role="alert"]')).toHaveCount(0)
 })

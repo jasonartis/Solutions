@@ -17,6 +17,7 @@ import { useRouter, usePathname } from 'next/navigation'
 import { Stage, Layer, Line, Text as KonvaText, Image as KonvaImage, Transformer } from 'react-konva'
 import { getStroke } from 'perfect-freehand'
 import { runAction } from './action-form'
+import { prepareImage } from './image-shrink'
 
 export type Stroke = { points: number[][]; color: string; size: number }
 // x/y are the placed CENTER point in image pixel space (matches Stroke's
@@ -279,11 +280,18 @@ export default function LayerCanvas(props: {
     setImageRotation(0)
   }
 
-  const handleImageFile = async (file: File | null) => {
-    if (!file || !props.onUploadImage) return
+  const handleImageFile = async (picked: File | null) => {
+    if (!picked || !props.onUploadImage) return
     setUploadingImage(true)
     setActionError(null)
     try {
+      // Shrink first: a Server Action's request body is capped (image-shrink.ts).
+      const prepared = await prepareImage(picked)
+      if (!prepared.ok) {
+        setActionError(prepared.reason)
+        return
+      }
+      const file = prepared.file
       const uploaded = await runAction(() => props.onUploadImage!(file))
       if (!uploaded.ok) {
         setActionError((uploaded as { reason: string }).reason)

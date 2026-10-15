@@ -8,6 +8,7 @@
 
 import { useState, useTransition, type ReactNode } from 'react'
 import type { ActionResult } from './actions'
+import { prepareImage } from './image-shrink'
 
 export const STALE_DEPLOY_MESSAGE =
   'The site was updated while this page was open. Reload the page to continue — nothing you have drawn here has been lost until you do.'
@@ -40,8 +41,9 @@ export function ActionForm(props: {
   className?: string
   /** clear the fields after a successful submit (a "create" form) */
   resetOnSuccess?: boolean
-  /** rewrite the form data before it is sent (e.g. shrink a picture) */
-  prepare?: (formData: FormData) => Promise<FormData>
+  /** name of a file field to shrink in the browser before sending (a Server
+   *  Action's request body is capped; see image-shrink.ts) */
+  shrinkImageField?: string
 }) {
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
@@ -55,9 +57,17 @@ export function ActionForm(props: {
         const formData = new FormData(form)
         setError(null)
         startTransition(async () => {
-          const result = await runAction(async () =>
-            props.action(props.prepare ? await props.prepare(formData) : formData),
-          )
+          const field = props.shrinkImageField
+          const picked = field ? formData.get(field) : null
+          if (field && picked instanceof File && picked.size > 0) {
+            const prepared = await prepareImage(picked)
+            if (!prepared.ok) {
+              setError(prepared.reason)
+              return
+            }
+            formData.set(field, prepared.file)
+          }
+          const result = await runAction(() => props.action(formData))
           if (!result.ok) setError((result as { reason: string }).reason)
           else if (props.resetOnSuccess) form.reset()
         })

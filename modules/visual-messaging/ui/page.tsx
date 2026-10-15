@@ -91,7 +91,7 @@ export default async function VisualMessagingPage(props: { params: Promise<{ org
         <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-gray-500">
           Start a conversation
         </h2>
-        <ActionForm action={createConversation.bind(null, orgSlug)} resetOnSuccess className="flex flex-wrap items-center gap-2">
+        <ActionForm action={createConversation.bind(null, orgSlug)} resetOnSuccess shrinkImageField="image" className="flex flex-wrap items-center gap-2">
           <input name="title" required placeholder="Title" className={`${inputCls} min-w-56`} />
           <input name="image" type="file" accept="image/*" required className="text-sm" />
           <button className={btnCls}>Create</button>
