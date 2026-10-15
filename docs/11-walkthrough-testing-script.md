@@ -155,9 +155,19 @@ because it's the smallest complete example.
 ## Chapter 7 — Visual Messaging (20 min)
 
 24. As **alice** on Demo Visual: *Member — draw your side...*. Create a
-    conversation from any photo, draw a reply, descend into it. Add
-    charlie as a member.
-25. As **charlie**: open it, draw a reply to alice's layer, react with ❤️.
+    conversation from any photo (try a 5 MB+ one — it is shrunk in the browser), open it.
+    **Draw a reply:** six colour swatches and a labelled Pen-size slider; a fast scribble must
+    not crash. **Select** (apart from the "Add:" Pen/Emoji/Text/Image group) grabs strokes;
+    placing an emoji/text/picture selects it with corner handles and returns to Select;
+    Undo/Redo (Ctrl+Z, Ctrl+Shift+Z), Delete key, Ctrl+V pastes a picture. **X-ray** cycles
+    off → 50% → full (eye icon): viewing fades the replies, drawing fades everything below.
+    Send, then **swipe**: right drags this layer's ink away, left brings in only what the
+    reply added (see-through); past halfway or a flick completes, short of it snaps back;
+    the page must not jump to the top; the edge markers sit on the side the layers come
+    from (replies → on the right, back up ← on the left). Rename it ("Rename this
+    conversation"). Add charlie as a member — the button turns green "Invited ✓" and stays
+    off until the email changes.
+25. As **charlie**: open it, draw a reply to alice's layer, react with ❤️ (a viewer may react).
 26. As **alice**: *Moderator — keep conversations healthy* (moderation
     actions are per-layer today; the queue UI is coming).
 

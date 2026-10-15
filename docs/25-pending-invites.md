@@ -165,3 +165,69 @@ docs/20 §0 item 8, §7.7, §8.3 · docs/modules/module-4-visual-messaging.md (T
 2026-10-14/15 entries) · docs/21 §7.12, §7.12.1 · docs/22 (email lives only in `auth.users`, read through
 definers) · docs/19 (seat authority) · docs/03 #1, #12, #22, #27, #29, #30 · docs/18 items 7 and 9 ·
 `supabase/migrations/20260727010000_org_invite_accept.sql`, `20261007030000` (accept-first seats).
+
+## 10. Appendix — starter prompt for the Opus build session (slice 1)
+
+Paste into a fresh Opus session. Kept here so it is not lost with the chat that wrote it.
+
+~~~~
+You are Opus. Task: BUILD SLICE 1 of pending invites (org pre-invite) per
+docs/25-pending-invites.md. The founder (Jason) is initiating this build.
+
+READ FIRST, in order:
+1. CLAUDE.md "Current state" (top block) + "Standing rules" + the model-choice and gotchas sections
+2. docs/25-pending-invites.md — the full brief; §2 decisions are settled, do not re-litigate
+3. docs/03-adding-a-module.md hard rules and conventions #1, #12, #22, #27, #29, #30
+4. docs/20-public-square.md §0 item 8, §7.7, §8.3 (the orphaned no-account-invite design and why it was dropped)
+5. docs/21 §7.12 and §7.12.1 (re-signup blocks, signup-screen parity) and docs/22 (email lives only in auth.users)
+6. supabase/migrations/20260727010000_org_invite_accept.sql and 20261007030000 (accept-first seats)
+
+DO NOT START CODING until you have:
+- re-measured §3 of the brief against the live local DB and the migrations (it was read, not measured), and
+  written down what you found, including anything that contradicts it
+- brought the founder the open questions in §6 that block slice 1 (email on issue — recommend no for v1;
+  per-inviter/per-address caps; admin visibility of all pending invites). Do not decide those silently.
+  Standing rule: don't block on a founder answer — record the question, proceed on the recommended default,
+  flag it in your reply.
+
+CLAIM A MIGRATION VERSION first: run ListAgents, SendMessage any concurrent session with the version you
+take, pick one with gaps. A Sonnet session owns modules/visual-messaging/ui and has pushed UI changes —
+don't touch it; slice 1 is org-level only.
+
+SLICE 1 SCOPE: the platform primitive + ONE consumer (org). Table, issue / cancel / resend / 30-day expiry,
+claim at a confirmed sign-in by EXACT lower+trim email (not the fingerprint), no-oracle issuing, authority
+re-checked at claim, a pruner that actually runs on prod (prod has no worker — use pg_cron in the database, see
+docs/03 hard rule 5), caps, and the inviter/admin list UI. A claim produces the existing PENDING org seat
+(accept-first), never an active one.
+
+PROCESS (non-negotiable, docs/03 #12): draft the design -> adversarial review (two narrow reviewers, each with
+one question and a word cap — a single broad reviewer has died on limits before; Fable-tier review is
+justified for this novel mechanism) -> build -> live-verify as real signed-in users -> RLS tests naming each
+failure -> docs. Every item in brief 4.2 needs a named test, and every section-5 scenario must be a test. New
+table: revoke all from public, anon, authenticated, service_role BEFORE any grant. A trigger/hook on auth.users
+that can fail can block every signup — study login_events and the prod Before-User-Created hook before
+touching that path.
+
+MIGRATION HYGIENE: it must meet an EMPTY database (supabase db reset locally before calling it done — CI runs
+migrations before any seed). Before `supabase db reset` on the shared local DB, check with other sessions
+(ListAgents/SendMessage). Prod: backup first, `pnpm migrate:prod --dry-run`, get the founder's go-ahead IN YOUR
+OWN SESSION, then a policy-aware prod verifier (template: scripts/prod-verify-*.mts) with controls; run it
+before AND after. The generic prod-verify-migration.ts is function-only and would pass vacuously on
+tables/policies.
+
+TOOLING NOTES (this host): pnpm may not be on PATH (shim via corepack enable --install-directory <dir> — see
+the gotcha). Stage explicit paths and use git commit -- <paths>; other sessions share this tree. Never
+--no-verify. Check Windows commit memory if dev tooling dies mysteriously. In git-bash prefix
+MSYS_NO_PATHCONV=1 when passing /paths into docker exec.
+
+DONE MEANS: slice 1 on prod and verified, docs/25 updated with what was built and measured, CLAUDE.md's status
+block kept lean, journal entry written. Say so plainly if anything is only locally proven.
+
+SCOPE LIMITS: slices 2-4 (chat consumer, lists/privacy copy, removing the old refusal in addMember) are NOT part
+of this session unless the founder asks. If your work drifts into something needing a lighter or heavier
+model than you, say so at the start of the turn.
+~~~~
+
+Two facts for that session: the visual-messaging UI work is all pushed (last UI commit `8402ea5`); slice 1 is
+org-only because it is the smallest piece that proves the platform mechanism and the chat rule
+("dormant until the person is an org member") depends on it.

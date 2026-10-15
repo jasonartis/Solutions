@@ -4,6 +4,19 @@ The running, dated build journal that used to live in `CLAUDE.md`'s "## Current 
 section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every session)
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
+- **2026-10-14/15 (Sonnet) — VISUAL MESSAGING FIX BATCH, UI HALF: BUILT, ON PRODUCTION, DESKTOP + TOUCH-SCREEN
+  CHECKED BY THE FOUNDER; PHONE PASS NOT DONE** (commits `2a8e212` → `8402ea5`; no migration; full e2e 66/66 on a
+  reset DB). Spec entries "2026-10-14 (build)", "…(founder … test) — fixes", "2026-10-15" have the detail. What a
+  future session would otherwise miss: **(1) the platform-wide Tailwind bug** (`@source "../../../modules/*/ui"`
+  scanned 0 files — now `@source "../../../modules"`, verified in the BUILT CSS, not by reading); **(2) a second
+  half of the stroke crash** (every pointer-move appended a partial stroke copy to the draft); **(3) emoji rotation
+  was silently dropped on send** (no `angle` field) — added; **(4) the swipe preview composited the whole
+  stack**, but a reply stores only its own ink — the preview now shows exactly that; **(5) a three-level X-ray**
+  (founder-designed; rejected an auto-dim); **(6) edge markers update client-side** (`layer-nav.ts` is shared by
+  server and client); **(7) the 11-failures-of-66 scare was stale seed data**, cured by reset + seed + one full run.
+  Founder discussions recorded, not built: **pending invites → docs/25** (30 days; anyone may pre-invite to what
+  they can invite to; includes the starter prompt for the Opus build); the invite-to-address oracle is §4.3 there.
+  Open: founder could not sign in on his phone (undiagnosed); X-ray-on-saved-reply report not reproduced.
 - **2026-10-15 (Opus) — VISUAL MESSAGING: SEATS NEED THE MODULE ROLE; NO CREDIT FORGERY
   (`20261015010000`) — ON PRODUCTION AND PROD-VERIFIED** (backup `backups/2026-10-15T19-57-55`;
   verifier 4/20 → 28/0; ACL 17/17 on prod; viewer-reactions 22/0; policy-split 15/0). The two open findings from the day before, founder said "go ahead with

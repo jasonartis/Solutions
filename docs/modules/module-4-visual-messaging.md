@@ -988,8 +988,17 @@ a surprise.
 ### 2026-10-14 (build) — the SONNET UI batch is BUILT, phases 1–7, no migration
 
 Commits `2a8e212` (1), `d65ca0e` (2), `c899ebb` (3), `1d054fb` (4+5), `c7ed9fb` (6), `b89dc70` (7).
-E2E: `apps/web/e2e/visual-messaging.spec.ts` (new, 11 tests) + the two older `visual messaging:`
-tests in `platform.spec.ts` (five assertions updated, see 4). **Not yet checked on a phone.**
+E2E: `apps/web/e2e/visual-messaging.spec.ts` (new; 16 tests by 2026-10-15) + the two older
+`visual messaging:` tests in `platform.spec.ts` (assertions updated, see 4). **Later entries below
+SUPERSEDE items 2 (X-ray), 5 (select behaviour) and 7 (swipe) of this one — read them too.**
+**Verification state, 2026-10-15:** full e2e suite **66/66** on a freshly reset + seeded local DB in CI's
+mode (`CI=true`, prebuilt app) after the vm work; all of it is on production (Vercel READY through
+`86cb829`). The founder tested on a desktop and on a touch-screen desktop and said it works. **The
+phone pass has NOT happened: the founder could not sign in on his phone** (reported 2026-10-15, cause
+NOT diagnosed — an old-browser theory was floated, unverified; check it is not a real login bug before
+accepting that). Phone-only unknowns: finger size of the handles, swipe feel, and whether pen marks fade
+under X-ray on a SAVED reply (reported once, never reproduced — saved layers fade by construction and
+e2e asserts the layer opacities).
 
 1. **Styling (#7).** `globals.css` now `@source "../../../modules";`. Verified in the BUILT CSS
    (`.h-8`, `.h-2.5`, `bg-black/40`, `max-w-[640px]`, `ring-[3px]` all emitted; 28.8 KB → 37.9 KB).
@@ -1128,3 +1137,29 @@ shared with the server page). **Open design discussion, NOT built:** pending inv
 not yet on the platform/org (founder: 30 days; "anyone may pre-invite to what they can invite to";
 each invite takes effect when its prerequisites are met) — see the brief to be written for the
 Opus session.
+
+### 2026-10-15 — notes from the build sessions that were only in the chat
+
+- **`ActionForm` / `runAction` live in `modules/visual-messaging/ui/action-form.tsx`. Every OTHER module's
+  actions still THROW expected refusals** (docs/03 #22 applies platform-wide; nothing was converted outside
+  this module). When a second module needs inline refusals, extract it to `packages/platform`
+  (extract-don't-speculate) rather than copying it. React's own `<form action>` resets the form when the
+  action finishes — that is why `ActionForm` submits by hand.
+- **The stage layer contract the e2e relies on:** `getLayers()` = [photo, ancestors' ink, this layer's own
+  ink, draft (+ the swipe sheet as a 5th during a left/up/down drag)]. `window.Konva` exists in the
+  browser, so tests read opacities, positions and node counts from the stage. Sliding is done with Layer
+  x/y, not by re-rendering.
+- **e2e gotchas found here (all cheap to rediscover, expensive the first time):** Next's route announcer is
+  also `role="alert"` — assert on `p[role="alert"]`, or strict mode fails; Konva redraws its hit canvas on
+  the NEXT animation frame, so a press right after placing a shape can miss it (wait two rAFs); a
+  playwright `setInputFiles` on a hidden/styled input works; Playwright's synthetic mouse moves are
+  instantaneous, so a "slow drag" test must `waitForTimeout(300)` before `mouse.up()` or the flick rule
+  completes it; `platform.spec.ts` has CRLF line endings, so a scripted multi-line replace on it silently
+  fails to match — normalise or edit by line.
+- **Running several partial e2e runs and then the full suite on the same DB produced 11 stale-seed
+  failures (of 66) that looked like a CSS regression and were not**; `db reset` + seed + ONE full run gave
+  66/66. Same trap as the CLAUDE.md gotcha — judge a full run only after a reset.
+- **Server-Action body limit is now 4 MB for the whole app** (`next.config.ts`); Vercel's ~4.5 MB request
+  ceiling is the real cap, so pictures are shrunk in the browser to ≤ 3.2 MB (`image-shrink.ts`).
+- **Open founder discussions from this test round, both recorded:** pending invites → docs/25 (brief +
+  starter prompt for the Opus build); X-ray → decided and built (entry above).
