@@ -981,3 +981,54 @@ a surprise.
    than posting; it belongs with docs/19's module-role work.
 3. `vm_reactions_delete_own` is `user_id = auth.uid()` only, so a banned or departed person
    can still REMOVE their own past reactions. Probably fine (it is their own act); recorded.
+
+
+### 2026-10-14 (build) — the SONNET UI batch is BUILT, phases 1–7, no migration
+
+Commits `2a8e212` (1), `d65ca0e` (2), `c899ebb` (3), `1d054fb` (4+5), `c7ed9fb` (6), `b89dc70` (7).
+E2E: `apps/web/e2e/visual-messaging.spec.ts` (new, 11 tests) + the two older `visual messaging:`
+tests in `platform.spec.ts` (five assertions updated, see 4). **Not yet checked on a phone.**
+
+1. **Styling (#7).** `globals.css` now `@source "../../../modules";`. Verified in the BUILT CSS
+   (`.h-8`, `.h-2.5`, `bg-black/40`, `max-w-[640px]`, `ring-[3px]` all emitted; 28.8 KB → 37.9 KB).
+   Applies to every module — the founder should look at the salon, speed-dating and classroom
+   screens, which may have looked "fine" by luck. e2e asserts the swatches have a real size.
+2. **Errors/crash/handles/X-ray.** Every action in `ui/actions.ts` returns `ActionResult`
+   (`{ok:true}|{ok:false,reason}`) — docs/03 #22. `ActionForm` (`ui/action-form.tsx`) replaces
+   `<form action>` everywhere: it submits by hand so a refusal shows inline and the typed values
+   stay (React's form action resets the form). A stale tab ("Server Action … not found") gets a
+   reload message. **The crash had a second half: every pointer-move appended a PARTIAL COPY of
+   the stroke to the draft** (the `LIVE` sentinel was spread into a new object, so the filter
+   never matched) — a long stroke sent hundreds of copies; plausibly why sends failed. The live
+   stroke is now its own state. X-ray uses pointer events and fades the draft layer too; the
+   "pen marks did not fade on a SAVED reply" report is still NOT reproduced (saved layers fade
+   by construction; e2e asserts layer opacities) — needs the founder's eyes on the new build.
+3. **Images.** `ui/image-shrink.ts`: longest side ≤ 2048, re-encoded until ≤ 3.2 MB; JPEG for
+   photos, PNG kept when there is real transparency; SVG/GIF pass through; clear message if still
+   too big. Applies to the root picture (via `ActionForm shrinkImageField`) and stamps/paste.
+   `next.config.ts` sets `serverActions.bodySizeLimit: '4mb'` (platform-wide; Vercel's ~4.5 MB
+   request ceiling is the real cap).
+4. **Draft model.** Strokes, emoji, text and pictures are ONE list with ids + a snapshot history:
+   Undo/Redo buttons and Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y; Delete/Backspace deletes the selection
+   (not while typing); Ctrl+V pastes a picture (and choosing one now drops it in the middle).
+   The toolbar is three fixed rows; **"Delete selected" is always in place and DISABLED when
+   nothing is selected** (the old e2e asserted "not visible" — updated). Pen-size slider is
+   labelled; file pickers are styled buttons.
+5. **Live handles.** Every placed item is selected on placement and shows Transformer handles;
+   the pre-placement size/rotation sliders are GONE. A **Select tool** grabs pen strokes (they
+   are inert in the Pen tool, which has to ink across them); a stroke's drag/resize/rotate is
+   BAKED into its points, so stored strokes are still plain points. **Emoji now carry an
+   optional `angle`** (stored, rendered, tree view too, validated server-side): before this,
+   the Transformer rotated an emoji on screen and the rotation was silently dropped on send.
+6. **Rename.** `vm_conversations_update_admin` + the column grant already allowed `title`
+   (and `vm_pin_conversation` leaves it free) — UI only. The action reads the row back, because
+   an RLS-filtered UPDATE reports no error.
+7. **Swipe follows the pointer.** The page composes each direction's neighbour layer and passes
+   it down; the canvas draws it as a translucent card (opacity 0.55→1) riding the pointer,
+   completes past halfway OR on a flick (≥ 60 px at ≥ 0.4 px/ms), otherwise snaps back in 160 ms.
+   Whole-conversation data is shipped to the client for this (fine at conversation size; lazy
+   fetch if trees get large). Buttons and the arrow overlays still navigate directly.
+
+**Test-harness note:** `window.Konva` exists in the browser, so e2e reads layer opacities, handle
+positions and node counts straight from the stage instead of guessing from pixels. The draft layer
+is `getLayers()[3]`; a swipe adds a 5th.

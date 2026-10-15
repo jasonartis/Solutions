@@ -19,18 +19,15 @@ A multi-tenant modular platform: each client engagement produces a **module** bu
      and update only the compact "Now / Next / Standing rules" below. A fresh chat must never
      pay for the full journal. See "Session hygiene". -->
 
-**NEXT WORK (founder, 2026-10-14): VISUAL MESSAGING FIX BATCH — two sessions, can run in
-parallel. Brief: [docs/modules/module-4-visual-messaging.md](docs/modules/module-4-visual-messaging.md)
-"2026-10-14" sections.** SONNET: UI phases 1–7 (no migration). OPUS: viewers may react —
-**SHIPPED 2026-10-14 (`20261014020000`), ON PRODUCTION AND PROD-VERIFIED** (backup
-`backups/2026-10-15T01-50-35`; `scripts/prod-verify-vm-viewer-reactions.mts` 8/14 → 22/0, incl. a
-real viewer's reaction replayed rolled-back; `prod-verify-migration.ts` 0 failures). Three
-pre-existing vm findings recorded open in the spec entry (manager reaction forgery; vm seats
-never check the module role; banned users can delete own reactions). **⚠ PLATFORM-WIDE, found the same day: every Tailwind
-class used ONLY in `modules/*/ui` is MISSING from the built CSS** — `globals.css`'s
-`@source "../../../modules/*/ui";` scans 0 files (measured). That is why the pen colour
-swatches were invisible; other modules' screens are likely affected too. Phase 1 of the
-Sonnet brief.
+**2026-10-14, VISUAL MESSAGING FIX BATCH: THE SONNET UI HALF IS BUILT AND PUSHED (phases 1–7, no
+migration — spec "2026-10-14 (build)" entry); NOT YET CHECKED ON A PHONE.** The Opus half (viewers
+may react, `20261014020000`) is on prod and verified. **⚠ PLATFORM-WIDE FIX in it: `globals.css`'s
+`@source "../../../modules/*/ui"` scanned 0 files, so every Tailwind class used ONLY in module
+screens was missing from the built CSS — now `@source "../../../modules"`, verified in the built
+CSS. Founder: look at the salon, speed-dating and classroom screens, which may have looked fine
+by luck.** Also: every vm action returns `{ok, reason}` (inline errors, draft kept), emoji carry
+an `angle`, `next.config.ts` has `serverActions.bodySizeLimit: '4mb'`. Open: "X-ray does not fade
+pen marks on a SAVED reply" was not reproduced.
 
 **2026-10-13: THE RE-SIGNUP "WAS THIS PERSON REMOVED?" GAP IS MEASURED AND CLOSED ON SCREEN
 (app only, no migration) — [docs/21 §7.12.1 RESULT](docs/21-account-deletion-and-departed-users.md).**
