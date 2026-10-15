@@ -112,10 +112,11 @@ try {
   console.log(`  ${stranded.length} conversation(s) left with NO admin seat that holds the floor (still managed by org managers)`)
   for (const r of stranded) console.log(`        "${r.title}"`)
 
-  // Measured 2026-10-15: the OLD vm_pin_conversation did not abort a creator's
-  // account deletion — it silently reverted the FK's SET NULL, and Postgres
-  // skips the FK re-check when the key is "unchanged", leaving created_by
-  // pointing at a deleted account. Any such row already on prod is listed here.
+  // Measured 2026-10-15 against the OLD vm_pin_conversation: a raw SQL delete of
+  // a creator's auth.users row aborted on the FK, but GoTrue's
+  // auth.admin.deleteUser reported success and left created_by pointing at the
+  // deleted account (cause of the difference not established). Any such
+  // dangling row already on prod is counted here.
   const [{ dangling }] = await sql<{ dangling: number }[]>`
     select count(*)::int as dangling from public.vm_conversations c
     where c.created_by is not null and not exists (select 1 from auth.users u where u.id = c.created_by)`

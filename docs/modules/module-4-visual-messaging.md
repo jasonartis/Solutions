@@ -939,7 +939,8 @@ go-ahead) → a policy-aware prod verifier (template: `scripts/prod-verify-vm-*.
 **8/14 pre-apply → 22/0 post-apply**, including section [3]: a real prod viewer's reaction
 now inserts (rolled back, nothing left). `prod-verify-migration.ts` 0 failures / 0 warnings
 (body match, definer, pinned search_path, anon no EXECUTE). Dry run: "Remote database is up
-to date". The "awaits the founder" wording below is superseded.
+to date". The "awaits the founder" wording below is superseded. **The founder then confirmed
+it in a real browser on prod as charlie (viewer, "tempw"): ❤️ went 0 → 1 and back.**
 
 **What changed:** `vm_reactions_insert_own` now checks `user_id = auth.uid() and
 vm_can_react(conversation_id)`. `vm_can_react` is `vm_can_post` minus the role list: an
@@ -1084,8 +1085,21 @@ by the server from whoever actually changed the state. The app always credited t
 user, so no screen changes. Review B found the flag and stamp cases in the first draft.
 
 **Side effect: deletion landmine (2) closed** (`vm_pin_conversation` lets the FK's SET NULL
-through). Its recorded symptom was wrong — measured, the delete succeeded and left
-`created_by` dangling at a deleted account; prod had 0 such rows.
+through). Against the old pin, a raw SQL delete aborted (as docs/20 §30.2 recorded,
+re-confirmed) while GoTrue's `auth.admin.deleteUser` reported success and left `created_by`
+dangling at a deleted account — two symptoms, cause of the difference not established; prod
+had 0 dangling rows.
+
+**Pre-existing, found by this slice's reviews, NOT changed — open:**
+1. **A manager removing a layer by a direct table UPDATE (`tombstoned = true`) skips the
+   moderation log and does not clear the content** — `vm_layers_before_write`'s manager
+   escape returns before both. The credit is now correct (stamped from the caller); the
+   app uses the audited `vm_tombstone_layer` RPC, so only a hand-made API call hits this.
+2. **Moving a conversation to another org** (`vm_pin_conversation` lets a manager change
+   `org_id`) leaves its seats and layers carrying the OLD `org_id` until next written, so
+   the seat predicates test membership of the old org. No app screen moves conversations.
+3. **A creator can re-seat themselves as admin** after their seat was DELETED (not banned),
+   via `vm_members_insert`'s creator arm. Now requires the vm role; otherwise unchanged.
 
 **Evidence:** 10 RLS tests in "a seat needs the MODULE ROLE, and nobody credits a row to
 someone else" (a throwaway probe account, never a seeded one): 6 red before / all green after;

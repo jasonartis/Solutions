@@ -586,6 +586,11 @@ open:**
   `.env.accounts.example` (blank template); NOT auto-loaded by the script itself (that file
   also holds the real prod superadmin login, and a plain local run must never silently prefer
   it), so the export-by-hand line is documented in the script's own header comment instead.
+  **⚠ SIGNING IN AS A DEMO USER ON PROD (measured 2026-10-15):** the working password is
+  `.env.deploy`'s `PROD_DEMO_PASSWORD` (15 chars; same value as `.env.accounts`'s
+  `VERIFY_DEMO_PASSWORD`). **`.env.accounts`'s own `PROD_DEMO_PASSWORD` line is a 74-char
+  value that is NOT a password** (prod sign-in 400). Left untouched (credential file, founder
+  did not ask). Point the founder at the `.env.deploy` VALUE — the variable NAME was once typed as the password.
   Full story → journal.
 **SEAT AUTHORITY — THE ORG-MEMBERSHIP HALF IS FIXED (2026-09-10, `cf63e77`,
 `20260910040000`). A SECOND, NARROWER HALF IS OPEN.** docs/19's class is closed for all four
@@ -716,11 +721,12 @@ but `/privacy` already promises deletion on request. Trap named in the doc: `ON 
 fires BEFORE UPDATE triggers, which has already bitten this repo once.
 
 - **TWO DELETION LANDMINES, found 2026-09-14 — (1) FIXED by `20260928010000`; (2) FIXED by
-  `20261015010000` (`vm_pin_conversation` now lets depth > 1 through). ⚠ (2)'s description
-  below was WRONG IN ITS SYMPTOM, measured 2026-10-15: the delete did NOT abort — it SUCCEEDED
-  and left `created_by` pointing at the deleted account (Postgres skips the FK re-check when
-  the pin makes the key "unchanged"). Silent dangling reference, not an error. Prod had 0
-  such rows (`prod-verify-vm-module-role.mts` now checks). Both are the SAME recorded gotcha (a foreign key's cascade/SET-NULL action fires the
+  `20261015010000` (`vm_pin_conversation` now lets depth > 1 through). ⚠ (2) HAD TWO
+  SYMPTOMS DEPENDING ON THE PATH, both measured 2026-10-15 against the old pin: a raw SQL
+  `delete from auth.users` ABORTS with the FK error (as described below — re-confirmed), but
+  GoTrue's `auth.admin.deleteUser` returned SUCCESS and left `created_by` pointing at the
+  deleted account. Why the two paths differ was NOT established. Prod had 0 dangling rows
+  (`prod-verify-vm-module-role.mts` now checks). Both are the SAME recorded gotcha (a foreign key's cascade/SET-NULL action fires the
   child's BEFORE triggers).** (1) **Deleting an ORG is impossible**: the cascade into
   `org_members` trips `org_members_guard_last_admin`, which has no cascade escape. (2)
   **Deleting a user who CREATED any conversation is impossible**: `vm_pin_conversation` is a

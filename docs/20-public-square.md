@@ -3191,6 +3191,11 @@ untouched by this.
 
 ### 30.2 DELETING A USER WHO CREATED ANY CONVERSATION IS IMPOSSIBLE
 
+**FIXED 2026-10-15 by `20261015010000`** (the pin now lets a nested update — the FK's
+SET NULL — through). Re-measured that day against the old pin: the raw SQL delete below
+does abort exactly as shown, but GoTrue's `auth.admin.deleteUser` reported success and left
+`created_by` dangling instead. Cause of the difference not established.
+
 Worse, because it is on the exact path docs/21 is building.
 
 `vm_conversations.created_by` is nullable and references

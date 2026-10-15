@@ -12,8 +12,8 @@ decision log, docs/03 conventions, docs/12 safeguards) — this is the chronolog
   a superadmin's reach); one shared definition `vm_user_is_module_member`. (B) managers could
   credit rows to others on INSERT and UPDATE across reactions, layers, conversations and — found
   by review B — flags and the tombstone/review stamps; all pinned or server-stamped. Side
-  effect: deletion landmine (2) closed, and its recorded symptom was wrong (measured: a
-  silent dangling `created_by`, not an abort). Review A: no widening, 112/112 pairs equivalent;
+  effect: deletion landmine (2) closed; it turned out to have two symptoms (raw SQL delete
+  aborts; GoTrue's admin delete "succeeds" leaving `created_by` dangling — cause unknown). Review A: no widening, 112/112 pairs equivalent;
   one recorded change (a role-less member cannot self-block). Prod measured first: 0 of 6
   active seats lose access. Tests 10 (6 red before); one older fixture needed the vm grant
   (same story as 2026-09-22). db 363/363; ACL 17/17 local. Detail: module-4 spec + docs/19.
