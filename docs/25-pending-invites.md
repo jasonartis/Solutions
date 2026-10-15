@@ -1,0 +1,167 @@
+# 25 — Pending invites (invite people who are not on the platform / org yet)
+
+**Status: REQUIREMENTS BRIEF, 2026-10-15. Nothing is built, no migration is claimed.** Written by a
+Sonnet session from the founder's decisions so they are not lost; the **schema, RLS and trigger design
+is OPUS work** (docs/03 #12 rhythm: draft → adversarial review → live-verify as real users → tests →
+docs), and a novel mechanism of this size is a Fable-tier *review* candidate (CLAUDE.md model rules).
+**Per the standing rule, a build does not start until the founder initiates it.**
+
+## 1. The problem (founder, 2026-10-15, testing visual messaging)
+
+A chat creator invited an address that is not in the org and got *"No user found with email …
+add them as an org member first"* — an instruction they usually cannot follow (only an org admin adds
+org members). More broadly the founder does not want to force the order **platform → org → module →
+chat**: *"I might want to invite family members as test users. Do I need to make them sign up before
+adding them to things, then wait for them to tell me they registered?"* He wants to set everything up
+first, so that **on registration they are ready to go.**
+
+## 2. Founder decisions (2026-10-15) — do not re-litigate
+
+1. **Hold time: 30 days**, for every kind of pending invite (this is also the founder decision 8 already
+   on record from 2026-09-04, docs/20 §0 item 8 / §7.7, which had been orphaned).
+2. **The model: anyone may pre-invite to anything they could invite to if the person were already
+   here.** A chat creator may pre-invite to the chat; whoever may invite to an org may pre-invite to the
+   org. A pre-invite takes effect when its prerequisites are met (the person signs up; later joins the
+   org). **This applies to ALL existing and future invite types on the platform**, not just visual
+   messaging.
+3. **Claude's four refinements — proposed by the Sonnet session and implicitly accepted (the founder replied
+   "draft it"), NOT separately ruled on; confirm if any is contested:** each link in the chain is
+   independent (a chat invite never creates org membership); authority is re-checked at claim; the inviter
+   never learns whether the person already exists; only a verified email can claim (§4).
+
+## 3. What exists today (verify each before relying on it — this was read, not re-measured)
+
+- **Org invites:** `org_members.status` is `pending|active` (default `pending`), with `invited_by`,
+  `invited_at`, `accepted_at` (migration `20260727010000_org_invite_accept.sql`). Only the invited user,
+  through `org_accept_invite()`, flips their own seat active; it **revalidates the inviter** (that is why
+  `invited_by` is load-bearing). `org_find_user_by_email` resolves an existing account (docs/20 §8.3, and
+  docs/18 item 9: admin email-lookup logging is deferred but its build shape — hash the address — is decided).
+- **Chat (visual messaging) invites:** accept-first seats — a seat made for someone else is `pending`
+  (`vm_members_c_invite`), confers nothing until the invitee accepts (`vm_accept_conversation_invite`);
+  decline, decline-and-block (self-block, per conversation) and unblock exist. The resolver is
+  `find_module_peer`, which returns an id **only for an ACTIVE member of the org** — which is exactly what
+  produces the refusal above, and it is also an email-membership oracle (see §4.3).
+- **Every existing invite needs an existing `auth.users` row** (a pending row is keyed by `user_id`). There
+  is **no** invite to a person with no account. docs/20's earlier `vm_pending_invites` + signup-time
+  resolver + pruner design was dropped without a decision (docs/20 §7.7, P3) — **this brief is that decision.**
+- **Re-signup blocks (docs/21 §7.12)** are enforced by a trigger on `auth.users` for signup and email
+  change, keyed by `account_email_fingerprint()` (aggressive normalisation: gmail dots, `+tag`). The signup
+  screen shows one identical "check your email" notice for taken/blocked/fresh addresses (§7.12.1).
+- Interim wording fix already shipped (`3a10297`): the refusal no longer tells a chat maker to do an
+  admin-only step. It still says *whether* the address is in the org — remove when this ships.
+
+## 4. Requirements
+
+### 4.1 Behaviour
+- **One platform mechanism, not one per feature** (extract-don't-speculate is satisfied: org and chat
+  invites are two consumers today). A pending invite = *who* (email), *what* (a kind + target, e.g.
+  `org`, `vm_conversation`), *as what* (role/seat), *by whom* (inviter), *when/expires*, *state*.
+  Each kind registers how it is **validated at issue**, **re-validated at claim**, and **applied**.
+- **Issue:** allowed iff the inviter could invite that person to that target if they were a member. The
+  inviter may be a conversation creator who is not an org admin.
+- **Claim:** happens at the person's first confirmed sign-in with that exact address (and re-runs when a
+  *prerequisite* is met later — e.g. a chat invite that was waiting on org membership). Applying an invite
+  produces the **same pending/accept-first state the platform already uses** (a pending seat the person
+  still accepts) — a pre-invite must not become a silent forced join. (Org/chat accept-first is a decided
+  property: docs/19, `20261007030000`.)
+- **Dependencies:** a chat invite never creates org membership. If the person is not in the org, the chat
+  invite stays dormant until an org admin (or other authority) adds them. Each invite expires on its own
+  30-day clock.
+- **Expiry:** 30 days from issue; the inviter sees "expires in N days", can **cancel**, and can **resend**
+  (resets the clock). A pruner deletes expired rows (note: **prod has no running worker** — CLAUDE.md;
+  account deletion solved this with `pg_cron` inside the database, docs/03 hard rule 5 records the exception).
+- **UI:** the inviter's list shows "Invited — pending" with the address, identical whether the person has an
+  account or not. Copy for every state; no jargon (CLAUDE.md "user-facing copy": no security mechanisms in text).
+
+### 4.2 Hard security / privacy requirements (each needs a named test)
+1. **Verified email only.** Claim by **exact lower+trim match of a CONFIRMED address**, never the
+   `account_email_fingerprint` (that one is deliberately aggressive and exists for blocks, not identity).
+   An unconfirmed signup must not claim anything (prod has `enable_confirmations` true for email and SMS —
+   CLAUDE.md local-auth gotcha).
+2. **Authority re-checked at claim.** If the inviter has since left the org/chat, been demoted, banned or
+   deleted (the silhouette, docs/21), the invite does not apply. State the rule per kind.
+3. **No oracle.** Issuing returns the same result whether the address has an account, is in the org, is
+   blocked, or is already a member — same words, same timing as far as practical. This removes the current
+   email-membership oracle in `addMember`. (Precedent: the deliberate 23505 silence in `addMember`; and
+   docs/21 §7.12.1, where exact HTTP parity was measured impossible but screen parity achieved.)
+4. **Blocked and removed people.** A pre-invite must not be a way back for someone removed from the
+   platform (docs/21 §7.12) or a self-blocked conversation (docs/21; `vm_guard_self_block`): a self-block
+   must beat any pending invite for that conversation; a platform block already prevents the signup itself.
+5. **The stored address is a data subject with no account** (docs/modules/module-4 "TWO PRIVACY
+   OBLIGATIONS"): not in the data browser, not exportable, no deletion route. **The 30-day expiry plus the
+   inviter's cancel must BE the deletion mechanism, and be described as such.** Also: the privacy page
+   needs a line for it (owed; docs/12 item 6 was overridden twice — "do not make it three"), and the
+   founder reviews all `/privacy` wording himself. Store the address (the inviter must see and cancel it);
+   delete it on claim, cancel or expiry. Decide whether to keep a one-way fingerprint after deletion — the
+   founder removed the retention sentence from `/privacy` for blocks (2026-10-14); do not quietly add another
+   retained identifier.
+6. **Table hygiene:** the new table starts with `revoke all … from public, anon, authenticated,
+   service_role` **before** any grant (docs/03 #27 — a privilege escalation shipped once from skipping this);
+   every function states its full ACL; policies are split per command, never `for all` (docs/20 §8.1);
+   any helper that must answer about a THIRD party cannot be caller-relative (docs/03 #29, e.g.
+   `is_org_member`); a trigger's volatility is load-bearing (docs/03 #30); the claim step runs as a definer
+   hooked on signup/first confirmed sign-in — **respect the auth-trigger criticality rules in docs/03**
+   (a trigger on `auth.users` that fails can block every signup; `login_events` is the worked precedent) and
+   note the prod "Before User Created" hook is ON.
+7. **Abuse limits:** cap pending invites per inviter and per target address (an address spammed with
+   invites from many orgs is a harassment vector, and `/signup` is an email sender; prod's built-in sender
+   is **2 emails/hour**, docs/18 item 7). **Decide whether issuing an invite sends an email at all** — the
+   platform has no custom SMTP yet; without an email the person only sees the invite after signing up by
+   other means (the founder tells them). Recommend: no email in v1, inviter shares the link; revisit with
+   SMTP.
+
+### 4.3 The invite-to-address oracle, stated plainly
+Today a conversation admin can learn whether an address is an active member of the org (the refusal text
+differs). The founder asked if that matters: it is small (org-mates already see each other's display names)
+but real, and it is the same class as docs/22's email-visibility work. This feature should **remove** it,
+not add a second one.
+
+## 5. Scenarios the build must pass (use real seed users; write these as e2e/RLS tests)
+
+1. **Family test users (the founder's case):** the org admin pre-invites three addresses to the org with a
+   module role, and to a chat. None has an account. They sign up (confirmed) → each sees a pending org
+   invite, accepts, then sees the chat invite, accepts → ready. Nothing was manual in between.
+2. **Chat maker who is not an org admin** pre-invites an address that is not in the org: accepted silently;
+   the chat invite sits dormant; the person signs up and is NOT in the chat until an org admin adds them to
+   the org; the moment they are, the chat invite appears. They never gain org membership from the chat invite.
+3. **Existing user** invited to the chat: same inviter-facing result as scenario 2 (no oracle).
+4. **Expiry:** day 31 → gone, the address no longer stored anywhere, the inviter sees it expired, a resend
+   works.
+5. **Inviter loses authority** (removed from the chat/org) before the person signs up → nothing applies.
+6. **Self-block wins:** the person self-blocked that conversation → the pending invite never applies.
+7. **Platform-removed address** (docs/21 §7.12) → signup itself is refused as today; the pending invite
+   does not resurrect them.
+8. **Typo'd / wrong person:** an invite to `a@x.com` cannot be claimed by `b@x.com`, or by an unconfirmed
+   `a@x.com`.
+9. **Cancel** by the inviter removes the row. A non-inviter, non-admin cannot read or cancel it.
+
+## 6. Open questions for the builder to bring to the founder (do not decide silently)
+
+- Email on issue (see 4.2 #7) — recommended **no** for v1.
+- Per-inviter / per-address caps (numbers).
+- Does a conversation creator's pre-invite also need the target org's `org_modules`/module-role (the chat
+  needs the `visual-messaging` module role since `20261015010000`)? Likely yes → the invite should carry
+  the *org + module* prerequisites it needs and say which are missing.
+- Should an org admin see all pending invites for the org (including ones others issued)? Recommended yes
+  (it is also how an admin finds and cancels abuse).
+- Kinds to register in v1: `org`, `vm_conversation`. The other modules' invite-like flows (classroom
+  enrolment, speed-dating registration, salon workers, matchmaking pool) are **not** in v1 — list them and
+  say which, if any, are the same shape.
+
+## 7. Suggested slicing (smallest first; each independently shippable + prod-verifiable)
+
+1. **Org pre-invite** end to end (table, issue/cancel/expire, claim on confirmed sign-in, no oracle) — the
+   platform primitive plus one consumer.
+2. **Chat pre-invite** as the second consumer (dormant-until-org-member rule, self-block precedence).
+3. UI for both inviter lists; the privacy-page line (founder reviews wording).
+4. Remove the interim membership-revealing refusal in `addMember`.
+
+## 8. Not in scope
+Anonymous public links (stay deferred post-v1, module-4 spec); Public Square (docs/20 — invite-only v1);
+SSO; changing accept-first semantics.
+
+## 9. Pointers
+docs/20 §0 item 8, §7.7, §8.3 · docs/modules/module-4-visual-messaging.md (TWO PRIVACY OBLIGATIONS; the
+2026-10-14/15 entries) · docs/21 §7.12, §7.12.1 · docs/22 (email lives only in `auth.users`, read through
+definers) · docs/19 (seat authority) · docs/03 #1, #12, #22, #27, #29, #30 · docs/18 items 7 and 9 ·
+`supabase/migrations/20260727010000_org_invite_accept.sql`, `20261007030000` (accept-first seats).

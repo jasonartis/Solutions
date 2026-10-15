@@ -28,6 +28,7 @@ CSS. Founder: look at the salon, speed-dating and classroom screens, which may h
 by luck.** Also: every vm action returns `{ok, reason}` (inline errors, draft kept), emoji carry
 an `angle`, `next.config.ts` has `serverActions.bodySizeLimit: '4mb'`. Open: "X-ray does not fade
 pen marks on a SAVED reply" was not reproduced.
+**2026-10-15: PENDING INVITES (invite people not yet on the platform/org; 30 days; "anyone may pre-invite to what they can invite to") ARE A BRIEF, NOT BUILT — [docs/25](docs/25-pending-invites.md). Opus work; founder initiates the build.**
 **2026-10-15 (Opus): `20261015010000` SHIPPED, ON PRODUCTION AND PROD-VERIFIED — vm seats now
 need the module ROLE (docs/19 decision 1 reaches vm), and nobody, managers included, can credit
 a reaction/layer/conversation/flag or a review/removal stamp to someone else. Also closes
