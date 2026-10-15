@@ -16,6 +16,7 @@ import {
   joinConversation,
   replyWithDrawing,
   restoreLayer,
+  renameConversation,
   reviewFlag,
   setBranchFrozen,
   setJoinPolicy,
@@ -287,6 +288,28 @@ export default async function ConversationPage(props: {
           ← Conversations
         </Link>
       </div>
+      {/* Rename: the conversation admin's (vm_conversations_update_admin). */}
+      {canAdmin && (
+        <details className="mb-3 text-sm">
+          <summary className="cursor-pointer text-gray-400 hover:text-gray-600">Rename this conversation</summary>
+          <ActionForm
+            action={renameConversation.bind(null, orgSlug, conversationId)}
+            className="mt-2 flex flex-wrap items-center gap-2"
+          >
+            <input
+              name="title"
+              required
+              maxLength={120}
+              defaultValue={conversation.title}
+              aria-label="conversation name"
+              className="min-w-56 rounded border border-gray-300 px-2 py-1 text-sm"
+            />
+            <button className="rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700">
+              Save name
+            </button>
+          </ActionForm>
+        </details>
+      )}
 
       {/* Breadcrumb: the layer address, each segment linking up the chain. */}
       <p className="mb-4 text-sm text-gray-500">

@@ -390,3 +390,17 @@ test('visual messaging: select, move and delete a pen stroke; resize + rotate an
   expect(Math.abs(saved.fontSize - sentSize)).toBeLessThan(0.5)
   expect(Math.abs(saved.rotation - sentAngle)).toBeLessThan(0.5)
 })
+
+test('visual messaging: the conversation admin can rename it', async ({ page }) => {
+  const title = 'Before ' + Date.now()
+  const renamed = 'After ' + Date.now()
+  await startConversation(page, title)
+  await page.getByText('Rename this conversation').click()
+  await page.getByLabel('conversation name').fill(renamed)
+  await page.getByRole('button', { name: 'Save name' }).click()
+  await expect(page.getByRole('heading', { name: renamed })).toBeVisible()
+  // The list shows the new name too (and no longer the old one).
+  await page.goto('/o/demo-visual/m/visual-messaging')
+  await expect(page.getByRole('link', { name: renamed })).toBeVisible()
+  await expect(page.getByRole('link', { name: title })).toHaveCount(0)
+})

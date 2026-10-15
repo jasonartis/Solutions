@@ -241,6 +241,32 @@ export async function setJoinPolicy(orgSlug: string, conversationId: string, ope
   return { ok: true }
 }
 
+// Rename = update `title`. The conversation admin may (vm_conversations_update_admin
+// + the column grant; vm_pin_conversation leaves title free) — no migration.
+// An UPDATE that RLS filters to zero rows is NOT an error, so ask for the row
+// back and treat "nothing changed" as the refusal it is.
+export async function renameConversation(
+  orgSlug: string,
+  conversationId: string,
+  formData: FormData,
+): Promise<ActionResult> {
+  const title = String(formData.get('title') ?? '').trim()
+  if (!title) return refuse('Give the conversation a name')
+  if (title.length > 120) return refuse('That name is too long (120 characters at most)')
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from('vm_conversations')
+    .update({ title })
+    .eq('id', conversationId)
+    .select('id')
+  const failed = failure(error, 'Rename failed')
+  if (failed) return failed
+  if (!data || data.length === 0) return refuse('Only a conversation admin can rename it')
+  revalidatePath(`/o/${orgSlug}/m/visual-messaging/conversations/${conversationId}`)
+  revalidatePath(`/o/${orgSlug}/m/visual-messaging`)
+  return { ok: true }
+}
+
 export async function addMember(orgSlug: string, conversationId: string, formData: FormData): Promise<ActionResult> {
   const email = String(formData.get('email') ?? '').trim().toLowerCase()
   if (!email) return refuse('Email is required')
