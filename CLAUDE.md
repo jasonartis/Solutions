@@ -337,7 +337,7 @@ doc.
   `d16c26f`, prod-verified 15/15 via the new `scripts/prod-verify-vm-policy-split.mts`):
   the five `vm_*` `for all` policies are split, the sole conversation admin can no longer
   leave and orphan a conversation, and self-block no longer leaks through `addMember`'s
-  duplicate-key error. **§8.1, §8.3, §8.4 and §8.6 remain open** — status table in docs/20 §28.
+  duplicate-key error. **§8.1 and §8.3 (half-closed) remain open** (§8.4 closed 2026-10-05; §8.6 closed 2026-10-15 by `20261015010000`) — status table in docs/20 §28.
 - **⚠ CORRECTED 2026-09-11: "CLOSED" MEANT CLOSED IN THE REPO, NOT ON PRODUCTION.**
   `pnpm migrate:prod --dry-run` on 2026-09-11 listed `20260904010000` as still PENDING — so the
   cross-org hole below has been **live on prod for a week while this file called it closed**,

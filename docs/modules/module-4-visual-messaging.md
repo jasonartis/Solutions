@@ -1090,6 +1090,10 @@ re-confirmed) while GoTrue's `auth.admin.deleteUser` reported success and left `
 dangling at a deleted account — two symptoms, cause of the difference not established; prod
 had 0 dangling rows.
 
+**Also closed as a side effect: docs/20 §8.6** (a creator removed from the org still read
+the conversation row). The creator arm is kept for the creation bootstrap but now needs the
+vm role, which needs active org membership. Recorded in docs/20's §28 table.
+
 **Pre-existing, found by this slice's reviews, NOT changed — open:**
 1. **A manager removing a layer by a direct table UPDATE (`tombstoned = true`) skips the
    moderation log and does not clear the content** — `vm_layers_before_write`'s manager

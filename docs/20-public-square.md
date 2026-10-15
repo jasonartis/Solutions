@@ -3011,7 +3011,7 @@ finding joins as **§8.8**. Everything below uses §8's numbering.
 | **8.3** | `org_find_user_by_email` has no org join — any org admin resolves any email platform-wide | **HALF CLOSED ON PROD 2026-09-17 — `prosrc` DID change, this row previously said it had not.** §25.2 split the fix in two and the IDENTITY half shipped with the email slice (docs/22): the function no longer touches `profiles`, and returns `user_id` ALONE — no display name, no address — which is exactly what §25.2 asked for. **What remains is the EXISTENCE oracle** (an org admin can still test whether an address has an account platform-wide), and §25.2 records that as an **accepted limit**: it cannot be bounded by org membership without breaking every invite. ~~The only undecided piece left is whether to LOG these lookups~~ **DECIDED 2026-09-22: DEFERRED, and it is now docs/18 item 9** — on the same trigger as go-live items 4/5/6/7 (the first real client org gaining an admin who is not the founder), because all 3 owner/admins on prod today are the founder's own accounts and the log would be empty. **The shape is pre-decided there — hash the address, do not store it — so it does not get re-derived.** Still: **do not add the join** |
 | **8.4** | `module_roles_select_member` leaks the module-role census | **CLOSED — ON PRODUCTION AND PROD-VERIFIED 2026-10-05** (`20261002010000`; prod 20/28 PRE-apply → 28/28 POST-apply). The blocker §25.3 names is gone: `20260925030000` rank-mapped the three modules, so `module_has_manager_grant` IS the replacement read path and a matchmaking admin passes it. The policy is now `module_roles_select_self_or_manager` — own rows, org admins, rank-≥-2 managers of THAT module, superadmins. Measured: an ordinary `demo-match` member went from reading all 6 grants to 1. **A second §25.3 obstacle ("it also breaks the view-as target picker") turned out to be FALSE** — the picker is mode-2-only and no mode-2 edge starts below rank 2, now pinned by a test. Full account: docs/24 §6b, docs/19's 2026-10-02 section |
 | **8.5** | `addMember` does a bare INSERT, so edge cases surface as raw duplicate-key errors | **DONE 2026-09-14 (§29).** Was: LIVE, and Track A's self-block had made it worse — see §28.2 for the mechanism |
-| **8.6** | a departed creator still reads the conversation ROW via `created_by = auth.uid()` | **LIVE.** `vm_conversations_select` unchanged. Recorded as a deliberate remainder in `20260904010000`. **AND IT TURNS OUT TO BE LOAD-BEARING FOR SOMETHING ELSE — see below** |
+| **8.6** | a departed creator still reads the conversation ROW via `created_by = auth.uid()` | **CLOSED 2026-10-15 by `20261015010000`, ON PROD.** The arm is KEPT (the INSERT ... RETURNING bootstrap still needs it — conversation creation verified end to end by review A and vm e2e 17/17) but now reads `created_by = auth.uid() and vm_is_module_member(org_id)`, which requires active org membership + the vm role. A departed or role-less creator no longer reads the row. The asymmetry below still holds for a banned creator who KEEPS the role. |
 
 > **§8.6's `created_by` arm is now the DIAGNOSTIC for a whole class — docs/03 #23,
 > added 2026-09-15 (`a96e2ad`) by the parallel session.** The convention is *a
@@ -3567,11 +3567,9 @@ one.**
   drawings. Gated on docs/21 being built.
 - **§8.4** the `module_roles` census — **blocked** until vm/matchmaking/synagogue
   are rank-mapped (§25.3).
-- **§8.6** a departed creator still reads the conversation row — deliberate
-  remainder in `20260904010000`.
-- **§30.1 / §30.2** the two deletion landmines — deleting an ORG, and deleting a
-  user who created any conversation. Both need product decisions; both land on
-  docs/21.
+- ~~**§8.6**~~ CLOSED 2026-10-15 (`20261015010000`) — see the §28 table.
+- ~~**§30.1 / §30.2**~~ BOTH FIXED: §30.1 by `20260928010000`, §30.2 by `20261015010000`
+  (2026-10-15).
 - **§17.8 items 5–9** — the unique index, `org_member_profiles`' missing
   `status` filter, `job_requests`/`module_scope_nodes`, the kinds ratchet test,
   and restating the ACL on the `shares_org_with` replace. **Several of these
