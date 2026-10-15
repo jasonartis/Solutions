@@ -21,8 +21,10 @@ A multi-tenant modular platform: each client engagement produces a **module** bu
 
 **NEXT WORK (founder, 2026-10-14): VISUAL MESSAGING FIX BATCH — two sessions, can run in
 parallel. Brief: [docs/modules/module-4-visual-messaging.md](docs/modules/module-4-visual-messaging.md)
-"2026-10-14" sections.** SONNET: UI phases 1–7 (no migration). OPUS: viewers may react
-(`vm_reactions_insert_own` migration). **⚠ PLATFORM-WIDE, found the same day: every Tailwind
+"2026-10-14" sections.** SONNET: UI phases 1–7 (no migration). OPUS: viewers may react —
+**BUILT 2026-10-14 (`20261014020000`), local 22/22, db 353/353; NOT ON PROD until the founder
+says go** (then `migrate:prod` → `scripts/prod-verify-vm-viewer-reactions.mts`, pre-apply
+8/14 with controls green). Three pre-existing vm findings recorded open in the spec entry. **⚠ PLATFORM-WIDE, found the same day: every Tailwind
 class used ONLY in `modules/*/ui` is MISSING from the built CSS** — `globals.css`'s
 `@source "../../../modules/*/ui";` scans 0 files (measured). That is why the pen colour
 swatches were invisible; other modules' screens are likely affected too. Phase 1 of the

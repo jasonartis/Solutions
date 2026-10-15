@@ -9451,3 +9451,194 @@ describe('visual messaging: the unblock list, and invited_by is server-stamped e
     expect(seat?.invited_by, 'an own seat kept a client-chosen inviter').toBeNull()
   })
 })
+
+describe('visual messaging: a VIEWER may react, nobody without an active seat may (20261014020000)', () => {
+  // Founder decision 2026-10-14: a reaction is not a post. vm_reactions_insert_own
+  // now requires vm_can_react (active seat of ANY role, not self-blocked, still an
+  // org member) instead of vm_can_post. demo-visual: charlie and dana = plain
+  // members, dana admins each fixture conversation and authors its layer; eve is
+  // NOT a member of demo-visual.
+  const svcKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
+  const svc = () => createClient(url, svcKey, { auth: { persistSession: false } })
+  const convIds: string[] = []
+  let org = ''
+  let charlieId = ''
+  let danaId = ''
+  let eveId = ''
+  let charlie: SupabaseClient
+  let dana: SupabaseClient
+  let eve: SupabaseClient
+  let moderatorGrantId: string | null = null
+
+  beforeAll(async () => {
+    org = (await svc().from('orgs').select('id').eq('slug', 'demo-visual').single()).data!.id as string
+    charlieId = await userIdOf('charlie@demo.local')
+    danaId = await userIdOf('dana@demo.local')
+    eveId = await userIdOf('eve@demo.local')
+    charlie = await signIn('charlie@demo.local')
+    dana = await signIn('dana@demo.local')
+    eve = await signIn('eve@demo.local')
+    const eveMember = await svc().from('org_members').select('user_id').eq('org_id', org).eq('user_id', eveId)
+    expect(eveMember.error).toBeNull()
+    expect(eveMember.data, 'CONTROL: eve must NOT be a demo-visual member for the non-member case').toEqual([])
+  })
+  afterAll(async () => {
+    if (moderatorGrantId) await svc().from('module_roles').delete().eq('id', moderatorGrantId)
+    for (const id of convIds) await svc().from('vm_conversations').delete().eq('id', id)
+  })
+
+  /** A conversation dana admins, with one root layer dana authored. */
+  const makeConvWithLayer = async (title: string) => {
+    const c = await svc().from('vm_conversations').insert({ org_id: org, title, created_by: danaId }).select('id').single()
+    if (c.error) throw new Error(`fixture conversation failed: ${c.error.message}`)
+    const conv = c.data!.id as string
+    convIds.push(conv)
+    const s = await svc()
+      .from('vm_conversation_members')
+      .insert({ org_id: org, conversation_id: conv, user_id: danaId, role: 'admin', status: 'active' })
+    if (s.error) throw new Error(`fixture admin seat failed: ${s.error.message}`)
+    const l = await svc()
+      .from('vm_layers')
+      .insert({ org_id: org, conversation_id: conv, author_id: danaId, path: 'server-assigned', content: {} })
+      .select('id')
+      .single()
+    if (l.error) throw new Error(`fixture layer failed: ${l.error.message}`)
+    return { conv, layer: l.data!.id as string }
+  }
+  const seat = async (conv: string, userId: string, role: string, status: string) => {
+    const r = await svc().from('vm_conversation_members').insert({ org_id: org, conversation_id: conv, user_id: userId, role, status })
+    if (r.error) throw new Error(`fixture seat failed: ${r.error.message}`)
+  }
+  const react = (client: SupabaseClient, conv: string, layer: string, userId: string) =>
+    client.from('vm_reactions').insert({ org_id: org, conversation_id: conv, layer_id: layer, user_id: userId, kind: 'heart' })
+  const reactionsOn = async (layer: string) =>
+    ((await svc().from('vm_reactions').select('user_id').eq('layer_id', layer)).data ?? []).map((r) => r.user_id as string)
+
+  it('a VIEWER reacts, and can take it back - but still cannot post', async () => {
+    const { conv, layer } = await makeConvWithLayer('RLS fixture - viewer reacts')
+    await seat(conv, charlieId, 'viewer', 'active')
+    const r = await react(charlie, conv, layer, charlieId)
+    expect(r.error, `a viewer could not react: ${JSON.stringify(r.error)}`).toBeNull()
+    expect(await reactionsOn(layer)).toEqual([charlieId])
+    // The role list dropped for reactions is intact for layers.
+    const post = await charlie.from('vm_layers').insert({
+      org_id: org,
+      conversation_id: conv,
+      parent_layer_id: layer,
+      author_id: charlieId,
+      path: 'server-assigned',
+      content: {},
+    })
+    expect(post.error?.code, 'a viewer posted a layer').toBe('42501')
+    const del = await charlie.from('vm_reactions').delete().eq('layer_id', layer).eq('user_id', charlieId).select('id')
+    expect(del.error, JSON.stringify(del.error)).toBeNull()
+    expect(del.data?.length, 'a viewer could not remove their own reaction').toBe(1)
+    expect(await reactionsOn(layer)).toEqual([])
+  })
+
+  it('a participant still reacts (unchanged)', async () => {
+    const { conv, layer } = await makeConvWithLayer('RLS fixture - participant reacts')
+    await seat(conv, charlieId, 'participant', 'active')
+    const r = await react(charlie, conv, layer, charlieId)
+    expect(r.error, JSON.stringify(r.error)).toBeNull()
+    expect(await reactionsOn(layer)).toEqual([charlieId])
+  })
+
+  it('a PENDING invitee cannot react', async () => {
+    const { conv, layer } = await makeConvWithLayer('RLS fixture - pending cannot react')
+    const inv = await dana.from('vm_conversation_members').insert({ org_id: org, conversation_id: conv, user_id: charlieId, role: 'viewer' })
+    expect(inv.error, JSON.stringify(inv.error)).toBeNull()
+    const s = await svc().from('vm_conversation_members').select('status').eq('conversation_id', conv).eq('user_id', charlieId).single()
+    expect(s.data?.status, 'CONTROL: the invitation is pending').toBe('pending')
+    const r = await react(charlie, conv, layer, charlieId)
+    expect(r.error?.code, 'a pending invitee reacted').toBe('42501')
+    expect(await reactionsOn(layer)).toEqual([])
+  })
+
+  it('a moderation-BANNED seat cannot react', async () => {
+    const { conv, layer } = await makeConvWithLayer('RLS fixture - banned cannot react')
+    await seat(conv, charlieId, 'viewer', 'banned')
+    const r = await react(charlie, conv, layer, charlieId)
+    expect(r.error?.code, 'a banned seat reacted').toBe('42501')
+    expect(await reactionsOn(layer)).toEqual([])
+  })
+
+  it('a SELF-BLOCKED seat cannot react', async () => {
+    const { conv, layer } = await makeConvWithLayer('RLS fixture - self-blocked cannot react')
+    await seat(conv, charlieId, 'viewer', 'active')
+    const b = await charlie.from('vm_conversation_members').update({ status: 'banned' }).eq('conversation_id', conv).eq('user_id', charlieId)
+    expect(b.error, JSON.stringify(b.error)).toBeNull()
+    const s = await svc().from('vm_conversation_members').select('self_blocked').eq('conversation_id', conv).eq('user_id', charlieId).single()
+    expect(s.data?.self_blocked, 'CONTROL: the seat is self-blocked').toBe(true)
+    const r = await react(charlie, conv, layer, charlieId)
+    expect(r.error?.code, 'a self-blocked seat reacted').toBe('42501')
+    expect(await reactionsOn(layer)).toEqual([])
+  })
+
+  it("a self-blocked org-level MODERATOR cannot react (vm_is_conv_member's moderator arm is not reused)", async () => {
+    const { conv, layer } = await makeConvWithLayer('RLS fixture - blocked moderator cannot react')
+    const g = await svc()
+      .from('module_roles')
+      .insert({ org_id: org, user_id: charlieId, module_key: 'visual-messaging', role: 'moderator' })
+      .select('id')
+      .single()
+    if (g.error) throw new Error(`fixture moderator grant failed: ${g.error.message}`)
+    moderatorGrantId = g.data!.id as string
+    try {
+      await seat(conv, charlieId, 'viewer', 'active')
+      const b = await charlie.from('vm_conversation_members').update({ status: 'banned' }).eq('conversation_id', conv).eq('user_id', charlieId)
+      expect(b.error, JSON.stringify(b.error)).toBeNull()
+      // CONTROL: the moderator arm is live for him - he still READS the layer -
+      // so the refusal below is vm_can_react's doing, not a dead grant.
+      const sees = await charlie.from('vm_layers').select('id').eq('id', layer)
+      expect(sees.data?.length, 'CONTROL: the org moderator no longer reads the layer').toBe(1)
+      const r = await react(charlie, conv, layer, charlieId)
+      expect(r.error?.code, 'a self-blocked org moderator reacted').toBe('42501')
+      expect(await reactionsOn(layer)).toEqual([])
+    } finally {
+      await svc().from('module_roles').delete().eq('id', moderatorGrantId)
+      moderatorGrantId = null
+    }
+  })
+
+  it('an active seat held by someone NOT in the org cannot react', async () => {
+    const { conv, layer } = await makeConvWithLayer('RLS fixture - non-member cannot react')
+    await seat(conv, eveId, 'viewer', 'active')
+    const s = await svc().from('vm_conversation_members').select('status').eq('conversation_id', conv).eq('user_id', eveId).single()
+    expect(s.data?.status, 'CONTROL: the leftover seat is active').toBe('active')
+    const r = await react(eve, conv, layer, eveId)
+    expect(r.error?.code, 'a non-member with a leftover seat reacted').toBe('42501')
+    expect(await reactionsOn(layer)).toEqual([])
+  })
+
+  it('a viewer cannot react AS someone else', async () => {
+    const { conv, layer } = await makeConvWithLayer('RLS fixture - no forged reactor')
+    await seat(conv, charlieId, 'viewer', 'active')
+    const r = await react(charlie, conv, layer, danaId)
+    expect(r.error?.code, 'charlie inserted a reaction as dana').toBe('42501')
+    expect(await reactionsOn(layer)).toEqual([])
+  })
+
+  it('a seat in conversation A does not reach a layer in conversation B, whatever conversation_id is sent', async () => {
+    const a = await makeConvWithLayer('RLS fixture - cross conv A')
+    const b = await makeConvWithLayer('RLS fixture - cross conv B')
+    await seat(a.conv, charlieId, 'viewer', 'active')
+    const r = await react(charlie, a.conv, b.layer, charlieId)
+    expect(r.error?.code, "a seat in A reacted to B's layer").toBe('42501')
+    expect(await reactionsOn(b.layer)).toEqual([])
+    // CONTROL: the same seat reacts to A's own layer.
+    const ok = await react(charlie, a.conv, a.layer, charlieId)
+    expect(ok.error, JSON.stringify(ok.error)).toBeNull()
+  })
+
+  it("a viewer cannot delete someone else's reaction", async () => {
+    const { conv, layer } = await makeConvWithLayer('RLS fixture - viewer cannot delete others')
+    await seat(conv, charlieId, 'viewer', 'active')
+    const d = await react(dana, conv, layer, danaId)
+    expect(d.error, `CONTROL: dana could not react: ${JSON.stringify(d.error)}`).toBeNull()
+    const del = await charlie.from('vm_reactions').delete().eq('layer_id', layer).eq('user_id', danaId).select('id')
+    expect(del.error).toBeNull()
+    expect(del.data, "a viewer deleted dana's reaction").toEqual([])
+    expect(await reactionsOn(layer)).toEqual([danaId])
+  })
+})

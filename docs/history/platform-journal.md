@@ -4,6 +4,20 @@ The running, dated build journal that used to live in `CLAUDE.md`'s "## Current 
 section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every session)
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
+- **2026-10-14 (Opus) — VISUAL MESSAGING: VIEWERS MAY REACT (`20261014020000`), built and
+  verified locally; prod apply awaits the founder.** Founder decision the same day: a
+  reaction is not a post. New definer `vm_can_react` (active seat of any role, not
+  self-blocked, still an org member) replaces `vm_can_post` in `vm_reactions_insert_own`;
+  posting untouched. `vm_is_conv_member` deliberately not reused (its org-moderator arm
+  would let a self-blocked moderator react). Applied locally by psql + a ledger row (a
+  concurrent UI session shared the database; no reset). 10 RLS tests, 2 red before / 10 after;
+  db 353/353; two adversarial reviews clean. New verifier
+  `scripts/prod-verify-vm-viewer-reactions.mts` replays a real viewer's reaction in a
+  ROLLED-BACK transaction — on prod pre-apply it reproduced Charlie's exact 42501 (8/14,
+  controls green). Three pre-existing findings recorded open in the module-4 spec (manager
+  reaction forgery via `insert_manage`; vm seats never check the module role; banned users
+  can delete their own reactions). Full entry: module-4 spec "2026-10-14 — viewer reactions
+  BUILT".
 - **2026-10-13 (later, Opus) — FORGOT PASSWORD + CHANGE PASSWORD (app only, no migration).**
   Picked by the founder as "a win you can do alone". The app had NO password recovery or
   change anywhere — a client user who forgot theirs could only use Email link and could

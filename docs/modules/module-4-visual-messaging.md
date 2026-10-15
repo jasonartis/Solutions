@@ -931,3 +931,46 @@ added — read docs/19 and the vm_ predicates before writing; a self-blocked or 
 must NOT react). RLS tests: viewer can react, pending invitee cannot, banned cannot,
 non-member cannot, delete-own still works. Prod: backup → `migrate:prod` (founder
 go-ahead) → a policy-aware prod verifier (template: `scripts/prod-verify-vm-*.mts`).
+
+### 2026-10-14 — viewer reactions BUILT (`20261014020000`); prod apply awaits the founder
+
+**What changed:** `vm_reactions_insert_own` now checks `user_id = auth.uid() and
+vm_can_react(conversation_id)`. `vm_can_react` is `vm_can_post` minus the role list: an
+ACTIVE seat of any role, `not self_blocked` (stated even though the pin trigger already
+forces self-blocked ⇒ banned), and `is_org_member(m.org_id)`. **Posting is unchanged** —
+a viewer still cannot add a layer (tested). **`vm_is_conv_member` was deliberately NOT
+reused:** its `vm_can_moderate_org` arm is true for an org-level moderator with no seat or
+a self-blocked one, so a moderator who blocked a conversation could still have reacted.
+
+**Evidence:** 10 new RLS tests (viewer reacts + deletes own + cannot post; participant
+unchanged; pending, moderation-banned, self-blocked, self-blocked ORG MODERATOR (with a
+control proving his moderator read arm is live), org non-member with a leftover active
+seat, forged `user_id`, cross-conversation `conversation_id`, deleting another's reaction)
+— **2 red against the old policy (the two that need a viewer to succeed, both failing with
+Charlie's prod 42501), 10/10 after**; full db suite 353/353. Two adversarial reviews
+(who-can-react; migration mechanics incl. a rolled-back apply and prod default privileges):
+no defect. New verifier `scripts/prod-verify-vm-viewer-reactions.mts`: **local 22/22;
+PROD PRE-APPLY 8 pass / 14 fail with every CONTROL green**, and its section [3] replays a
+real prod viewer's reaction as that viewer in a ROLLED-BACK transaction — pre-apply it
+reproduces the exact `new row violates row-level security policy for table "vm_reactions"`.
+**Not yet on prod: `migrate:prod` waits for the founder.** After it: re-run that script
+(expect 22/0) and `prod-verify-migration.ts` on the file. The UI needs no change — the
+buttons already show for viewers (`toggleReaction` inserts without `.select()`).
+
+**The real size of the widening (review A):** anyone who self-joins an OPEN conversation
+gets an active `viewer` seat (`vm_join_conversation`), so every module member can now react
+in every open conversation. That is the decision working as intended, stated so it is not
+a surprise.
+
+**Found, NOT changed, all pre-existing — open:**
+1. **`vm_reactions_insert_manage` never checks `user_id`** — an org admin or vm `admin` can
+   insert a reaction AS ANOTHER PERSON (since `20260709100000`). Same shape likely on
+   `vm_layers_insert_manage` (`author_id`) — unchecked. A forgery hole for managers; Opus
+   migration if wanted.
+2. **vm seats never check the module ROLE** (`vm_can_post`, `vm_is_conv_member`, now
+   `vm_can_react`): someone whose visual-messaging grant was revoked but who is still an org
+   member keeps using an active seat. `20260915010000` closed this class for matchmaking,
+   salon and classroom, not vm. Kept consistent here rather than making reacting stricter
+   than posting; it belongs with docs/19's module-role work.
+3. `vm_reactions_delete_own` is `user_id = auth.uid()` only, so a banned or departed person
+   can still REMOVE their own past reactions. Probably fine (it is their own act); recorded.
