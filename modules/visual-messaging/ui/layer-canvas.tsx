@@ -20,7 +20,7 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
-import { Stage, Layer, Line, Text as KonvaText, Image as KonvaImage, Transformer } from 'react-konva'
+import { Stage, Layer, Group, Line, Text as KonvaText, Image as KonvaImage, Transformer } from 'react-konva'
 import { getStroke } from 'perfect-freehand'
 import { runAction } from './action-form'
 import { prepareImage } from './image-shrink'
@@ -64,6 +64,16 @@ const HISTORY_LIMIT = 100
 
 type Tool = 'pen' | 'select' | 'emoji' | 'text' | 'image'
 
+// Everything a layer shows, composed along its path from the root (flat): what
+// the swipe slides in from a neighbouring layer while the finger is still down.
+export type LayerContent = {
+  strokes: Stroke[]
+  stamps: Stamp[]
+  texts: TextStamp[]
+  images: ResolvedImageStamp[]
+}
+type SwipeDir = 'left' | 'right' | 'up' | 'down'
+
 export type LayerNav = {
   parentId: string | null
   firstChildId: string | null
@@ -77,7 +87,10 @@ export type LayerNav = {
 
 const COLORS = ['#e11d48', '#2563eb', '#16a34a', '#f59e0b', '#111111', '#ffffff']
 const EMOJIS = ['😀', '😍', '😂', '😢', '😡', '👍', '👎', '❤️', '🔥', '🎉', '⭐', '✅', '❌', '🤔']
-const SWIPE_MIN = 60 // px of drag before a gesture counts as a swipe
+const SWIPE_MIN = 60 // px of drag before a quick flick counts as a swipe
+const SWIPE_AXIS_LOCK = 10 // px before a drag picks horizontal or vertical
+const FLICK_SPEED = 0.4 // px/ms — a fast flick completes even before halfway
+const SWIPE_SETTLE_MS = 160
 const EMOJI_SIZE = 48 // placed size, in image pixels — the handles change it live
 const TEXT_SIZE = 32
 
@@ -123,6 +136,8 @@ export default function LayerCanvas(props: {
   currentImages: ResolvedImageStamp[]
   drawable: boolean
   nav: LayerNav
+  /** content of the layer each swipe direction leads to (null = nowhere to go) */
+  neighbours: Record<SwipeDir, LayerContent | null>
   // Both return {ok, ...} rather than throwing (docs/03 #22) — a refusal shows
   // inline and the draft stays on the canvas.
   onSend?: (payloadJson: string) => Promise<{ ok: true; layerId: string } | { ok: false; reason: string }>
@@ -157,7 +172,21 @@ export default function LayerCanvas(props: {
   const [xray, setXray] = useState(false)
   const [pending, startTransition] = useTransition()
   const activeStroke = useRef<number[][] | null>(null)
-  const swipeStart = useRef<{ x: number; y: number } | null>(null)
+  // A swipe in progress: where it began, which axis it locked to, and recent
+  // pointer samples (for the flick speed at release). `swipe` is what is drawn;
+  // swipeRef mirrors it so the pointer handlers never read a stale copy.
+  const swipeStart = useRef<{
+    x: number
+    y: number
+    axis: 'x' | 'y' | null
+    samples: { t: number; x: number; y: number }[]
+  } | null>(null)
+  const [swipe, setSwipe] = useState<{ dir: SwipeDir; offset: number } | null>(null)
+  const swipeRef = useRef<{ dir: SwipeDir; offset: number } | null>(null)
+  const showSwipe = (s: { dir: SwipeDir; offset: number } | null) => {
+    swipeRef.current = s
+    setSwipe(s)
+  }
   const nextDraftId = useRef(0)
   const genId = () => `d${nextDraftId.current++}`
   const shapeRefs = useRef<Record<string, any>>({})
@@ -182,6 +211,7 @@ export default function LayerCanvas(props: {
     ...props.baseImages.flatMap((layer) => layer.map((i) => i.url)),
     ...props.currentImages.map((i) => i.url),
     ...Object.values(imageObjectUrls),
+    ...Object.values(props.neighbours).flatMap((n) => (n ? n.images.map((i) => i.url) : [])),
   ])
 
   // ---- the draft: every change goes through commit() so undo sees it -------
@@ -238,6 +268,8 @@ export default function LayerCanvas(props: {
   useEffect(() => {
     if (props.currentLayerId === prevLayerId.current) return
     prevLayerId.current = props.currentLayerId
+    // The navigation landed: the real layer replaces the sliding card.
+    showSwipe(null)
     const dir = lastSwipeDir.current
     lastSwipeDir.current = null
     if (!dir) return
@@ -514,10 +546,91 @@ export default function LayerCanvas(props: {
       setDrawing(true)
     } else {
       const pos = stage?.getPointerPosition()
-      if (pos) swipeStart.current = { x: pos.x, y: pos.y }
+      if (pos) swipeStart.current = { x: pos.x, y: pos.y, axis: null, samples: [{ t: performance.now(), x: pos.x, y: pos.y }] }
+    }
+  }
+  const targetFor = (dir: SwipeDir): string | null =>
+    dir === 'left'
+      ? props.nav.firstChildId
+      : dir === 'right'
+        ? props.nav.parentId
+        : dir === 'up'
+          ? props.nav.nextSiblingId
+          : props.nav.prevSiblingId
+  const extentOf = (dir: SwipeDir) => (dir === 'left' || dir === 'right' ? displayW : displayH)
+
+  // Move the sliding card to `to` (screen px along the swipe axis), then call done.
+  const settleSwipe = (dir: SwipeDir, from: number, to: number, done: () => void) => {
+    const t0 = performance.now()
+    const tick = (now: number) => {
+      const k = Math.min(1, (now - t0) / SWIPE_SETTLE_MS)
+      const eased = 1 - (1 - k) * (1 - k)
+      showSwipe({ dir, offset: from + (to - from) * eased })
+      if (k < 1) requestAnimationFrame(tick)
+      else done()
+    }
+    requestAnimationFrame(tick)
+  }
+
+  // VIEW mode, finger/mouse down and moving: the incoming layer follows the
+  // pointer, see-through (spec + founder 2026-10-14: "the swipe should follow
+  // the finger ... finishing past halfway and snapping back before it").
+  const dragSwipe = (stage: any) => {
+    const st = swipeStart.current
+    const pos = stage?.getPointerPosition()
+    if (!st || !pos) return
+    st.samples.push({ t: performance.now(), x: pos.x, y: pos.y })
+    if (st.samples.length > 8) st.samples.shift()
+    const dx = pos.x - st.x
+    const dy = pos.y - st.y
+    if (!st.axis) {
+      if (Math.max(Math.abs(dx), Math.abs(dy)) < SWIPE_AXIS_LOCK) return
+      st.axis = Math.abs(dx) >= Math.abs(dy) ? 'x' : 'y'
+    }
+    const raw = st.axis === 'x' ? dx : dy
+    const dir: SwipeDir = st.axis === 'x' ? (raw < 0 ? 'left' : 'right') : raw < 0 ? 'up' : 'down'
+    if (!targetFor(dir)) {
+      if (swipeRef.current) showSwipe(null) // nowhere to go that way
+      return
+    }
+    const extent = extentOf(dir)
+    showSwipe({ dir, offset: Math.max(-extent, Math.min(extent, raw)) })
+  }
+
+  const releaseSwipe = () => {
+    const st = swipeStart.current
+    swipeStart.current = null
+    const s = swipeRef.current
+    if (!st || !s) return
+    const target = targetFor(s.dir)
+    const extent = extentOf(s.dir)
+    const sign = s.dir === 'left' || s.dir === 'up' ? -1 : 1
+    // Speed over the last ~120ms, in the direction of the swipe.
+    const now = performance.now()
+    const last = st.samples[st.samples.length - 1]
+    const first = st.samples.find((p) => now - p.t <= 120) ?? last
+    let speed = 0
+    if (first && last && last.t > first.t) {
+      const d = st.axis === 'x' ? last.x - first.x : last.y - first.y
+      speed = (d * sign) / (last.t - first.t)
+    }
+    const complete =
+      !!target && (Math.abs(s.offset) / extent > 0.5 || (Math.abs(s.offset) >= SWIPE_MIN && speed >= FLICK_SPEED))
+    if (complete) {
+      settleSwipe(s.dir, s.offset, sign * extent, () => {
+        goTo(target)
+        // If the navigation never lands, do not leave the card stuck on screen.
+        setTimeout(() => showSwipe(null), 2500)
+      })
+    } else {
+      settleSwipe(s.dir, s.offset, 0, () => showSwipe(null))
     }
   }
   const handleMove = (e: any) => {
+    if (mode === 'view') {
+      dragSwipe(e.target.getStage())
+      return
+    }
     if (mode !== 'draw' || !drawing || !activeStroke.current) return
     const pt = toImageSpace(e.target.getStage())
     if (!pt) return
@@ -543,21 +656,8 @@ export default function LayerCanvas(props: {
       return
     }
     // VIEW mode: resolve the swipe (spec: left = descend, right = back up,
-    // up/down = cycle siblings).
-    const start = swipeStart.current
-    swipeStart.current = null
-    const pos = e.target.getStage()?.getPointerPosition()
-    if (!start || !pos) return
-    const dx = pos.x - start.x
-    const dy = pos.y - start.y
-    if (Math.abs(dx) < SWIPE_MIN && Math.abs(dy) < SWIPE_MIN) return // a tap, not a swipe
-    if (Math.abs(dx) >= Math.abs(dy)) {
-      if (dx < 0) goTo(props.nav.firstChildId, 'left')
-      else goTo(props.nav.parentId, 'right')
-    } else {
-      if (dy < 0) goTo(props.nav.nextSiblingId, 'up')
-      else goTo(props.nav.prevSiblingId, 'down')
-    }
+    // up/down = cycle siblings). A press with no drag is just a tap.
+    releaseSwipe()
   }
 
   const strokeItems = items.filter((i): i is DraftStroke => i.kind === 'stroke')
@@ -678,6 +778,10 @@ export default function LayerCanvas(props: {
           }
           style={{ touchAction: 'none', width: displayW, ...slideStyle }}
           data-canvas-mode={mode}
+          // A pointer that leaves the canvas (or is cancelled) mid-swipe ends it,
+          // else the card would stay stuck to a finger that is no longer there.
+          onPointerLeave={() => mode === 'view' && releaseSwipe()}
+          onPointerCancel={() => mode === 'view' && releaseSwipe()}
         >
         <Stage
           width={displayW}
@@ -864,6 +968,75 @@ export default function LayerCanvas(props: {
             })}
             {mode === 'draw' && <Transformer ref={transformerRef} rotateEnabled keepRatio anchorSize={14} />}
           </Layer>
+          {swipe && props.neighbours[swipe.dir] && (
+            // The layer being swiped TO, as a see-through card that rides the
+            // pointer in from the side it will arrive from. It firms up as it
+            // gets closer (0.55 -> 1.0).
+            <Layer
+              listening={false}
+              opacity={0.55 + 0.45 * Math.pow(Math.min(1, Math.abs(swipe.offset) / extentOf(swipe.dir)), 2)}
+            >
+              <Group
+                x={
+                  swipe.dir === 'left'
+                    ? natural.w + swipe.offset / scale
+                    : swipe.dir === 'right'
+                      ? -natural.w + swipe.offset / scale
+                      : 0
+                }
+                y={
+                  swipe.dir === 'up'
+                    ? natural.h + swipe.offset / scale
+                    : swipe.dir === 'down'
+                      ? -natural.h + swipe.offset / scale
+                      : 0
+                }
+              >
+                {img && <KonvaImage image={img} width={natural.w} height={natural.h} />}
+                {props.neighbours[swipe.dir]!.strokes.map((s, i) => (
+                  <Line key={`ns${i}`} points={strokeToPolygon(s)} closed fill={s.color} />
+                ))}
+                {props.neighbours[swipe.dir]!.stamps.map((st, i) => (
+                  <KonvaText
+                    key={`nst${i}`}
+                    text={st.emoji}
+                    fontSize={st.fontSize}
+                    x={st.x}
+                    y={st.y}
+                    rotation={st.angle ?? 0}
+                    offsetX={st.fontSize / 2}
+                    offsetY={st.fontSize / 2}
+                  />
+                ))}
+                {props.neighbours[swipe.dir]!.texts.map((t, i) => (
+                  <KonvaText
+                    key={`nt${i}`}
+                    text={t.text}
+                    fontSize={t.fontSize}
+                    fill={t.color}
+                    rotation={t.angle}
+                    x={t.x}
+                    y={t.y}
+                  />
+                ))}
+                {props.neighbours[swipe.dir]!.images.map(
+                  (im, i) =>
+                    imageCache[im.url] && (
+                      <KonvaImage
+                        key={`ni${i}`}
+                        image={imageCache[im.url]}
+                        x={im.x}
+                        y={im.y}
+                        width={im.width}
+                        height={im.height}
+                        rotation={im.rotation}
+                        opacity={im.opacity}
+                      />
+                    ),
+                )}
+              </Group>
+            </Layer>
+          )}
         </Stage>
         </div>
       </div>

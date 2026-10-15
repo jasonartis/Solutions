@@ -404,3 +404,50 @@ test('visual messaging: the conversation admin can rename it', async ({ page }) 
   await expect(page.getByRole('link', { name: renamed })).toBeVisible()
   await expect(page.getByRole('link', { name: title })).toHaveCount(0)
 })
+
+test('visual messaging: the swipe follows the pointer with the incoming layer see-through; past halfway completes, short of it snaps back', async ({
+  page,
+}) => {
+  test.slow()
+  const box = await openDrawing(page, 'Swipe ' + Date.now())
+  await inkStroke(page, box, [60, 60], [220, 140])
+  await page.getByRole('button', { name: 'Send reply' }).click()
+  await expect(page.getByText('1.1', { exact: true })).toBeVisible() // now on the reply
+  await expect(page.getByText('Replies to this layer (0)')).toBeVisible()
+
+  const layerCount = () => page.evaluate(() => (window as any).Konva.stages[0].getLayers().length as number)
+  const card = () =>
+    page.evaluate(() => {
+      const layers = (window as any).Konva.stages[0].getLayers()
+      const l = layers[layers.length - 1]
+      return { count: layers.length as number, opacity: l.opacity() as number, x: l.findOne('Group')?.x() as number }
+    })
+  const b = (await page.locator('canvas').first().boundingBox())!
+
+  // Drag RIGHT (back up to the root) about 30% of the way and hold: the card
+  // from the left is on screen, translucent, riding the pointer.
+  await page.mouse.move(b.x + 80, b.y + 120)
+  await page.mouse.down()
+  await page.mouse.move(b.x + 80 + 120, b.y + 122, { steps: 6 })
+  await expect.poll(async () => (await card()).count).toBe(5)
+  const mid = await card()
+  expect(mid.opacity).toBeGreaterThan(0.5)
+  expect(mid.opacity).toBeLessThan(0.8)
+  // The photo is 400px wide at scale 1: the card started at x = -400 and has been dragged 120px.
+  expect(Math.abs(mid.x - (-400 + 120))).toBeLessThan(40)
+
+  // Let go short of halfway, and slowly (no flick): it snaps back, no navigation.
+  await page.waitForTimeout(300)
+  await page.mouse.up()
+  await expect.poll(layerCount).toBe(4)
+  await expect(page.getByText('Replies to this layer (0)')).toBeVisible() // still on the reply
+
+  // Drag the same way ~70% and let go slowly: it completes.
+  await page.mouse.move(b.x + 40, b.y + 120)
+  await page.mouse.down()
+  await page.mouse.move(b.x + 40 + 280, b.y + 122, { steps: 8 })
+  await page.waitForTimeout(300)
+  await page.mouse.up()
+  await expect(page.getByText('Replies to this layer (1)')).toBeVisible() // arrived at the root
+  await expect.poll(layerCount).toBe(4) // the sliding card is gone
+})

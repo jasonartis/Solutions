@@ -255,6 +255,33 @@ export default async function ConversationPage(props: {
     swipeCounts,
   }
 
+  // What each swipe direction leads to, composed along that layer's path, so
+  // the canvas can slide the incoming layer in under the finger. (The whole
+  // conversation is already loaded above; this only re-shapes it. Fine for
+  // conversation-sized trees — a very large one would want this fetched lazily.)
+  const contentOf = (layer: LayerRow) => {
+    const lineage: LayerRow[] = []
+    for (let l: LayerRow | undefined = layer; l; l = l.parent_layer_id ? byId.get(l.parent_layer_id) : undefined) {
+      lineage.unshift(l)
+    }
+    return {
+      strokes: lineage.flatMap((l) => l.content.strokes ?? []),
+      stamps: lineage.flatMap((l) => l.content.stamps ?? []),
+      texts: lineage.flatMap((l) => l.content.texts ?? []),
+      images: lineage.flatMap((l) => resolveImages(l.content.images ?? [])),
+    }
+  }
+  const neighbourOf = (id: string | null) => {
+    const layer = id ? byId.get(id) : undefined
+    return layer ? contentOf(layer) : null
+  }
+  const neighbours = {
+    left: neighbourOf(nav.firstChildId),
+    right: neighbourOf(nav.parentId),
+    up: neighbourOf(nav.nextSiblingId),
+    down: neighbourOf(nav.prevSiblingId),
+  }
+
   const sendReply = replyWithDrawing.bind(null, orgSlug, conversationId, current.id)
   const pathOf = (id: string) => byId.get(id)?.path ?? '?'
 
@@ -367,6 +394,7 @@ export default async function ConversationPage(props: {
           currentImages={resolveImages(current.content.images ?? [])}
           drawable={!locked && !current.tombstoned && canPost}
           nav={nav}
+          neighbours={neighbours}
           onSend={sendReply}
           onUploadImage={uploadImageStamp.bind(null, orgSlug, conversationId)}
           imageStampMaxFraction={imageStampMaxFraction}
