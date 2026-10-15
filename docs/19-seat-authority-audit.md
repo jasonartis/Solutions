@@ -1300,7 +1300,7 @@ from a pgdelta preview step, not the apply. Confirmed by re-running `--dry-run`
 ("Remote database is up to date") and by both verifiers above. Do not read that
 trace as a failed migration, and do not re-run the push on account of it.
 
-## 2026-10-15 — VISUAL MESSAGING joins the module-role half (`20261015010000`)
+## 2026-10-15 — VISUAL MESSAGING joins the module-role half (`20261015010000`) — ON PRODUCTION AND PROD-VERIFIED (28/0)
 
 Founder decision 1 above ("full symmetry, no per-module exceptions") had been applied to
 matchmaking, nail salon and classroom by `20260915010000`; **visual messaging was never

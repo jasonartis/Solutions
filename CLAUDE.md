@@ -28,13 +28,14 @@ CSS. Founder: look at the salon, speed-dating and classroom screens, which may h
 by luck.** Also: every vm action returns `{ok, reason}` (inline errors, draft kept), emoji carry
 an `angle`, `next.config.ts` has `serverActions.bodySizeLimit: '4mb'`. Open: "X-ray does not fade
 pen marks on a SAVED reply" was not reproduced.
-**2026-10-15 (Opus): `20261015010000` BUILT — vm seats now need the module ROLE (docs/19 decision
-1 reaches vm), and nobody, managers included, can credit a reaction/layer/conversation/flag or a
-review/removal stamp to someone else. Also closes deletion landmine (2). db 363/363, local
-verifier 28/0; prod pre-apply 4/20 (controls green), 0 of 6 active prod seats lose access.
-PROD APPLY AWAITS THE FOUNDER** → then `scripts/prod-verify-vm-module-role.mts`,
-`prod-verify-migration.ts`, `verify-acl-hardening.ts` (its new exception entry reads "dead"
-until the apply). Spec: module-4 "2026-10-15".
+**2026-10-15 (Opus): `20261015010000` SHIPPED, ON PRODUCTION AND PROD-VERIFIED — vm seats now
+need the module ROLE (docs/19 decision 1 reaches vm), and nobody, managers included, can credit
+a reaction/layer/conversation/flag or a review/removal stamp to someone else. Also closes
+deletion landmine (2).** Backup `backups/2026-10-15T19-57-55`; `prod-verify-vm-module-role.mts`
+4/20 → **28/0** (0 of 6 active seats lost access); `prod-verify-migration.ts` 0 failures (6
+warnings, all the benign no-api-role-EXECUTE class: internal helpers + trigger fns);
+`verify-acl-hardening.ts` **17/17 on prod**; viewer-reactions 22/0; policy-split 15/0; CI green;
+vm e2e 17/17 (UI session). Spec: module-4 "2026-10-15".
 
 **2026-10-13: THE RE-SIGNUP "WAS THIS PERSON REMOVED?" GAP IS MEASURED AND CLOSED ON SCREEN
 (app only, no migration) — [docs/21 §7.12.1 RESULT](docs/21-account-deletion-and-departed-users.md).**

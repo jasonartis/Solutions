@@ -1056,7 +1056,13 @@ Founder findings and what changed (commit after `5d3aa64`):
   pointing there (replies: right edge →; back up: left edge ←; next sibling: bottom ↓; previous: top ↑).
   aria-labels and the swipe-direction hint text are unchanged (they describe the finger's direction).
 
-### 2026-10-15 — seats need the module role; no credit forgery (`20261015010000`, Opus)
+### 2026-10-15 — seats need the module role; no credit forgery (`20261015010000`, Opus) — ON PRODUCTION AND PROD-VERIFIED
+
+**Applied the same day at the founder's go-ahead** (backup `backups/2026-10-15T19-57-55`, CI
+green on `20481ac`, vm e2e 17/17 run by the UI session). Prod: `prod-verify-vm-module-role.mts`
+4/20 → **28/0**, nobody lost access; `prod-verify-migration.ts` 0 failures (6 benign
+no-api-role warnings); `verify-acl-hardening.ts` 17/17; `prod-verify-vm-viewer-reactions.mts`
+22/0; `prod-verify-vm-policy-split.mts` 15/0; dry run "up to date".
 
 Closes items 1 and 2 of the 2026-10-14 "Found, NOT changed" list (founder: "go ahead with
 both"). Item 3 (a banned person can delete their own past reactions) is deliberately left.

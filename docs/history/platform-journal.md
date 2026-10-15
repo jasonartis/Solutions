@@ -5,7 +5,8 @@ section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every 
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
 - **2026-10-15 (Opus) — VISUAL MESSAGING: SEATS NEED THE MODULE ROLE; NO CREDIT FORGERY
-  (`20261015010000`).** The two open findings from the day before, founder said "go ahead with
+  (`20261015010000`) — ON PRODUCTION AND PROD-VERIFIED** (backup `backups/2026-10-15T19-57-55`;
+  verifier 4/20 → 28/0; ACL 17/17 on prod; viewer-reactions 22/0; policy-split 15/0). The two open findings from the day before, founder said "go ahead with
   both". (A) docs/19 decision 1 (full symmetry) had never reached vm: role conjunct ADDED beside
   `is_org_member` in five predicates, two creator arms and the floor (a swap would have widened
   a superadmin's reach); one shared definition `vm_user_is_module_member`. (B) managers could
