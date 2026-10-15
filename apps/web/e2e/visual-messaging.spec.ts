@@ -158,7 +158,7 @@ test('visual messaging: a refused form action shows inline and keeps what was ty
   await startConversation(page, 'Invite refusal ' + Date.now())
   await page.getByPlaceholder('member@email').fill('nobody-here@demo.local')
   await page.getByRole('button', { name: 'Invite member' }).click()
-  await expect(page.locator('p[role="alert"]')).toContainText('No user found with email nobody-here@demo.local')
+  await expect(page.locator('p[role="alert"]')).toContainText('nobody-here@demo.local is not a member of this organization yet')
   await expect(page.getByPlaceholder('member@email')).toHaveValue('nobody-here@demo.local')
 })
 
@@ -570,4 +570,24 @@ test('visual messaging: inviting confirms, and the button stays done until the e
   await page.getByPlaceholder('member@email').fill('dana@demo.local')
   await expect(page.getByRole('button', { name: 'Invite member' })).toBeEnabled()
   await expect(page.locator('p[role="status"]')).toHaveCount(0)
+})
+
+test('visual messaging: the edge markers update at once on a swipe, not after the server round-trip', async ({ page }) => {
+  test.slow()
+  const box = await openDrawing(page, 'Fast markers ' + Date.now())
+  await inkStroke(page, box, [60, 60], [220, 140])
+  await page.getByRole('button', { name: 'Send reply' }).click()
+  await expect(page.getByText('1.1', { exact: true })).toBeVisible()
+
+  // Make every page-data request take 3s, so anything that waits for the server is slow.
+  await page.route(/_rsc=/, async (route) => {
+    await new Promise((r) => setTimeout(r, 3000))
+    await route.continue()
+  })
+  await page.getByRole('button', { name: /swipe right: 1 back up/ }).click()
+  // The new layer's markers (a reply to dive into) are there well inside the 3s.
+  await expect(page.getByRole('button', { name: /swipe left: 1 deeper/ })).toBeVisible({ timeout: 1500 })
+  await expect(page.getByRole('button', { name: /swipe right/ })).toHaveCount(0) // root: nowhere further back
+  await page.unroute(/_rsc=/)
+  await expect(page.getByText('Replies to this layer (1)')).toBeVisible({ timeout: 15_000 })
 })

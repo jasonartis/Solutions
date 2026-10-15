@@ -6,6 +6,7 @@ import { requireOrgModule } from '@/lib/module-gate'
 import { resolveVisualMessagingSettings, type VisualMessagingSettings } from '@/lib/visual-messaging-settings'
 import LayerCanvas, { type Stroke, type Stamp, type TextStamp, type ImageStamp } from '../../layer-canvas'
 import LayerGrid from '../../layer-grid'
+import { navFor } from '../../layer-nav'
 import { ActionForm } from '../../action-form'
 import {
   acceptConversationInvite,
@@ -215,45 +216,11 @@ export default async function ConversationPage(props: {
   const fmt = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
   const locked = conversation.frozen || chain.some((l) => l.frozen)
 
-  // Swipe-navigation targets (spec: left = descend, right = up, up/down =
-  // cycle siblings). rows are path-ordered, so sibling order is stable.
-  const siblings = current.parent_layer_id
-    ? rows.filter((l) => l.parent_layer_id === current.parent_layer_id)
-    : [current]
-  const sibIndex = siblings.findIndex((l) => l.id === current.id)
-
-  // Per-direction swipe counts (founder feedback, 2026-07-11: "know which
-  // direction is available to swipe and how many are available"). Each is
-  // "how many times can I swipe THIS direction in a row from here" — right
-  // always ends at the root (one ancestor per hop, so just the chain
-  // length); left follows the first-child chain down as far as it goes;
-  // up/down are just how many siblings sit on either side of current.
-  const firstChildDepth = (startId: string): number => {
-    let depth = 0
-    let cursorId: string | null = startId
-    while (cursorId) {
-      const kids = rows.filter((l) => l.parent_layer_id === cursorId)
-      if (kids.length === 0) break
-      depth++
-      cursorId = kids[0]!.id
-    }
-    return depth
-  }
-  const swipeCounts = {
-    left: firstChildDepth(current.id),
-    right: chain.length - 1,
-    up: siblings.length - 1 - sibIndex,
-    down: sibIndex,
-  }
-
-  const nav = {
-    parentId: current.parent_layer_id,
-    firstChildId: children[0]?.id ?? null,
-    prevSiblingId: sibIndex > 0 ? siblings[sibIndex - 1]!.id : null,
-    nextSiblingId: sibIndex >= 0 && sibIndex < siblings.length - 1 ? siblings[sibIndex + 1]!.id : null,
-    siblings: siblings.map((l) => ({ id: l.id, current: l.id === current.id })),
-    swipeCounts,
-  }
+  // Swipe-navigation targets + the edge-marker counts (layer-nav.ts is shared
+  // with the canvas, which recomputes them client-side the instant a swipe
+  // completes). rows are path-ordered, so sibling order is stable.
+  const tree = rows.map((l) => ({ id: l.id, parentId: l.parent_layer_id }))
+  const nav = navFor(tree, current.id)
 
   // What each swipe direction leads to, composed along that layer's path, so
   // the canvas can slide the incoming layer in under the finger. (The whole
@@ -390,6 +357,7 @@ export default async function ConversationPage(props: {
           currentImages={resolveImages(current.content.images ?? [])}
           drawable={!locked && !current.tombstoned && canPost}
           nav={nav}
+          tree={tree}
           neighbours={neighbours}
           onSend={sendReply}
           onUploadImage={uploadImageStamp.bind(null, orgSlug, conversationId)}

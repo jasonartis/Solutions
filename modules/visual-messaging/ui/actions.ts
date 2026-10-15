@@ -302,8 +302,11 @@ export async function addMember(orgSlug: string, conversationId: string, formDat
     target_email: email,
   })
   if (!peerId) {
+    // Wording (founder 2026-10-15): the old text told a conversation creator to "add them as
+    // an org member first" — which only an org admin can do. See the module-4 spec for the
+    // open design question (inviting people who are not in the org / on the platform yet).
     return refuse(
-      `No user found with email ${email} in this organization — add them as an org member first (and they must have accepted the invite)`,
+      `${email} is not a member of this organization yet, so they cannot be invited here. An organization admin has to add them to the organization first.`,
     )
   }
 

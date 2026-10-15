@@ -24,6 +24,9 @@ import { Stage, Layer, Group, Line, Text as KonvaText, Image as KonvaImage, Tran
 import { getStroke } from 'perfect-freehand'
 import { runAction } from './action-form'
 import { prepareImage } from './image-shrink'
+import { navFor, type LayerNav, type TreeNode } from './layer-nav'
+
+export type { LayerNav }
 
 export type Stroke = { points: number[][]; color: string; size: number }
 // x/y are the placed CENTER point in image pixel space (matches Stroke's
@@ -73,17 +76,6 @@ export type LayerContent = {
   images: ResolvedImageStamp[]
 }
 type SwipeDir = 'left' | 'right' | 'up' | 'down'
-
-export type LayerNav = {
-  parentId: string | null
-  firstChildId: string | null
-  prevSiblingId: string | null
-  nextSiblingId: string | null
-  /** this layer + its siblings, in path order (for the dots) */
-  siblings: { id: string; current: boolean }[]
-  /** how many consecutive swipes each direction keeps working from here */
-  swipeCounts: { left: number; right: number; up: number; down: number }
-}
 
 const COLORS = ['#e11d48', '#2563eb', '#16a34a', '#f59e0b', '#111111', '#ffffff']
 const EMOJIS = ['😀', '😍', '😂', '😢', '😡', '👍', '👎', '❤️', '🔥', '🎉', '⭐', '✅', '❌', '🤔']
@@ -136,6 +128,8 @@ export default function LayerCanvas(props: {
   currentImages: ResolvedImageStamp[]
   drawable: boolean
   nav: LayerNav
+  /** every layer (id + parent, path order) — lets the markers update at once on a swipe */
+  tree: TreeNode[]
   /** what a layer ADDED (its own ink only, not the picture or its ancestors'),
    *  for the layer each of these swipes leads to. Right (back up) needs none: it
    *  slides the CURRENT layer's own ink away. */
@@ -189,6 +183,15 @@ export default function LayerCanvas(props: {
     swipeRef.current = s
     setSwipe(s)
   }
+  // The layer we are navigating TO, from the moment a swipe/click commits until
+  // the server's page for it arrives. The edge markers, dots and next swipe
+  // targets follow it immediately (computed from the tree), so they no longer
+  // lag a server round-trip behind the picture.
+  const [pendingLayerId, setPendingLayerId] = useState<string | null>(null)
+  const nav = useMemo(
+    () => (pendingLayerId ? navFor(props.tree, pendingLayerId) : props.nav),
+    [pendingLayerId, props.tree, props.nav],
+  )
   const nextDraftId = useRef(0)
   const genId = () => `d${nextDraftId.current++}`
   const shapeRefs = useRef<Record<string, any>>({})
@@ -272,6 +275,7 @@ export default function LayerCanvas(props: {
     prevLayerId.current = props.currentLayerId
     // The navigation landed: the real layer replaces the sliding card.
     showSwipe(null)
+    setPendingLayerId(null)
     const dir = lastSwipeDir.current
     lastSwipeDir.current = null
     if (!dir) return
@@ -476,6 +480,9 @@ export default function LayerCanvas(props: {
   const goTo = (layerId: string | null, dir?: 'left' | 'right' | 'up' | 'down') => {
     if (!layerId) return // no target — don't touch lastSwipeDir, a no-op swipe shouldn't taint the next real one
     if (dir) lastSwipeDir.current = dir
+    setPendingLayerId(layerId)
+    // If the navigation never lands, fall back to what the server last said.
+    setTimeout(() => setPendingLayerId((p) => (p === layerId ? null : p)), 4000)
     // scroll:false — a swipe changes the layer, not the page; without it the
     // browser jumped back to the top whenever you were scrolled down a little.
     router.push(`${pathname}?layer=${layerId}`, { scroll: false })
@@ -558,12 +565,12 @@ export default function LayerCanvas(props: {
   }
   const targetFor = (dir: SwipeDir): string | null =>
     dir === 'left'
-      ? props.nav.firstChildId
+      ? nav.firstChildId
       : dir === 'right'
-        ? props.nav.parentId
+        ? nav.parentId
         : dir === 'up'
-          ? props.nav.nextSiblingId
-          : props.nav.prevSiblingId
+          ? nav.nextSiblingId
+          : nav.prevSiblingId
   const extentOf = (dir: SwipeDir) => (dir === 'left' || dir === 'right' ? displayW : displayH)
 
   // Move the sliding card to `to` (screen px along the swipe axis), then call done.
@@ -739,46 +746,46 @@ export default function LayerCanvas(props: {
             navigates directly, same target as the matching swipe/dot. */}
         {mode === 'view' && (
           <>
-            {props.nav.swipeCounts.left > 0 && (
+            {nav.swipeCounts.left > 0 && (
               <button
                 type="button"
-                onClick={() => goTo(props.nav.firstChildId, 'left')}
-                aria-label={`swipe left: ${props.nav.swipeCounts.left} deeper`}
+                onClick={() => goTo(nav.firstChildId, 'left')}
+                aria-label={`swipe left: ${nav.swipeCounts.left} deeper`}
                 // Replies are pulled in from the RIGHT, so the marker sits on the
                 // right edge pointing right: "N layers waiting that way".
                 className="absolute right-1 top-1/2 z-10 flex -translate-y-1/2 items-center gap-1 rounded-full bg-black/40 px-2 py-1 text-sm text-white hover:bg-black/60"
               >
-                <span className="rounded-full bg-white/90 px-1.5 text-[10px] font-semibold text-gray-800">{props.nav.swipeCounts.left}</span> →
+                <span className="rounded-full bg-white/90 px-1.5 text-[10px] font-semibold text-gray-800">{nav.swipeCounts.left}</span> →
               </button>
             )}
-            {props.nav.swipeCounts.right > 0 && (
+            {nav.swipeCounts.right > 0 && (
               <button
                 type="button"
-                onClick={() => goTo(props.nav.parentId, 'right')}
-                aria-label={`swipe right: ${props.nav.swipeCounts.right} back up`}
+                onClick={() => goTo(nav.parentId, 'right')}
+                aria-label={`swipe right: ${nav.swipeCounts.right} back up`}
                 className="absolute left-1 top-1/2 z-10 flex -translate-y-1/2 items-center gap-1 rounded-full bg-black/40 px-2 py-1 text-sm text-white hover:bg-black/60"
               >
-                ← <span className="rounded-full bg-white/90 px-1.5 text-[10px] font-semibold text-gray-800">{props.nav.swipeCounts.right}</span>
+                ← <span className="rounded-full bg-white/90 px-1.5 text-[10px] font-semibold text-gray-800">{nav.swipeCounts.right}</span>
               </button>
             )}
-            {props.nav.swipeCounts.up > 0 && (
+            {nav.swipeCounts.up > 0 && (
               <button
                 type="button"
-                onClick={() => goTo(props.nav.nextSiblingId, 'up')}
-                aria-label={`swipe up: ${props.nav.swipeCounts.up} siblings`}
+                onClick={() => goTo(nav.nextSiblingId, 'up')}
+                aria-label={`swipe up: ${nav.swipeCounts.up} siblings`}
                 className="absolute bottom-1 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1 rounded-full bg-black/40 px-2 py-1 text-sm text-white hover:bg-black/60"
               >
-                ↓ <span className="rounded-full bg-white/90 px-1.5 text-[10px] font-semibold text-gray-800">{props.nav.swipeCounts.up}</span>
+                ↓ <span className="rounded-full bg-white/90 px-1.5 text-[10px] font-semibold text-gray-800">{nav.swipeCounts.up}</span>
               </button>
             )}
-            {props.nav.swipeCounts.down > 0 && (
+            {nav.swipeCounts.down > 0 && (
               <button
                 type="button"
-                onClick={() => goTo(props.nav.prevSiblingId, 'down')}
-                aria-label={`swipe down: ${props.nav.swipeCounts.down} siblings`}
+                onClick={() => goTo(nav.prevSiblingId, 'down')}
+                aria-label={`swipe down: ${nav.swipeCounts.down} siblings`}
                 className="absolute left-1/2 top-1 z-10 flex -translate-x-1/2 items-center gap-1 rounded-full bg-black/40 px-2 py-1 text-sm text-white hover:bg-black/60"
               >
-                <span className="rounded-full bg-white/90 px-1.5 text-[10px] font-semibold text-gray-800">{props.nav.swipeCounts.down}</span> ↑
+                <span className="rounded-full bg-white/90 px-1.5 text-[10px] font-semibold text-gray-800">{nav.swipeCounts.down}</span> ↑
               </button>
             )}
           </>
@@ -1071,9 +1078,9 @@ export default function LayerCanvas(props: {
       </div>
 
       {/* Sibling dots: this layer among its siblings (carousel position). */}
-      {props.nav.siblings.length > 1 && (
+      {nav.siblings.length > 1 && (
         <div className="mt-1 flex items-center gap-1" aria-label="sibling layers">
-          {props.nav.siblings.map((s) => (
+          {nav.siblings.map((s) => (
             <button
               key={s.id}
               type="button"
