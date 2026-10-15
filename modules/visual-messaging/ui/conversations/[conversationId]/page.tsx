@@ -6,6 +6,7 @@ import { requireOrgModule } from '@/lib/module-gate'
 import { resolveVisualMessagingSettings, type VisualMessagingSettings } from '@/lib/visual-messaging-settings'
 import LayerCanvas, { type Stroke, type Stamp, type TextStamp, type ImageStamp } from '../../layer-canvas'
 import LayerGrid from '../../layer-grid'
+import { ActionForm } from '../../action-form'
 import {
   acceptConversationInvite,
   addMember,
@@ -87,19 +88,19 @@ export default async function ConversationPage(props: {
             accept.
           </p>
           <div className="flex justify-center gap-2">
-            <form action={acceptConversationInvite.bind(null, orgSlug, conversationId)}>
+            <ActionForm action={acceptConversationInvite.bind(null, orgSlug, conversationId)}>
               <button className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
                 Accept
               </button>
-            </form>
-            <form action={declineConversationInvite.bind(null, orgSlug, conversationId)}>
+            </ActionForm>
+            <ActionForm action={declineConversationInvite.bind(null, orgSlug, conversationId)}>
               <button className="rounded border border-gray-300 px-4 py-2 text-sm hover:bg-gray-50">Decline</button>
-            </form>
-            <form action={declineAndBlockConversationInvite.bind(null, orgSlug, conversationId)}>
+            </ActionForm>
+            <ActionForm action={declineAndBlockConversationInvite.bind(null, orgSlug, conversationId)}>
               <button className="rounded border border-red-200 px-4 py-2 text-sm text-red-700 hover:bg-red-50">
                 Decline and block
               </button>
-            </form>
+            </ActionForm>
           </div>
         </div>
       )
@@ -112,11 +113,11 @@ export default async function ConversationPage(props: {
           You reached a shared link to a conversation you haven&apos;t joined. If its owner has
           opened it up, you can join as a read-only viewer.
         </p>
-        <form action={joinConversation.bind(null, orgSlug, conversationId)}>
+        <ActionForm action={joinConversation.bind(null, orgSlug, conversationId)}>
           <button className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
             Join conversation
           </button>
-        </form>
+        </ActionForm>
         <Link
           href={`/o/${orgSlug}/m/visual-messaging`}
           className="mt-4 inline-block text-sm text-blue-600 hover:underline"
@@ -351,22 +352,22 @@ export default async function ConversationPage(props: {
       )}
 
       <div className="mt-3 flex items-center gap-3 text-sm">
-        <form action={toggleReaction.bind(null, orgSlug, conversationId, current.id, 'heart')}>
+        <ActionForm action={toggleReaction.bind(null, orgSlug, conversationId, current.id, 'heart')}>
           <button className="rounded border border-gray-200 px-2 py-0.5 hover:bg-gray-50">
             ❤️ {reactionCount(current.id, 'heart')}
           </button>
-        </form>
-        <form action={toggleReaction.bind(null, orgSlug, conversationId, current.id, 'laugh')}>
+        </ActionForm>
+        <ActionForm action={toggleReaction.bind(null, orgSlug, conversationId, current.id, 'laugh')}>
           <button className="rounded border border-gray-200 px-2 py-0.5 hover:bg-gray-50">
             😂 {reactionCount(current.id, 'laugh')}
           </button>
-        </form>
+        </ActionForm>
       </div>
 
       {me && (
         <details className="mt-2 text-sm">
           <summary className="cursor-pointer text-gray-400 hover:text-gray-600">Flag this layer</summary>
-          <form
+          <ActionForm
             action={flagLayer.bind(null, orgSlug, conversationId, current.id)}
             className="mt-2 flex flex-col gap-2 rounded border border-gray-200 p-3 sm:flex-row sm:items-center"
           >
@@ -385,7 +386,7 @@ export default async function ConversationPage(props: {
             <button className="rounded border border-gray-300 px-3 py-1 text-sm text-gray-700 hover:bg-gray-50">
               Flag
             </button>
-          </form>
+          </ActionForm>
         </details>
       )}
 
@@ -416,13 +417,13 @@ export default async function ConversationPage(props: {
           </h2>
           <div className="mb-4 flex flex-wrap items-center gap-2 text-sm">
             {current.tombstoned ? (
-              <form action={restoreLayer.bind(null, orgSlug, conversationId, current.id)}>
+              <ActionForm action={restoreLayer.bind(null, orgSlug, conversationId, current.id)}>
                 <button className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50">
                   Restore this layer
                 </button>
-              </form>
+              </ActionForm>
             ) : (
-              <form
+              <ActionForm
                 action={tombstoneLayer.bind(null, orgSlug, conversationId, current.id)}
                 className="flex flex-wrap items-center gap-2"
               >
@@ -434,15 +435,15 @@ export default async function ConversationPage(props: {
                 <button className="rounded border border-red-300 px-2 py-1 text-xs text-red-600 hover:bg-red-50">
                   Remove this layer
                 </button>
-              </form>
+              </ActionForm>
             )}
             {/* Freeze requires the conversation-admin tier (vm_set_branch_frozen). */}
             {canAdmin && (
-              <form action={setBranchFrozen.bind(null, orgSlug, conversationId, current.id, !current.frozen)}>
+              <ActionForm action={setBranchFrozen.bind(null, orgSlug, conversationId, current.id, !current.frozen)}>
                 <button className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50">
                   {current.frozen ? 'Unfreeze this branch' : 'Freeze this branch'}
                 </button>
-              </form>
+              </ActionForm>
             )}
           </div>
 
@@ -474,16 +475,16 @@ export default async function ConversationPage(props: {
                 </div>
                 {f.state === 'open' && (
                   <div className="mt-1 flex gap-2">
-                    <form action={reviewFlag.bind(null, orgSlug, conversationId, f.id, 'actioned')}>
+                    <ActionForm action={reviewFlag.bind(null, orgSlug, conversationId, f.id, 'actioned')}>
                       <button className="rounded border border-gray-300 px-2 py-0.5 text-xs text-gray-700 hover:bg-gray-50">
                         Mark actioned
                       </button>
-                    </form>
-                    <form action={reviewFlag.bind(null, orgSlug, conversationId, f.id, 'dismissed')}>
+                    </ActionForm>
+                    <ActionForm action={reviewFlag.bind(null, orgSlug, conversationId, f.id, 'dismissed')}>
                       <button className="rounded border border-gray-300 px-2 py-0.5 text-xs text-gray-700 hover:bg-gray-50">
                         Dismiss
                       </button>
-                    </form>
+                    </ActionForm>
                   </div>
                 )}
               </li>
@@ -506,14 +507,14 @@ export default async function ConversationPage(props: {
                 <span className="text-gray-500">
                   Link joining: <span className="font-medium">{joinOpen ? 'open' : 'invite-only'}</span>
                 </span>
-                <form action={setJoinPolicy.bind(null, orgSlug, conversationId, !joinOpen)}>
+                <ActionForm action={setJoinPolicy.bind(null, orgSlug, conversationId, !joinOpen)}>
                   <button className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50">
                     {joinOpen ? 'Make invite-only' : 'Open to anyone with the link'}
                   </button>
-                </form>
+                </ActionForm>
               </div>
 
-              <form action={addMember.bind(null, orgSlug, conversationId)} className="flex flex-wrap items-center gap-2">
+              <ActionForm action={addMember.bind(null, orgSlug, conversationId)} className="flex flex-wrap items-center gap-2">
                 <input
                   name="email"
                   type="email"
@@ -524,7 +525,7 @@ export default async function ConversationPage(props: {
                 <button className="rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700">
                   Invite member
                 </button>
-              </form>
+              </ActionForm>
             </>
           )}
         </section>

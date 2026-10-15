@@ -9,10 +9,16 @@ import { recordActivity } from '@platform/core'
 // layer: the creator-insert policy + member bootstrap start a conversation;
 // the reply guard assigns paths atomically server-side (client-supplied
 // path/child_count are ignored); frozen/tombstoned parents reject replies.
-
-function fail(error: { message: string } | null, what: string) {
-  if (error) throw new Error(`${what}: ${error.message}`)
-}
+//
+// docs/03 #22: an expected refusal is a RETURN VALUE, never a throw. In a
+// production build a thrown Server Action message is redacted to a generic one
+// and the error boundary replaces the page — which loses a half-drawn reply.
+// Every action here returns an ActionResult and the client (ActionForm / the
+// canvas) shows `reason` inline, keeping whatever the person was doing.
+export type ActionResult = { ok: true } | { ok: false; reason: string }
+const refuse = (reason: string) => ({ ok: false as const, reason })
+const failure = (error: { message: string } | null, what: string) =>
+  error ? refuse(`${what}: ${error.message}`) : null
 
 // Layer content vocabulary (Zod-light for v1; the canvas produces exactly
 // this shape): a root layer carries the image; replies carry strokes and/or
@@ -43,44 +49,50 @@ const IMAGE_STAMP_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif',
 // the first UI to use them for anything other than the root image. Called
 // programmatically from the canvas (not a <form> submit), so it takes the
 // File directly rather than FormData.
-export async function uploadImageStamp(orgSlug: string, conversationId: string, image: File): Promise<string> {
-  if (!image || image.size === 0) throw new Error('Pick an image first')
-  if (image.size > IMAGE_STAMP_MAX_BYTES) throw new Error('Image is too large (max 8MB)')
-  if (!IMAGE_STAMP_TYPES.includes(image.type)) throw new Error('Unsupported image type')
+export async function uploadImageStamp(
+  orgSlug: string,
+  conversationId: string,
+  image: File,
+): Promise<{ ok: true; path: string } | { ok: false; reason: string }> {
+  if (!image || image.size === 0) return refuse('Pick an image first')
+  if (image.size > IMAGE_STAMP_MAX_BYTES) return refuse('Image is too large (max 8MB)')
+  if (!IMAGE_STAMP_TYPES.includes(image.type)) return refuse('Unsupported image type')
 
   const supabase = await createClient()
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  if (!user) throw new Error('Not signed in')
+  if (!user) return refuse('Not signed in')
   const { data: org } = await supabase.from('orgs').select('id').eq('slug', orgSlug).single()
-  if (!org) throw new Error('Org not found')
+  if (!org) return refuse('Org not found')
 
   const path = `${org.id}/${conversationId}/stamp-${Date.now()}-${image.name}`
   const { error } = await supabase.storage.from('vm-images').upload(path, image)
-  fail(error, 'Image upload failed')
-  return path
+  const failed = failure(error, 'Image upload failed')
+  if (failed) return failed
+  return { ok: true, path }
 }
 
-export async function createConversation(orgSlug: string, formData: FormData) {
+export async function createConversation(orgSlug: string, formData: FormData): Promise<ActionResult> {
   const title = String(formData.get('title') ?? '').trim()
   const image = formData.get('image') as File | null
-  if (!title || !image || image.size === 0) throw new Error('Title and a starting picture are required')
+  if (!title || !image || image.size === 0) return refuse('Title and a starting picture are required')
 
   const supabase = await createClient()
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  if (!user) throw new Error('Not signed in')
+  if (!user) return refuse('Not signed in')
   const { data: org } = await supabase.from('orgs').select('id').eq('slug', orgSlug).single()
-  if (!org) throw new Error('Org not found')
+  if (!org) return refuse('Org not found')
 
   const { data: conv, error: convErr } = await supabase
     .from('vm_conversations')
     .insert({ org_id: org.id, title, created_by: user.id })
     .select('id')
     .single()
-  fail(convErr, 'Create conversation failed')
+  const convFailed = failure(convErr, 'Create conversation failed')
+  if (convFailed) return convFailed
 
   // Creator bootstraps their own admin seat (the one self-insert the policy allows).
   const { error: memberErr } = await supabase.from('vm_conversation_members').insert({
@@ -89,11 +101,13 @@ export async function createConversation(orgSlug: string, formData: FormData) {
     user_id: user.id,
     role: 'admin',
   })
-  fail(memberErr, 'Join own conversation failed')
+  const memberFailed = failure(memberErr, 'Join own conversation failed')
+  if (memberFailed) return memberFailed
 
   const path = `${org.id}/${conv!.id}/root-${Date.now()}-${image.name}`
   const { error: upErr } = await supabase.storage.from('vm-images').upload(path, image)
-  fail(upErr, 'Image upload failed')
+  const upFailed = failure(upErr, 'Image upload failed')
+  if (upFailed) return upFailed
 
   // The root IS a layer (path '1', assigned server-side).
   const { error: rootErr } = await supabase.from('vm_layers').insert({
@@ -103,7 +117,8 @@ export async function createConversation(orgSlug: string, formData: FormData) {
     path: 'server-assigned',
     content: { image: { path } },
   })
-  fail(rootErr, 'Create root layer failed')
+  const rootFailed = failure(rootErr, 'Create root layer failed')
+  if (rootFailed) return rootFailed
 
   await recordActivity(supabase, {
     moduleKey: 'visual-messaging',
@@ -111,6 +126,7 @@ export async function createConversation(orgSlug: string, formData: FormData) {
     orgSlug,
   })
   revalidatePath(`/o/${orgSlug}/m/visual-messaging`)
+  return { ok: true }
 }
 
 // Deep-link join (spec: a read-only viewer is what a deep-link visitor gets
@@ -121,23 +137,23 @@ export async function createConversation(orgSlug: string, formData: FormData) {
 // — the app never trusts a client claim. Invite-only conversations refuse,
 // which is exactly the per-conversation "deep links work for non-members?"
 // setting the spec calls for.
-export async function joinConversation(orgSlug: string, conversationId: string) {
+export async function joinConversation(orgSlug: string, conversationId: string): Promise<ActionResult> {
   const supabase = await createClient()
   const { error } = await supabase.rpc('vm_join_conversation', { check_conversation_id: conversationId })
-  fail(error, 'Join failed')
+  const failed = failure(error, 'Join failed')
+  if (failed) return failed
   redirect(`/o/${orgSlug}/m/visual-messaging/conversations/${conversationId}`)
 }
 
 // Accept-first seats (20261007030000): being added to a conversation creates a
 // PENDING seat that confers nothing until the invitee says yes. Accept goes
 // through a definer because a pending invitee cannot see the conversation, so
-// the scope trigger would refuse a direct UPDATE of their own seat. Returns
-// Throws on failure like the other form actions here (they are plain <form>
-// actions, not awaited by client code, so docs/03 #22 does not apply).
-export async function acceptConversationInvite(orgSlug: string, conversationId: string) {
+// the scope trigger would refuse a direct UPDATE of their own seat.
+export async function acceptConversationInvite(orgSlug: string, conversationId: string): Promise<ActionResult> {
   const supabase = await createClient()
   const { error } = await supabase.rpc('vm_accept_conversation_invite', { check_conversation_id: conversationId })
-  fail(error, 'Accept invitation failed')
+  const failed = failure(error, 'Accept invitation failed')
+  if (failed) return failed
   revalidatePath(`/o/${orgSlug}/m/visual-messaging`)
   redirect(`/o/${orgSlug}/m/visual-messaging/conversations/${conversationId}`)
 }
@@ -145,19 +161,20 @@ export async function acceptConversationInvite(orgSlug: string, conversationId: 
 // Decline = delete your own pending seat (vm_members_delete_self). Deleting
 // rather than marking it declined matches LEAVE, so a later re-invite works.
 // Scoped to status 'pending' so this can never be used to leave by accident.
-export async function declineConversationInvite(orgSlug: string, conversationId: string) {
+export async function declineConversationInvite(orgSlug: string, conversationId: string): Promise<ActionResult> {
   const supabase = await createClient()
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  if (!user) throw new Error('Not signed in')
+  if (!user) return refuse('Not signed in')
   const { error } = await supabase
     .from('vm_conversation_members')
     .delete()
     .eq('conversation_id', conversationId)
     .eq('user_id', user.id)
     .eq('status', 'pending')
-  fail(error, 'Decline invitation failed')
+  const failed = failure(error, 'Decline invitation failed')
+  if (failed) return failed
   revalidatePath(`/o/${orgSlug}/m/visual-messaging`)
   redirect(`/o/${orgSlug}/m/visual-messaging`)
 }
@@ -167,10 +184,14 @@ export async function declineConversationInvite(orgSlug: string, conversationId:
 // invite the person again — nobody else can lift, re-invite over, or delete
 // it. Per CONVERSATION, not per inviter. A definer for the same reason as
 // accept: a pending invitee cannot update their own seat directly.
-export async function declineAndBlockConversationInvite(orgSlug: string, conversationId: string) {
+export async function declineAndBlockConversationInvite(
+  orgSlug: string,
+  conversationId: string,
+): Promise<ActionResult> {
   const supabase = await createClient()
   const { error } = await supabase.rpc('vm_decline_and_block_invite', { check_conversation_id: conversationId })
-  fail(error, 'Decline and block failed')
+  const failed = failure(error, 'Decline and block failed')
+  if (failed) return failed
   revalidatePath(`/o/${orgSlug}/m/visual-messaging`)
   redirect(`/o/${orgSlug}/m/visual-messaging`)
 }
@@ -179,12 +200,12 @@ export async function declineAndBlockConversationInvite(orgSlug: string, convers
 // (vm_guard_self_block) lets only the holder do this; the filters make sure
 // it can only ever hit a SELF-block, never a moderation ban. After it, the
 // conversation can invite you again.
-export async function unblockConversation(orgSlug: string, conversationId: string) {
+export async function unblockConversation(orgSlug: string, conversationId: string): Promise<ActionResult> {
   const supabase = await createClient()
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  if (!user) throw new Error('Not signed in')
+  if (!user) return refuse('Not signed in')
   const { error } = await supabase
     .from('vm_conversation_members')
     .delete()
@@ -192,15 +213,17 @@ export async function unblockConversation(orgSlug: string, conversationId: strin
     .eq('user_id', user.id)
     .eq('status', 'banned')
     .eq('self_blocked', true)
-  fail(error, 'Unblock failed')
+  const failed = failure(error, 'Unblock failed')
+  if (failed) return failed
   revalidatePath(`/o/${orgSlug}/m/visual-messaging`)
+  return { ok: true }
 }
 
 // A conversation admin opens or closes deep-link joining. Writes
 // settings.joinPolicy; the vm_conversations_update_admin policy gates who,
 // and vm_pin_conversation leaves settings free to change (it only pins
 // org_id/created_by). Reads the current settings first so other keys survive.
-export async function setJoinPolicy(orgSlug: string, conversationId: string, open: boolean) {
+export async function setJoinPolicy(orgSlug: string, conversationId: string, open: boolean): Promise<ActionResult> {
   const supabase = await createClient()
   const { data: conv } = await supabase
     .from('vm_conversations')
@@ -212,13 +235,15 @@ export async function setJoinPolicy(orgSlug: string, conversationId: string, ope
     joinPolicy: open ? 'open' : 'invite',
   }
   const { error } = await supabase.from('vm_conversations').update({ settings }).eq('id', conversationId)
-  fail(error, 'Update join policy failed')
+  const failed = failure(error, 'Update join policy failed')
+  if (failed) return failed
   revalidatePath(`/o/${orgSlug}/m/visual-messaging/conversations/${conversationId}`)
+  return { ok: true }
 }
 
-export async function addMember(orgSlug: string, conversationId: string, formData: FormData) {
+export async function addMember(orgSlug: string, conversationId: string, formData: FormData): Promise<ActionResult> {
   const email = String(formData.get('email') ?? '').trim().toLowerCase()
-  if (!email) throw new Error('Email is required')
+  if (!email) return refuse('Email is required')
 
   const supabase = await createClient()
 
@@ -232,7 +257,7 @@ export async function addMember(orgSlug: string, conversationId: string, formDat
     .select('org_id')
     .eq('id', conversationId)
     .single()
-  if (!conv) throw new Error('Conversation not found')
+  if (!conv) return refuse('Conversation not found')
 
   // The target must be an ACTIVE member of the conversation's org. A seat row
   // alone grants reads of every layer, reaction, roster row and vm-images
@@ -251,7 +276,7 @@ export async function addMember(orgSlug: string, conversationId: string, formDat
     target_email: email,
   })
   if (!peerId) {
-    throw new Error(
+    return refuse(
       `No user found with email ${email} in this organization — add them as an org member first (and they must have accepted the invite)`,
     )
   }
@@ -284,8 +309,12 @@ export async function addMember(orgSlug: string, conversationId: string, formDat
   // Deliberate silence, not an oversight: the page renders no member roster
   // (it reads only the caller's own seat), so a no-op and a real add look
   // identical to the admin either way.
-  if (error && error.code !== '23505') fail(error, 'Add member failed')
+  if (error && error.code !== '23505') {
+    const failed = failure(error, 'Add member failed')
+    if (failed) return failed
+  }
   revalidatePath(`/o/${orgSlug}/m/visual-messaging/conversations/${conversationId}`)
+  return { ok: true }
 }
 
 // A reply layer: strokes drawn on top of the layer being viewed. The reply
@@ -296,23 +325,28 @@ export async function replyWithDrawing(
   conversationId: string,
   parentLayerId: string,
   payloadJson: string,
-) {
-  const payload = JSON.parse(payloadJson) as {
+): Promise<{ ok: true; layerId: string } | { ok: false; reason: string }> {
+  let payload: {
     strokes: Stroke[]
     stamps: Stamp[]
     texts: TextStamp[]
     images: ImageStamp[]
+  }
+  try {
+    payload = JSON.parse(payloadJson)
+  } catch {
+    return refuse('Malformed drawing')
   }
   const strokes = Array.isArray(payload.strokes) ? payload.strokes : []
   const stamps = Array.isArray(payload.stamps) ? payload.stamps : []
   const texts = Array.isArray(payload.texts) ? payload.texts : []
   const images = Array.isArray(payload.images) ? payload.images : []
   if (strokes.length === 0 && stamps.length === 0 && texts.length === 0 && images.length === 0) {
-    throw new Error('Draw or place something first')
+    return refuse('Draw or place something first')
   }
   for (const s of strokes) {
     if (!Array.isArray(s.points) || s.points.length < 2 || typeof s.color !== 'string' || typeof s.size !== 'number') {
-      throw new Error('Malformed drawing')
+      return refuse('Malformed drawing')
     }
   }
   for (const st of stamps) {
@@ -324,7 +358,7 @@ export async function replyWithDrawing(
       typeof st.y !== 'number' ||
       typeof st.fontSize !== 'number'
     ) {
-      throw new Error('Malformed stamp')
+      return refuse('Malformed stamp')
     }
   }
   for (const t of texts) {
@@ -338,7 +372,7 @@ export async function replyWithDrawing(
       typeof t.fontSize !== 'number' ||
       typeof t.angle !== 'number'
     ) {
-      throw new Error('Malformed text')
+      return refuse('Malformed text')
     }
   }
 
@@ -346,9 +380,9 @@ export async function replyWithDrawing(
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  if (!user) throw new Error('Not signed in')
+  if (!user) return refuse('Not signed in')
   const { data: org } = await supabase.from('orgs').select('id').eq('slug', orgSlug).single()
-  if (!org) throw new Error('Org not found')
+  if (!org) return refuse('Org not found')
 
   // Images must be objects THIS reply actually uploaded into THIS
   // conversation's folder — not an arbitrary storage path the client could
@@ -367,7 +401,7 @@ export async function replyWithDrawing(
       typeof img.rotation !== 'number' ||
       typeof img.opacity !== 'number'
     ) {
-      throw new Error('Malformed image stamp')
+      return refuse('Malformed image stamp')
     }
   }
 
@@ -383,7 +417,8 @@ export async function replyWithDrawing(
     })
     .select('id')
     .single()
-  fail(error, 'Send reply failed')
+  const failed = failure(error, 'Send reply failed')
+  if (failed) return failed
   await recordActivity(supabase, {
     moduleKey: 'visual-messaging',
     action: 'drawing.replied',
@@ -392,34 +427,42 @@ export async function replyWithDrawing(
   revalidatePath(`/o/${orgSlug}/m/visual-messaging/conversations/${conversationId}`)
   // Founder feedback (2026-07-11): after sending, land on the reply just
   // sent — not back on the parent, requiring a swipe to find it.
-  return newLayer!.id as string
+  return { ok: true, layerId: newLayer!.id as string }
 }
 
 // Any member may flag a layer for moderator attention (safety reporting is
 // not a drawing privilege — RLS's vm_flags_insert_own only requires
 // membership, per vm_is_conv_member).
-export async function flagLayer(orgSlug: string, conversationId: string, layerId: string, formData: FormData) {
+export async function flagLayer(
+  orgSlug: string,
+  conversationId: string,
+  layerId: string,
+  formData: FormData,
+): Promise<ActionResult> {
   const reason = String(formData.get('reason') ?? '').trim()
   const detail = String(formData.get('detail') ?? '').trim()
-  if (!reason) throw new Error('A reason is required')
+  if (!reason) return refuse('A reason is required')
 
   const supabase = await createClient()
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  if (!user) throw new Error('Not signed in')
+  if (!user) return refuse('Not signed in')
   const { data: org } = await supabase.from('orgs').select('id').eq('slug', orgSlug).single()
+  if (!org) return refuse('Org not found')
 
   const { error } = await supabase.from('vm_flags').insert({
-    org_id: org!.id,
+    org_id: org.id,
     conversation_id: conversationId,
     layer_id: layerId,
     reporter_user_id: user.id,
     reason,
     detail: detail || null,
   })
-  fail(error, 'Flag failed')
+  const failed = failure(error, 'Flag failed')
+  if (failed) return failed
   revalidatePath(`/o/${orgSlug}/m/visual-messaging/conversations/${conversationId}`)
+  return { ok: true }
 }
 
 // Moderator triage on an open flag. The vm_flags_update_moderate policy pins
@@ -430,59 +473,77 @@ export async function reviewFlag(
   conversationId: string,
   flagId: string,
   state: 'actioned' | 'dismissed',
-) {
+): Promise<ActionResult> {
   const supabase = await createClient()
   const { error } = await supabase.from('vm_flags').update({ state }).eq('id', flagId)
-  fail(error, 'Review flag failed')
+  const failed = failure(error, 'Review flag failed')
+  if (failed) return failed
   await recordActivity(supabase, {
     moduleKey: 'visual-messaging',
     action: 'flag.reviewed',
     orgSlug,
   })
   revalidatePath(`/o/${orgSlug}/m/visual-messaging/conversations/${conversationId}`)
+  return { ok: true }
 }
 
 // Moderator-only RPCs (vm_can_moderate / vm_is_conv_admin re-checked inside
 // each definer function — the app never trusts a client-side "is moderator"
 // flag).
-export async function tombstoneLayer(orgSlug: string, conversationId: string, layerId: string, formData: FormData) {
+export async function tombstoneLayer(
+  orgSlug: string,
+  conversationId: string,
+  layerId: string,
+  formData: FormData,
+): Promise<ActionResult> {
   const reason = String(formData.get('reason') ?? '').trim()
   const supabase = await createClient()
   const { error } = await supabase.rpc('vm_tombstone_layer', {
     check_layer_id: layerId,
     check_reason: reason || null,
   })
-  fail(error, 'Remove layer failed')
+  const failed = failure(error, 'Remove layer failed')
+  if (failed) return failed
   await recordActivity(supabase, {
     moduleKey: 'visual-messaging',
     action: 'layer.tombstoned',
     orgSlug,
   })
   revalidatePath(`/o/${orgSlug}/m/visual-messaging/conversations/${conversationId}`)
+  return { ok: true }
 }
 
-export async function restoreLayer(orgSlug: string, conversationId: string, layerId: string) {
+export async function restoreLayer(orgSlug: string, conversationId: string, layerId: string): Promise<ActionResult> {
   const supabase = await createClient()
   const { error } = await supabase.rpc('vm_restore_layer', { check_layer_id: layerId })
-  fail(error, 'Restore layer failed')
+  const failed = failure(error, 'Restore layer failed')
+  if (failed) return failed
   await recordActivity(supabase, {
     moduleKey: 'visual-messaging',
     action: 'layer.restored',
     orgSlug,
   })
   revalidatePath(`/o/${orgSlug}/m/visual-messaging/conversations/${conversationId}`)
+  return { ok: true }
 }
 
-export async function setBranchFrozen(orgSlug: string, conversationId: string, layerId: string, frozen: boolean) {
+export async function setBranchFrozen(
+  orgSlug: string,
+  conversationId: string,
+  layerId: string,
+  frozen: boolean,
+): Promise<ActionResult> {
   const supabase = await createClient()
   const { error } = await supabase.rpc('vm_set_branch_frozen', { check_layer_id: layerId, check_frozen: frozen })
-  fail(error, 'Freeze branch failed')
+  const failed = failure(error, 'Freeze branch failed')
+  if (failed) return failed
   await recordActivity(supabase, {
     moduleKey: 'visual-messaging',
     action: frozen ? 'branch.frozen' : 'branch.unfrozen',
     orgSlug,
   })
   revalidatePath(`/o/${orgSlug}/m/visual-messaging/conversations/${conversationId}`)
+  return { ok: true }
 }
 
 export async function toggleReaction(
@@ -490,12 +551,12 @@ export async function toggleReaction(
   conversationId: string,
   layerId: string,
   kind: 'heart' | 'laugh',
-) {
+): Promise<ActionResult> {
   const supabase = await createClient()
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  if (!user) throw new Error('Not signed in')
+  if (!user) return refuse('Not signed in')
 
   const { data: existing } = await supabase
     .from('vm_reactions')
@@ -507,17 +568,21 @@ export async function toggleReaction(
 
   if (existing) {
     const { error } = await supabase.from('vm_reactions').delete().eq('id', existing.id)
-    fail(error, 'Remove reaction failed')
+    const failed = failure(error, 'Remove reaction failed')
+    if (failed) return failed
   } else {
     const { data: org } = await supabase.from('orgs').select('id').eq('slug', orgSlug).single()
+    if (!org) return refuse('Org not found')
     const { error } = await supabase.from('vm_reactions').insert({
-      org_id: org!.id,
+      org_id: org.id,
       conversation_id: conversationId,
       layer_id: layerId,
       user_id: user.id,
       kind,
     })
-    fail(error, 'React failed')
+    const failed = failure(error, 'React failed')
+    if (failed) return failed
   }
   revalidatePath(`/o/${orgSlug}/m/visual-messaging/conversations/${conversationId}`)
+  return { ok: true }
 }

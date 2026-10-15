@@ -16,6 +16,7 @@ import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { Stage, Layer, Line, Text as KonvaText, Image as KonvaImage, Transformer } from 'react-konva'
 import { getStroke } from 'perfect-freehand'
+import { runAction } from './action-form'
 
 export type Stroke = { points: number[][]; color: string; size: number }
 // x/y are the placed CENTER point in image pixel space (matches Stroke's
@@ -104,8 +105,10 @@ export default function LayerCanvas(props: {
   currentImages: ResolvedImageStamp[]
   drawable: boolean
   nav: LayerNav
-  onSend?: (payloadJson: string) => Promise<string>
-  onUploadImage?: (file: File) => Promise<string>
+  // Both return {ok, ...} rather than throwing (docs/03 #22) — a refusal shows
+  // inline and the draft stays on the canvas.
+  onSend?: (payloadJson: string) => Promise<{ ok: true; layerId: string } | { ok: false; reason: string }>
+  onUploadImage?: (file: File) => Promise<{ ok: true; path: string } | { ok: false; reason: string }>
   // Spec's image-stamp guards: "default max stamp size relative to canvas
   // (admin/org-tunable)" and "default slight transparency" — resolved by the
   // page from org_modules.settings (resolveVisualMessagingSettings), which
@@ -120,6 +123,10 @@ export default function LayerCanvas(props: {
   const [tool, setTool] = useState<'pen' | 'emoji' | 'text' | 'image'>('pen')
   const [drawing, setDrawing] = useState(false)
   const [draft, setDraft] = useState<Stroke[]>([])
+  // The stroke being drawn RIGHT NOW, kept apart from the finished ones so a
+  // half-drawn line is never mistaken for (or sent as) a finished stroke.
+  const [liveStroke, setLiveStroke] = useState<Stroke | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
   const [stampDraft, setStampDraft] = useState<DraftStamp[]>([])
   const [textDraft, setTextDraft] = useState<DraftTextStamp[]>([])
   const [imageDraft, setImageDraft] = useState<DraftImageStamp[]>([])
@@ -275,8 +282,14 @@ export default function LayerCanvas(props: {
   const handleImageFile = async (file: File | null) => {
     if (!file || !props.onUploadImage) return
     setUploadingImage(true)
+    setActionError(null)
     try {
-      const path = await props.onUploadImage(file)
+      const uploaded = await runAction(() => props.onUploadImage!(file))
+      if (!uploaded.ok) {
+        setActionError((uploaded as { reason: string }).reason)
+        return
+      }
+      const path = (uploaded as { ok: true; path: string }).path
       const url = URL.createObjectURL(file)
       const naturalSize = await new Promise<{ w: number; h: number }>((resolve) => {
         const el = new window.Image()
@@ -333,6 +346,13 @@ export default function LayerCanvas(props: {
     return [pos.x / scale, pos.y / scale]
   }
 
+  const isTransformerPart = (node: any) => {
+    for (let n = node; n; n = n.getParent?.()) {
+      if (n.getClassName?.() === 'Transformer') return true
+    }
+    return false
+  }
+
   const handleDown = (e: any) => {
     const stage = e.target.getStage()
     if (mode === 'draw' && props.drawable) {
@@ -346,6 +366,10 @@ export default function LayerCanvas(props: {
       // never place anything. Only bail for taps that hit one of OUR
       // tracked draft shapes specifically.
       if (Object.values(shapeRefs.current).includes(e.target)) return
+      // A press on one of the Transformer's handles (resize/rotate) belongs to
+      // the Transformer — without this it deselected the shape and dropped a
+      // NEW emoji/stroke under the handle.
+      if (isTransformerPart(e.target)) return
       if (selected) setSelected(null) // tapping empty canvas deselects
 
       const pt = toImageSpace(stage)
@@ -383,6 +407,7 @@ export default function LayerCanvas(props: {
         return
       }
       activeStroke.current = [pt]
+      setLiveStroke({ points: [pt], color, size })
       setDrawing(true)
     } else {
       const pos = stage?.getPointerPosition()
@@ -394,16 +419,21 @@ export default function LayerCanvas(props: {
     const pt = toImageSpace(e.target.getStage())
     if (!pt) return
     activeStroke.current.push(pt)
-    setDraft((d) => [...d.filter((s) => s !== LIVE), { ...LIVE, points: [...activeStroke.current!], color, size }])
+    // Copy the points HERE, not inside a setState updater: React runs updaters
+    // later, at render, and a fast pointer-up in between nulls the ref — which
+    // is the "K.current is not iterable" crash that lost the draft.
+    const points = [...activeStroke.current]
+    setLiveStroke({ points, color, size })
   }
-  const LIVE = useMemo(() => ({ points: [] as number[][], color: '', size: 0 }), [])
   const handleUp = (e: any) => {
     if (mode === 'draw') {
       if (!drawing || !activeStroke.current) return
-      const pts = activeStroke.current
+      const pts = [...activeStroke.current]
       activeStroke.current = null
       setDrawing(false)
-      setDraft((d) => [...d.filter((s) => s !== LIVE && s.points.length > 0), { points: pts, color, size }])
+      setLiveStroke(null)
+      // A single tap leaves one point — not a line; drop it.
+      if (pts.length >= 2) setDraft((d) => [...d, { points: pts, color, size }])
       return
     }
     // VIEW mode: resolve the swipe (spec: left = descend, right = back up,
@@ -437,8 +467,15 @@ export default function LayerCanvas(props: {
     const texts = textDraft.map(({ id: _id, ...t }) => t)
     const images = imageDraft.map(({ id: _id, ...im }) => im)
     const payload = JSON.stringify({ strokes, stamps, texts, images })
+    setActionError(null)
     startTransition(async () => {
-      const newLayerId = await props.onSend!(payload)
+      const result = await runAction(() => props.onSend!(payload))
+      if (!result.ok) {
+        // Keep everything on the canvas so the person can retry.
+        setActionError((result as { reason: string }).reason)
+        return
+      }
+      const newLayerId = (result as { ok: true; layerId: string }).layerId
       setDraft([])
       setStampDraft([])
       setTextDraft([])
@@ -627,8 +664,8 @@ export default function LayerCanvas(props: {
                 ),
             )}
           </Layer>
-          <Layer>
-            {draft
+          <Layer opacity={xray ? 0.15 : 1}>
+            {[...draft, ...(liveStroke ? [liveStroke] : [])]
               .filter((s) => s.points.length >= 2)
               .map((s, i) => (
                 <Line key={`d${i}`} points={strokeToPolygon(s)} closed fill={s.color} />
@@ -732,12 +769,24 @@ export default function LayerCanvas(props: {
         </div>
       )}
 
+      {actionError && (
+        <p role="alert" className="mt-2 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          {actionError}
+        </p>
+      )}
+
       <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
         <button
           type="button"
-          onMouseDown={() => setXray(true)}
-          onMouseUp={() => setXray(false)}
-          onMouseLeave={() => setXray(false)}
+          // Pointer events, not mouse events: those never fire for a finger.
+          // touch-action none + no context menu stop a long press selecting
+          // text or opening the browser's menu instead of holding the button.
+          onPointerDown={() => setXray(true)}
+          onPointerUp={() => setXray(false)}
+          onPointerLeave={() => setXray(false)}
+          onPointerCancel={() => setXray(false)}
+          onContextMenu={(e) => e.preventDefault()}
+          style={{ touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none' }}
           className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-600"
           title="Press and hold to fade the layers"
         >

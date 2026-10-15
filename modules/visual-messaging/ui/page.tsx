@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { ActionForm } from './action-form'
 import { requireOrgModule } from '@/lib/module-gate'
 import {
   acceptConversationInvite,
@@ -64,17 +65,17 @@ export default async function VisualMessagingPage(props: { params: Promise<{ org
                   </span>
                 </span>
                 <span className="flex gap-2">
-                  <form action={acceptConversationInvite.bind(null, orgSlug, i.conversation_id)}>
+                  <ActionForm action={acceptConversationInvite.bind(null, orgSlug, i.conversation_id)}>
                     <button className={btnCls}>Accept</button>
-                  </form>
-                  <form action={declineConversationInvite.bind(null, orgSlug, i.conversation_id)}>
+                  </ActionForm>
+                  <ActionForm action={declineConversationInvite.bind(null, orgSlug, i.conversation_id)}>
                     <button className="rounded border border-gray-300 px-3 py-1 text-sm hover:bg-gray-50">Decline</button>
-                  </form>
-                  <form action={declineAndBlockConversationInvite.bind(null, orgSlug, i.conversation_id)}>
+                  </ActionForm>
+                  <ActionForm action={declineAndBlockConversationInvite.bind(null, orgSlug, i.conversation_id)}>
                     <button className="rounded border border-red-200 px-3 py-1 text-sm text-red-700 hover:bg-red-50">
                       Decline and block
                     </button>
-                  </form>
+                  </ActionForm>
                 </span>
               </li>
             ))}
@@ -90,11 +91,11 @@ export default async function VisualMessagingPage(props: { params: Promise<{ org
         <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-gray-500">
           Start a conversation
         </h2>
-        <form action={createConversation.bind(null, orgSlug)} className="flex flex-wrap items-center gap-2">
+        <ActionForm action={createConversation.bind(null, orgSlug)} resetOnSuccess className="flex flex-wrap items-center gap-2">
           <input name="title" required placeholder="Title" className={`${inputCls} min-w-56`} />
           <input name="image" type="file" accept="image/*" required className="text-sm" />
           <button className={btnCls}>Create</button>
-        </form>
+        </ActionForm>
         <p className="mt-2 text-xs text-gray-400">
           A conversation starts with a picture; every reply is a drawing on top of the layer it
           answers.
@@ -133,9 +134,9 @@ export default async function VisualMessagingPage(props: { params: Promise<{ org
                 {/* No date shown: blocked_at is the seat's updated_at, which a
                     silently-reverted update by someone else still bumps. */}
                 <span className="text-sm font-medium">{b.title}</span>
-                <form action={unblockConversation.bind(null, orgSlug, b.conversation_id)}>
+                <ActionForm action={unblockConversation.bind(null, orgSlug, b.conversation_id)}>
                   <button className="rounded border border-gray-300 px-3 py-1 text-sm hover:bg-gray-50">Unblock</button>
-                </form>
+                </ActionForm>
               </li>
             ))}
           </ul>
