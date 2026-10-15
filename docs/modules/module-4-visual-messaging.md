@@ -1161,5 +1161,12 @@ Opus session.
   66/66. Same trap as the CLAUDE.md gotcha — judge a full run only after a reset.
 - **Server-Action body limit is now 4 MB for the whole app** (`next.config.ts`); Vercel's ~4.5 MB request
   ceiling is the real cap, so pictures are shrunk in the browser to ≤ 3.2 MB (`image-shrink.ts`).
+- **Known limits of the swipe, left as they are (founder asked "can't we just change the image display, not the
+  whole page?"):** a completed swipe is still a soft navigation — the edge markers, dots and next-swipe targets
+  now switch at once (client-side, `layer-nav.ts`), and the scroll position is kept (`router.push(..., {scroll:
+  false})`), but the layer's OWN ink under the sheet is the server's render and appears when the page for it
+  arrives. Making the whole switch client-side would mean shipping every layer's content to the browser (today
+  only the three neighbours' own ink is sent). Also: the breadcrumb and "Replies to this layer" links still use
+  plain `<Link>`s and scroll to the top; only `goTo` (swipes, arrows, dots) keeps the scroll.
 - **Open founder discussions from this test round, both recorded:** pending invites → docs/25 (brief +
   starter prompt for the Opus build); X-ray → decided and built (entry above).

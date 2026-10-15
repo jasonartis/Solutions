@@ -1458,7 +1458,9 @@ in the sections below.
   transient local lock race and produce a misleading error on an otherwise-successful push.
   Don't force-push or retry on the strength of the error text alone: `git fetch` then compare
   `git rev-parse HEAD` against `git rev-parse origin/master` — if they match, it already went
-  through. Full story → journal.
+  through. **Same on 2026-10-15 for a push that HUNG for 5+ minutes and printed `Broken pipe`:
+  `git ls-remote --heads origin master` showed the commit had landed** (the pre-push hook plus a
+  busy machine); stuck `git`/`git-remote-https` processes can be left behind and are harmless. Full story → journal.
 - **A file made executable with `chmod +x` can still land in a commit as mode `100644`
   (non-executable) on this host (2026-09-23), even after `git update-index --chmod=+x`.**
   `core.fileMode=false` here means `git commit <pathspec>` re-reads the working tree for a NEW
