@@ -932,7 +932,14 @@ must NOT react). RLS tests: viewer can react, pending invitee cannot, banned can
 non-member cannot, delete-own still works. Prod: backup → `migrate:prod` (founder
 go-ahead) → a policy-aware prod verifier (template: `scripts/prod-verify-vm-*.mts`).
 
-### 2026-10-14 — viewer reactions BUILT (`20261014020000`); prod apply awaits the founder
+### 2026-10-14 — viewer reactions BUILT (`20261014020000`) — ON PRODUCTION AND PROD-VERIFIED
+
+**UPDATE, same day: applied by `migrate:prod` at the founder's go-ahead, after backup
+`backups/2026-10-15T01-50-35` and green CI (`cc2d0f2`).** `prod-verify-vm-viewer-reactions.mts`
+**8/14 pre-apply → 22/0 post-apply**, including section [3]: a real prod viewer's reaction
+now inserts (rolled back, nothing left). `prod-verify-migration.ts` 0 failures / 0 warnings
+(body match, definer, pinned search_path, anon no EXECUTE). Dry run: "Remote database is up
+to date". The "awaits the founder" wording below is superseded.
 
 **What changed:** `vm_reactions_insert_own` now checks `user_id = auth.uid() and
 vm_can_react(conversation_id)`. `vm_can_react` is `vm_can_post` minus the role list: an

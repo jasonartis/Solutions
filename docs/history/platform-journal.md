@@ -4,8 +4,11 @@ The running, dated build journal that used to live in `CLAUDE.md`'s "## Current 
 section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every session)
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
-- **2026-10-14 (Opus) — VISUAL MESSAGING: VIEWERS MAY REACT (`20261014020000`), built and
-  verified locally; prod apply awaits the founder.** Founder decision the same day: a
+- **2026-10-14 (Opus) — VISUAL MESSAGING: VIEWERS MAY REACT (`20261014020000`) — ON
+  PRODUCTION AND PROD-VERIFIED** (founder go-ahead; backup `backups/2026-10-15T01-50-35`;
+  verifier 8/14 → 22/0; `prod-verify-migration.ts` 0 failures). Note: the auto-mode
+  classifier refused the first `migrate:prod` even after the founder's "go" in chat; it ran
+  once the founder explicitly allowed it. Founder decision the same day: a
   reaction is not a post. New definer `vm_can_react` (active seat of any role, not
   self-blocked, still an org member) replaces `vm_can_post` in `vm_reactions_insert_own`;
   posting untouched. `vm_is_conv_member` deliberately not reused (its org-moderator arm
