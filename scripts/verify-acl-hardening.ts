@@ -97,6 +97,9 @@ const TABLE_EXCEPTIONS: Record<string, string[]> = {
   // fingerprints only, read and written through superadmin definers.
   account_signup_blocks: [],
   account_signup_block_lookups: [],
+  // Pending invites (20261016010000, docs/25). SELECT only (org admins, by
+  // policy); every write is a SECURITY DEFINER that re-checks its own gate.
+  pending_invites: ['SELECT'],
 }
 
 // Functions whose intended EXECUTE differs from the blanket
@@ -164,6 +167,18 @@ const FUNCTION_EXCEPTIONS: Record<string, { auth: boolean; svc: boolean }> = {
   'former_members(check_user_ids uuid[])': { auth: true, svc: false },
   'sd_my_departed_matches(check_event_id uuid)': { auth: true, svc: false },
   'sd_my_departed_interests(check_event_id uuid)': { auth: true, svc: false },
+  // PENDING INVITES (20261016010000, docs/25). Entry points act on auth.uid()
+  // (issue/cancel/resend re-check is_org_admin; the claim reads the caller's own
+  // address), so service_role has no use for them. The applier and the pruner
+  // are internal: the applier is reachable only from the claim, the pruner only
+  // from pg_cron as postgres.
+  'pending_invite_issue_org(check_org_id uuid, target_email text, invited_role text)': { auth: true, svc: false },
+  'pending_invite_cancel(invite_id uuid)': { auth: true, svc: false },
+  'pending_invite_resend(invite_id uuid)': { auth: true, svc: false },
+  'pending_invites_claim_mine()': { auth: true, svc: false },
+  'pending_invites_pruner_last_run()': { auth: true, svc: false },
+  'pending_invite_apply(invite_id uuid, invitee uuid)': { auth: false, svc: false },
+  'pending_invites_prune_expired()': { auth: false, svc: false },
 }
 const FULL_CRUD = ['SELECT', 'INSERT', 'UPDATE', 'DELETE']
 // `settings` moved to `public.user_private` with the email slice (2026-09-17,
@@ -534,6 +549,9 @@ async function main() {
     // 20261009020000: the worker has no business with re-signup blocks either.
     account_signup_blocks: [],
     account_signup_block_lookups: [],
+    // 20261016010000 revokes service_role and never re-grants: addresses of
+    // people who may have no account; definers only.
+    pending_invites: [],
   }
   const svcLost = tables.filter((t) => {
     const want = SVC_EXCEPTIONS[t.relname] ?? FULL_CRUD
