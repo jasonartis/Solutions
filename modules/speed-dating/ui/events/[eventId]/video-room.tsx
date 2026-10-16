@@ -37,6 +37,9 @@ declare global {
 type JitsiTrack = {
   isLocal(): boolean
   getType(): 'audio' | 'video'
+  isMuted(): boolean
+  mute(): Promise<void>
+  unmute(): Promise<void>
   attach(el: HTMLMediaElement): void
   detach(el: HTMLMediaElement): void
   dispose(): Promise<void>
@@ -62,6 +65,7 @@ type JitsiMeetJSGlobal = {
     conference: {
       TRACK_ADDED: string
       TRACK_REMOVED: string
+      TRACK_MUTE_CHANGED: string
       CONFERENCE_JOINED: string
       CONFERENCE_FAILED: string
     }
@@ -69,6 +73,12 @@ type JitsiMeetJSGlobal = {
 }
 
 type Status = 'idle' | 'joining' | 'in_call' | 'left' | 'error'
+
+/** What we can tell about one of the PARTNER's media tracks. 'none' = no such
+ *  track has arrived (not connected, or they never granted the device) — which
+ *  is different from 'off' (they muted it), and that difference is exactly what
+ *  two people debugging "I can't see/hear you" need to tell apart. */
+type PartnerMedia = 'none' | 'on' | 'off'
 
 type MediaElements = { audio: HTMLAudioElement | null; video: HTMLVideoElement | null }
 
@@ -176,6 +186,10 @@ export default function VideoRoom({
   const [status, setStatus] = useState<Status>('idle')
   const [error, setError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
+  const [micOn, setMicOn] = useState(true)
+  const [camOn, setCamOn] = useState(true)
+  const [partnerAudio, setPartnerAudio] = useState<PartnerMedia>('none')
+  const [partnerVideo, setPartnerVideo] = useState<PartnerMedia>('none')
   const localVideoRef = useRef<HTMLVideoElement>(null)
   const remoteVideoRef = useRef<HTMLVideoElement>(null)
   // A SEPARATE element for the partner's microphone. A <video> element plays
@@ -200,7 +214,27 @@ export default function VideoRoom({
     sessionRef.current = null
     if (!session) return
     await teardownCall(session, mediaElements())
+    setPartnerAudio('none')
+    setPartnerVideo('none')
     setStatus('left')
+  }
+
+  // Mute / camera toggles act on OUR OWN published track (mute() keeps the
+  // device open and just stops sending; the partner's TRACK_MUTE_CHANGED shows
+  // them the state). State is set from the track's own isMuted() afterwards
+  // rather than flipped optimistically, so the button can never disagree with
+  // what is actually being sent.
+  const toggleLocal = async (type: 'audio' | 'video') => {
+    const track = sessionRef.current?.localTracks.find((t) => t.getType() === type)
+    if (!track) return
+    try {
+      if (track.isMuted()) await track.unmute()
+      else await track.mute()
+    } catch {
+      /* the device vanished mid-call — the state below will say what is true */
+    }
+    if (type === 'audio') setMicOn(!track.isMuted())
+    else setCamOn(!track.isMuted())
   }
 
   // Video off at round end — mirrors authorizeVideoJoin's own server-side
@@ -230,6 +264,10 @@ export default function VideoRoom({
 
   async function join() {
     setError(null)
+    setMicOn(true)
+    setCamOn(true)
+    setPartnerAudio('none')
+    setPartnerVideo('none')
     setStatus('joining')
     // getVideoJoinToken returns a discriminated union rather than throwing
     // for an expected refusal (not seated, round ended, video not
@@ -310,6 +348,9 @@ export default function VideoRoom({
         // the null-ref guard, a track that arrived early was invisible to both
         // TRACK_REMOVED and teardown — so it could never be cleaned up either.
         session.remoteTracks.push(track)
+        const state: PartnerMedia = track.isMuted() ? 'off' : 'on'
+        if (track.getType() === 'audio') setPartnerAudio(state)
+        else setPartnerVideo(state)
         const el = track.getType() === 'audio' ? remoteAudioRef.current : remoteVideoRef.current
         if (!el) return
         track.attach(el)
@@ -319,6 +360,8 @@ export default function VideoRoom({
         const i = session.remoteTracks.indexOf(track)
         if (i === -1) return
         session.remoteTracks.splice(i, 1)
+        if (track.getType() === 'audio') setPartnerAudio('none')
+        else setPartnerVideo('none')
         // Without this, a partner who drops leaves their last frame frozen on
         // screen, which reads as a live call.
         const el = track.getType() === 'audio' ? remoteAudioRef.current : remoteVideoRef.current
@@ -329,6 +372,18 @@ export default function VideoRoom({
           /* already detached */
         }
       })
+
+      // Optional on older library builds; without it the partner status line
+      // simply keeps its arrival-time value instead of updating live.
+      if (JitsiMeetJS.events.conference.TRACK_MUTE_CHANGED) {
+        room.on(JitsiMeetJS.events.conference.TRACK_MUTE_CHANGED, (...args: unknown[]) => {
+          const track = args[0] as JitsiTrack
+          if (track.isLocal()) return
+          const state: PartnerMedia = track.isMuted() ? 'off' : 'on'
+          if (track.getType() === 'audio') setPartnerAudio(state)
+          else setPartnerVideo(state)
+        })
+      }
 
       session.localTracks = await JitsiMeetJS.createLocalTracks({ devices: ['audio', 'video'] })
       if (await abandonIfCancelled()) return
@@ -370,10 +425,6 @@ export default function VideoRoom({
     }
   }
 
-  if (status === 'left') {
-    return <p className="mt-2 text-sm text-gray-500">You left the video room.</p>
-  }
-
   return (
     <div className="mt-2 rounded border border-indigo-100 bg-white p-3">
       {status === 'idle' && (
@@ -384,6 +435,18 @@ export default function VideoRoom({
         >
           Join video
         </button>
+      )}
+      {status === 'left' && (
+        <div className="flex items-center gap-3">
+          <p className="text-sm text-gray-500">You left the video room.</p>
+          <button
+            onClick={() => startTransition(join)}
+            disabled={isPending}
+            className="rounded bg-indigo-600 px-3 py-1 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+          >
+            Rejoin video
+          </button>
+        </div>
       )}
       {status === 'joining' && <p className="text-sm text-indigo-700">Connecting…</p>}
       {status === 'error' && (
@@ -420,16 +483,45 @@ export default function VideoRoom({
         {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
         <audio ref={remoteAudioRef} autoPlay />
         {status === 'in_call' && (
-          <button
-            onClick={() => void leave()}
-            className="col-span-2 mt-1 w-fit rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50"
-          >
-            Leave
-          </button>
+          <>
+            {/* What each side is actually sending — the answer to "can you
+                see/hear me?" without needing a chat. 'not connected' means no
+                track from them has arrived at all (device blocked, or they have
+                not joined); 'off' means they muted it on purpose. */}
+            <p className="col-span-2 text-xs text-gray-600" data-testid="video-status">
+              You: microphone {micOn ? 'on' : 'off'} · camera {camOn ? 'on' : 'off'}
+              <br />
+              Them: microphone {mediaWord(partnerAudio)} · camera {mediaWord(partnerVideo)}
+            </p>
+            <div className="col-span-2 mt-1 flex flex-wrap gap-2">
+              <button
+                onClick={() => void toggleLocal('audio')}
+                className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50"
+              >
+                {micOn ? 'Mute microphone' : 'Unmute microphone'}
+              </button>
+              <button
+                onClick={() => void toggleLocal('video')}
+                className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50"
+              >
+                {camOn ? 'Turn camera off' : 'Turn camera on'}
+              </button>
+              <button
+                onClick={() => void leave()}
+                className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50"
+              >
+                Leave
+              </button>
+            </div>
+          </>
         )}
       </div>
     </div>
   )
+}
+
+function mediaWord(state: PartnerMedia): string {
+  return state === 'on' ? 'on' : state === 'off' ? 'off (they muted it)' : 'not connected'
 }
 
 // lib-jitsi-meet reads optional keys as ABSENT rather than undefined — an
