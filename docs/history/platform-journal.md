@@ -16,7 +16,9 @@ decision log, docs/03 conventions, docs/12 safeguards) — this is the chronolog
   server and client); **(7) the 11-failures-of-66 scare was stale seed data**, cured by reset + seed + one full run.
   Founder discussions recorded, not built: **pending invites → docs/25** (30 days; anyone may pre-invite to what
   they can invite to; includes the starter prompt for the Opus build); the invite-to-address oracle is §4.3 there.
-  Open: founder could not sign in on his phone (undiagnosed); X-ray-on-saved-reply report not reproduced.
+  Closed 2026-10-16: the phone sign-in failure is the login page's "hasn't finished loading — browser too old or
+  blocking scripts" notice (his phone's browser does not run the JS; not a login bug), and X-ray on a saved reply
+  fades (founder rechecked). Phone pass of the batch still waits on a capable phone.
 - **2026-10-15 (Opus) — VISUAL MESSAGING: SEATS NEED THE MODULE ROLE; NO CREDIT FORGERY
   (`20261015010000`) — ON PRODUCTION AND PROD-VERIFIED** (backup `backups/2026-10-15T19-57-55`;
   verifier 4/20 → 28/0; ACL 17/17 on prod; viewer-reactions 22/0; policy-split 15/0). The two open findings from the day before, founder said "go ahead with

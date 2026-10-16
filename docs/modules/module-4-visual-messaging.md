@@ -994,11 +994,13 @@ SUPERSEDE items 2 (X-ray), 5 (select behaviour) and 7 (swipe) of this one — re
 **Verification state, 2026-10-15:** full e2e suite **66/66** on a freshly reset + seeded local DB in CI's
 mode (`CI=true`, prebuilt app) after the vm work; all of it is on production (Vercel READY through
 `86cb829`). The founder tested on a desktop and on a touch-screen desktop and said it works. **The
-phone pass has NOT happened: the founder could not sign in on his phone** (reported 2026-10-15, cause
-NOT diagnosed — an old-browser theory was floated, unverified; check it is not a real login bug before
-accepting that). Phone-only unknowns: finger size of the handles, swipe feel, and whether pen marks fade
-under X-ray on a SAVED reply (reported once, never reproduced — saved layers fade by construction and
-e2e asserts the layer opacities).
+phone pass has NOT happened: the founder could not sign in on his phone** (2026-10-15). **Diagnosed
+2026-10-16 (founder): the login page's own "This page hasn't finished loading … your browser is probably too
+old or is blocking scripts" notice (`apps/web/app/login/page.tsx`, added earlier because sign-in used to
+fail SILENTLY there) is what he saw — the phone's browser does not run the app's JavaScript. Not a login bug;
+fix is a newer browser/OS or another device.** So the phone pass waits on a capable phone. Phone-only unknowns:
+finger size of the handles and swipe feel. **The earlier "pen marks do not fade under X-ray on a SAVED reply"
+report: founder rechecked 2026-10-16 — it fades. CLOSED, not reproducible.**
 
 1. **Styling (#7).** `globals.css` now `@source "../../../modules";`. Verified in the BUILT CSS
    (`.h-8`, `.h-2.5`, `bg-black/40`, `max-w-[640px]`, `ring-[3px]` all emitted; 28.8 KB → 37.9 KB).

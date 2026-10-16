@@ -27,8 +27,9 @@ screens was missing from the built CSS — now `@source "../../../modules"`, ver
 CSS. Founder: look at the salon, speed-dating and classroom screens, which may have looked fine
 by luck.** Also: every vm action returns `{ok, reason}` (inline errors, draft kept), emoji carry
 an `angle`, `next.config.ts` has `serverActions.bodySizeLimit: '4mb'`. Open: "X-ray does not fade
-pen marks on a SAVED reply" was not reproduced. **Open: the founder could not sign in on his
-phone (2026-10-15, undiagnosed) — so the phone pass of this batch has not happened.**
+pen marks on a SAVED reply" turned out fine (founder rechecked 2026-10-16). **The phone pass has not
+happened: his phone's browser showed the login page's "this page hasn't finished loading — browser too
+old / blocking scripts" notice (not a login bug); it waits on a capable phone.**
 **2026-10-15: PENDING INVITES (invite people not yet on the platform/org; 30 days; "anyone may pre-invite to what they can invite to") ARE A BRIEF, NOT BUILT — [docs/25](docs/25-pending-invites.md). Opus work; founder initiates the build.**
 **2026-10-15 (Opus): `20261015010000` SHIPPED, ON PRODUCTION AND PROD-VERIFIED — vm seats now
 need the module ROLE (docs/19 decision 1 reaches vm), and nobody, managers included, can credit
