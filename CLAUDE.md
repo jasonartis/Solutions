@@ -30,7 +30,15 @@ an `angle`, `next.config.ts` has `serverActions.bodySizeLimit: '4mb'`. Open: "X-
 pen marks on a SAVED reply" turned out fine (founder rechecked 2026-10-16). **The phone pass has not
 happened: his phone's browser showed the login page's "this page hasn't finished loading — browser too
 old / blocking scripts" notice (not a login bug); it waits on a capable phone.**
-**2026-10-15: PENDING INVITES (invite people not yet on the platform/org; 30 days; "anyone may pre-invite to what they can invite to") ARE A BRIEF, NOT BUILT — [docs/25](docs/25-pending-invites.md). Opus work; founder initiates the build.**
+**2026-10-16 (Opus): PENDING INVITES SLICE 1 (ORG PRE-INVITE) — `20261016010000` ON PRODUCTION AND
+PROD-VERIFIED** (backup `backups/2026-10-16T06-27-18`; `prod-verify-pending-invites.mts` 8/55 → **64/0**;
+ACL 17/17 on prod). An org admin invites an ADDRESS; a confirmed sign-in with it turns it into the usual
+PENDING seat. **Read [docs/25 §11](docs/25-pending-invites.md) first.** Things that bite:
+**`org_find_user_by_email` is now SUPERADMIN-ONLY** (tests resolve ids with `userIdOf`); the org members
+page no longer creates seats directly, so **an e2e that invites an existing user sees the seat only after
+that user opens their dashboard**; module roles are NOT carried on an invite (slice 2 grants at accept).
+Slices 2–4 (chat consumer, privacy line, removing vm `addMember`'s refusal) not started; the `/privacy`
+line is drafted in §11.5 for the founder to word.
 **2026-10-15 (Opus): `20261015010000` SHIPPED, ON PRODUCTION AND PROD-VERIFIED — vm seats now
 need the module ROLE (docs/19 decision 1 reaches vm), and nobody, managers included, can credit
 a reaction/layer/conversation/flag or a review/removal stamp to someone else. Also closes
@@ -332,15 +340,15 @@ doc.
   5 (per-org info choice) is no longer waiting on v4 — it is ABSORBED into that model and rides
   with the deferred naming slice** (docs/22 §20.4 item 3). v3 remains dead for its own reason:
   its column revoke is a no-op, `authenticated` holds a TABLE-level grant. Still blocking before the
-  Public Square org itself: docs/20 §17.8's remaining items, chiefly `org_find_user_by_email`
-  (§8.3 — and do NOT "fix" it by adding an org join, that breaks every invite) and
+  Public Square org itself: docs/20 §17.8's remaining items — `org_find_user_by_email` (§8.3)
+  is CLOSED 2026-10-16 (superadmin-only, docs/25 §11; no org join was added) — and
   `join_module`, which is unbuildable as specified because a SECURITY DEFINER does not bypass
   a BEFORE trigger. Opus, full docs/03 #12 rhythm.
   **Three of docs/20 §8's live bugs SHIPPED AND ARE ON PROD 2026-09-14** (`11faed5`,
   `d16c26f`, prod-verified 15/15 via the new `scripts/prod-verify-vm-policy-split.mts`):
   the five `vm_*` `for all` policies are split, the sole conversation admin can no longer
   leave and orphan a conversation, and self-block no longer leaks through `addMember`'s
-  duplicate-key error. **§8.1 and §8.3 (half-closed) remain open** (§8.4 closed 2026-10-05; §8.6 closed 2026-10-15 by `20261015010000`) — status table in docs/20 §28.
+  duplicate-key error. **§8.1 remains open** (§8.3 closed 2026-10-16 by `20261016010000`; §8.4 closed 2026-10-05; §8.6 closed 2026-10-15 by `20261015010000`) — status table in docs/20 §28.
 - **⚠ CORRECTED 2026-09-11: "CLOSED" MEANT CLOSED IN THE REPO, NOT ON PRODUCTION.**
   `pnpm migrate:prod --dry-run` on 2026-09-11 listed `20260904010000` as still PENDING — so the
   cross-org hole below has been **live on prod for a week while this file called it closed**,

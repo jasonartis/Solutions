@@ -4,6 +4,25 @@ The running, dated build journal that used to live in `CLAUDE.md`'s "## Current 
 section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every session)
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
+- **2026-10-15/16 (Opus) — PENDING INVITES SLICE 1 (ORG PRE-INVITE), `20261016010000` — ON PRODUCTION AND
+  PROD-VERIFIED** (commits `72197c4`, `3fac438`; backup `backups/2026-10-16T06-27-18`; prod verifier 8/55 →
+  64/0; ACL 17/17 on prod; live on prod as real users 12/12 — scenario 1 end to end with a throwaway confirmed
+  account, then deleted; db 395/395 from reset → e2e 73/73 in CI order). Full record: docs/25 §11. What a
+  future session would otherwise miss: **(1) §3 of the brief missed the bigger oracle** — the org members page
+  told an admin whether ANY address had an account; `org_find_user_by_email` is now superadmin-only.
+  **(2) The claim is a dashboard RPC, not an `auth.users` trigger** (a failing auth trigger blocks sign-in, and
+  a sign-in trigger never reaches someone who stays signed in). **(3) A function-level `SET request.jwt.claims`
+  is REFUSED on this DB**; the applier blanks/restores with `set_config(..., true)` and the claim asserts the
+  identity came back — measured, including restore on a caught error. **(4) Adversarial review removed module
+  roles from the invite**: a grant written at claim outlives its inviter's authority and goes live through a
+  later invite — slice 2 must grant at ACCEPT. **(5) The founder changed two answers mid-build** (no caps → 100
+  per inviter / 20 per address in `platform_settings`, silent per-address; any admin may cancel) — relayed by
+  the VM-UI session and read in docs/25 §6 before building. **(6) `verify-acl-hardening.ts` dropped prod to
+  14/17 after the apply** — the lesson CLAUDE.md already records (classify new definers in that script); fixed
+  in `3fac438`. **(7) Docker Desktop exited mid-e2e** once (all containers gone, 16 GB free afterwards);
+  relaunching it brought everything back with data intact. **(8) Teeth proven** by three deliberate
+  breakages of the database functions, each turning the matching tests red. **Not measured:** whether GoTrue
+  keeps an attacker's password when the real owner later confirms an unconfirmed signup (review note 5).
 - **2026-10-14/15 (Sonnet) — VISUAL MESSAGING FIX BATCH, UI HALF: BUILT, ON PRODUCTION, DESKTOP + TOUCH-SCREEN
   CHECKED BY THE FOUNDER; PHONE PASS NOT DONE** (commits `2a8e212` → `8402ea5`; no migration; full e2e 66/66 on a
   reset DB). Spec entries "2026-10-14 (build)", "…(founder … test) — fixes", "2026-10-15" have the detail. What a

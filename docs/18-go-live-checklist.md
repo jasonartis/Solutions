@@ -359,6 +359,12 @@ perspective; nothing about the demo password was touched).
 
 ## 9. Org-admin email-lookup logging — **DEFERRED 2026-09-22, founder's call**
 
+> **⚠ 2026-10-16: THE GAP THIS ITEM WOULD LOG IS GONE.** `20261016010000` (docs/25 §11) made
+> `org_find_user_by_email` **superadmin-only**; org admins now invite by ADDRESS through
+> `pending_invite_issue_org`, which never says whether an account exists. There is no org-admin
+> lookup left to log. The superadmin's own lookups are a separate question (docs/12 item 9's
+> superadmin log covers the console tools). Kept below for the reasoning.
+
 **The gap, measured not guessed.** `org_find_user_by_email` answers *"does this address have
 an account on this platform?"* for any active org owner/admin, about any address, in any org —
 and nothing records that they asked. It is the residue of docs/20 §8.3 after the email slice.

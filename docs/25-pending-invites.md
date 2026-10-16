@@ -355,7 +355,17 @@ installed; a function-level `SET request.jwt.claims` is REFUSED on this database
   local). **Prod pre-apply 8 pass / 55 fail — every control green, and prod's auth config CONFIRMS
   `mailer_autoconfirm = false` and `mailer_secure_email_change_enabled = true`**, which is what makes a
   confirmed address proof of ownership.
-- **Only locally proven:** the claim's behaviour (prod has no invites until someone issues one), and that a
+- **ON PRODUCTION 2026-10-16** (backup `backups/2026-10-16T06-27-18`; `migrate:prod`, then push, deploy
+  `3fac438` READY): verifier **8/55 → 64/0**; `prod-verify-migration.ts` 0 failures (2 warnings, the benign
+  internal-function class); `verify-acl-hardening.ts` 14/17 after apply (new objects unclassified) → **17/17**
+  once classified. **Live as real users on prod, 12/12:** alice (demo-a admin) issued an invite to a fresh
+  address; charlie read nothing; an org-admin lookup of an existing address returned nothing; a throwaway
+  confirmed account with that address claimed exactly one PENDING seat, the stored address was gone, it
+  accepted, and the seat was active with `invited_by` = alice; the real members page rendered with the form
+  and the list. Everything it created was deleted. **The throwaway account was made confirmed through the
+  admin API, so prod's real confirmation email was NOT exercised** (prod's sender is 2/hour, docs/18 item 7).
+  The first hourly prune had not run yet at the time of writing — re-run the verifier to see §[5] go green.
+- **Only locally proven:** the claim's failure paths (lapsed inviter, unconfirmed, banned), and that a
   confirmed address cannot be obtained without owning it under prod's GoTrue (the unconfirmed-account
   pre-hijack question in review note 5 — whether GoTrue keeps an attacker's password when the real owner
   later confirms an unconfirmed signup — was NOT measured).
