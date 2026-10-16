@@ -372,10 +372,13 @@ installed; a function-level `SET request.jwt.claims` is REFUSED on this database
 
 ### 11.5 Still open
 
-- **Privacy-page line (owed, §4.2.5; founder reviews the wording).** Draft, not applied: *"If someone
-  invites you by email address before you have an account, we keep that address for up to 30 days so the
-  invitation can reach you when you sign up. It is deleted when you join, when the invitation is cancelled,
-  or when it expires. Copies may remain in backups for a limited time."*
+- ~~Privacy-page line~~ **DONE 2026-10-16 — founder approved the wording, LIVE on `/privacy`:** *"If someone
+  invites you by email address before you have an account, we keep that address for up to 30 days from when
+  the invitation was last sent, so it can reach you when you sign up. It is deleted when you join, when the
+  invitation is cancelled, or when it expires. Copies may remain in backups for a limited time."* ("from when
+  … last sent" was added because of the next decision.)
+- **Resend has NO maximum (founder, 2026-10-16).** An inviter may keep renewing an invitation every 30 days
+  indefinitely; this is deliberate, and the privacy line is worded to stay true under it.
 - §6a: how a chat invite carries prerequisites — answered in shape by 11.3 item 1 (grant at accept); the
   data shape is slice 2's.
 - Other modules' invite-like flows, for later: classroom enrolment and salon workers are "grant a module

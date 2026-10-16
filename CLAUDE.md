@@ -37,8 +37,8 @@ PENDING seat. **Read [docs/25 §11](docs/25-pending-invites.md) first.** Things 
 **`org_find_user_by_email` is now SUPERADMIN-ONLY** (tests resolve ids with `userIdOf`); the org members
 page no longer creates seats directly, so **an e2e that invites an existing user sees the seat only after
 that user opens their dashboard**; module roles are NOT carried on an invite (slice 2 grants at accept).
-Slices 2–4 (chat consumer, privacy line, removing vm `addMember`'s refusal) not started; the `/privacy`
-line is drafted in §11.5 for the founder to word.
+The `/privacy` line is LIVE (founder-approved 2026-10-16; resend has no maximum, by decision). Slices 2
+and 4 (chat consumer; removing vm `addMember`'s refusal) not started.
 **2026-10-15 (Opus): `20261015010000` SHIPPED, ON PRODUCTION AND PROD-VERIFIED — vm seats now
 need the module ROLE (docs/19 decision 1 reaches vm), and nobody, managers included, can credit
 a reaction/layer/conversation/flag or a review/removal stamp to someone else. Also closes
@@ -1251,8 +1251,8 @@ Everything below is open but unranked:
   Re-read before repeating a claim of ABSENCE, not just a claim of presence.**
   Prior text, kept for the record: *a `/privacy` PAGE NOW EXISTS* (`apps/web/app/privacy/page.tsx`,
   go-live item 3, commit `6033ae9`, linked from the footer); this bullet and docs/12 item 6 both
-  previously said there was "no privacy page of any kind" — false since that commit. **And a
-  THIRD line is owed as soon as ad-hoc groups ship** — the pending-invite table stores the email
+  previously said there was "no privacy page of any kind" — false since that commit. **The
+  THIRD line (pending invites) is LIVE since 2026-10-16, founder-approved (docs/25 §11.5)** — the pending-invite table stores the email
   address of a person who has NO account, a data subject with no export, no data-browser presence
   and no deletion route (detail: docs/modules/module-4's "TWO PRIVACY OBLIGATIONS" section).
   Full detail: docs/12 item 6.

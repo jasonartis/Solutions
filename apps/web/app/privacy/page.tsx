@@ -12,7 +12,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getProfile } from '@/lib/platform'
 import { AppHeader } from '@/components/app-header'
 
-const LAST_UPDATED = 'October 14, 2026'
+const LAST_UPDATED = 'October 16, 2026'
 
 export default async function PrivacyPage() {
   // Public page, but signed-in people reach it from the footer too: give them
@@ -52,6 +52,13 @@ export default async function PrivacyPage() {
           see your email address. Your address is only ever shared where you'd expect it — with
           your organizations' administrators, and where a feature exists to put two people in
           touch and you've both opted in.
+        </p>
+        <p>
+          If someone invites you by email address before you have an account, we keep that address
+          for up to 30 days from when the invitation was last sent, so it can reach you when you sign
+          up. It is deleted when you
+          join, when the invitation is cancelled, or when it expires. Copies may remain in backups for
+          a limited time.
         </p>
         <p>
           If anyone on our staff ever needs to look at your account (for example, to help with a
