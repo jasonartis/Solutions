@@ -4,11 +4,12 @@ import { revalidatePath } from 'next/cache'
 import { getModule } from '@platform/core'
 import { createClient } from '@/lib/supabase/server'
 import {
+  cancelPendingInvite,
   changeMemberRole,
-  inviteOrgMember,
+  issuePendingOrgInvite,
   removeModuleRole,
   removeOrgMember,
-  resolveEmailToUserId,
+  resendPendingInvite,
   upsertModuleRole,
 } from '@/lib/org-members'
 
@@ -28,16 +29,50 @@ async function requireOrgAdminBySlug(orgSlug: string) {
   return { supabase, orgId: org.id as string }
 }
 
-export async function addMember(orgSlug: string, formData: FormData) {
-  const { supabase, orgId } = await requireOrgAdminBySlug(orgSlug)
+export type InviteState = { ok: true; message: string } | { ok: false; reason: string } | null
+
+// Invite by ADDRESS (docs/25, 20261016010000). The answer is the same whether
+// or not anyone has an account with that address — the person sees the
+// invite once they sign in with it. Returns {ok, reason} instead of throwing
+// (docs/03 #22: a thrown Server Action message is redacted in production),
+// and never puts the address into a thrown error, which would reach the logs.
+export async function addMember(orgSlug: string, formData: FormData): Promise<InviteState> {
   const email = String(formData.get('email') ?? '').trim()
   const role = String(formData.get('role') ?? 'member')
-  if (!email) throw new Error('Email is required')
+  if (!email) return { ok: false, reason: 'Enter an email address.' }
 
-  const found = await resolveEmailToUserId(supabase, orgId, email)
-  if (!found) throw new Error(`No user found with email ${email} — they must sign up first`)
+  try {
+    const { supabase, orgId } = await requireOrgAdminBySlug(orgSlug)
+    const result = await issuePendingOrgInvite(supabase, orgId, email, role)
+    revalidatePath(`/o/${orgSlug}/members`)
+    if (result === 'already_member') {
+      return { ok: true, message: 'That person is already a member, or already has an invitation to accept.' }
+    }
+    if (result === 'exists') {
+      return { ok: true, message: 'There is already an invitation for this address. You can see it in the list below.' }
+    }
+    return {
+      ok: true,
+      message:
+        'Invitation saved. Let them know to sign in or sign up with this address — they will see it then. It expires in 30 days.',
+    }
+  } catch (e) {
+    const msg = (e as Error).message
+    const known = ['Enter a valid email address', 'Not authorized', 'Unknown role']
+    const shown = known.includes(msg) || msg.startsWith('You have reached your limit of ')
+    return { ok: false, reason: shown ? msg : 'Something went wrong. Please try again.' }
+  }
+}
 
-  await inviteOrgMember(supabase, orgId, found.userId, role)
+export async function cancelInvite(orgSlug: string, inviteId: string) {
+  const { supabase } = await requireOrgAdminBySlug(orgSlug)
+  await cancelPendingInvite(supabase, inviteId)
+  revalidatePath(`/o/${orgSlug}/members`)
+}
+
+export async function resendInvite(orgSlug: string, inviteId: string) {
+  const { supabase } = await requireOrgAdminBySlug(orgSlug)
+  await resendPendingInvite(supabase, inviteId)
   revalidatePath(`/o/${orgSlug}/members`)
 }
 

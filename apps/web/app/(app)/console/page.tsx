@@ -14,6 +14,7 @@ import {
   removeModuleRoleAction,
   renameOrg,
   setAddMemberDefault,
+  setInviteCaps,
   toggleModule,
   updateSynagogueSettings,
 } from './actions'
@@ -55,6 +56,11 @@ export default async function ConsolePage(props: {
   )
 
   const profileById = new Map((profiles ?? []).map((p) => [p.user_id, p]))
+
+  // The database's own fallbacks (100 / 20) when no row has been saved yet.
+  const { data: capsRow } = await supabase.from('platform_settings').select('value').eq('key', 'pending_invites.caps').maybeSingle()
+  const capsValue = (capsRow?.value ?? {}) as { maxPerInviter?: number; maxPerAddress?: number }
+  const inviteCaps = { maxPerInviter: capsValue.maxPerInviter ?? 100, maxPerAddress: capsValue.maxPerAddress ?? 20 }
 
   return (
     <div>
@@ -136,6 +142,24 @@ export default async function ConsolePage(props: {
           </label>
           <button className="rounded border border-gray-300 px-3 py-1 text-xs text-gray-700 hover:bg-gray-50">
             Save default
+          </button>
+        </form>
+
+        {/* Pending-invite limits (docs/25 §6 answer 2). */}
+        <form action={setInviteCaps} className="mt-4 flex flex-wrap items-center gap-2 border-t border-gray-100 pt-4 text-xs text-gray-600">
+          <span className="font-medium">Invitation limits:</span>
+          <label className="flex items-center gap-1">
+            at most
+            <input name="maxPerInviter" type="number" min={1} defaultValue={inviteCaps.maxPerInviter} className={`${inputCls} w-20`} />
+            open per person inviting
+          </label>
+          <label className="flex items-center gap-1">
+            and
+            <input name="maxPerAddress" type="number" min={1} defaultValue={inviteCaps.maxPerAddress} className={`${inputCls} w-20`} />
+            open for any one email address
+          </label>
+          <button className="rounded border border-gray-300 px-3 py-1 text-xs text-gray-700 hover:bg-gray-50">
+            Save limits
           </button>
         </form>
       </section>

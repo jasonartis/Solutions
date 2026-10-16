@@ -17,6 +17,9 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 // Cohen?" and answered *"no we should not"* — so `org_find_user_by_email` now
 // returns the id ALONE. It no longer returns a name or an address, and this
 // signature narrowed with it: the caller gets a user id or nothing.
+// SUPERADMIN ONLY since 20261016010000 (it answered "does any account have
+// this address?" for every org admin). Only the Owner Console calls it; org
+// admins invite by address through issuePendingOrgInvite instead.
 export async function resolveEmailToUserId(
   supabase: SupabaseClient,
   orgId: string,
@@ -48,6 +51,61 @@ export async function inviteOrgMember(
   const row: { org_id: string; user_id: string; role: string; status?: string } = { org_id: orgId, user_id: userId, role }
   if (status) row.status = status
   const { error } = await supabase.from('org_members').insert(row)
+  if (error) throw new Error(error.message)
+}
+
+// Pending invites held for an ADDRESS (docs/25, 20261016010000). The org
+// members page uses these instead of resolveEmailToUserId + inviteOrgMember,
+// so an org admin never learns whether an address has an account: the result
+// is the same whether it does or not. The person sees the invite once they
+// sign in with that exact, confirmed address.
+export type IssueInviteResult = 'invited' | 'exists' | 'already_member'
+
+export async function issuePendingOrgInvite(
+  supabase: SupabaseClient,
+  orgId: string,
+  email: string,
+  role: string,
+): Promise<IssueInviteResult> {
+  const { data, error } = await supabase.rpc('pending_invite_issue_org', {
+    check_org_id: orgId,
+    target_email: email,
+    invited_role: role,
+  })
+  if (error) throw new Error(error.message)
+  return data as IssueInviteResult
+}
+
+export type PendingAddressInvite = {
+  id: string
+  email: string
+  role: string
+  invited_by: string
+  created_at: string
+  expires_at: string
+}
+
+export async function listPendingAddressInvites(
+  supabase: SupabaseClient,
+  orgId: string,
+): Promise<PendingAddressInvite[]> {
+  const { data, error } = await supabase
+    .from('pending_invites')
+    .select('id, email, role, invited_by, created_at, expires_at')
+    .eq('org_id', orgId)
+    .eq('kind', 'org')
+    .order('created_at', { ascending: false })
+  if (error) throw new Error(error.message)
+  return (data ?? []) as PendingAddressInvite[]
+}
+
+export async function cancelPendingInvite(supabase: SupabaseClient, inviteId: string) {
+  const { error } = await supabase.rpc('pending_invite_cancel', { invite_id: inviteId })
+  if (error) throw new Error(error.message)
+}
+
+export async function resendPendingInvite(supabase: SupabaseClient, inviteId: string) {
+  const { error } = await supabase.rpc('pending_invite_resend', { invite_id: inviteId })
   if (error) throw new Error(error.message)
 }
 

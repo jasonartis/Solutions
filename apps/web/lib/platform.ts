@@ -66,6 +66,12 @@ export async function getPendingOrgInvites(): Promise<PendingInvite[]> {
     data: { user },
   } = await supabase.auth.getUser()
   if (!user) return []
+  // Pending invites held for this person's ADDRESS (docs/25) become ordinary
+  // pending seats first, so they show up in the list below. The database
+  // checks the address is confirmed and re-checks each inviter. Never allowed
+  // to break the dashboard: on failure, log the code only (never the address).
+  const { error: claimError } = await supabase.rpc('pending_invites_claim_mine')
+  if (claimError) console.error('pending_invites_claim_mine failed', claimError.code)
   return getPendingInvites(supabase)
 }
 

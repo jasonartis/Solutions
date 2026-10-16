@@ -1,9 +1,18 @@
 import Link from 'next/link'
 import { moduleRegistry } from '@platform/core'
 import { requireOrgAdmin } from '@/lib/platform'
-import type { OrgMemberProfile } from '@/lib/org-members'
+import { listPendingAddressInvites, type OrgMemberProfile, type PendingAddressInvite } from '@/lib/org-members'
 import OrgMembersPanel, { type OrgMemberRow } from '@/components/org-members-panel'
-import { addMember, addModuleRole, changeRole, removeMember, removeModuleRoleAction } from './actions'
+import {
+  addMember,
+  addModuleRole,
+  cancelInvite,
+  changeRole,
+  removeMember,
+  removeModuleRoleAction,
+  resendInvite,
+} from './actions'
+import InviteForm from './invite-form'
 
 // Org self-management (docs/03 "Control hierarchy" level 2, founder ask
 // 2026-07-12): the org owner/admin layer of the three-level hierarchy —
@@ -27,6 +36,14 @@ export default async function MembersPage(props: { params: Promise<{ orgSlug: st
     supabase.rpc('org_member_profiles', { check_org_id: org.id }),
     supabase.from('org_modules').select('module_key').eq('org_id', org.id).eq('enabled', true),
     supabase.from('module_roles').select('user_id, module_key, role').eq('org_id', org.id),
+  ])
+
+  // Invitations held for an ADDRESS (docs/25). RLS shows them to org admins
+  // only. The pruner timestamp is docs/03 hard rule 5's "something renders
+  // whether the job has run".
+  const [addressInvites, { data: prunerLastRun }] = await Promise.all([
+    listPendingAddressInvites(supabase, org.id),
+    supabase.rpc('pending_invites_pruner_last_run'),
   ])
 
   const enabledModules = (entitlements ?? [])
@@ -81,13 +98,99 @@ export default async function MembersPage(props: { params: Promise<{ orgSlug: st
       <OrgMembersPanel
         members={rows}
         enabledModules={enabledModules}
-        addMemberAction={addMember.bind(null, orgSlug)}
         changeRoleAction={changeRole.bind(null, orgSlug)}
         removeMemberAction={removeMember.bind(null, orgSlug)}
         addModuleRoleAction={addModuleRole.bind(null, orgSlug)}
         removeModuleRoleAction={removeModuleRoleAction.bind(null, orgSlug)}
         callerRank={callerRank}
+        addMemberSlot={
+          <>
+            <InviteForm
+              action={addMember.bind(null, orgSlug)}
+              roles={(['member', 'admin', 'owner'] as const).filter((r) => ORG_RANK[r] < callerRank)}
+            />
+            <PendingAddressInvites
+              invites={addressInvites}
+              nameOf={(userId) => {
+                const p = memberProfiles.find((x) => x.user_id === userId)
+                return p?.display_name || p?.email || 'A former admin'
+              }}
+              callerRank={callerRank}
+              cancelAction={(id) => cancelInvite.bind(null, orgSlug, id)}
+              resendAction={(id) => resendInvite.bind(null, orgSlug, id)}
+              prunerLastRun={(prunerLastRun as string | null) ?? null}
+            />
+          </>
+        }
       />
+    </div>
+  )
+}
+
+const ORG_RANK: Record<string, number> = { member: 1, admin: 2, owner: 3 }
+
+function daysLeft(expiresAt: string): number {
+  return Math.ceil((new Date(expiresAt).getTime() - Date.now()) / (24 * 60 * 60 * 1000))
+}
+
+function PendingAddressInvites(props: {
+  invites: PendingAddressInvite[]
+  nameOf: (userId: string) => string
+  callerRank: number
+  cancelAction: (id: string) => () => Promise<void>
+  resendAction: (id: string) => () => Promise<void>
+  prunerLastRun: string | null
+}) {
+  return (
+    <div className="mb-6">
+      <h3 className="mb-2 text-sm font-medium text-gray-600">Invitations waiting to be used</h3>
+      {props.invites.length === 0 ? (
+        <p className="text-sm text-gray-400">None right now.</p>
+      ) : (
+        <ul className="space-y-2">
+          {props.invites.map((inv) => {
+            const left = daysLeft(inv.expires_at)
+            // Mirrors the database: any org admin may CANCEL (docs/25 §6 answer
+            // 3); RESEND re-issues, so it needs the issue rule — the inviter, or
+            // someone who outranks the invited role. The database decides either way.
+            const canResend = props.callerRank > (ORG_RANK[inv.role] ?? 0)
+            return (
+              <li
+                key={inv.id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded border border-dashed border-gray-300 bg-white p-3"
+              >
+                <span className="text-sm">
+                  <span className="font-medium">{inv.email}</span>
+                  <span className="ml-2 text-xs text-gray-500">as {inv.role}</span>
+                  <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700">
+                    invited · pending
+                  </span>
+                  <span className="ml-2 text-xs text-gray-400">
+                    by {props.nameOf(inv.invited_by)} ·{' '}
+                    {left <= 0 ? 'expired' : left === 1 ? 'expires within a day' : `expires in ${left} days`}
+                  </span>
+                </span>
+                <span className="flex items-center gap-2">
+                  {canResend && (
+                    <form action={props.resendAction(inv.id)}>
+                      <button className="text-xs text-blue-600 hover:underline">Resend (30 more days)</button>
+                    </form>
+                  )}
+                  <form action={props.cancelAction(inv.id)}>
+                    <button className="text-xs text-red-600 hover:underline">Cancel</button>
+                  </form>
+                </span>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+      <p className="mt-2 max-w-xl text-xs text-gray-400">
+        An invitation and the address in it are deleted when it is used, cancelled, or 30 days after it was last sent.
+        {props.prunerLastRun
+          ? ` Expired invitations were last cleared ${new Date(props.prunerLastRun).toLocaleString()}.`
+          : ' Expired invitations have not been cleared yet.'}
+      </p>
     </div>
   )
 }

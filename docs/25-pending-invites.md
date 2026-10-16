@@ -1,6 +1,9 @@
 # 25 — Pending invites (invite people who are not on the platform / org yet)
 
-**Status: REQUIREMENTS BRIEF, 2026-10-15. Nothing is built, no migration is claimed.** Written by a
+**Status 2026-10-16: SLICE 1 (ORG PRE-INVITE) IS BUILT — migration `20261016010000`; read §11 first for
+what was built, what was measured, and what is only locally proven. Slices 2–4 are not started.**
+
+**Original status: REQUIREMENTS BRIEF, 2026-10-15.** Written by a
 Sonnet session from the founder's decisions so they are not lost; the **schema, RLS and trigger design
 is OPUS work** (docs/03 #12 rhythm: draft → adversarial review → live-verify as real users → tests →
 docs), and a novel mechanism of this size is a Fable-tier *review* candidate (CLAUDE.md model rules).
@@ -30,6 +33,10 @@ first, so that **on registration they are ready to go.**
    never learns whether the person already exists; only a verified email can claim (§4).
 
 ## 3. What exists today (verify each before relying on it — this was read, not re-measured)
+
+> **RE-MEASURED 2026-10-15 against the live local catalog (§11.1).** Everything below held, with
+> one omission that matters: the ORG flow had its own, larger oracle (any account on the platform),
+> which this section did not mention.
 
 - **Org invites:** `org_members.status` is `pending|active` (default `pending`), with `invited_by`,
   `invited_at`, `accepted_at` (migration `20260727010000_org_invite_accept.sql`). Only the invited user,
@@ -270,3 +277,99 @@ model than you, say so at the start of the turn.
 Two facts for that session: the visual-messaging UI work is all pushed (last UI commit `8402ea5`); slice 1 is
 org-only because it is the smallest piece that proves the platform mechanism and the chat rule
 ("dormant until the person is an org member") depends on it.
+## 11. SLICE 1 — BUILT (2026-10-16, Opus) — org pre-invite
+
+Migration `20261016010000_pending_invites_org.sql`. Code: `apps/web/app/(app)/o/[orgSlug]/members/`
+(actions, page, `invite-form.tsx`), `apps/web/lib/org-members.ts`, `apps/web/lib/platform.ts` (the claim),
+`apps/web/app/(app)/console/` (the caps editor). Tests: `packages/db/src/pending-invites.test.ts` (one test
+per §4.2 item and per slice-1 scenario), e2e "pending invites: an address with NO account…". Prod verifier:
+`scripts/prod-verify-pending-invites.mts` (run before AND after `migrate:prod`).
+
+### 11.1 §3 re-measured (live local catalog, 2026-10-15)
+
+All of §3 held. **Missing from §3:** the org members page's `addMember` threw *"No user found with email X —
+they must sign up first"*, and `org_find_user_by_email` answered "does ANY account have this address?" for
+every org admin — a platform-wide account-existence oracle, larger than the chat one in §4.3. Both are gone:
+the page now invites by address, and the function is **superadmin-only** (the Owner Console still uses it).
+Also measured: local auth autoconfirms (`enable_confirmations = false`); `org_members_guard_hierarchy` and
+`module_roles_guard_hierarchy` treat "no signed-in user" as the trusted service path; pg_cron 1.6.4 is
+installed; a function-level `SET request.jwt.claims` is REFUSED on this database.
+
+### 11.2 The shape
+
+- **Table `pending_invites`**: kind (`org` only), org_id, target_id, email (lower+trim), role, invited_by,
+  created_at, expires_at; one row per (kind, target, address). org_id/target_id are nullable at the table
+  level and required per kind, so a future `platform` kind (§6 answer 6) is a new kind, not a redesign.
+  `revoke all` from every API role, then `grant select` to authenticated only. **One policy, SELECT,
+  `is_org_admin(org_id)`.** Every write goes through a definer.
+- **Issue** (`pending_invite_issue_org`): allowed iff the caller could add that role directly (org admin,
+  rank strictly above). Never asks whether an account exists. Answers `invited` / `exists` (someone above you
+  already holds an invite for this address — visible in the list) / `already_member` (only from THIS org's
+  seats, which the admin already reads with addresses).
+- **Claim** (`pending_invites_claim_mine`): **an RPC the dashboard calls, NOT a trigger on `auth.users`** — a
+  failing auth trigger can block every sign-in, and a sign-in trigger would never reach an existing user who
+  stays signed in. It needs the caller's address CONFIRMED, matches it exactly (never by fingerprint), skips
+  banned/deleted/anonymous accounts and addresses shared by two accounts, and turns each live invite into the
+  existing **PENDING** org seat. `org_accept_invite` re-checks the inviter again at accept.
+- **Authority at claim** (`pending_invite_apply`, internal): the inviter must not be banned or departed, and
+  must be a superadmin or an ACTIVE member who outranks the invited role (the same rule as accept). A dead
+  invite is deleted unused.
+- **The applier clears the caller's identity** (`set_config` on `request.jwt.claims`/`.sub`, restored at its
+  single exit and in its exception handler) so the seat is created on the inviter's behalf through the guard
+  triggers' service path. The claim asserts the identity came back.
+- **Cancel**: any org admin of the org (§6 answer 3). **Resend**: re-issues, so it keeps the issue rule; it
+  moves the invite to the resender and gives 30 more days. **Resending can keep an invite alive indefinitely**
+  — that follows from "resend resets the clock".
+- **Expiry**: an hourly pg_cron job (`pending-invites-prune-expired`, `23 * * * *`) deletes expired rows and
+  rows whose inviter's account deletion has COMPLETED (not during the 30-day grace). The members page shows when
+  it last ran (docs/03 hard rule 5).
+- **Caps** (§6 answer 2): 100 open per inviter, 20 open per address across everyone, in `platform_settings`
+  key `pending_invites.caps` (`{"maxPerInviter", "maxPerAddress"}`), edited on the Owner Console; malformed
+  values fall back to the defaults rather than breaking issuing. Over the inviter cap: *"You have reached your
+  limit of N open invitations."* Over the address cap: the ordinary "Invitation saved" and **nothing stored**.
+  **Residual, stated:** the admin's waiting list will not show that invitation, so a watchful admin can infer
+  the address is heavily invited elsewhere — never whether it has an account.
+- **No email is sent** (§6 answer 1, accepted). The page says so and tells the admin to let the person know.
+
+### 11.3 What adversarial review changed (two narrow Fable reviewers, 2026-10-15)
+
+1. **Module roles are NOT carried on an org pre-invite.** A grant written at claim survives its inviter losing
+   authority (module_roles has no tie to org_members) and goes live later through somebody else's invite.
+   **Slice 2 must grant module roles at ACCEPT, after the inviter re-check** — this also serves §6 answer 4.
+2. `org_find_user_by_email` narrowed to superadmin (above).
+3. The SELECT policy lost an "inviter reads their own" arm: a demoted admin kept reading addresses, and could
+   watch a row vanish early (= "this address now has an account").
+4. The first per-address cap was dropped because its refusal leaked other orgs' invitations; the founder's
+   later cap is silent for that reason.
+5. The address never appears in a warning, a log line or a thrown server-action error.
+6. Departed inviters' rows are pruned; the applier has one exit; duplicate-address accounts claim nothing; the
+   applier re-checks the address itself.
+
+### 11.4 Verification
+
+- `pending-invites.test.ts` — every §4.2 item and slice-1 scenario. **Teeth proven** by breaking the
+  database on purpose: dropping the confirmed check, dropping the authority re-check, and skipping the
+  identity restore each turned the matching tests red; restored, green.
+- Full db suite 395/395 from `supabase db reset` (the migration meets an EMPTY database), typecheck 9/9.
+- `prod-verify-pending-invites.mts`: local 61/0 (2 warnings: no cron run yet; auth config not checkable on
+  local). **Prod pre-apply 8 pass / 55 fail — every control green, and prod's auth config CONFIRMS
+  `mailer_autoconfirm = false` and `mailer_secure_email_change_enabled = true`**, which is what makes a
+  confirmed address proof of ownership.
+- **Only locally proven:** the claim's behaviour (prod has no invites until someone issues one), and that a
+  confirmed address cannot be obtained without owning it under prod's GoTrue (the unconfirmed-account
+  pre-hijack question in review note 5 — whether GoTrue keeps an attacker's password when the real owner
+  later confirms an unconfirmed signup — was NOT measured).
+
+### 11.5 Still open
+
+- **Privacy-page line (owed, §4.2.5; founder reviews the wording).** Draft, not applied: *"If someone
+  invites you by email address before you have an account, we keep that address for up to 30 days so the
+  invitation can reach you when you sign up. It is deleted when you join, when the invitation is cancelled,
+  or when it expires. Copies may remain in backups for a limited time."*
+- §6a: how a chat invite carries prerequisites — answered in shape by 11.3 item 1 (grant at accept); the
+  data shape is slice 2's.
+- Other modules' invite-like flows, for later: classroom enrolment and salon workers are "grant a module
+  position to an existing org member" — the same shape as a module role carried on an invite. Speed-dating
+  registration and the matchmaking pool are SELF-service (the person joins), so they are not invites.
+- Deploy order: **`migrate:prod` FIRST, then `git push`.** Reversed, the members page errors (its table does
+  not exist yet); migrate-first only makes org admins' Invite fall back to the old refusal for a few minutes.

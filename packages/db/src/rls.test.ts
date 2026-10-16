@@ -179,13 +179,23 @@ describe('org self-management', () => {
     return data!.id as string
   }
 
-  it('org_find_user_by_email resolves an email only for an org the caller admins', async () => {
+  it('org_find_user_by_email answers ONLY the superadmin — an org admin gets nothing (20261016010000)', async () => {
     const orgId = await selfTestOrgId(alice)
-    const { data: found } = await alice.rpc('org_find_user_by_email', {
+    // An org admin used to be able to ask whether ANY address has an account
+    // (docs/25 §4.3). Since pending invites, org admins invite by address and
+    // never learn that, so this lookup is the Owner Console's alone.
+    const { data: asOrgAdmin } = await alice.rpc('org_find_user_by_email', {
       check_org_id: orgId,
       target_email: 'orgtest@demo.local',
     })
-    expect(found?.[0]?.user_id).toBe(await userIdOf('orgtest@demo.local'))
+    expect(asOrgAdmin ?? [], 'an org admin learned that an account exists').toEqual([])
+
+    const superadmin = await signIn('owner@demo.local')
+    const { data: found } = await superadmin.rpc('org_find_user_by_email', {
+      check_org_id: orgId,
+      target_email: 'orgtest@demo.local',
+    })
+    expect(found?.[0]?.user_id, 'CONTROL: the superadmin still resolves it').toBe(await userIdOf('orgtest@demo.local'))
 
     // A LOOKUP NEVER CONFIRMS A NAME (docs/22 decision 3, §15.2). The founder
     // was asked whether a mistyped address should prompt "did you mean Sarah
@@ -201,13 +211,9 @@ describe('org self-management', () => {
     expect(notFound ?? []).toEqual([])
   })
 
-  it('alice can add a new member to an org she admins (resolved via org_find_user_by_email)', async () => {
+  it('alice can add a new member to an org she admins (id from the fixture resolver)', async () => {
     const orgId = await selfTestOrgId(alice)
-    const { data: found } = await alice.rpc('org_find_user_by_email', {
-      check_org_id: orgId,
-      target_email: 'bob@demo.local',
-    })
-    const bobUserId = found![0]!.user_id as string
+    const bobUserId = await userIdOf('bob@demo.local')
     const { error } = await alice.from('org_members').upsert({ org_id: orgId, user_id: bobUserId, role: 'member' })
     expect(error).toBeNull()
     // cleanup — leave the fixture org as it was for other tests
@@ -284,13 +290,9 @@ describe('org self-management', () => {
     const orgId = await selfTestOrgId(alice)
     const { data: aliceUser } = await alice.auth.getUser()
     const orgtestId = await userIdOf('orgtest@demo.local')
-    // bob's id via the admin-only email resolver (alice & bob share no org
-    // otherwise, so a plain profiles read wouldn't see him).
-    const { data: found } = await alice.rpc('org_find_user_by_email', {
-      check_org_id: orgId,
-      target_email: 'bob@demo.local',
-    })
-    const bobId = found![0]!.user_id as string
+    // bob's id via the fixture resolver (alice & bob share no org otherwise,
+    // and since 20261016010000 an org admin cannot look up an address).
+    const bobId = await userIdOf('bob@demo.local')
 
     // Owner can create an admin (member -> admin).
     expect(
@@ -375,10 +377,8 @@ describe('org invite-accept (slice 3)', () => {
     pstId = (await alice.from('orgs').select('id').eq('slug', 'platform-self-test').single()).data!.id
     shulId = (await alice.from('orgs').select('id').eq('slug', 'demo-shul').single()).data!.id
     demoAId = (await alice.from('orgs').select('id').eq('slug', 'demo-a').single()).data!.id
-    const resolve = async (email: string) =>
-      (await alice.rpc('org_find_user_by_email', { check_org_id: pstId, target_email: email })).data![0].user_id as string
-    bobId = await resolve('bob@demo.local')
-    charlieId = await resolve('charlie@demo.local')
+    bobId = await userIdOf('bob@demo.local')
+    charlieId = await userIdOf('charlie@demo.local')
   })
 
   // Leave no trace between tests: bob is a shared global fixture (admin of
@@ -778,11 +778,7 @@ describe('module grants scope (slice 1)', () => {
     demoBId = (await bob.from('orgs').select('id').eq('slug', 'demo-b').single()).data!.id
     uid.alice = (await alice.auth.getUser()).data.user!.id
     for (const e of ['bob', 'charlie', 'dana', 'eve', 'frank']) {
-      const { data } = await alice.rpc('org_find_user_by_email', {
-        check_org_id: orgId,
-        target_email: `${e}@demo.local`,
-      })
-      uid[e] = data![0].user_id as string
+      uid[e] = await userIdOf(`${e}@demo.local`)
       await alice.from('org_members').upsert({ org_id: orgId, user_id: uid[e], role: 'member' })
       await acceptInviteAs(`${e}@demo.local`, orgId) // slice 3: pending -> active
     }
@@ -967,8 +963,7 @@ describe('classroom scoped authority (slice 2b)', () => {
     eveC = await signIn('eve@demo.local')
     orgA = (await alice.from('orgs').select('id').eq('slug', 'demo-a').single()).data!.id
     for (const e of ['bob', 'charlie', 'dana', 'eve']) {
-      const { data } = await alice.rpc('org_find_user_by_email', { check_org_id: orgA, target_email: `${e}@demo.local` })
-      uid[e] = data![0].user_id as string
+      uid[e] = await userIdOf(`${e}@demo.local`)
       await alice.from('org_members').upsert({ org_id: orgA, user_id: uid[e], role: 'member' })
       await acceptInviteAs(`${e}@demo.local`, orgA) // slice 3: pending -> active
     }
@@ -1077,8 +1072,7 @@ describe('nail-salon scoped authority (slice 2 — 20260726010000)', () => {
     charlieC = await signIn('charlie@demo.local')
     salonOrg = (await alice.from('orgs').select('id').eq('slug', 'demo-salon').single()).data!.id
     for (const e of ['bob', 'charlie', 'dana']) {
-      const { data } = await alice.rpc('org_find_user_by_email', { check_org_id: salonOrg, target_email: `${e}@demo.local` })
-      uid[e] = data![0].user_id as string
+      uid[e] = await userIdOf(`${e}@demo.local`)
     }
     // bob is not a salon member (he's in demo-b); charlie/dana are seeded
     // salon members already. Add only bob, as alice (org owner).
@@ -1178,8 +1172,7 @@ describe('speed-dating scoped authority (slice 2 — 20260726030000)', () => {
     danaC = await signIn('dana@demo.local')
     datingOrg = (await alice.from('orgs').select('id').eq('slug', 'demo-dating').single()).data!.id
     for (const e of ['bob', 'dana', 'frank']) {
-      const { data } = await alice.rpc('org_find_user_by_email', { check_org_id: datingOrg, target_email: `${e}@demo.local` })
-      uid[e] = data![0].user_id as string
+      uid[e] = await userIdOf(`${e}@demo.local`)
     }
     // dana/frank are seeded demo-dating members (participants); bob is not (he's
     // in demo-b). Add only bob, as alice (org owner).
@@ -1888,11 +1881,7 @@ describe('view-as: nail-salon surfaces (module 5 review, 2026-08-04)', () => {
     salonOrg = (await alice.from('orgs').select('id').eq('slug', 'demo-salon').single()).data!.id
 
     for (const e of ['bob', 'eve', 'dana', 'charlie']) {
-      const { data } = await alice.rpc('org_find_user_by_email', {
-        check_org_id: salonOrg,
-        target_email: `${e}@demo.local`,
-      })
-      uid[e] = data![0].user_id as string
+      uid[e] = await userIdOf(`${e}@demo.local`)
     }
 
     // bob is not a salon member (he lives in demo-b). Invite + ACCEPT — since
@@ -2319,11 +2308,7 @@ describe('view-as session log: append-only, and a floor under the edge table (sl
     gabeV = await signIn('gabe@demo.local')
     orgA = (await alice.from('orgs').select('id').eq('slug', 'demo-a').single()).data!.id
     for (const e of ['alice', 'charlie', 'dana', 'gabe']) {
-      const { data } = await alice.rpc('org_find_user_by_email', {
-        check_org_id: orgA,
-        target_email: `${e}@demo.local`,
-      })
-      uid[e] = data![0].user_id as string
+      uid[e] = await userIdOf(`${e}@demo.local`)
     }
   })
 
@@ -7744,7 +7729,10 @@ describe('the email slice: addresses are reachable only through definers (docs/2
   })
 
   it('org_find_user_by_email answers EXISTENCE only — no name, no address (decision 3)', async () => {
-    const found = await alice.rpc('org_find_user_by_email', { check_org_id: pstOrgId, target_email: 'bob@demo.local' })
+    // Superadmin-only since 20261016010000 (the org-admin refusal is asserted in
+    // "org self-management").
+    const superadmin = await signIn('owner@demo.local')
+    const found = await superadmin.rpc('org_find_user_by_email', { check_org_id: pstOrgId, target_email: 'bob@demo.local' })
     expect(found.data?.[0]?.user_id, 'CONTROL: the row is real, so the absences below mean something').toBeTruthy()
     expect(Object.keys(found.data![0]!)).toEqual(['user_id'])
   })

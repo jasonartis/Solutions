@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import ModuleRoleForm from './module-role-form'
 
 const inputCls = 'rounded border border-gray-300 px-2 py-1 text-sm'
@@ -31,7 +32,8 @@ export type OrgMemberRow = {
 export default function OrgMembersPanel(props: {
   members: OrgMemberRow[]
   enabledModules: { key: string; name: string; roles: readonly string[] }[]
-  addMemberAction: (formData: FormData) => Promise<void>
+  // Required unless addMemberSlot replaces the default add form.
+  addMemberAction?: (formData: FormData) => Promise<void>
   changeRoleAction: (formData: FormData) => Promise<void>
   removeMemberAction: (userId: string) => Promise<void>
   addModuleRoleAction: (formData: FormData) => Promise<void>
@@ -48,6 +50,10 @@ export default function OrgMembersPanel(props: {
   // Org admins never see it — they can only ever send a pending invite.
   showActiveToggle?: boolean
   activeToggleDefault?: boolean
+  // Org admin page (docs/25): invites by ADDRESS, whether or not the person has
+  // an account yet. When given, it replaces the add-existing-account form
+  // below; the Owner Console passes nothing and keeps its direct add.
+  addMemberSlot?: ReactNode
 }) {
   const nameOf = (m: OrgMemberRow) => m.displayName || m.email || m.userId
   // Roles the caller may assign: strictly below their own rank.
@@ -130,6 +136,8 @@ export default function OrgMembersPanel(props: {
         {props.members.length === 0 && <li className="text-sm text-gray-400">No members yet.</li>}
       </ul>
 
+      {props.addMemberSlot ?? (
+      <>
       <h3 className="mb-2 text-sm font-medium text-gray-600">{props.showActiveToggle ? 'Add a member' : 'Invite a member'}</h3>
       <p className="mb-2 max-w-xl text-xs text-gray-400">
         {props.showActiveToggle
@@ -151,6 +159,8 @@ export default function OrgMembersPanel(props: {
         )}
         <button className={btnCls}>{props.showActiveToggle ? 'Add' : 'Invite'}</button>
       </form>
+      </>
+      )}
 
       {props.enabledModules.length > 0 && (
         <>

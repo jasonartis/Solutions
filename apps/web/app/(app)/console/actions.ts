@@ -453,3 +453,22 @@ export async function lookupSignupBlock(formData: FormData) {
   if (ids.length === 0) redirect(`/console/accounts?notice=${encodeURIComponent('No block for that address.')}#blocks`)
   redirect(`/console/accounts?blocks=${ids.join(',')}#blocks`)
 }
+
+// Pending-invite limits (docs/25 §6 answer 2, 20261016010000). Stored in
+// platform_settings so raising them is a console edit, not a deploy; the
+// database falls back to 100 / 20 when no row exists or a value is malformed.
+export async function setInviteCaps(formData: FormData) {
+  const supabase = await requireSuperadmin()
+  const maxPerInviter = Number(formData.get('maxPerInviter'))
+  const maxPerAddress = Number(formData.get('maxPerAddress'))
+  const ok = (n: number) => Number.isInteger(n) && n >= 1 && n <= 100000
+  if (!ok(maxPerInviter) || !ok(maxPerAddress)) {
+    redirect('/console?error=' + encodeURIComponent('Invitation limits must be whole numbers from 1 to 100000.'))
+  }
+  const { error } = await supabase.rpc('platform_setting_merge', {
+    setting_key: 'pending_invites.caps',
+    patch: { maxPerInviter, maxPerAddress },
+  })
+  if (error) throw new Error(error.message)
+  revalidatePath('/console')
+}

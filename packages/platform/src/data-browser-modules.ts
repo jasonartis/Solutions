@@ -274,6 +274,16 @@ export const platformDataBrowser = declareDataBrowser({
         'only the superadmin who looked, never whose address was typed (the address is never ' +
         'stored), so it is not a record ABOUT any subject. Unreadable to every API role.',
     },
+    {
+      table: 'pending_invites',
+      columns: ['invited_by'],
+      why:
+        'Invitations held for an ADDRESS (docs/25). Each row is mostly ANOTHER person\'s email ' +
+        'address — often someone with no account — and docs/25 §4.2.5 keeps that address out of ' +
+        'the data browser and export by design: it lives at most 30 days and is deleted on use, ' +
+        'cancel or expiry. Rendering it under the inviter would put a third party\'s address in a ' +
+        'browsable surface. Org admins see open invitations on the org members page instead.',
+    },
   ],
   neverReadable: [],
 })

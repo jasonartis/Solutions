@@ -110,20 +110,24 @@ test('org self-management: admin adds/removes members, changes roles, grants/rev
   await expect(aliceRow.getByRole('button', { name: 'Remove', exact: true })).not.toBeVisible()
   await expect(aliceRow.getByText('owner', { exact: true })).toBeVisible()
 
-  // Invite bob (org membership is invite-accept now — he lands as a pending
-  // invite, shown with a badge, until he accepts from his own dashboard).
+  // Invite bob BY ADDRESS (docs/25, 20261016010000). The page answers the same
+  // whether or not an account exists, and the invitation waits in its own list
+  // until bob next opens his dashboard — so no seat for him exists yet.
   await page.getByPlaceholder('email@example.com').fill('bob@demo.local')
   await page.getByRole('button', { name: 'Invite' }).click()
-  await expect(page.getByText('bob@demo.local')).toBeVisible()
-  await expect(
-    page.locator('li', { has: page.getByText('bob@demo.local') }).getByText('invited · pending'),
-  ).toBeVisible()
+  await expect(page.getByRole('status')).toContainText('Invitation saved')
+  const bobInvite = page.locator('li', { has: page.getByText('bob@demo.local') })
+  await expect(bobInvite.getByText('invited · pending')).toBeVisible()
+  await expect(bobInvite.getByText(/expires in 30 days/)).toBeVisible()
 
-  // Change bob's (pending) org role to admin — role edits work pre-acceptance.
-  const bobRow = page.locator('li', { has: page.getByText('bob@demo.local') });
-  await bobRow.getByRole('combobox').first().selectOption('admin')
-  await bobRow.getByRole('button', { name: 'Update' }).click()
-  await expect(bobRow.getByRole('combobox').first()).toHaveValue('admin')
+  // Role edits on an existing seat: promote orgtest to admin, then back.
+  const orgtestSeat = page.locator('li', { has: page.getByText('orgtest@demo.local') })
+  await orgtestSeat.getByRole('combobox').first().selectOption('admin')
+  await orgtestSeat.getByRole('button', { name: 'Update' }).click()
+  await expect(orgtestSeat.getByRole('combobox').first()).toHaveValue('admin')
+  await orgtestSeat.getByRole('combobox').first().selectOption('member')
+  await orgtestSeat.getByRole('button', { name: 'Update' }).click()
+  await expect(orgtestSeat.getByRole('combobox').first()).toHaveValue('member')
 
   // Grant a module role to Org Test Member for the stub module — 'user',
   // not 'admin' (the seed already grants alice herself "Demo Module: admin"
@@ -142,9 +146,61 @@ test('org self-management: admin adds/removes members, changes roles, grants/rev
   await orgtestRow.getByRole('button', { name: 'Remove this role' }).click()
   await expect(orgtestRow.getByText('Demo Module: user')).not.toBeVisible()
 
-  // Remove bob (cleanup — leaves the fixture org as other tests expect it).
-  await bobRow.getByRole('button', { name: 'Remove' }).click()
+  // Cancel bob's invitation (cleanup — and it deletes the stored address).
+  await bobInvite.getByRole('button', { name: 'Cancel' }).click()
   await expect(page.getByText('bob@demo.local')).not.toBeVisible()
+})
+
+test('pending invites: an address with NO account is invited, signs up, and accepts (docs/25 scenario 1)', async ({
+  page,
+}) => {
+  // A FRESH address through the real signup screen. Locally sign-up is
+  // auto-confirmed; on prod the person confirms their address first.
+  const stamp = Date.now()
+  const email = `e2e-invitee-${stamp}@demo.local`
+  // Unique per run: the name also appears in the module-role picker, and a
+  // retry must not collide with an earlier attempt's leftover member.
+  const name = `E2E Invitee ${stamp}`
+  await signIn(page, 'alice@demo.local')
+  await page.goto('/o/platform-self-test/members')
+  await page.getByPlaceholder('email@example.com').fill(email)
+  await page.getByRole('button', { name: 'Invite' }).click()
+  // Same words as for an address that already has an account (no oracle).
+  await expect(page.getByRole('status')).toContainText('Invitation saved')
+  await expect(page.locator('li', { has: page.getByText(email) }).getByText('invited · pending')).toBeVisible()
+
+  await page.goto('/login')
+  await page.getByRole('button', { name: 'Create account' }).click()
+  await page.getByLabel('Email').fill(email)
+  await page.getByLabel('Display name').fill(name)
+  await page.getByLabel('Password').fill('password123')
+  await page.getByRole('button', { name: 'Sign up' }).click()
+  await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible({ timeout: 15_000 })
+
+  // Nothing manual in between: the invitation is simply there.
+  await expect(page.getByText(/been invited to join/)).toContainText('Platform Self-Test')
+  const accepted = page.waitForResponse((r) => r.request().method() === 'POST')
+  await page.getByRole('button', { name: 'Accept' }).click()
+  await accepted
+  await expect(page.getByRole('heading', { name: 'Platform Self-Test' })).toBeVisible()
+
+  // The admin's waiting list no longer holds the address; the person is a member.
+  await signIn(page, 'alice@demo.local')
+  await page.goto('/o/platform-self-test/members')
+  await expect(page.getByRole('heading', { name: 'Invitations waiting to be used' })).toBeVisible()
+  // Exactly one row carries the address now — the MEMBER row (name + address),
+  // with no pending badge; the waiting-list entry is gone.
+  const row = page.locator('li', { has: page.getByText(email, { exact: true }) })
+  await expect(row).toHaveCount(1)
+  await expect(row.locator('span.font-medium', { hasText: name })).toBeVisible()
+  await expect(row.getByText('invited · pending')).not.toBeVisible()
+
+  // Cleanup: remove the new member so Platform Self-Test keeps its seeded roster.
+  const removed = page.waitForResponse((r) => r.request().method() === 'POST')
+  await row.getByRole('button', { name: 'Remove', exact: true }).click()
+  await removed
+  await page.reload()
+  await expect(page.getByText(email, { exact: true })).not.toBeVisible()
 })
 
 test('org invite-accept: an invitee accepts a pending invite from their dashboard', async ({ page }) => {
@@ -2252,19 +2308,21 @@ test('owner console engagement: a pending invite is excluded from the org rollup
 }) => {
   // Platform Self-Test is the seed's dedicated scratch org for exactly this
   // kind of mutation (packages/db/src/seed.ts) — safe to add/remove a member
-  // here without disturbing any other test's assumptions. Inviting through
-  // the org self-management page (not the superadmin console) because that
-  // flow always lands the invitee as PENDING, which is exactly the state this
-  // test needs — no active/pending toggle to get wrong.
-  await signIn(page, 'alice@demo.local')
-  await page.goto('/o/platform-self-test/members')
-  await page.getByPlaceholder('email@example.com').fill('grace@demo.local')
-  await page.getByRole('button', { name: 'Invite' }).click()
+  // here without disturbing any other test's assumptions. Added through the
+  // SUPERADMIN CONSOLE with "add active immediately" UNTICKED, which creates a
+  // pending seat at once. (Since 20261016010000 the org members page invites
+  // by ADDRESS, and a seat appears only when the person next opens their
+  // dashboard — and grace must never sign in during e2e.)
+  await signIn(page, 'owner@demo.local')
+  await page.goto('/console')
+  const addSection = page.locator('section', { has: page.getByRole('heading', { name: 'Platform Self-Test' }) })
+  await addSection.getByPlaceholder('email@example.com').fill('grace@demo.local')
+  await addSection.getByRole('checkbox', { name: /add active immediately/ }).uncheck()
+  await addSection.getByRole('button', { name: 'Add', exact: true }).click()
   await expect(
-    page.locator('li', { has: page.getByText('grace@demo.local') }).getByText('invited · pending'),
+    addSection.locator('li', { has: page.getByText('grace@demo.local') }).getByText('invited · pending'),
   ).toBeVisible()
 
-  await signIn(page, 'owner@demo.local')
   await page.goto('/console/engagement')
   // Scoped to the section BEFORE clicking — "Show" is not a unique label, the
   // "By person" picker below has its own identically-labelled button. Scoping

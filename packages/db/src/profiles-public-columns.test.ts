@@ -49,8 +49,19 @@ const EMAIL_READERS: Record<string, string> = {
     'The admin-scoped member roster. Gated on is_org_admin(check_org_id) — an org admin sees the ' +
     'addresses of the people they administer, which is unchanged from before the slice.',
   org_find_user_by_email:
-    'The INVITE lookup. Takes an address and returns a user_id; it never RETURNS an address, and ' +
-    'since docs/22 decision 3 it does not return a name either. Gated on is_org_admin.',
+    'The Owner Console add lookup. Takes an address and returns a user_id; it never RETURNS an ' +
+    'address, and since docs/22 decision 3 it does not return a name either. SUPERADMIN-ONLY since ' +
+    '20261016010000 (it was an account-existence oracle for every org admin, docs/25 §4.3).',
+  pending_invite_issue_org:
+    'Issues an invitation for an address (docs/25). Reads auth.users ONLY joined to THIS org\'s own ' +
+    'seats, to answer "already a member" — addresses the issuing org admin already reads through ' +
+    'org_member_profiles. Never asks whether an account exists elsewhere (no-oracle rule).',
+  pending_invites_claim_mine:
+    "Reads the CALLER'S OWN confirmed address to find invitations held for it; returns a count, " +
+    'never an address. Also counts accounts sharing that address so a duplicate claims nothing.',
+  pending_invite_apply:
+    "Internal (no API EXECUTE). Re-checks that the invite's address is the invitee's own confirmed " +
+    "address, and reads the inviter's ban/deletion state; returns a boolean.",
   find_module_peer:
     'The three module resolvers (classroom/matchmaking/visual-messaging). Takes an address, returns ' +
     'a user_id and nothing else, and only for an ACTIVE member of the named org.',
