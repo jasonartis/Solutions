@@ -142,20 +142,42 @@ not add a second one.
    "invite to the platform"). The inviter tells the person to sign up; they see their invites on first sign-in.
    **Open only as an explicit confirmation:** the founder asked what the question meant and answered the other
    four; treat 1A as accepted, but say so in the build reply.
-2. **No cap in v1 (founder chose B).** Safe only BECAUSE nothing is emailed (1) and every invite expires in 30
-   days — an address can be named by many inviters but nobody is pinged. **Revisit and add caps the moment
-   invites start sending email** (docs/18 item 7: prod's sender is 2/hour, and a strangers-can-trigger-email
-   path is a harassment vector). The builder must still protect the table itself from a runaway insert (e.g. a
-   sane server-side ceiling per statement), but not product-level per-person caps.
+2. **CAPS: YES (founder 2026-10-16, superseding his first answer "no cap" — "we could have a cap to be safe, pick
+   what is best, make it easy to raise later"). Claude's pick: at most 100 PENDING invites per inviter, and at
+   most 20 pending invites naming any one address across ALL inviters** (the second stops many people piling
+   onto one address; the first stops one person flooding). Both are plenty for family/test use. **The two numbers
+   live in `platform_settings` (superadmin-only key/value, migration `20260923010000`) with these values as the
+   code fallback, so raising them is a console edit, not a migration or deploy.** Over the cap the issue is
+   refused with a plain-language message to the inviter (it says THEIR limit, never anything about the address —
+   the per-address cap must not become an oracle either: when it trips, behave exactly as for any other
+   silent no-op). Revisit again when invites start sending email (docs/18 item 7).
 3. **Org admins see every pending invite whose target belongs to their org (A)** — org invites AND chat invites
    to conversations in that org, including ones issued by others, even when the invitee is not an org member
    yet ("Dana invited X to *Family sketch*; X is not in the org yet"). They can cancel any. Seeing a chat invite
    confers nothing: **a chat invite never creates org membership**; adding X to the org is a separate step by
    someone with that authority.
-4. **A chat pre-invite for someone without the module role is HELD and says what is missing** ("needs the
-   visual-messaging role"), applying once the prerequisites are met, expiring at 30 days otherwise. It does not
-   fail at issue time.
+4. **A chat pre-invite for someone without the module role (or not yet in the org) is HELD, not refused**,
+   applying once the prerequisites are met and expiring at 30 days otherwise. **WHO SEES WHAT'S MISSING
+   (founder asked, 2026-10-16):** the **org admin** sees the specific reason ("waiting for org membership" /
+   "needs the visual-messaging role") because they are the one who can act on it. The **ordinary inviter**
+   (e.g. a chat maker who is not an org admin) sees only a generic "Pending" — a specific reason would tell
+   them whether the address has an account / is in the org, which is the oracle this feature exists to
+   remove (§4.2 #3). The **invitee** sees nothing about it until every prerequisite is met; then it appears as
+   a normal pending invite they can accept or decline.
 5. **v1 kinds: `org`, then `vm_conversation`. Other modules' invite-like flows come later, one at a time.**
+
+6. **Is there a PLATFORM invite (a superuser emails someone to join the platform)? Not in v1 — decided
+   2026-10-16 after the founder asked "what do other apps do?".** Facts: **signup is OPEN today** (anyone can
+   create an account at `/login`; they land with no org and see nothing; removal blocks apply — docs/21 §7.12),
+   so a stand-alone "invite to the platform" has no job: **an org invite IS the platform invite** — the
+   address is invited to a thing, and signing up is what activates it. What other apps do: Slack, Notion,
+   GitHub, Google Workspace invite you to a WORKSPACE/ORG (the account is created on the way in); a bare
+   "invite to the product" exists mainly for closed betas that GATE signup (Linear/Superhuman-style
+   invite-only waitlists, invite codes). That gate would only matter if signup were closed (a client
+   requirement), and sending the invite email is blocked anyway by the 2/hour sender (docs/18 item 7).
+   **Builder: keep `kind` extensible and the table target-optional, so a future `platform` kind (an address
+   allowed to sign up while signup is closed) is just another kind, not a redesign — but build NOTHING for it
+   now.** Revisit with the first client that wants invite-only signup or when custom SMTP exists.
 
 ### 6a. Still genuinely open (builder brings these)
 
@@ -163,7 +185,7 @@ not add a second one.
   the behaviour, not the data shape).
 - Which of the other modules' invite-like flows (classroom enrolment, speed-dating registration, salon workers,
   matchmaking pool) are the same shape — list them for later; none are in v1.
-- The server-side ceiling mentioned in answer 2, and the exact "expires in N days" / resend wording.
+- The exact "expires in N days" / resend wording, and the `platform_settings` key names for the two caps.
 
 ## 7. Suggested slicing (smallest first; each independently shippable + prod-verifiable)
 
