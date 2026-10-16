@@ -133,6 +133,7 @@ decision log, docs/03 conventions, docs/12 safeguards) — this is the chronolog
   dashboard step and prod's email-confirmation setting is inferred from the app, not read.
   Coordination: the account-deletion session's `20261009030000` (pushed first, sorts after
   these) must ship in ONE `migrate:prod` with them.
+- **2026-10-16 — JaaS VIDEO VERIFIED BY A REAL HUMAN TWO-COMPUTER CALL** (dana/charlie on prod, both directions, sight and sound). Also found a set of video-room and organizer-flow gaps — listed in the module-6 spec's 2026-10-16 entry, none built yet.
 - **2026-10-08 (Opus) — "REMOVE FROM PLATFORM" (`20261008020000`), BUILT, NOT DEPLOYED; and the
   docs/21 §7.10 judgement calls reviewed with the founder.** Walking the founder through the
   account-deletion build's judgement calls, he spotted that the superadmin's ONLY action was

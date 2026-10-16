@@ -105,7 +105,7 @@ your email" notice as a taken address (docs/21 §7.12.1 RESULT). Do not switch i
 nothing uses it routinely, so an expiry breaks nothing). OPEN for the founder: whether a
 removed person should be pulled out of pools/upcoming events at once (docs/21 §7.11).
 
-**MODULE 6 VIDEO — JaaS IS THE DEFAULT PROVIDER, BUILT, AND UNVERIFIABLE FROM THIS REPO
+**MODULE 6 VIDEO — JaaS IS THE DEFAULT PROVIDER, BUILT, AND VERIFIED BY A REAL CALL (see UPDATE below)
 (2026-10-02, no migration).** Founder chose **JaaS (8x8-hosted Jitsi)** over a self-hosted VPS:
 free tier is **25 monthly active users**, the spec's default event is 7v7 = 14 people, so a
 monthly event is **$0** with no VPS, TLS, coturn or patching. Self-hosting is one env var away
@@ -114,7 +114,7 @@ docs/02 "Video" — do not re-derive it.** It also corrects docs/05's stale "+$2
 Hetzner's 2026-06-15 change made the cheap plans EU-only and US entry is now $20.49.
 **UPDATE 2026-10-08: THE ACCOUNT EXISTS, THE THREE VARS ARE SET ON PROD, AND A FIRST CALL CONNECTED
 BOTH WAYS** (`scripts/prod-verify-video-call.mjs`, three browsers on prod `demo-dating`, no bug found).
-**BUT IT USED CHROMIUM'S FAKE CAMERA/MIC ON ONE MACHINE — NOT "VERIFIED" UNTIL A HUMAN TWO-DEVICE CALL.**
+**THEN 2026-10-16: A REAL HUMAN CALL BETWEEN TWO COMPUTERS CONNECTED BOTH WAYS — EACH SIDE SAW AND HEARD THE OTHER (founder, dana/charlie on prod). VIDEO IS NOW VERIFIED END TO END.** Gaps found by that call, NOT yet built (module-6 spec, 2026-10-16 entry): no mute/camera toggles, no way to rejoin after leaving, no in-call chat/status for debugging.
 Key parsing now also accepts PKCS#1/CRLF/quotes (`25475eb`). Spec's 2026-10-08 entry has detail.
 ~~**WHAT REMAINS IS AN ACCOUNT, NOT INFRASTRUCTURE**~~ (superseded) — create a JaaS app, generate an RS256
 keypair, set `JAAS_APP_ID` / `JAAS_API_KEY_ID` / `JAAS_PRIVATE_KEY` (3 Vercel vars, same shape
