@@ -135,18 +135,35 @@ not add a second one.
    `a@x.com`.
 9. **Cancel** by the inviter removes the row. A non-inviter, non-admin cannot read or cancel it.
 
-## 6. Open questions for the builder to bring to the founder (do not decide silently)
+## 6. Founder answers to the open questions (2026-10-16) — SETTLED unless marked open
 
-- Email on issue (see 4.2 #7) — recommended **no** for v1.
-- Per-inviter / per-address caps (numbers).
-- Does a conversation creator's pre-invite also need the target org's `org_modules`/module-role (the chat
-  needs the `visual-messaging` module role since `20261015010000`)? Likely yes → the invite should carry
-  the *org + module* prerequisites it needs and say which are missing.
-- Should an org admin see all pending invites for the org (including ones others issued)? Recommended yes
-  (it is also how an admin finds and cancels abuse).
-- Kinds to register in v1: `org`, `vm_conversation`. The other modules' invite-like flows (classroom
-  enrolment, speed-dating registration, salon workers, matchmaking pool) are **not** in v1 — list them and
-  say which, if any, are the same shape.
+1. **Email on issue: NO, for every invite type** (recommended A; the founder did not push back after the
+   clarification that "invite" always means an invite to a thing — org, chat — and that there is no separate
+   "invite to the platform"). The inviter tells the person to sign up; they see their invites on first sign-in.
+   **Open only as an explicit confirmation:** the founder asked what the question meant and answered the other
+   four; treat 1A as accepted, but say so in the build reply.
+2. **No cap in v1 (founder chose B).** Safe only BECAUSE nothing is emailed (1) and every invite expires in 30
+   days — an address can be named by many inviters but nobody is pinged. **Revisit and add caps the moment
+   invites start sending email** (docs/18 item 7: prod's sender is 2/hour, and a strangers-can-trigger-email
+   path is a harassment vector). The builder must still protect the table itself from a runaway insert (e.g. a
+   sane server-side ceiling per statement), but not product-level per-person caps.
+3. **Org admins see every pending invite whose target belongs to their org (A)** — org invites AND chat invites
+   to conversations in that org, including ones issued by others, even when the invitee is not an org member
+   yet ("Dana invited X to *Family sketch*; X is not in the org yet"). They can cancel any. Seeing a chat invite
+   confers nothing: **a chat invite never creates org membership**; adding X to the org is a separate step by
+   someone with that authority.
+4. **A chat pre-invite for someone without the module role is HELD and says what is missing** ("needs the
+   visual-messaging role"), applying once the prerequisites are met, expiring at 30 days otherwise. It does not
+   fail at issue time.
+5. **v1 kinds: `org`, then `vm_conversation`. Other modules' invite-like flows come later, one at a time.**
+
+### 6a. Still genuinely open (builder brings these)
+
+- How an invite carries its prerequisites (org + module role) and reports which are missing (answer 4 fixes
+  the behaviour, not the data shape).
+- Which of the other modules' invite-like flows (classroom enrolment, speed-dating registration, salon workers,
+  matchmaking pool) are the same shape — list them for later; none are in v1.
+- The server-side ceiling mentioned in answer 2, and the exact "expires in N days" / resend wording.
 
 ## 7. Suggested slicing (smallest first; each independently shippable + prod-verifiable)
 
