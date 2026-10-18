@@ -188,6 +188,13 @@ not add a second one.
 
 ### 6a. Still genuinely open (builder brings these)
 
+> **STATUS 2026-10-16 (after slice 1):** item 1 is still open for SLICE 2, but its shape is constrained
+> by §11.3 item 1 (module roles must be granted at ACCEPT, never at claim). Items 2 and 3 are ANSWERED in
+> §11.5 and §11.2. Answer 1 above (no email) was stated as accepted in the build reply and the founder did
+> not object (2026-10-16) — treat it as confirmed. The UI's actual strings: "expires in N days" / "expires
+> within a day" / "expired", button "Resend (30 more days)"; caps key `pending_invites.caps`
+> (`{"maxPerInviter", "maxPerAddress"}`).
+
 - How an invite carries its prerequisites (org + module role) and reports which are missing (answer 4 fixes
   the behaviour, not the data shape).
 - Which of the other modules' invite-like flows (classroom enrolment, speed-dating registration, salon workers,
@@ -199,7 +206,9 @@ not add a second one.
 1. **Org pre-invite** end to end (table, issue/cancel/expire, claim on confirmed sign-in, no oracle) — the
    platform primitive plus one consumer.
 2. **Chat pre-invite** as the second consumer (dormant-until-org-member rule, self-block precedence).
-3. UI for both inviter lists; the privacy-page line (founder reviews wording).
+3. UI for both inviter lists; the privacy-page line (founder reviews wording). **— ORG half DONE in slice 1
+   (the org members page list, and the privacy line is live); only the chat inviter's list remains, with
+   slice 2.**
 4. Remove the interim membership-revealing refusal in `addMember`.
 
 ## 8. Not in scope
@@ -213,6 +222,10 @@ definers) · docs/19 (seat authority) · docs/03 #1, #12, #22, #27, #29, #30 · 
 `supabase/migrations/20260727010000_org_invite_accept.sql`, `20261007030000` (accept-first seats).
 
 ## 10. Appendix — starter prompt for the Opus build session (slice 1)
+
+> **USED 2026-10-15/16 — slice 1 is built and live (§11). Do NOT re-run this prompt.** For slice 2, start
+> from §11 (especially §11.3 item 1, §11.5) plus §6 answers 3–4; the process rules in the prompt below still
+> apply.
 
 Paste into a fresh Opus session. Kept here so it is not lost with the chat that wrote it.
 
@@ -344,6 +357,11 @@ installed; a function-level `SET request.jwt.claims` is REFUSED on this database
 5. The address never appears in a warning, a log line or a thrown server-action error.
 6. Departed inviters' rows are pruned; the applier has one exit; duplicate-address accounts claim nothing; the
    applier re-checks the address itself.
+7. **Judged and ACCEPTED, not changed:** once claimed, the admin sees a pending member with a display name
+   before the person accepts. That is identical to the old direct-add flow, and an admin cannot tell a brand-new
+   signup from an existing account claiming — so it is not a new oracle. Also accepted: an `on conflict`
+   takeover by a peer admin of a member-level invite (they could cancel it anyway; issue answers `exists` when
+   it does not apply).
 
 ### 11.4 Verification
 

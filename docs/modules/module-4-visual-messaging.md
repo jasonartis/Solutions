@@ -511,6 +511,13 @@ would close it if ever wanted.
    org-invite flow (`org_accept_invite()` + the dashboard invite card): a
    pending seat the invitee accepts or declines. This satisfies docs/16 P1-2/P1-7
    for free.
+> **⚠ SUPERSEDED 2026-10-16 — do not build the `vm_pending_invites` design below.** The founder chose
+> ONE platform mechanism for every invite type (docs/25 §2, §4.1), now built as the generic
+> `public.pending_invites` (`20261016010000`, docs/25 §11). The org consumer is live; the chat consumer
+> is docs/25 slice 2. The prefix argument below (view-as coverage derives tables by `vm_` prefix) was
+> weighed implicitly: `pending_invites` is platform-level, holds no conversation content, and is
+> classified in the data-browser registry instead.
+
 4. **Inviting an email with NO account — the one genuinely new mechanism.**
    Founder's instruction: don't hard-fail; tell the inviter it's fine, hand
    them the **plain standard signup link** (no token — *"just the standard
@@ -615,6 +622,10 @@ would close it if ever wanted.
 - **Anonymous public view-links** — still deferred post-v1, unchanged.
 
 ### TWO PRIVACY OBLIGATIONS THIS CREATES — neither is optional, both are easy to miss
+
+> **BOTH DISCHARGED 2026-10-16 (docs/25 §11):** (1) the stored address is deleted on claim, cancel, expiry
+> and when the inviter's account deletion completes, and the 30-day expiry plus the admin's cancel are
+> stated as the deletion mechanism; (2) the privacy line is LIVE on `/privacy`, founder-approved.
 
 These came out of the adversarial review of the *rejected* shared-org design and
 **survive the per-pair choice unchanged**, so they were nearly lost with it.
@@ -1138,7 +1149,8 @@ Also: the edge markers now update client-side the instant a swipe completes (`la
 shared with the server page). **Open design discussion, NOT built:** pending invites for people
 not yet on the platform/org (founder: 30 days; "anyone may pre-invite to what they can invite to";
 each invite takes effect when its prerequisites are met) — see the brief to be written for the
-Opus session.
+Opus session. **→ Now docs/25; the ORG half is LIVE (2026-10-16, `20261016010000`); the CHAT half for
+this module is docs/25 slice 2, not started.**
 
 ### 2026-10-15 — notes from the build sessions that were only in the chat
 

@@ -344,7 +344,11 @@ All six steps worked cleanly on the first try. Full click-path, in order:
   module data, rather than warning and letting you through — deleting an org cascades across
   67 tables and no tenant-level restore has ever been rehearsed. Offboarding a real client is
   left as a separate, deliberate operation.
-- **A new client's people must sign up for an account BEFORE an admin can add them** —
+- **⚠ SUPERSEDED 2026-10-16 for ORG ADMINS:** the org members page now invites by ADDRESS
+  (docs/25 §11) — the admin can invite first, and the person sees it after signing up, so the
+  order below no longer applies there. It still applies to the Owner Console's DIRECT add
+  (superadmin), which needs an existing account. Original note:
+  **A new client's people must sign up for an account BEFORE an admin can add them** —
   `resolveEmailToUserId`/`org_find_user_by_email` returns nothing for an email with no
   account yet, and the real UI surfaces this as "No user found … they must sign up first."
   This is expected behavior (by design, not a bug), but it's a real sequencing fact for

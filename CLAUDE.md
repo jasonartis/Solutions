@@ -1501,6 +1501,12 @@ in the sections below.
   metacharacters, or ripgrep. → And when a documentation grep returns ZERO, confirm with a
   second command in a different shape before concluding absence; CLAUDE.md already warns that
   *a grep that HITS is not proof* — this is the inverse and it has a mechanical cause.
+- **REPO-WIDE SEARCHES HANG OR TIME OUT; SCOPE THEM (2026-10-15).** The Grep/Glob tools at the repo root
+  time out after 20s, and git-bash `grep -r` over `apps/web` ran past 2 minutes — both are walking
+  `node_modules`/`.next` on exFAT. Point searches at a specific directory (`supabase/migrations`,
+  `apps/web/app`, `packages/db/src`) or a single file. **And from PowerShell, `git commit -F -` with a
+  piped here-string does NOT read stdin** — git takes the message as a PATHSPEC and commits nothing
+  ("did not match any file(s)"). Write the message to a file and use `-F <file>`.
 - **GIT BASH SILENTLY REWRITES ANY ARGUMENT THAT LOOKS LIKE AN ABSOLUTE POSIX PATH, AND IT
   BITES INSIDE `docker exec` AND IN `curl` FORMAT STRINGS (2026-10-02, cost two cycles).**
   MSYS path conversion turns a leading `/foo` into `C:/Program Files/Git/foo` before the

@@ -603,7 +603,8 @@ display name. Three options:
    self-join keeps the *decision* in code, but `org_modules.settings` may still
    disable it per-org — a narrowing branch, which the rule permits. Stated rather
    than hidden.
-7. **The no-account invite flow is GONE and nobody decided that.** v1 and the
+7. **DECIDED 2026-10-15/16 — docs/25 is the decision, and slice 1 (org) is LIVE (`20261016010000`,
+   docs/25 §11).** Original note: **The no-account invite flow is GONE and nobody decided that.** v1 and the
    2026-09-04 design both had `vm_pending_invites` + a signup-time resolver +
    a pruner + a four-state honesty UI, to invite someone with no account.
    **Under v3 the answer is "tell them to sign up like anyone else"** — which is

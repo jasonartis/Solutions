@@ -479,7 +479,7 @@ Found in a deliberate "what haven't we thought of" pass; ordered by urgency.
    is arguably a one-line factual correction, but it also reads as declaring the
    policy final, so it was left for the founder rather than taken unilaterally.
    **A THIRD owed line joins the two below the moment ad-hoc visual-messaging
-   groups ship:** their pending-invite table stores the email of a person who has
+   groups ship** (✅ written and live 2026-10-16 — see below): their pending-invite table stores the email of a person who has
    NO account — no export, no data-browser presence, no deletion route, since
    every one of those keys on a user. See docs/modules/module-4-visual-messaging.md's
    "TWO PRIVACY OBLIGATIONS THIS CREATES" section.)*  But
@@ -519,7 +519,8 @@ Found in a deliberate "what haven't we thought of" pass; ordered by urgency.
    not a data-collection disclosure), but it is now a true and concrete sentence
    thanks to docs/22, and is tracked separately.
    **The THIRD line — the pending-invite address of a person with NO account —
-   remains genuinely owed, and only once ad-hoc groups ship.**
+   is DONE: LIVE on `/privacy` since 2026-10-16, founder-approved, shipped WITH the
+   feature (docs/25 §11.5) rather than after it.**
  Exposure today remains nil for the same
    reason as phase 1 — the one real captured phase-2 event is a demo account
    (`dana@demo.local`), and prod otherwise holds only the 12 demo/founder accounts already
