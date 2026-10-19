@@ -273,75 +273,50 @@ export async function addMember(orgSlug: string, conversationId: string, formDat
 
   const supabase = await createClient()
 
-  // Derive the org from the CONVERSATION, not from the route slug: the
-  // membership check below has to be about the org whose content this seat
-  // would expose. (vm_members_scope overwrites any client-supplied org_id
-  // from the conversation anyway, so this is also the value that will be
-  // stored — passing the slug's org was always cosmetic.)
-  const { data: conv } = await supabase
-    .from('vm_conversations')
-    .select('org_id')
-    .eq('id', conversationId)
-    .single()
-  if (!conv) return refuse('Conversation not found')
-
-  // The target must be an ACTIVE member of the conversation's org. A seat row
-  // alone grants reads of every layer, reaction, roster row and vm-images
-  // object in the conversation (the vm_is_conv_* predicates gate on the seat),
-  // so without this an org member could hand a NON-member of that org full
-  // access to its content. 20260904010000 is the real gate; this check exists
-  // so the UI reports it as a clear error instead of an opaque RLS failure.
-  //
-  // The lookup and the bound are now ONE database call (docs/22 §3 R5):
-  // `find_module_peer` returns an id only for an ACTIVE member of the named
-  // org, which is why the separate `profiles`-by-email read that used to sit
-  // above this — and whose own comment had to explain that it was not itself a
-  // bound — is gone.
-  const { data: peerId } = await supabase.rpc('find_module_peer', {
-    check_org_id: conv.org_id,
+  // An invitation held for the ADDRESS (docs/25 §12, 20261018020000). It
+  // replaces looking the person up and inserting a seat, which told the
+  // inviter whether the address was an org member ("X is not a member of this
+  // organization yet") and, through a swallowed duplicate, whether they had
+  // blocked this conversation. The database now answers 'invited' for every
+  // address: no account, not in the org, missing the module role, already
+  // here, or blocked. When the person signs in with that confirmed address and
+  // is an active org member with the Visual Messaging role, it becomes the
+  // usual PENDING seat they accept themselves (accept-first, 20261007030000);
+  // a self-block always wins. It never adds anyone to the organization.
+  const { error } = await supabase.rpc('pending_invite_issue_vm', {
+    check_conversation_id: conversationId,
     target_email: email,
   })
-  if (!peerId) {
-    // Wording (founder 2026-10-15): the old text told a conversation creator to "add them as
-    // an org member first" — which only an org admin can do. See the module-4 spec for the
-    // open design question (inviting people who are not in the org / on the platform yet).
-    return refuse(
-      `${email} is not a member of this organization yet, so they cannot be invited here. An organization admin has to add them to the organization first.`,
-    )
-  }
+  // The only refusals are about the caller (not allowed here, a malformed
+  // address, their own invitation limit) — never about the address.
+  if (error) return refuse(error.message)
+  revalidatePath(`/o/${orgSlug}/m/visual-messaging/conversations/${conversationId}`)
+  return { ok: true }
+}
 
-  // Lands as an INVITATION: vm_members_c_invite forces status 'pending' and
-  // stamps invited_by for any seat created for someone else, so the person
-  // sees nothing of this conversation until they accept (20261007030000).
-  const { error } = await supabase.from('vm_conversation_members').insert({
-    org_id: conv.org_id,
-    conversation_id: conversationId,
-    user_id: peerId as string,
-    role: 'participant',
-  })
+// Cancel or resend one held invitation (docs/25 §12). The database decides
+// who may: the inviter while still an admin of the conversation, or any org
+// admin; anything else is "Invitation not found".
+export async function cancelConversationInvite(
+  orgSlug: string,
+  conversationId: string,
+  inviteId: string,
+): Promise<ActionResult> {
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('pending_invite_cancel', { invite_id: inviteId })
+  if (error) return refuse(error.message)
+  revalidatePath(`/o/${orgSlug}/m/visual-messaging/conversations/${conversationId}`)
+  return { ok: true }
+}
 
-  // 23505 = unique_violation on (conversation_id, user_id): the person ALREADY
-  // HAS A SEAT. That is deliberately NOT surfaced, because the two cases it
-  // covers MUST be indistinguishable to the caller:
-  //
-  //   * they are already an active member — harmless, nothing to do; or
-  //   * they SELF-BLOCKED. `20260910030000` deliberately KEEPS the seat row and
-  //     flips it to 'banned'; that persistence is the entire mechanism, and is
-  //     exactly what stops a conversation admin undoing the block by re-adding.
-  //
-  // Reporting the error told the admin the person has a row — and since LEAVING
-  // deletes the row (so a re-add would succeed), an error meant "they did not
-  // leave, they blocked you", handed to the very person self-block exists to
-  // protect against. Self-block is the platform's only user-level block
-  // (CLAUDE.md), so that confirmation is the whole thing worth withholding.
-  //
-  // Deliberate silence, not an oversight: the page renders no member roster
-  // (it reads only the caller's own seat), so a no-op and a real add look
-  // identical to the admin either way.
-  if (error && error.code !== '23505') {
-    const failed = failure(error, 'Add member failed')
-    if (failed) return failed
-  }
+export async function resendConversationInvite(
+  orgSlug: string,
+  conversationId: string,
+  inviteId: string,
+): Promise<ActionResult> {
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('pending_invite_resend', { invite_id: inviteId })
+  if (error) return refuse(error.message)
   revalidatePath(`/o/${orgSlug}/m/visual-messaging/conversations/${conversationId}`)
   return { ok: true }
 }

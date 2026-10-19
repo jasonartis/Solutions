@@ -849,6 +849,17 @@ backslash that passes through a shell, a heredoc and a language literal has thre
 wrong, and all three fail silently.** Verify the written bytes (`grep | cat -A`), never the
 source you intended to write.
 
+**A FIXTURE WRITE AS THE DATABASE OWNER CAN BE SILENTLY UNDONE BY A PIN TRIGGER (2026-10-18,
+docs/25 §12.4).** A test "demoted" a conversation admin with an owner-level `update
+vm_conversation_members set role = 'participant'` and "moved" a conversation with `update
+vm_conversations set org_id = …`. Both statements succeeded, and both changes were reverted by
+`vm_pin_member` / `vm_pin_conversation`, which pin those columns for anyone who is not a manager —
+and with no JWT, nobody is. Both tests then passed, or failed, for the wrong reason. → **Make a
+state change through a real signed-in user who is allowed to make it, and assert it landed
+(CONTROL) before asserting anything that depends on it.** Same family: vitest runs test FILES in
+parallel, so a test that writes a platform-wide row (`platform_settings`) races any other file
+that writes the same row.
+
 ## Triggers on `auth.users` (engagement monitoring phase 1, 2026-08-09)
 
 The platform now has two: `on_auth_user_created` (AFTER INSERT → `handle_new_user`, live since

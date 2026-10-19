@@ -41,9 +41,21 @@ export async function addMember(orgSlug: string, formData: FormData): Promise<In
   const role = String(formData.get('role') ?? 'member')
   if (!email) return { ok: false, reason: 'Enter an email address.' }
 
+  // Optional module role, "<moduleKey>:<role>" (docs/25 §12). SQL has no role
+  // vocabulary, so it is checked against the module manifest here — the same
+  // check addModuleRole applies to a direct grant.
+  const moduleRole = String(formData.get('moduleRole') ?? '')
+  let withModule: { key: string; role: string } | undefined
+  if (moduleRole) {
+    const [key, mrole] = moduleRole.split(':')
+    const manifest = key ? getModule(key) : undefined
+    if (!manifest || !mrole || !manifest.roles.includes(mrole)) return { ok: false, reason: 'Unknown module role' }
+    withModule = { key: key!, role: mrole }
+  }
+
   try {
     const { supabase, orgId } = await requireOrgAdminBySlug(orgSlug)
-    const result = await issuePendingOrgInvite(supabase, orgId, email, role)
+    const result = await issuePendingOrgInvite(supabase, orgId, email, role, withModule)
     revalidatePath(`/o/${orgSlug}/members`)
     if (result === 'already_member') {
       return { ok: true, message: 'That person is already a member, or already has an invitation to accept.' }
@@ -58,7 +70,7 @@ export async function addMember(orgSlug: string, formData: FormData): Promise<In
     }
   } catch (e) {
     const msg = (e as Error).message
-    const known = ['Enter a valid email address', 'Not authorized', 'Unknown role']
+    const known = ['Enter a valid email address', 'Not authorized', 'Unknown role', 'Unknown module role']
     const shown = known.includes(msg) || msg.startsWith('You have reached your limit of ')
     return { ok: false, reason: shown ? msg : 'Something went wrong. Please try again.' }
   }

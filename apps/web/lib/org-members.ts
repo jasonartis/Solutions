@@ -66,11 +66,14 @@ export async function issuePendingOrgInvite(
   orgId: string,
   email: string,
   role: string,
+  // ONE module role to give once they accept (docs/25 §12, 20261018020000).
+  withModule?: { key: string; role: string },
 ): Promise<IssueInviteResult> {
   const { data, error } = await supabase.rpc('pending_invite_issue_org', {
     check_org_id: orgId,
     target_email: email,
     invited_role: role,
+    ...(withModule ? { with_module_key: withModule.key, with_module_role: withModule.role } : {}),
   })
   if (error) throw new Error(error.message)
   return data as IssueInviteResult
@@ -85,18 +88,37 @@ export type PendingAddressInvite = {
   expires_at: string
 }
 
+// Every kind since slice 2 (20261018020000): 'org', a 'module_role' that rode
+// on an org invitation, and 'vm_conversation'. Read through the
+// pending_invites_list definer, which adds what a held invitation is waiting
+// for — for org admins only (docs/25 §6 answer 4).
+export type PendingAddressInviteRow = PendingAddressInvite & {
+  kind: 'org' | 'module_role' | 'vm_conversation'
+  target_id: string
+  target_title: string | null
+  module_key: string | null
+  waiting_on: string | null
+}
+
 export async function listPendingAddressInvites(
   supabase: SupabaseClient,
   orgId: string,
-): Promise<PendingAddressInvite[]> {
-  const { data, error } = await supabase
-    .from('pending_invites')
-    .select('id, email, role, invited_by, created_at, expires_at')
-    .eq('org_id', orgId)
-    .eq('kind', 'org')
-    .order('created_at', { ascending: false })
+): Promise<PendingAddressInviteRow[]> {
+  const { data, error } = await supabase.rpc('pending_invites_list', { check_org_id: orgId })
   if (error) throw new Error(error.message)
-  return (data ?? []) as PendingAddressInvite[]
+  return (data ?? []) as PendingAddressInviteRow[]
+}
+
+// What a held invitation is waiting for, in words. Shown to ORG ADMINS only:
+// they are the ones who can act on it, and these are computed from their own
+// org's seats. Anyone else sees "Pending" (a reason would say whether the
+// address is in the org).
+export const PENDING_INVITE_WAITING_ON: Record<string, string> = {
+  org_membership: 'waiting for them to join the organization',
+  org_acceptance: 'waiting for them to accept the organization invitation',
+  module_role: 'needs the Visual Messaging role',
+  module_enabled: 'waiting for that module to be switched on',
+  ready: 'ready — appears next time they sign in',
 }
 
 export async function cancelPendingInvite(supabase: SupabaseClient, inviteId: string) {

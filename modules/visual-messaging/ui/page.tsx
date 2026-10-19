@@ -18,6 +18,13 @@ export default async function VisualMessagingPage(props: { params: Promise<{ org
   const { orgSlug } = await props.params
   const { supabase, org } = await requireOrgModule(orgSlug, 'visual-messaging')
 
+  // Invitations held for this person's ADDRESS (docs/25 §12) become pending
+  // seats first — e.g. one that was waiting for the Visual Messaging role they
+  // were just given — so they appear in the list below. Never allowed to break
+  // the page; log the code only, never the address.
+  const { error: claimError } = await supabase.rpc('pending_invites_claim_mine')
+  if (claimError) console.error('pending_invites_claim_mine failed', claimError.code)
+
   const { data: conversations } = await supabase
     .from('vm_conversations')
     .select('id, title, frozen, created_at')

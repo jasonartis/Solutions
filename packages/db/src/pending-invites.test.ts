@@ -518,17 +518,20 @@ describe('§4.2.7 caps — founder answer 2 (revised 2026-10-16): 100 per invite
     }
   })
 
-  it('an address named by 20 open invitations: the 21st answers the ordinary "invited" (no oracle) and stores nothing', async () => {
+  // Since slice 2 (20261018020000) the address cap counts DISTINCT INVITERS,
+  // not rows, so this needs 20 different people.
+  it('an address invited by 20 other people: the 21st answers the ordinary "invited" (no oracle) and stores nothing', async () => {
     await clearCaps()
     const email = addr('popular')
-    // 20 other orgs have invited this address.
+    // 20 other orgs, each with its own inviter, have invited this address.
     const others = await sql<{ id: string }[]>`
       insert into orgs (name, slug)
       select 'Pop ' || g, ${`pi-${RUN}-pop-`} || g from generate_series(1, 20) g
       returning id`
-    for (const o of others) {
+    const inviters = await Promise.all(others.map((_, i) => newUser(addr(`pop-inviter-${i}`))))
+    for (const [i, o] of others.entries()) {
       await sql`insert into pending_invites (kind, org_id, target_id, email, role, invited_by, expires_at)
-                values ('org', ${o.id}, ${o.id}, ${email}, 'member', ${O}, now() + interval '30 days')`
+                values ('org', ${o.id}, ${o.id}, ${email}, 'member', ${inviters[i]!}, now() + interval '30 days')`
     }
     const r = await issue(asA, email)
     expect(r.error, 'the per-address cap must not be a visible refusal').toBeNull()
@@ -544,7 +547,7 @@ describe('§4.2.7 caps — founder answer 2 (revised 2026-10-16): 100 per invite
     const [after] = await sql<{ n: number }[]>`
       select count(*)::int as n from pending_invites where email = ${email} and org_id = ${P}`
     expect(after?.n).toBe(1)
-  })
+  }, 30_000)
 })
 
 describe('founder answer 3: any org admin may cancel any invitation in their org', () => {

@@ -1,7 +1,8 @@
 # 25 — Pending invites (invite people who are not on the platform / org yet)
 
-**Status 2026-10-16: SLICE 1 (ORG PRE-INVITE) IS BUILT — migration `20261016010000`; read §11 first for
-what was built, what was measured, and what is only locally proven. Slices 2–4 are not started.**
+**Status 2026-10-19: SLICES 1–4 ARE BUILT.** Slice 1 (org pre-invite, `20261016010000`) is on production —
+§11. **Slice 2 (chat pre-invite + a module role carried on an org invite, `20261018020000`) with slices 3 and 4
+folded in is §12 — read it first; its prod status is stated there.**
 
 **Original status: REQUIREMENTS BRIEF, 2026-10-15.** Written by a
 Sonnet session from the founder's decisions so they are not lost; the **schema, RLS and trigger design
@@ -209,7 +210,7 @@ not add a second one.
 3. UI for both inviter lists; the privacy-page line (founder reviews wording). **— ORG half DONE in slice 1
    (the org members page list, and the privacy line is live); only the chat inviter's list remains, with
    slice 2.**
-4. Remove the interim membership-revealing refusal in `addMember`.
+4. Remove the interim membership-revealing refusal in `addMember`. **— DONE with slice 2 (§12).**
 
 ## 8. Not in scope
 Anonymous public links (stay deferred post-v1, module-4 spec); Public Square (docs/20 — invite-only v1);
@@ -404,3 +405,112 @@ installed; a function-level `SET request.jwt.claims` is REFUSED on this database
   registration and the matchmaking pool are SELF-service (the person joins), so they are not invites.
 - Deploy order: **`migrate:prod` FIRST, then `git push`.** Reversed, the members page errors (its table does
   not exist yet); migrate-first only makes org admins' Invite fall back to the old refusal for a few minutes.
+
+## 12. SLICE 2 — BUILT (2026-10-18/19, Opus) — chat pre-invite + a module role on an org invite; slices 3–4 folded in
+
+Migration `20261018020000_pending_invites_chat.sql`. Code: `modules/visual-messaging/ui/actions.ts` (`addMember`
+now issues; cancel/resend), the conversation page (admin waiting list) and module home (claim), the org members
+page (module-role picker; every kind in the waiting list), `apps/web/lib/org-members.ts`
+(`PENDING_INVITE_WAITING_ON`). Tests: `packages/db/src/pending-invites-chat.test.ts` (25, one per requirement,
+scenario and review finding); e2e `pending invites, chat (docs/25 scenario 1)…` and `…NO account and an existing
+member reads exactly the same`. Prod verifier: `scripts/prod-verify-pending-invites-chat.mts` (before AND after).
+
+### 12.1 Measured before building (live local catalog, 2026-10-18)
+- Who may add someone to a conversation = `vm_is_conv_admin`: an active `admin` seat + active org member + vm module
+  member, or `vm_can_manage` (org owner/admin/superadmin, or an unscoped vm `admin` role).
+- `vm_invite_pending` passes a row through untouched when nobody is signed in. A self-block is a `banned` seat row;
+  leaving deletes the row.
+- `module_roles` has NO role vocabulary in SQL (`module_position_rank` returns 0 for anything unknown); the module
+  manifest is the vocabulary.
+- The table owner `postgres` has BYPASSRLS, so the applier's inserts are not RLS-checked: **its own checks are the
+  whole gate.**
+- `vm_pin_member` / `vm_pin_conversation` SILENTLY revert a no-JWT UPDATE of a seat's role or a conversation's org
+  (this bit two test fixtures, §12.4).
+
+### 12.2 The shape
+- **Two new kinds, both HELD.** `vm_conversation` (target = the conversation; role `participant` only, the only role
+  the app ever invited as) waits until the address's account is an ACTIVE member of that org AND holds the vm module
+  role. `module_role` (target = the org, `module_key` set) is ONE module role an org admin may attach to an org
+  invitation, applied only after the person ACCEPTS it (§11.3 item 1). **Answer to "should the org invite carry module
+  roles?": yes, one** — scenario 1 is impossible otherwise, because a chat maker cannot grant the role a chat invite
+  waits for. The role name is checked against the module manifest in the server action (as a direct grant is); SQL
+  checks the module is on for the org.
+- **A held row is re-evaluated every time the claim runs**: the dashboard (which also re-renders right after an
+  accept or decline) and the Visual Messaging home and conversation pages. Order org → module_role → vm_conversation,
+  so one dashboard load after accepting grants the role and then creates the chat seat. Applied when ready; DELETED
+  unused when dead; otherwise left alone until it expires. **No trigger on org_members / module_roles**: a failing one
+  would block an accept or a grant, and it would run as whoever made the change. Cost: the invitation appears on the
+  person's next page load, not pushed.
+- **Dead** = the inviter can no longer add them directly (banned, left, or no longer a conversation admin / vm
+  manager / org admin — a third-party restatement of `vm_is_conv_admin`, checked arm by arm in review); the
+  conversation is gone or **moved to another org** (read under `for share`); the person **already has ANY seat** there,
+  **so a self-block or a ban always wins**; or they already hold that module role.
+- **Applying** = the same accept-first PENDING seat (or the module role), written with the caller's identity cleared
+  (slice 1's choice 2), `invited_by` / `granted_by` = the inviter.
+- **Issue** (`pending_invite_issue_vm`) needs `vm_is_conv_admin`, never reads `auth.users` or `org_members`, and
+  answers `invited` for every address. `pending_invite_issue_org` gained `with_module_key` / `with_module_role` (DROP +
+  CREATE; the defaults keep the deployed three-argument call working in the deploy window).
+- **Who sees what** (founder answers 3–4). Table RLS unchanged (org admins read every kind in their org).
+  `pending_invites_list(org, target?)` gives an org admin every row with `waiting_on` — `org_membership`,
+  `org_acceptance`, `module_role`, `module_enabled` or `ready` — computed ONLY from the org's own seats, which they
+  already read with addresses, so "an account outside the org" reads exactly like "no account". Any other
+  conversation admin gets only the chat invitations THEY sent, with no reason ("Pending"). The invitee sees nothing
+  until it is a real pending seat (the claim returns only an applied count).
+- **Cancel**: any org admin, any kind; the inviter of a chat invitation while still a conversation admin. Cancelling
+  an org invitation also deletes its module role. **Resend**: each kind's issue rule; moves `invited_by` to the
+  resender. **Pruner**: also deletes chat invitations whose conversation is gone (no FK is possible on `target_id`).
+- **Slice 4**: `addMember` no longer calls `find_module_peer` or inserts a seat. The "X is not a member of this
+  organization yet" refusal and the swallowed-duplicate self-block tell are both gone. **Behaviour change:** an
+  existing eligible member now gets the invitation at their next page load instead of instantly.
+
+### 12.3 What adversarial review changed (two narrow Fable reviewers, 2026-10-18)
+1. **The address cap counts DISTINCT INVITERS, not rows.** Counting rows let one chat maker fill an address's cap
+   alone by inviting it to many conversations, read off how many OTHER invitations exist, and watch that count drop —
+   i.e. learn across tenants when the person signed up. Someone already among the inviters is never stopped. Slice 1's
+   address-cap test was rewritten to use 20 distinct inviters.
+2. **A module role belongs to ITS org invitation, not to the address.** When the org invitation becomes a pending seat
+   the row is stamped (`claimed_by`, `seat_invited_at`) and applies only if THAT seat becomes active. Before, a
+   withdrawn or declined invitation's role rode in on someone else's later invite, or followed the address to its
+   next owner. A decline now deletes it at the next claim.
+3. **A moved conversation kills its held invitations.** Otherwise checks ran against the old org while the seat
+   landed in the new one.
+4. **A companion module role is stored only when the org part was stored**, and re-issuing replaces it wholesale.
+5. **Judged and ACCEPTED, not changed.**
+   - R1: an ordinary inviter's row disappears when it applies, so they learn "now an eligible member" — after the
+     person visits, where before slice 2 they learned it instantly at issue. A pending seat is visible to conversation
+     members anyway.
+   - R2: a held chat invitation keeps the address until it applies, is cancelled or expires — still inside the
+     /privacy line ("up to 30 days from when last sent … deleted when you join"). **Do NOT re-key held rows to a user
+     id at sign-up**: the change itself would tell org admins the address now has an account.
+   - Pre-existing, not a regression: `vm_accept_conversation_invite` does not re-check the inviter at accept (the
+     direct path behaves the same).
+
+### 12.4 Verification
+- `pending-invites-chat.test.ts` 25/25 and slice 1's 32/32, from `supabase db reset` (the migration meets an EMPTY
+  database). **Teeth proven by breaking the live local database eleven ways**: the authority re-check, the vm-role
+  prerequisite, the existing-seat check, tying the module role to its seat, the moved conversation, the seat status
+  (created active), the identity restore, the reason shown to ordinary inviters, the cap counting rows, issue authority
+  and cancel ownership. Each turned its named test red; restored, green. **One break first had NO teeth**: the cap
+  counting rows went unnoticed, because the test only checked the inviter already counted. The test now checks that
+  one person's rows do not crowd out someone else.
+- **CI order** (reset → seed → db suite → full e2e, same database, no reset between): db 457/459 — the two failures
+  were a 5-second timeout in my rewritten slice-1 cap test (fixed: parallel account creation, 30s) and the
+  rank-admission map missing two rows from the concurrent speed-dating migration `20261017030000` (theirs; they
+  regenerated it). e2e 74 passed + 1 flaky (the documented speed-dating waitlist test, green on retry).
+- **Two fixture traps worth knowing.** An owner-level `update vm_conversation_members set role = …` or `update
+  vm_conversations set org_id = …` with no JWT is SILENTLY reverted by the pin triggers, so both tests first passed for
+  the wrong reason; they now act through a real signed-in user and assert the change landed (CONTROL). And vitest runs
+  test FILES in parallel, so a test that writes the platform-wide `pending_invites.caps` row races slice 1's caps
+  tests; the slice-2 cap test uses the default and never writes it.
+- e2e: the founder's scenario 1 end to end through the real screens. The owner invites with the vm role; Dana, a plain
+  member, invites the address to her chat and sees only "Pending"; the owner sees "waiting for them to join the
+  organization"; then sign-up → accept → the chat invitation is there → accept. Plus screen parity for an unknown
+  address vs an existing member.
+- `prod-verify-pending-invites-chat.mts --local` 63/0. Slice 1's verifier was updated to accept the slice-2 shape
+  (still 61/0 local). `verify-acl-hardening.ts` local: all six new functions classified.
+
+### 12.5 Still open
+- **Other modules' invite-like flows** (classroom enrolment, salon workers) are "grant a module position to an existing
+  org member". The `module_role` kind already covers an UNSCOPED grant; a SCOPED one (a class, a location) would need
+  `scope_ref` on the row. Not built (extract-don't-speculate).
+- Only ONE module role per org invitation; more can be granted after they join.

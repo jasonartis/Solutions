@@ -15,9 +15,9 @@ async function signIn(page: Page, email: string) {
 const SVG_400x300 =
   '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300"><rect width="400" height="300" fill="#cbd5e1"/></svg>'
 
-// Alice starts a conversation from a picture and opens it.
-async function startConversation(page: Page, title: string) {
-  await signIn(page, 'alice@demo.local')
+// Alice (or `who`) starts a conversation from a picture and opens it.
+async function startConversation(page: Page, title: string, who = 'alice@demo.local') {
+  await signIn(page, who)
   await page.goto('/o/demo-visual/m/visual-messaging')
   await page.getByPlaceholder('Title').fill(title)
   await page.setInputFiles('input[name="image"]', {
@@ -154,10 +154,94 @@ test('visual messaging: a refused send shows inline and keeps the draft (not a c
 
 test('visual messaging: a refused form action shows inline and keeps what was typed', async ({ page }) => {
   await startConversation(page, 'Invite refusal ' + Date.now())
-  await page.getByPlaceholder('member@email').fill('nobody-here@demo.local')
+  // Since docs/25 §12 an invitation is never refused because of WHO the
+  // address belongs to, so the refusal used here is about the input: an
+  // address the browser accepts but longer than the 320 characters allowed.
+  // 60 + 1 + 60 + 1 + (4 × 61) + 7 = 373 characters.
+  const tooLong = `${'a'.repeat(60)}.${'b'.repeat(60)}@${['c', 'd', 'e', 'f'].map((ch) => ch.repeat(60)).join('.')}.example`
+  expect(tooLong.length).toBeGreaterThan(320)
+  await page.getByPlaceholder('member@email').fill(tooLong)
   await page.getByRole('button', { name: 'Invite member' }).click()
-  await expect(page.locator('p[role="alert"]')).toContainText('nobody-here@demo.local is not a member of this organization yet')
-  await expect(page.getByPlaceholder('member@email')).toHaveValue('nobody-here@demo.local')
+  await expect(page.locator('p[role="alert"]')).toContainText('Enter a valid email address')
+  await expect(page.getByPlaceholder('member@email')).toHaveValue(tooLong)
+})
+
+test('pending invites, chat (docs/25 scenario 1): org invite with the Visual Messaging role + a chat invite from a non-admin, then sign up and accept twice', async ({
+  page,
+}) => {
+  const stamp = Date.now()
+  const email = `e2e-family-${stamp}@demo.local`
+  const title = `Family sketch ${stamp}`
+
+  // 1. The org owner invites the address with the module role.
+  await signIn(page, 'alice@demo.local')
+  await page.goto('/o/demo-visual/members')
+  await page.getByPlaceholder('email@example.com').fill(email)
+  await page.getByLabel('Also give a module role').selectOption({ label: 'Visual Messaging: member' })
+  await page.getByRole('button', { name: 'Invite', exact: true }).click()
+  await expect(page.getByRole('status')).toContainText('Invitation saved')
+  await expect(page.getByText('Visual Messaging: member, given when they accept')).toBeVisible()
+
+  // 2. Dana — a plain member, NOT an org admin — invites the same address to her chat.
+  await startConversation(page, title, 'dana@demo.local')
+  await page.getByPlaceholder('member@email').fill(email)
+  await page.getByRole('button', { name: 'Invite member' }).click()
+  await expect(page.getByRole('button', { name: 'Invited ✓' })).toBeVisible()
+  const danaRow = page.locator('li', { hasText: email })
+  // An ordinary inviter sees only "Pending", never what it is waiting for.
+  await expect(danaRow.getByText('Pending', { exact: true })).toBeVisible()
+  await expect(danaRow.getByText(/join the organization|Visual Messaging role|ready/)).toHaveCount(0)
+
+  // 3. The org owner sees the same chat invitation with its reason.
+  await signIn(page, 'alice@demo.local')
+  await page.goto('/o/demo-visual/members')
+  const aliceRow = page.locator('li', { hasText: `to the conversation “${title}”` })
+  await expect(aliceRow.getByText('waiting for them to join the organization')).toBeVisible()
+
+  // 4. They sign up: the org invitation is there; the chat one is not, yet.
+  await page.goto('/login')
+  await page.getByRole('button', { name: 'Create account' }).click()
+  await page.getByLabel('Email').fill(email)
+  await page.getByLabel('Display name').fill(`E2E Family ${stamp}`)
+  await page.getByLabel('Password').fill('password123')
+  await page.getByRole('button', { name: 'Sign up' }).click()
+  await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByText(/been invited to join/)).toContainText('Demo Visual')
+  const accepted = page.waitForResponse((r) => r.request().method() === 'POST')
+  await page.getByRole('button', { name: 'Accept' }).click()
+  await accepted
+
+  // 5. Nothing manual in between: the role was given, and the chat invitation is waiting.
+  await page.goto('/o/demo-visual/m/visual-messaging')
+  const invitation = page.locator('li', { hasText: title })
+  await expect(invitation).toBeVisible()
+  await invitation.getByRole('button', { name: 'Accept' }).click()
+  await expect(page.getByRole('heading', { name: title })).toBeVisible()
+
+  // Cleanup: remove the new member so Demo Visual keeps its seeded roster.
+  await signIn(page, 'alice@demo.local')
+  await page.goto('/o/demo-visual/members')
+  const row = page.locator('li', { has: page.getByText(email, { exact: true }) })
+  const removed = page.waitForResponse((r) => r.request().method() === 'POST')
+  await row.getByRole('button', { name: 'Remove', exact: true }).click()
+  await removed
+})
+
+test('visual messaging: inviting an address with NO account and an existing member reads exactly the same (no oracle)', async ({
+  page,
+}) => {
+  await startConversation(page, 'Invite parity ' + Date.now())
+  const answers: string[] = []
+  for (const email of ['nobody-here@demo.local', 'charlie@demo.local']) {
+    await page.getByPlaceholder('member@email').fill(email)
+    await page.getByRole('button', { name: 'Invite member' }).click()
+    await expect(page.getByRole('button', { name: 'Invited ✓' })).toBeVisible()
+    answers.push((await page.locator('p[role="status"]').textContent()) ?? '')
+  }
+  expect(answers[0]).toContain('Invitation saved')
+  expect(answers[1], 'the inviter must not be able to tell the two apart').toBe(answers[0])
+  // Both appear in the admin's waiting list with the same plain status.
+  await expect(page.getByText('nobody-here@demo.local')).toBeVisible()
 })
 
 // A noisy picture compresses badly, so it stays large however it is saved —
@@ -563,7 +647,7 @@ test('visual messaging: inviting confirms, and the button stays done until the e
   await page.getByRole('button', { name: 'Invite member' }).click()
   const done = page.getByRole('button', { name: 'Invited ✓' })
   await expect(done).toBeDisabled()
-  await expect(page.locator('p[role="status"]')).toContainText('Invitation sent')
+  await expect(page.locator('p[role="status"]')).toContainText('Invitation saved')
   // Changing the address re-arms it.
   await page.getByPlaceholder('member@email').fill('dana@demo.local')
   await expect(page.getByRole('button', { name: 'Invite member' })).toBeEnabled()

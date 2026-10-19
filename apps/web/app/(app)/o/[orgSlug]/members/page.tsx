@@ -1,7 +1,12 @@
 import Link from 'next/link'
 import { moduleRegistry } from '@platform/core'
 import { requireOrgAdmin } from '@/lib/platform'
-import { listPendingAddressInvites, type OrgMemberProfile, type PendingAddressInvite } from '@/lib/org-members'
+import {
+  listPendingAddressInvites,
+  PENDING_INVITE_WAITING_ON,
+  type OrgMemberProfile,
+  type PendingAddressInviteRow,
+} from '@/lib/org-members'
 import OrgMembersPanel, { type OrgMemberRow } from '@/components/org-members-panel'
 import {
   addMember,
@@ -108,6 +113,7 @@ export default async function MembersPage(props: { params: Promise<{ orgSlug: st
             <InviteForm
               action={addMember.bind(null, orgSlug)}
               roles={(['member', 'admin', 'owner'] as const).filter((r) => ORG_RANK[r] < callerRank)}
+              modules={enabledModules}
             />
             <PendingAddressInvites
               invites={addressInvites}
@@ -134,7 +140,7 @@ function daysLeft(expiresAt: string): number {
 }
 
 function PendingAddressInvites(props: {
-  invites: PendingAddressInvite[]
+  invites: PendingAddressInviteRow[]
   nameOf: (userId: string) => string
   callerRank: number
   cancelAction: (id: string) => () => Promise<void>
@@ -153,7 +159,15 @@ function PendingAddressInvites(props: {
             // Mirrors the database: any org admin may CANCEL (docs/25 §6 answer
             // 3); RESEND re-issues, so it needs the issue rule — the inviter, or
             // someone who outranks the invited role. The database decides either way.
-            const canResend = props.callerRank > (ORG_RANK[inv.role] ?? 0)
+            // A module role or chat invitation is resent by any org admin.
+            const canResend = inv.kind !== 'org' || props.callerRank > (ORG_RANK[inv.role] ?? 0)
+            const moduleName = moduleRegistry.find((m) => m.key === inv.module_key)?.name ?? inv.module_key
+            const what =
+              inv.kind === 'org'
+                ? `to the organization as ${inv.role}`
+                : inv.kind === 'module_role'
+                  ? `${moduleName}: ${inv.role}, given when they accept`
+                  : `to the conversation “${inv.target_title ?? 'a removed conversation'}”`
             return (
               <li
                 key={inv.id}
@@ -161,9 +175,9 @@ function PendingAddressInvites(props: {
               >
                 <span className="text-sm">
                   <span className="font-medium">{inv.email}</span>
-                  <span className="ml-2 text-xs text-gray-500">as {inv.role}</span>
+                  <span className="ml-2 text-xs text-gray-500">{what}</span>
                   <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700">
-                    invited · pending
+                    {PENDING_INVITE_WAITING_ON[inv.waiting_on ?? ''] ?? 'invited · pending'}
                   </span>
                   <span className="ml-2 text-xs text-gray-400">
                     by {props.nameOf(inv.invited_by)} ·{' '}

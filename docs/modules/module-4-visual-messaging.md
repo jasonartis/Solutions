@@ -1184,3 +1184,17 @@ this module is docs/25 slice 2, not started.**
   plain `<Link>`s and scroll to the top; only `goTo` (swipes, arrows, dots) keeps the scroll.
 - **Open founder discussions from this test round, both recorded:** pending invites → docs/25 (brief +
   starter prompt for the Opus build); X-ray → decided and built (entry above).
+
+### 2026-10-18 — inviting by ADDRESS to a conversation (pending invites slice 2, `20261018020000`, Opus)
+
+Full record: docs/25 §12. What changed for this module:
+- **"Invite member" no longer refuses an address that is not in the org.** It saves an invitation for the address
+  and gives the same answer for every address (no account, not in the org, missing the role, already here, or
+  blocked). The 2026-10-15 interim wording and its oracle are gone, as is the swallowed-duplicate self-block tell.
+- The invitation becomes the usual PENDING seat once the person is an active org member with the Visual Messaging
+  role and opens the platform. **A chat invitation never adds anyone to the organization**, and a self-block always
+  wins.
+- The conversation's admin panel has a waiting list: an org admin sees every invitation with what it is waiting for;
+  any other conversation admin sees only the ones they sent, marked "Pending". Cancel / Resend (30 more days).
+- **Behaviour change:** an existing eligible member now sees the invitation at their next page load, not instantly.
+- The module home and the not-yet-a-member conversation page run the claim before listing invitations.

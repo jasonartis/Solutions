@@ -276,7 +276,10 @@ export const platformDataBrowser = declareDataBrowser({
     },
     {
       table: 'pending_invites',
-      columns: ['invited_by'],
+      // claimed_by (20261018020000): the person a module_role invitation is
+      // tied to once its org invitation became their pending seat — same row,
+      // same reasons, and it lives only until that role is granted or dies.
+      columns: ['invited_by', 'claimed_by'],
       why:
         'Invitations held for an ADDRESS (docs/25). Each row is mostly ANOTHER person\'s email ' +
         'address — often someone with no account — and docs/25 §4.2.5 keeps that address out of ' +

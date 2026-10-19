@@ -62,6 +62,31 @@ const EMAIL_READERS: Record<string, string> = {
   pending_invite_apply:
     "Internal (no API EXECUTE). Re-checks that the invite's address is the invitee's own confirmed " +
     "address, and reads the inviter's ban/deletion state; returns a boolean.",
+  // Slice 2 (20261018020000, docs/25 §12). Five of these handle only the
+  // STORED invitation address (pending_invites.email), never auth.users.
+  pending_invite_issue_vm:
+    'Stores an invitation for an address to one conversation. Never reads auth.users or ' +
+    'org_members for it, and answers the same for every address (no-oracle rule).',
+  pending_invite_slot:
+    'Internal (no API EXECUTE). Serialises issuing per address and counts open invitations for ' +
+    'the caps; returns a word, never an address.',
+  pending_invite_cancel:
+    'Deletes one invitation by id and, for an org invitation, the module role stored for the same ' +
+    'address. Returns nothing.',
+  pending_invite_resend:
+    'Extends one invitation by id and, for an org invitation, the module role stored for the same ' +
+    'address. Returns nothing.',
+  pending_invites_list:
+    'RETURNS stored invitation addresses: to an org admin for their own org (they already see these ' +
+    'rows through RLS), or to an ordinary conversation admin for the invitations THEY typed. Reads ' +
+    'auth.users only through pending_invite_waiting_on, and only for an org admin.',
+  pending_invite_waiting_on:
+    'Internal (no API EXECUTE). Matches the stored address to THIS org\'s own seats — addresses an ' +
+    'org admin already reads via org_member_profiles — so it never says whether an account exists ' +
+    'elsewhere. Returns a reason word.',
+  pending_invite_apply_held:
+    "Internal (no API EXECUTE). Re-checks that the invitation's address is the invitee's own " +
+    "confirmed address and reads the inviter's ban state; returns a word.",
   find_module_peer:
     'The three module resolvers (classroom/matchmaking/visual-messaging). Takes an address, returns ' +
     'a user_id and nothing else, and only for an ACTIVE member of the named org.',

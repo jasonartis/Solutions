@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import { FORMER_MEMBER_LABEL, loadFormerMembers } from '@platform/core'
 import { createClient } from '@/lib/supabase/server'
 import { requireOrgModule } from '@/lib/module-gate'
+import { PENDING_INVITE_WAITING_ON } from '@/lib/org-members'
 import { resolveVisualMessagingSettings, type VisualMessagingSettings } from '@/lib/visual-messaging-settings'
 import LayerCanvas, { type Stroke, type Stamp, type TextStamp, type ImageStamp } from '../../layer-canvas'
 import LayerGrid from '../../layer-grid'
@@ -11,11 +12,13 @@ import { ActionForm } from '../../action-form'
 import {
   acceptConversationInvite,
   addMember,
+  cancelConversationInvite,
   declineAndBlockConversationInvite,
   declineConversationInvite,
   flagLayer,
   joinConversation,
   replyWithDrawing,
+  resendConversationInvite,
   restoreLayer,
   renameConversation,
   reviewFlag,
@@ -76,6 +79,11 @@ export default async function ConversationPage(props: {
     // (vm_members_select's user_id = auth.uid() arm) even though the
     // conversation is not, so offer accept/decline instead of a deep-link join.
     // The title comes from the same definer the landing page uses.
+    // Invitations held for this person's ADDRESS turn into pending seats first
+    // (docs/25 §12), so one that just became ready shows up here. Never allowed
+    // to break the page; log the code only, never the address.
+    const { error: claimError } = await supabase.rpc('pending_invites_claim_mine')
+    if (claimError) console.error('pending_invites_claim_mine failed', claimError.code)
     const { data: invites } = await supabase.rpc('vm_my_pending_invites', { check_org_id: org.id })
     const invite = ((invites ?? []) as { conversation_id: string; title: string; invited_by_name: string | null }[]).find(
       (i) => i.conversation_id === conversationId,
@@ -172,6 +180,21 @@ export default async function ConversationPage(props: {
   // Status matters too: a creator always resolves the conversation (the
   // created_by arm), so their seat may be pending or banned — vm_can_post
   // would refuse, and the button must not offer what RLS denies.
+  // Invitations waiting to be used (docs/25 §12). An org admin gets every one
+  // for this conversation with what it is waiting for; any other conversation
+  // admin gets only the ones they sent, with no reason (a reason would say
+  // whether the address is in the org). The database decides which.
+  const { data: heldInviteRows } = canAdmin
+    ? await supabase.rpc('pending_invites_list', { check_org_id: org.id, check_target_id: conversationId })
+    : { data: [] }
+  const heldInvites = (heldInviteRows ?? []) as {
+    id: string
+    email: string
+    expires_at: string
+    invited_by: string
+    waiting_on: string | null
+  }[]
+
   const canPost =
     myMembership?.status === 'active' &&
     (myMembership.role === 'participant' || myMembership.role === 'conversation_moderator' || myMembership.role === 'admin')
@@ -536,9 +559,10 @@ export default async function ConversationPage(props: {
                 className="flex flex-wrap items-center gap-2"
                 submitLabel="Invite member"
                 doneLabel="Invited ✓"
-                // Same words whether they were added, already in, or blocked this
-                // conversation — the action deliberately does not tell the admin which.
-                successMessage="Invitation sent. They will see it in their Visual Messaging list once they open it."
+                // Same words for every address — no account, not in the org,
+                // already here, or blocked this conversation. The action
+                // deliberately does not tell the admin which (docs/25 §4.2.3).
+                successMessage="Invitation saved. No email is sent, so let them know. They will see it in Visual Messaging once they sign in with that address and can use Visual Messaging here."
                 submitClassName="rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700"
             doneClassName="rounded bg-green-600 px-3 py-1 text-sm font-medium text-white disabled:opacity-100"
               >
@@ -550,6 +574,46 @@ export default async function ConversationPage(props: {
                   className="rounded border border-gray-300 px-2 py-1 text-sm"
                 />
               </ActionForm>
+
+              <h3 className="mb-2 mt-4 text-xs font-medium text-gray-600">Invitations waiting to be used</h3>
+              {heldInvites.length === 0 ? (
+                <p className="text-xs text-gray-400">None right now.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {heldInvites.map((inv) => {
+                    const left = Math.ceil((new Date(inv.expires_at).getTime() - Date.now()) / (24 * 60 * 60 * 1000))
+                    return (
+                      <li
+                        key={inv.id}
+                        className="flex flex-wrap items-center justify-between gap-2 rounded border border-dashed border-gray-300 bg-white p-2 text-sm"
+                      >
+                        <span>
+                          <span className="font-medium">{inv.email}</span>
+                          <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700">
+                            {PENDING_INVITE_WAITING_ON[inv.waiting_on ?? ''] ?? 'Pending'}
+                          </span>
+                          <span className="ml-2 text-xs text-gray-400">
+                            {inv.invited_by === me?.id ? 'by you · ' : ''}
+                            {left <= 0 ? 'expired' : left === 1 ? 'expires within a day' : `expires in ${left} days`}
+                          </span>
+                        </span>
+                        <span className="flex items-center gap-2">
+                          <ActionForm action={resendConversationInvite.bind(null, orgSlug, conversationId, inv.id)}>
+                            <button className="text-xs text-blue-600 hover:underline">Resend (30 more days)</button>
+                          </ActionForm>
+                          <ActionForm action={cancelConversationInvite.bind(null, orgSlug, conversationId, inv.id)}>
+                            <button className="text-xs text-red-600 hover:underline">Cancel</button>
+                          </ActionForm>
+                        </span>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+              <p className="mt-2 max-w-xl text-xs text-gray-400">
+                An invitation and the address in it are deleted when it is used, cancelled, or 30 days after it was
+                last sent. Inviting someone here never adds them to the organization.
+              </p>
             </>
           )}
         </section>

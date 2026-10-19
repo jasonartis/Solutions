@@ -68,7 +68,13 @@ const tablePriv = async (role: string, priv: string) =>
     select case when to_regclass('public.pending_invites') is null then null
                 else has_table_privilege(${role}, 'public.pending_invites', ${priv}) end as ok`)[0]!.ok
 
-const ISSUE = 'public.pending_invite_issue_org(uuid, text, text)'
+// SLICE 2 (20261018020000) re-created issue with two more (defaulted)
+// parameters, added three columns, widened the unique key by module_key and
+// moved the caps into pending_invite_slot. The checks below accept either
+// shape, so this script stays true after slice 2; slice 2's own objects are
+// verified by prod-verify-pending-invites-chat.mts.
+let ISSUE = 'public.pending_invite_issue_org(uuid, text, text)'
+const ISSUE_V2 = 'public.pending_invite_issue_org(uuid, text, text, text, text)'
 const CANCEL = 'public.pending_invite_cancel(uuid)'
 const RESEND = 'public.pending_invite_resend(uuid)'
 const APPLY = 'public.pending_invite_apply(uuid, uuid)'
@@ -89,6 +95,8 @@ try {
   check('CONTROL: authenticated holds SELECT on org_members (a has_table_privilege read works)',
     (await sql<{ ok: boolean }[]>`select has_table_privilege('authenticated', 'public.org_members', 'select') as ok`)[0]!.ok)
 
+  if ((await body(ISSUE_V2)) !== '') ISSUE = ISSUE_V2
+
   console.log('\n[1] The table and its ACL')
   const rel = await sql<{ rls: boolean; force: boolean }[]>`
     select relrowsecurity as rls, relforcerowsecurity as force from pg_class where oid = to_regclass('public.pending_invites')`
@@ -96,8 +104,9 @@ try {
   const cols = await sql<{ column_name: string; is_nullable: string }[]>`
     select column_name::text, is_nullable::text from information_schema.columns
     where table_schema = 'public' and table_name = 'pending_invites' order by ordinal_position`
-  check('columns are exactly id,kind,org_id,target_id,email,role,invited_by,created_at,expires_at',
-    cols.map((c) => c.column_name).join(',') === 'id,kind,org_id,target_id,email,role,invited_by,created_at,expires_at',
+  const SLICE1_COLS = 'id,kind,org_id,target_id,email,role,invited_by,created_at,expires_at'
+  check('columns are exactly the slice-1 set (+ module_key,claimed_by,seat_invited_at once slice 2 is applied)',
+    [SLICE1_COLS, `${SLICE1_COLS},module_key,claimed_by,seat_invited_at`].includes(cols.map((c) => c.column_name).join(',')),
     cols.map((c) => c.column_name).join(','))
   check('authenticated holds SELECT', (await tablePriv('authenticated', 'select')) === true)
   for (const priv of ['insert', 'update', 'delete', 'truncate', 'references', 'trigger']) {
@@ -111,7 +120,7 @@ try {
   const cons = await sql<{ def: string }[]>`
     select pg_get_constraintdef(oid) as def from pg_constraint where conrelid = to_regclass('public.pending_invites')`
   check('the org-shape CHECK exists', cons.some((c) => /target_id = org_id/.test(c.def)))
-  check('one row per (kind, target, address), NULLS NOT DISTINCT', cons.some((c) => /UNIQUE NULLS NOT DISTINCT \(kind, target_id, email\)/.test(c.def)), cons.map((c) => c.def).join(' | '))
+  check('one row per (kind, target, address), NULLS NOT DISTINCT', cons.some((c) => /UNIQUE NULLS NOT DISTINCT \(kind, target_id, (module_key, )?email\)/.test(c.def)), cons.map((c) => c.def).join(' | '))
   check('the address CHECK requires lower+trim', cons.some((c) => /lower\(btrim\(email\)\)/.test(c.def)))
 
   console.log('\n[2] The ONE policy — and the ABSENCE of an inviter arm')
@@ -144,8 +153,8 @@ try {
   check('the claim requires a CONFIRMED address', /email_confirmed_at is not null/.test(claim))
   check('the claim asserts the identity came back', /caller identity was not restored/.test(claim))
   check('NEGATIVE: the claim never matches by account_email_fingerprint', !!claim && !/account_email_fingerprint/.test(claim))
-  const issue = await body(ISSUE)
-  check('issue reads the caps from platform_settings with a 100 / 20 fallback',
+  const issue = (await body(ISSUE)) + (await body('public.pending_invite_slot(uuid, text, text, uuid, text)'))
+  check('issue (or, since slice 2, its slot helper) reads the caps from platform_settings with a 100 / 20 fallback',
     /pending_invites\.caps/.test(issue) && /else 100 end/.test(issue) && /else 20 end/.test(issue))
 
   console.log('\n[4] org_find_user_by_email is SUPERADMIN-ONLY now (docs/25 §4.3)')
