@@ -4,6 +4,7 @@ The running, dated build journal that used to live in `CLAUDE.md`'s "## Current 
 section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every session)
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
+- **2026-10-19 — SECURITY SWEEP: THREE MIGRATIONS ON PRODUCTION, PROD-VERIFIED.** Self re-register for speed dating grew into a platform sweep (cross-org mentor read, first-insert trust, removed seat still got video tokens, INSERT-vs-UPDATE pin mismatch in 5 modules). Prod verifiers 92/79 -> 171/0 and 46/52 -> 271/0. Three re-review rounds each found a hole in the previous fix. Detail + lessons: module-6 spec 2026-10-19, CLAUDE.md top block.
 - **2026-10-15/16 (Opus) — PENDING INVITES SLICE 1 (ORG PRE-INVITE), `20261016010000` — ON PRODUCTION AND
   PROD-VERIFIED** (commits `72197c4`, `3fac438`; backup `backups/2026-10-16T06-27-18`; prod verifier 8/55 →
   64/0; ACL 17/17 on prod; live on prod as real users 12/12 — scenario 1 end to end with a throwaway confirmed

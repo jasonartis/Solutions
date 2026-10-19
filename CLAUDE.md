@@ -19,6 +19,20 @@ A multi-tenant modular platform: each client engagement produces a **module** bu
      and update only the compact "Now / Next / Standing rules" below. A fresh chat must never
      pay for the full journal. See "Session hygiene". -->
 
+**2026-10-19 (Opus builders + reviewers): SECURITY SWEEP — `20261017010000`/`020000`/`030000` ARE ON PRODUCTION AND
+PROD-VERIFIED** (backup `backups/2026-10-19T15-44-08`; sd verifier 92/79-fail → **171/0**, insert-pins verifier
+46/52 → **271/0**; db suite 471/471). Began as "a self-withdrawn dater cannot register again" and became: a
+CROSS-ORG READ via `sd_mentors()` (closed at the write trigger AND the helper), first registration trusting the
+client, a removed seat still getting video tokens, interest marks without a meeting creating real matches, and the
+same INSERT-vs-UPDATE-pin mismatch in classroom/visual-messaging/salon/matchmaking/job queue. **Rules now in the
+DB: a withdrawn person re-registers THEMSELVES; an organizer can never put a withdrawn/removed person back (may
+only clear a removal). The APP side (Register again, token hardening) is COMMITTED `d287e79` BUT PUSH WAITS** for
+the pending-invites session's migration (shared master: any push ships every session's local commits). Until then
+prod runs OLD screens on the NEW DB (old Reinstate button errors). **Lessons:** each of three re-review rounds
+found a hole in the PREVIOUS fix (an error that distinguishes "none" from "not yours" is an oracle; a coarse
+"manager anywhere in the org" exemption must be class-level). **Open, founder-deferred:** an organizer can still
+seat an org member without their say-so (build the consent flow with audience/mentor seats). Full story:
+module-6 spec 2026-10-19.
 **2026-10-14, VISUAL MESSAGING FIX BATCH: THE SONNET UI HALF IS BUILT AND PUSHED (phases 1–7, no
 migration — spec "2026-10-14 (build)" entry); NOT YET CHECKED ON A PHONE.** The Opus half (viewers
 may react, `20261014020000`) is on prod and verified. **⚠ PLATFORM-WIDE FIX in it: `globals.css`'s
