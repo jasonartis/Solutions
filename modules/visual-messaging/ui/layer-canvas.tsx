@@ -127,21 +127,34 @@ function strokeToPolygon(stroke: Stroke): number[] {
 // URLs for already-sent stamps, plus local object URLs for an unsent draft —
 // both need a real Image() to paint on canvas). Cache persists across
 // renders so a URL already loaded isn't re-fetched.
+//
+// KEYED BY THE URL WITHOUT ITS QUERY STRING. A signed storage URL carries a fresh
+// token on every server render, so keying by the whole URL made every navigation
+// (every completed swipe) look like a brand-new set of pictures: stamps vanished
+// until they re-downloaded, which read as "the image and the layers below it
+// reload" (founder, 2026-10-19). The path part is stable; the token is not.
+export const urlKey = (url: string) => url.split('?')[0]!
+
 export function useImageCache(urls: string[]): Record<string, HTMLImageElement> {
   const [cache, setCache] = useState<Record<string, HTMLImageElement>>({})
-  const key = urls.filter(Boolean).join('|')
+  const key = urls.filter(Boolean).map(urlKey).join('|')
   useEffect(() => {
     if (typeof window === 'undefined') return
     for (const url of urls) {
-      if (!url || cache[url]) continue
+      const k = url && urlKey(url)
+      if (!url || cache[k]) continue
       const el = new window.Image()
       el.crossOrigin = 'anonymous'
-      el.onload = () => setCache((c) => (c[url] ? c : { ...c, [url]: el }))
+      el.onload = () => setCache((c) => (c[k] ? c : { ...c, [k]: el }))
       el.src = url
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key])
-  return cache
+  // Callers still index by the full URL (`cache[im.url]`); look it up by key.
+  return useMemo(
+    () => new Proxy(cache, { get: (t, p) => (typeof p === 'string' ? t[urlKey(p)] : undefined) }),
+    [cache],
+  )
 }
 
 export default function LayerCanvas(props: {
@@ -380,7 +393,10 @@ export default function LayerCanvas(props: {
     el.crossOrigin = 'anonymous'
     el.onload = () => setImg(el)
     el.src = props.imageUrl
-  }, [props.imageUrl])
+    // Depends on the stable part of the URL only (see urlKey): a fresh token on
+    // the same picture must not trigger a re-download and re-decode.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlKey(props.imageUrl)])
 
   // Founder feedback (2026-07-12, "doesn't come out very well on phone/
   // tablet"): the canvas used to hard-cap at 640px regardless of viewport,
@@ -1154,7 +1170,8 @@ export default function LayerCanvas(props: {
           }
           className={
             'flex items-center gap-1.5 rounded border px-2 py-1 text-xs ' +
-            (xrayLevel === 0 ? 'border-gray-300 text-gray-600' : 'border-blue-500 bg-blue-50 text-blue-700')
+            (xrayLevel === 0 ? 'border-gray-300 text-gray-600' : 'border-blue-500 bg-blue-50 text-blue-700') +
+            (mode === 'view' ? ' order-2' : '')
           }
         >
           <XrayEye level={xrayLevel} />
@@ -1163,14 +1180,18 @@ export default function LayerCanvas(props: {
 
         {mode === 'view' && (
           <>
-            <span className="text-[11px] text-gray-400">
+            <span className="order-1 min-w-0 flex-1 text-[11px] text-gray-400">
               swipe ← dive into replies · swipe → back up
             </span>
+            {/* Its own full-width row on a phone, with a gap above it: when it sat
+                right under X-ray the two looked alike and a tap meant for X-ray
+                started a reply (founder, 2026-10-19). Different size, different
+                colour, different place. */}
             {props.drawable && (
               <button
                 type="button"
                 onClick={() => setMode('draw')}
-                className="rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700"
+                className="order-3 mt-3 min-h-11 w-full rounded bg-blue-600 px-4 py-2 text-base font-medium text-white hover:bg-blue-700 sm:mt-0 sm:min-h-0 sm:w-auto sm:px-3 sm:py-1 sm:text-sm"
               >
                 Draw a reply
               </button>

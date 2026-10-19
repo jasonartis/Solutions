@@ -1198,3 +1198,22 @@ Full record: docs/25 §12. What changed for this module:
   any other conversation admin sees only the ones they sent, marked "Pending". Cancel / Resend (30 more days).
 - **Behaviour change:** an existing eligible member now sees the invitation at their next page load, not instantly.
 - The module home and the not-yet-a-member conversation page run the claim before listing invitations.
+
+### 2026-10-19 — phone-width pass (founder, touch-screen desktop in phone view)
+
+- **Dashboard is responsive:** each org card is the name + role on one line, the text links (Members / Settings /
+  Help / Export data / Leave) on their own row with finger-sized targets, and the module buttons full width
+  (`apps/web/app/(app)/dashboard/page.tsx`). From `sm` up it is the original one-row layout. Checked as
+  screenshots at 390px, before and after.
+- **"Draw a reply" no longer sits under X-ray** (the founder tapped it meaning X-ray and could not tell why the
+  page changed): in view mode the hint text + a small X-ray button share one row, and Draw is a big full-width
+  blue bar on its own row with a gap above it (inline again from `sm` up).
+- **The reload after a completed swipe was the signed picture URLs.** A signed storage URL carries a fresh token
+  on every server render, so keying the image cache (and the root picture's effect) by the whole URL made every
+  navigation look like new pictures — stamps vanished until re-downloaded. Now keyed by the URL without its query
+  string (`urlKey` in `layer-canvas.tsx`; the cache is a Proxy so call sites still index by full URL). e2e counts
+  `/vm-images/` requests across two navigations (with a positive control that the first load did fetch).
+- **e2e trap:** the test "sign out returns to login and locks the dashboard" signs Alice out EVERYWHERE; any
+  other test using alice in parallel then fails with "Not signed in" (seen as a vm test failing only when a
+  `-g` filter happened to include it). The full suite has passed with it, by timing — a latent flake source;
+  run vm tests with filters that exclude it.

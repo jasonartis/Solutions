@@ -4,6 +4,9 @@ import { createClient } from '@/lib/supabase/server'
 import { acceptInvite, declineInvite, leaveOrg } from './actions'
 import JoinHelp from './join-help'
 
+// An org card's text links: small on a desktop, a comfortable tap target on a phone.
+const orgLink = 'whitespace-nowrap py-1.5 text-sm text-blue-600 hover:underline sm:py-0 sm:text-xs'
+
 export default async function DashboardPage() {
   const supabase = await createClient()
   // Signing back in during the 30-day grace period cancels a deletion
@@ -50,7 +53,7 @@ export default async function DashboardPage() {
               key={inv.org_id}
               className="rounded-lg border border-dashed border-amber-300 bg-amber-50 p-5"
             >
-              <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
                 <p className="text-sm text-amber-900">
                   You&apos;ve been invited to join <span className="font-semibold">{inv.org_name}</span> as{' '}
                   <span className="font-medium">{inv.invited_role}</span>. It won&apos;t appear below until you
@@ -76,14 +79,16 @@ export default async function DashboardPage() {
 
       <div className="space-y-6">
         {orgs.map((org) => (
-          <section key={org.id} className="rounded-lg border border-gray-200 bg-white p-5">
-            <div className="mb-3 flex items-baseline justify-between">
-              <div className="flex items-baseline gap-2">
+          <section key={org.id} className="rounded-lg border border-gray-200 bg-white p-4 sm:p-5">
+            {/* Phone: the name (and role) on top, the links on their own row below
+                with finger-sized targets. From sm up it is the original one-row layout. */}
+            <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-baseline sm:justify-between">
+              <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                 <h2 className="text-lg font-medium">{org.name}</h2>
                 <span
                   title="Your organization-level role (separate from any role you hold inside a specific module below)"
                   className={
-                    'rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ' +
+                    'whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ' +
                     (org.role === 'owner'
                       ? 'bg-purple-100 text-purple-700'
                       : org.role === 'admin'
@@ -94,26 +99,28 @@ export default async function DashboardPage() {
                   org: {org.role}
                 </span>
               </div>
-              <span className="flex items-baseline gap-3">
+              <span className="flex flex-wrap items-center gap-x-5 gap-y-1 border-t border-gray-100 pt-2 sm:gap-x-3 sm:border-0 sm:pt-0">
                 {(org.role === 'owner' || org.role === 'admin') && (
                   <>
-                    <Link href={`/o/${org.slug}/members`} className="text-xs text-blue-600 hover:underline">
+                    <Link href={`/o/${org.slug}/members`} className={orgLink}>
                       Members
                     </Link>
-                    <Link href={`/o/${org.slug}/settings`} className="text-xs text-blue-600 hover:underline">
+                    <Link href={`/o/${org.slug}/settings`} className={orgLink}>
                       Settings
                     </Link>
                   </>
                 )}
-                <Link href={`/o/${org.slug}/help`} className="text-xs text-blue-600 hover:underline">
+                <Link href={`/o/${org.slug}/help`} className={orgLink}>
                   Help
                 </Link>
-                <Link href={`/o/${org.slug}/export`} className="text-xs text-blue-600 hover:underline">
+                <Link href={`/o/${org.slug}/export`} className={orgLink}>
                   Export data
                 </Link>
                 {org.role === 'member' && (
                   <form action={leaveOrg.bind(null, org.id)}>
-                    <button className="text-xs text-red-600 hover:underline">Leave</button>
+                    <button className="whitespace-nowrap py-1.5 text-sm text-red-600 hover:underline sm:py-0 sm:text-xs">
+                      Leave
+                    </button>
                   </form>
                 )}
               </span>
@@ -121,12 +128,12 @@ export default async function DashboardPage() {
             {org.modules.length === 0 ? (
               <p className="text-sm text-gray-500">No modules enabled for this organization.</p>
             ) : (
-              <ul className="flex flex-wrap gap-3">
+              <ul className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-3">
                 {org.modules.map((mod) => (
                   <li key={mod.key}>
                     <Link
                       href={`/o/${org.slug}/m/${mod.key}`}
-                      className="inline-flex items-center gap-1.5 rounded border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100"
+                      className="flex min-h-11 items-center justify-between gap-1.5 rounded border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 sm:inline-flex sm:min-h-0 sm:justify-start"
                     >
                       {mod.name}
                       {mod.myRole && (

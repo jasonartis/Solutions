@@ -693,3 +693,28 @@ test('visual messaging: X-ray while viewing fades the replies, not the picture, 
   await expect(xray).toHaveAttribute('aria-label', 'X-ray: off')
   await expect.poll(() => layerOpacities(page)).toEqual([1, 1, 1, 1])
 })
+
+test('visual messaging: moving between layers does not re-download the pictures', async ({ page }) => {
+  // A signed storage URL carries a fresh token on every server render; keyed by the whole
+  // URL, every navigation re-downloaded the root picture and stamps, which showed as a
+  // reload after each swipe (founder, 2026-10-19).
+  test.slow()
+  const pictureRequests: string[] = []
+  page.on('request', (r) => {
+    if (r.url().includes('/vm-images/')) pictureRequests.push(r.url())
+  })
+  const box = await openDrawing(page, 'No reload ' + Date.now())
+  await inkStroke(page, box, [60, 60], [220, 140])
+  await page.getByRole('button', { name: 'Send reply' }).click()
+  await expect(page.getByText('1.1', { exact: true })).toBeVisible()
+  await page.waitForTimeout(1000)
+  const before = pictureRequests.length
+  expect(before).toBeGreaterThan(0) // control: the picture really was fetched, and we can see it
+
+  await page.getByRole('button', { name: /swipe right: 1 back up/ }).click()
+  await expect(page.getByText('Replies to this layer (1)')).toBeVisible()
+  await page.getByRole('button', { name: /swipe left: 1 deeper/ }).click()
+  await expect(page.getByText('Replies to this layer (0)')).toBeVisible()
+  await page.waitForTimeout(1500)
+  expect(pictureRequests.length).toBe(before)
+})
