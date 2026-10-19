@@ -464,6 +464,23 @@ member reads exactly the same`. Prod verifier: `scripts/prod-verify-pending-invi
   organization yet" refusal and the swallowed-duplicate self-block tell are both gone. **Behaviour change:** an
   existing eligible member now gets the invitation at their next page load instead of instantly.
 
+**Who can invite what, in plain words** (the founder asked, 2026-10-19, "so both Alice and Dana can invite?"):
+
+| | Org owner/admin (Alice) | Plain member with the vm role (Dana) |
+|---|---|---|
+| Invite to the ORGANIZATION (members page) | yes, optionally with one module role | no |
+| Invite to a CONVERSATION | any conversation in the org | only conversations she is an admin of (the ones she started) |
+| Waiting list shows | every invitation in the org, by anyone, with what it waits for | only her own, as "Pending" |
+| Cancel | any invitation in the org | her own |
+
+Same rule as before slice 2: whoever could already add a person to something can now invite their address to it.
+
+**Founder review, 2026-10-19.** Three choices were made on recommended defaults and put to the founder: ONE
+module role per org invitation; a held invitation appears on the person's next page load (no trigger); an existing
+member likewise gets a chat invitation at their next page load. He then tried it on prod and answered "looks good".
+**Treat all three as accepted.** His other answers that day: chat invitations never email (§12.5); the prod push
+was approved.
+
 ### 12.3 What adversarial review changed (two narrow Fable reviewers, 2026-10-18)
 1. **The address cap counts DISTINCT INVITERS, not rows.** Counting rows let one chat maker fill an address's cap
    alone by inviting it to many conversations, read off how many OTHER invitations exist, and watch that count drop —
@@ -494,6 +511,10 @@ member reads exactly the same`. Prod verifier: `scripts/prod-verify-pending-invi
   and cancel ownership. Each turned its named test red; restored, green. **One break first had NO teeth**: the cap
   counting rows went unnoticed, because the test only checked the inviter already counted. The test now checks that
   one person's rows do not crowd out someone else.
+  - **How, so it can be repeated** (the script was a throwaway): for each break, read the live body with
+    `pg_get_functiondef`, replace one line, `CREATE OR REPLACE` it (a function's ACL survives that), run the suite and
+    collect the red test names, then restore the saved body. Finish with one clean run to prove everything was
+    restored.
 - **CI order** (reset → seed → db suite → full e2e, same database, no reset between): db 457/459 — the two failures
   were a 5-second timeout in my rewritten slice-1 cap test (fixed: parallel account creation, 30s) and the
   rank-admission map missing two rows from the concurrent speed-dating migration `20261017030000` (theirs; they
@@ -511,7 +532,8 @@ member reads exactly the same`. Prod verifier: `scripts/prod-verify-pending-invi
   (still 61/0 local). `verify-acl-hardening.ts` local: all six new functions classified.
 - **ON PRODUCTION 2026-10-19.** Backup `backups/2026-10-19T15-47-05`; `migrate:prod` applied this file alone, right
   after the speed-dating session's three `20261017*` (shipped by that session, its own backup and go-ahead); then a
-  dry run said "up to date", then `git push`.
+  dry run said "up to date", then `git push`. The app code deployed READY on Vercel as part of `234b5a0` (which
+  contains `f2b4e5e` and this slice's `48b9746`).
   - Verifiers on prod: `prod-verify-pending-invites-chat.mts` **21/42 → 63/0** (every CONTROL and the §[4]
     trigger-reliance checks green both times); slice 1's verifier **65/0**; `verify-acl-hardening.ts` **17/17**;
     `prod-verify-migration.ts` 0 failures (4 warnings, the benign internal-function class).

@@ -1584,6 +1584,13 @@ in the sections below.
   in ONE `migrate:prod`, theirs first, and read the dry run before treating a go-ahead for
   "my migration" as covering the push — it covers everything pending. A go-ahead relayed by
   another session is not the founder's: get it in your own session.
+  **The alternative that worked (2026-10-19), when the EARLIER-sorting set ships alone:** the
+  owner of the LATER file moves it out of `supabase/migrations/` (a copy identical to its
+  commit kept aside), the other session's dry run proves only its files are listed, it
+  applies, then the file goes back and ships in its own push. That order is safe; the reverse
+  is not. **Cross-session messages cross**: two plans were swapped back and forth twice, so
+  every message should state where the file IS right now, and nobody applies until the dry run
+  matches.
 - **AFTER `supabase stop`, `supabase start` CAN FAIL ON STUDIO'S MOUNT (2026-10-09):**
   `failed to start docker container "supabase_studio_..." ... mkdir /run/desktop/mnt/host/d: file
   exists`. A Docker Desktop host-mount quirk on D:, not a broken stack; a retry fails the same
@@ -1949,6 +1956,10 @@ ode-compile-cache`. **So `--concurrency=1` is not a universal fix and "134 means
   printed five paths when two were expected, one command before the commit. → **Use a pathspec on
   the commit itself — `git commit -- <paths>` — which ignores everything else in the index**; or if
   you print `git diff --cached`, actually read the count and stop when it exceeds what you touched.
+  → **The PUSH has the same trap (2026-10-19): `.git` is shared, so `git push` of master sends EVERY
+  session's unpushed commits** — a pathspec only controls what YOU commit. A session nearly shipped
+  another's app code before that session's migration was on prod. Before pushing, run
+  `git log --oneline origin/master..HEAD` and ask the owner of any commit that is not yours.
   → And do not "fix" a sweep like this by reverting the other session's files: they may already
   have built on them, and a revert can destroy live work. Leave the code, correct the record, and
   TELL the founder, because that session's own git view now shows its work committed by someone

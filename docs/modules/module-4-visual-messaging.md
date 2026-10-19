@@ -1149,8 +1149,8 @@ Also: the edge markers now update client-side the instant a swipe completes (`la
 shared with the server page). **Open design discussion, NOT built:** pending invites for people
 not yet on the platform/org (founder: 30 days; "anyone may pre-invite to what they can invite to";
 each invite takes effect when its prerequisites are met) — see the brief to be written for the
-Opus session. **→ Now docs/25; the ORG half is LIVE (2026-10-16, `20261016010000`); the CHAT half for
-this module is docs/25 slice 2, not started.**
+Opus session. **→ Now docs/25; the ORG half is LIVE (2026-10-16, `20261016010000`); the CHAT half is
+LIVE TOO (2026-10-19, `20261018020000`, docs/25 §12 — entry 2026-10-18 below).**
 
 ### 2026-10-15 — notes from the build sessions that were only in the chat
 
