@@ -26,9 +26,10 @@ CROSS-ORG READ via `sd_mentors()` (closed at the write trigger AND the helper), 
 client, a removed seat still getting video tokens, interest marks without a meeting creating real matches, and the
 same INSERT-vs-UPDATE-pin mismatch in classroom/visual-messaging/salon/matchmaking/job queue. **Rules now in the
 DB: a withdrawn person re-registers THEMSELVES; an organizer can never put a withdrawn/removed person back (may
-only clear a removal). The APP side (Register again, token hardening) is COMMITTED `d287e79` BUT PUSH WAITS** for
-the pending-invites session's migration (shared master: any push ships every session's local commits). Until then
-prod runs OLD screens on the NEW DB (old Reinstate button errors). **Lessons:** each of three re-review rounds
+only clear a removal). The APP side (Register again, token hardening) IS LIVE** (`d287e79`, pushed 2026-10-19 once the pending-invites
+migration landed; deploy READY, CI green). **Verified on PROD with real browsers:** `prod-verify-event-lifecycle.mjs`
+12/12, `prod-verify-video-controls.mjs` 9/9, `prod-verify-video-refusals.mjs` 4/4 (a REMOVED seat is refused a
+token; the registered partner joins). **Lessons:** each of three re-review rounds
 found a hole in the PREVIOUS fix (an error that distinguishes "none" from "not yours" is an oracle; a coarse
 "manager anywhere in the org" exemption must be class-level). **Open, founder-deferred:** an organizer can still
 seat an org member without their say-so (build the consent flow with audience/mentor seats). Full story:
