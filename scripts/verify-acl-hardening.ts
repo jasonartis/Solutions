@@ -167,12 +167,25 @@ const FUNCTION_EXCEPTIONS: Record<string, { auth: boolean; svc: boolean }> = {
   'former_members(check_user_ids uuid[])': { auth: true, svc: false },
   'sd_my_departed_matches(check_event_id uuid)': { auth: true, svc: false },
   'sd_my_departed_interests(check_event_id uuid)': { auth: true, svc: false },
+  // SD SELF-REJOIN / HARDENING (20261017010000): internal capacity rule, called
+  // only from the sd_participants triggers (which run as definer). It takes an
+  // advisory lock and reads every seat on a side, so NO api role may call it.
+  'sd_registration_status(check_event_id uuid, check_side text, exclude_participant_id uuid)': { auth: false, svc: false },
   // PENDING INVITES (20261016010000, docs/25). Entry points act on auth.uid()
   // (issue/cancel/resend re-check is_org_admin; the claim reads the caller's own
   // address), so service_role has no use for them. The applier and the pruner
   // are internal: the applier is reachable only from the claim, the pruner only
   // from pg_cron as postgres.
-  'pending_invite_issue_org(check_org_id uuid, target_email text, invited_role text)': { auth: true, svc: false },
+  // SLICE 2 (20261018020000) re-created issue_org with two defaulted
+  // parameters, and added the chat kind: issue_vm and the list act on
+  // auth.uid() like the rest; slot, apply_held and waiting_on are internal
+  // (reachable only from the issue functions, the claim and the list).
+  'pending_invite_issue_org(check_org_id uuid, target_email text, invited_role text, with_module_key text, with_module_role text)': { auth: true, svc: false },
+  'pending_invite_issue_vm(check_conversation_id uuid, target_email text)': { auth: true, svc: false },
+  'pending_invites_list(check_org_id uuid, check_target_id uuid)': { auth: true, svc: false },
+  'pending_invite_slot(p_inviter uuid, p_email text, p_kind text, p_target uuid, p_module_key text)': { auth: false, svc: false },
+  'pending_invite_apply_held(invite_id uuid, invitee uuid)': { auth: false, svc: false },
+  'pending_invite_waiting_on(invite_id uuid)': { auth: false, svc: false },
   'pending_invite_cancel(invite_id uuid)': { auth: true, svc: false },
   'pending_invite_resend(invite_id uuid)': { auth: true, svc: false },
   'pending_invites_claim_mine()': { auth: true, svc: false },

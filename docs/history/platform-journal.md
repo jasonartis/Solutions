@@ -4,6 +4,23 @@ The running, dated build journal that used to live in `CLAUDE.md`'s "## Current 
 section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every session)
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
+- **2026-10-18/19 (Opus) — PENDING INVITES SLICE 2 (CHAT PRE-INVITE + A MODULE ROLE ON AN ORG INVITE),
+  `20261018020000`, WITH SLICES 3–4 FOLDED IN — ON PRODUCTION AND PROD-VERIFIED.** Backup
+  `backups/2026-10-19T15-47-05`, applied right after the sweep below; prod verifier 21/42 → 63/0; slice-1 verifier
+  65/0; ACL 17/17 on prod; live on prod as real users 17/17 (scenario 1 end to end with a throwaway confirmed
+  account, then deleted). Locally: 25 new tests from reset, teeth proven by 11 deliberate breakages; CI order db
+  457/459 → e2e 74/75 (the two db failures: my timeout, fixed, and the sweep's rank-map rows; the e2e one is the
+  known speed-dating flake). Full record: docs/25 §12. What a future session would otherwise miss:
+  - **(1) Two Fable reviewers found 4 real holes.** The worst: counting the per-address cap by ROWS let one chat
+    maker learn, across tenants, when an address signed up; it now counts distinct inviters.
+  - **(2) A module role rides on its OWN org seat** (`claimed_by` / `seat_invited_at`), not on the address.
+  - **(3) The pin triggers silently revert an owner-level no-JWT fixture write** (docs/03 test discipline,
+    2026-10-18): two tests first passed for the wrong reason.
+  - **(4) The shared `.git` means a push of master ships EVERY session's unpushed commits.** A commit pathspec
+    controls what you commit, not what a push sends. The other session nearly pushed this slice's app code before its
+    migration; the fix was to apply the migration first, then push once.
+  - **(5) Founder, 2026-10-19:** chat invitations never email. Org (and future platform) invitations get an opt-in
+    "also send an email", after the mail provider exists (docs/25 §12.5, docs/18 item 7).
 - **2026-10-19 — SECURITY SWEEP: THREE MIGRATIONS ON PRODUCTION, PROD-VERIFIED.** Self re-register for speed dating grew into a platform sweep (cross-org mentor read, first-insert trust, removed seat still got video tokens, INSERT-vs-UPDATE pin mismatch in 5 modules). Prod verifiers 92/79 -> 171/0 and 46/52 -> 271/0. Three re-review rounds each found a hole in the previous fix. Detail + lessons: module-6 spec 2026-10-19, CLAUDE.md top block.
 - **2026-10-15/16 (Opus) — PENDING INVITES SLICE 1 (ORG PRE-INVITE), `20261016010000` — ON PRODUCTION AND
   PROD-VERIFIED** (commits `72197c4`, `3fac438`; backup `backups/2026-10-16T06-27-18`; prod verifier 8/55 →

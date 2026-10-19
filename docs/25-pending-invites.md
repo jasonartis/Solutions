@@ -1,8 +1,9 @@
 # 25 — Pending invites (invite people who are not on the platform / org yet)
 
-**Status 2026-10-19: SLICES 1–4 ARE BUILT.** Slice 1 (org pre-invite, `20261016010000`) is on production —
-§11. **Slice 2 (chat pre-invite + a module role carried on an org invite, `20261018020000`) with slices 3 and 4
-folded in is §12 — read it first; its prod status is stated there.**
+**Status 2026-10-19: SLICES 1–4 ARE BUILT, ON PRODUCTION AND PROD-VERIFIED.** Slice 1 (org pre-invite,
+`20261016010000`) — §11. **Slice 2 (chat pre-invite + a module role carried on an org invite, `20261018020000`),
+with slices 3 and 4 folded in — §12; read it first.** The one decided future improvement: an opt-in invitation
+email for org (and future platform) invitations, waiting on the mail provider (§12.5).
 
 **Original status: REQUIREMENTS BRIEF, 2026-10-15.** Written by a
 Sonnet session from the founder's decisions so they are not lost; the **schema, RLS and trigger design
@@ -508,9 +509,34 @@ member reads exactly the same`. Prod verifier: `scripts/prod-verify-pending-invi
   address vs an existing member.
 - `prod-verify-pending-invites-chat.mts --local` 63/0. Slice 1's verifier was updated to accept the slice-2 shape
   (still 61/0 local). `verify-acl-hardening.ts` local: all six new functions classified.
+- **ON PRODUCTION 2026-10-19.** Backup `backups/2026-10-19T15-47-05`; `migrate:prod` applied this file alone, right
+  after the speed-dating session's three `20261017*` (shipped by that session, its own backup and go-ahead); then a
+  dry run said "up to date", then `git push`.
+  - Verifiers on prod: `prod-verify-pending-invites-chat.mts` **21/42 → 63/0** (every CONTROL and the §[4]
+    trigger-reliance checks green both times); slice 1's verifier **65/0**; `verify-acl-hardening.ts` **17/17**;
+    `prod-verify-migration.ts` 0 failures (4 warnings, the benign internal-function class).
+  - **Live on prod as real users, 17/17:** alice (owner) issued an org invite carrying the vm role; dana (a plain
+    member) issued a chat invite and got the same answer for an existing member; dana's list showed only her rows,
+    with no reason; charlie read nothing; alice saw "org_membership". A throwaway confirmed account then claimed ONLY
+    the org seat (pending) and saw no chat invitation. After it accepted, one claim granted the role and created the
+    PENDING chat seat stamped with dana, which it accepted. No stored address remained; everything the run created
+    was deleted and checked gone.
+- **Only locally proven:** the failure paths (lapsed / demoted / banned inviter, self-block, moved conversation,
+  withdrawn module role, caps). The throwaway account was confirmed through the admin API, so prod's confirmation
+  email was not exercised (same as slice 1).
 
 ### 12.5 Still open
 - **Other modules' invite-like flows** (classroom enrolment, salon workers) are "grant a module position to an existing
   org member". The `module_role` kind already covers an UNSCOPED grant; a SCOPED one (a class, a location) would need
   `scope_ref` on the row. Not built (extract-don't-speculate).
 - Only ONE module role per org invitation; more can be granted after they join.
+- **FUTURE IMPROVEMENT — an opt-in "also send an email" next to the invite (founder, 2026-10-19).**
+  - **Chat invitations: NO email, confirmed.** The inviter tells the person.
+  - **Org invitations, and a future PLATFORM invitation (§6 answer 6): the inviter should get the OPTION of
+    sending an email, beside the invite** — a choice per invitation, not automatic.
+  - **Blocked on the mail provider** (docs/18 item 7, paused until the first real client): production's built-in
+    sender is 2 emails per hour for the whole project. Build it after custom SMTP exists.
+  - Design notes for whoever builds it:
+    - The email must not become an oracle: send the same email whether or not the address has an account.
+    - The §6 answer 2 caps already bound how often one address can be emailed; revisit them with it.
+    - The /privacy line may need a sentence (founder reviews the wording).

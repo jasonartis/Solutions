@@ -250,6 +250,10 @@ database — a compromised GitHub account defeats every safeguard in docs/12. Fi
 docs/12 item 7: Supabase's built-in sender is rate-limited and unsuitable for real signup
 volume. Needs a sending domain and a provider account.
 
+**WAITING ON THIS (founder, 2026-10-19): an opt-in "also send an email" beside an org invitation
+(and a future platform invitation).** Chat invitations stay email-free. Design notes:
+docs/25 §12.5.
+
 **MEASURED 2026-10-13 — THE BUILT-IN SENDER IS CAPPED AT 2 EMAILS PER HOUR FOR THE WHOLE
 PROJECT** (`rate_limit_email_sent = 2`, all `smtp_*` null, Management API). With confirm-email
 ON, every signup, every email sign-in link and every password reset draws on those 2. A third

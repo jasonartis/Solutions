@@ -51,8 +51,16 @@ PENDING seat. **Read [docs/25 §11](docs/25-pending-invites.md) first.** Things 
 **`org_find_user_by_email` is now SUPERADMIN-ONLY** (tests resolve ids with `userIdOf`); the org members
 page no longer creates seats directly, so **an e2e that invites an existing user sees the seat only after
 that user opens their dashboard**; module roles are NOT carried on an invite (slice 2 grants at accept).
-The `/privacy` line is LIVE (founder-approved 2026-10-16; resend has no maximum, by decision). Slices 2
-and 4 (chat consumer; removing vm `addMember`'s refusal) not started.
+The `/privacy` line is LIVE (founder-approved 2026-10-16; resend has no maximum, by decision).
+**2026-10-19 (Opus): PENDING INVITES SLICE 2 (+3, +4) — `20261018020000` ON PRODUCTION AND PROD-VERIFIED**
+(backup `backups/2026-10-19T15-47-05`; `prod-verify-pending-invites-chat.mts` 21/42 → **63/0**; ACL 17/17 on
+prod; live as real users 17/17). A conversation admin invites an ADDRESS; it is HELD until the person is an active
+org member with the vm role, then becomes the usual pending seat. It never creates org membership, and a self-block
+wins. An org invite may carry ONE module role, granted only after they accept. **Read [docs/25 §12](docs/25-pending-invites.md)
+first.** Things that bite: vm `addMember` no longer refuses or looks anyone up, so **an existing member sees a chat
+invite at their next page load, not instantly**; the per-address cap counts DISTINCT INVITERS; held invites are
+re-evaluated only when the claim runs (dashboard, vm pages), never by a trigger. **Founder 2026-10-19: chat invites
+never email; an opt-in email for org/platform invites waits on the mail provider** (docs/25 §12.5).
 **2026-10-15 (Opus): `20261015010000` SHIPPED, ON PRODUCTION AND PROD-VERIFIED — vm seats now
 need the module ROLE (docs/19 decision 1 reaches vm), and nobody, managers included, can credit
 a reaction/layer/conversation/flag or a review/removal stamp to someone else. Also closes
