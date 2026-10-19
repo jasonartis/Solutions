@@ -5,11 +5,12 @@ import { requireOrgModule } from '@/lib/module-gate'
 import {
   blockUser,
   fileReport,
+  allowRegisterAgain,
   deleteEvent,
   markInterest,
   promoteNextWaitlisted,
   registerForEvent,
-  reinstateParticipant,
+  rejoinEvent,
   revealMatches,
   reviewReport,
   runPairingRound,
@@ -179,6 +180,23 @@ export default async function EventPage(props: {
       </div>
       <p className="mb-6 text-sm uppercase tracking-wide text-gray-400">{event.state}</p>
 
+      {notice === 'rejoin-refused' && (
+        <p className="mb-6 rounded border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
+          You could not be registered for this event — registration may be closed, or you are not eligible.
+          Ask the organizer if you think this is a mistake.
+        </p>
+      )}
+      {notice === 'register-closed' && (
+        <p className="mb-6 rounded border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
+          Registration for this event is not open.
+        </p>
+      )}
+      {notice === 'register-side' && (
+        <p className="mb-6 rounded border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
+          Choose a side to register for, then try again.
+        </p>
+      )}
+
       {notice === 'rotation-complete' && (
         <p className="mb-6 rounded border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
           No new round was started: everyone registered has already met everyone else. Complete the event
@@ -276,9 +294,11 @@ export default async function EventPage(props: {
                   {p.seat_type !== 'participant' ? ` · ${p.seat_type}` : ''}
                   {sides && p.pool_side ? ` · ${sides[p.pool_side as SideKey]?.label ?? p.pool_side}` : ''}
                 </span>
-                {canOrganize && (p.status === 'withdrawn' || p.status === 'removed') && (
-                  <form action={reinstateParticipant.bind(null, orgSlug, p.id, eventId)} className="ml-2 inline">
-                    <button className={linkBtn}>Reinstate</button>
+                {/* Consent: an organizer never re-seats someone. A removal can be
+                    CLEARED so the person may register again; they must do it. */}
+                {canOrganize && p.status === 'removed' && (
+                  <form action={allowRegisterAgain.bind(null, orgSlug, p.id, eventId)} className="ml-2 inline">
+                    <button className={linkBtn}>Allow to register again</button>
                   </form>
                 )}
               </li>
@@ -389,9 +409,17 @@ export default async function EventPage(props: {
             <div className="flex items-center justify-between">
               <p className="text-sm">
                 You are <span className="font-medium">{mySeat.status}</span>.
-                {mySeat.status === 'withdrawn' && ' You withdrew from this event — ask the organizer to reinstate you if you want back in.'}
-                {mySeat.status === 'removed' && ' The organizer removed you from this event.'}
+                {mySeat.status === 'withdrawn' &&
+                  (event.state === 'open'
+                    ? ' You withdrew from this event. You can register again below.'
+                    : ' You withdrew from this event, and registration is now closed.')}
+                {mySeat.status === 'removed' && ' The organizer removed you from this event. Ask them if you think that is a mistake.'}
               </p>
+              {mySeat.status === 'withdrawn' && event.state === 'open' && (
+                <form action={rejoinEvent.bind(null, orgSlug, mySeat.id, eventId)}>
+                  <button className={btnCls}>Register again</button>
+                </form>
+              )}
               {mySeat.status === 'registered' && event.state === 'open' && (
                 <form action={withdrawFromEvent.bind(null, orgSlug, mySeat.id, eventId)}>
                   <button className="text-sm text-red-600 hover:underline">Withdraw</button>

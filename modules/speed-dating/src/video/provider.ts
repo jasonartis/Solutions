@@ -20,6 +20,9 @@ export type IssueTokenParams = {
   userId: string
   displayName: string
   email?: string | null
+  /** Latest instant the token may remain valid — the end of the round. The token
+   *  expiry is min(now + ttl, notAfter), so it cannot outlive the round it was issued for. */
+  notAfter?: Date | null
   /**
    * Jitsi moderator rights (mute-all/kick/recording controls). NEVER true for
    * a participant — the organizer console is a separate surface ("connection

@@ -26,6 +26,10 @@ export default async function SchedulesPage(props: {
   const { orgSlug } = await props.params
   const { week: weekParam } = await props.searchParams
   const { supabase, org, settings: rawSettings } = await requireOrgModule(orgSlug, MODULE_KEY)
+  // Exports are a maker action (the export action and, since 20261017030000,
+  // the job_requests insert guard both require syn_can_write). Don't offer the
+  // button to a member it would only fail for.
+  const { data: canWrite } = await supabase.rpc('syn_can_write', { check_org_id: org.id })
 
   const settings = rawSettings as {
     latitude?: number
@@ -233,7 +237,7 @@ export default async function SchedulesPage(props: {
         weekStart={sunday}
       />
 
-      <ExportPanel orgId={org.id} orgSlug={orgSlug} weekStart={weekStart} />
+      {canWrite && <ExportPanel orgId={org.id} orgSlug={orgSlug} weekStart={weekStart} />}
     </div>
   )
 }

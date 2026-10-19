@@ -1,6 +1,6 @@
 // Drives PRODUCTION through the organizer/participant event lifecycle fixes of 2026-10-08:
 // delete an empty event, refuse-by-absence of Delete when it has a registrant, withdraw ->
-// organizer Reinstate, per-user status badges on the events list, duplicate names allowed
+// self re-register (organizer cannot re-seat), per-user status badges on the events list, duplicate names allowed
 // but dated. Creates (and cleans up) events in prod's demo-dating org. Reads .env.deploy.
 import { chromium } from 'playwright-core'
 import { readFileSync } from 'node:fs'
@@ -32,11 +32,12 @@ await charlie.goto(MOD)
 check('charlie list: "Your events" section with registered badge', await charlie.getByRole('heading',{name:'Your events'}).waitFor({timeout:15000}).then(()=>true,()=>false) && await charlie.getByText('registered',{exact:true}).first().isVisible())
 // withdraw -> badge + message + organizer reinstate
 await charlie.getByRole('link',{name:NAME}).first().click(); await charlie.getByRole('button',{name:'Withdraw'}).click(); await charlie.getByText(/You withdrew from this event/).waitFor({timeout:30000})
-check('withdrawn person is told how to get back in', await charlie.getByText(/ask the organizer to reinstate/).isVisible())
+check('withdrawn person can register again themselves', await charlie.getByRole('button',{name:'Register again'}).isVisible())
 await charlie.goto(MOD); check('list badge shows withdrawn', await charlie.getByText('withdrawn',{exact:true}).first().waitFor({timeout:15000}).then(()=>true,()=>false))
-await alice.reload(); await alice.getByRole('button',{name:'Reinstate'}).click(); await alice.getByText('Roster (1 registered)').waitFor({timeout:30000})
-check('organizer reinstated charlie (roster 1 registered)', await alice.getByText('Roster (1 registered)').isVisible())
-await charlie.goto(evUrl); check('charlie is registered again and can Withdraw', await charlie.getByRole('button',{name:'Withdraw'}).waitFor({timeout:15000}).then(()=>true,()=>false))
+await alice.reload(); check('organizer has NO button to re-seat a withdrawn person', (await alice.getByRole('button',{name:'Reinstate'}).count())===0 && (await alice.getByRole('button',{name:'Allow to register again'}).count())===0)
+await charlie.goto(evUrl); await charlie.getByRole('button',{name:'Register again'}).click()
+check('charlie registered again by himself (and can Withdraw)', await charlie.getByRole('button',{name:'Withdraw'}).waitFor({timeout:30000}).then(()=>true,()=>false))
+await alice.reload(); check('organizer roster shows 1 registered', await alice.getByText('Roster (1 registered)').waitFor({timeout:15000}).then(()=>true,()=>false))
 // cancel, then Delete should remain hidden while he is registered; clean up: withdraw then delete
 await charlie.getByRole('button',{name:'Withdraw'}).click(); await charlie.getByText(/You withdrew/).waitFor({timeout:30000})
 await alice.reload(); await alice.getByRole('button',{name:'Delete event'}).click(); await alice.waitForURL(/speed-dating$/,{timeout:30000})

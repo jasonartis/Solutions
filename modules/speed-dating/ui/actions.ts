@@ -112,21 +112,45 @@ export async function deleteEvent(orgSlug: string, eventId: string) {
   redirect(`/o/${orgSlug}/m/speed-dating`)
 }
 
-// Organizer: put a withdrawn (or removed) person back. A person cannot do this
-// for themselves ON PURPOSE — sd_pin_participant lets a self-editor only
-// withdraw, because self-reactivation would let anyone jump a full side's
-// waitlist. The organizer tier is exempt from that pin. This does NOT check
-// capacity: reinstating is an explicit organizer decision, and the roster
-// shows the resulting count.
-export async function reinstateParticipant(orgSlug: string, participantId: string, eventId: string) {
+// A person who withdrew THEMSELVES registers again THEMSELVES (founder decision,
+// consent principle: an organizer never puts someone back without their say-so).
+// The seat row is reused: the client only signals the wish ('registered'); the
+// database (sd_pin_participant, 20261017010000) decides 'registered' vs
+// 'waitlisted', and refuses when registration is closed, the seat was removed by
+// an organizer, or the person is banned. This is a <form action>, so a refusal
+// has no return value to render — and a THROWN message is redacted in production
+// (docs/03 #22) — hence a redirect with a notice the page shows.
+export async function rejoinEvent(orgSlug: string, participantId: string, eventId: string) {
   const supabase = await createClient()
-  const { error } = await supabase
+  const { data: updated, error } = await supabase
     .from('sd_participants')
     .update({ status: 'registered' })
     .eq('id', participantId)
-    .in('status', ['withdrawn', 'removed'])
-  fail(error, 'Reinstate failed')
-  await recordActivity(supabase, { moduleKey: 'speed-dating', action: 'participant.reinstated', orgSlug })
+    .eq('status', 'withdrawn')
+    .select('id')
+  const base = `/o/${orgSlug}/m/speed-dating/events/${eventId}`
+  // Zero rows = nothing to rejoin (a removed seat, a double click, someone
+  // else's seat): say so rather than redirecting silently.
+  if (error || !updated || updated.length === 0) redirect(`${base}?notice=rejoin-refused`)
+  await recordActivity(supabase, { moduleKey: 'speed-dating', action: 'event.rejoined', orgSlug })
+  revalidatePath(base)
+  revalidatePath(`/o/${orgSlug}/m/speed-dating`)
+  redirect(base)
+}
+
+// Organizer: clear a REMOVAL so the person may register again — and nothing
+// more. It sets the seat to 'withdrawn' (the state a person is in after leaving
+// on their own); the person then has to register themselves. The organizer tier
+// is exempt from sd_pin_participant, so this needs no migration.
+export async function allowRegisterAgain(orgSlug: string, participantId: string, eventId: string) {
+  const supabase = await createClient()
+  const { error } = await supabase
+    .from('sd_participants')
+    .update({ status: 'withdrawn' })
+    .eq('id', participantId)
+    .eq('status', 'removed')
+  fail(error, 'Could not clear the removal')
+  await recordActivity(supabase, { moduleKey: 'speed-dating', action: 'participant.removal_cleared', orgSlug })
   revalidatePath(`/o/${orgSlug}/m/speed-dating/events/${eventId}`)
 }
 
@@ -181,7 +205,20 @@ export async function registerForEvent(orgSlug: string, eventId: string, formDat
     pool_side: poolSide,
     status,
   })
-  fail(error, 'Registration failed')
+  // The DATABASE decides eligibility and the final status (registered vs
+  // waitlisted) since 20261017010000 — the app-side capacity check above is now
+  // advisory. Its refusals ("not open", "not eligible", "choose a side") are
+  // expected states, and a THROWN message is redacted in production (docs/03
+  // #22), so surface them as a notice the page renders.
+  if (error) {
+    const msg = error.message ?? ''
+    const notice = msg.includes('not open')
+      ? 'register-closed'
+      : msg.includes('Choose a side')
+        ? 'register-side'
+        : 'rejoin-refused'
+    redirect(`/o/${orgSlug}/m/speed-dating/events/${eventId}?notice=${notice}`)
+  }
   await recordActivity(supabase, { moduleKey: 'speed-dating', action: 'event.registered', orgSlug })
   revalidatePath(`/o/${orgSlug}/m/speed-dating/events/${eventId}`)
 }
@@ -496,11 +533,16 @@ export async function getVideoJoinToken(orgSlug: string, eventId: string, pairin
       .eq('id', pairingId)
       .eq('event_id', eventId)
       .maybeSingle(),
-    supabase.from('sd_participants').select('id, seat_type').eq('event_id', eventId).eq('user_id', user.id).maybeSingle(),
+    supabase.from('sd_participants').select('id, seat_type, status').eq('event_id', eventId).eq('user_id', user.id).maybeSingle(),
   ])
   if (!pairing) return { ok: false, reason: 'Pairing not found' }
 
-  const { data: round } = await supabase.from('sd_rounds').select('ends_at').eq('id', pairing.round_id).maybeSingle()
+  const [{ data: round }, { data: eventRow }] = await Promise.all([
+    supabase.from('sd_rounds').select('ends_at, state').eq('id', pairing.round_id).maybeSingle(),
+    supabase.from('sd_events').select('state').eq('id', eventId).maybeSingle(),
+  ])
+  // Fail CLOSED: an unreadable round or event is a refusal, not a pass.
+  if (!round || !eventRow) return { ok: false, reason: 'Pairing not found' }
 
   const decision = authorizeVideoJoin({
     pairing: {
@@ -508,8 +550,9 @@ export async function getVideoJoinToken(orgSlug: string, eventId: string, pairin
       participantBId: pairing.participant_b_id,
       roomRef: pairing.room_ref,
     },
-    round: { endsAt: round?.ends_at ?? null },
-    mySeat: mySeatRow ? { id: mySeatRow.id, seatType: mySeatRow.seat_type } : null,
+    round: { endsAt: round.ends_at ?? null, state: round.state },
+    mySeat: mySeatRow ? { id: mySeatRow.id, seatType: mySeatRow.seat_type, status: mySeatRow.status } : null,
+    eventState: eventRow.state,
     now: new Date(),
   })
   if (!decision.ok) return { ok: false, reason: decision.reason }
@@ -550,6 +593,8 @@ export async function getVideoJoinToken(orgSlug: string, eventId: string, pairin
       // console is a separate surface, and "no recording, ever" is a product
       // promise a dater can't override from inside the call.
       moderator: false,
+      // The token dies with the round it was issued for (security review 2026-10-18).
+      notAfter: round.ends_at ? new Date(round.ends_at) : null,
     }))
   } catch (err) {
     console.error(`[speed-dating] video token issuance failed: ${err instanceof Error ? err.message : String(err)}`)

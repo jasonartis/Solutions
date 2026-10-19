@@ -21,8 +21,8 @@ export type PairingForAuth = {
   participantBId: string | null
   roomRef: string | null
 }
-export type RoundForAuth = { endsAt: string | null }
-export type SeatForAuth = { id: string; seatType: string } | null
+export type RoundForAuth = { endsAt: string | null; state: string }
+export type SeatForAuth = { id: string; seatType: string; status: string } | null
 
 export type AuthDecision = { ok: true } | { ok: false; reason: string }
 
@@ -30,11 +30,26 @@ export function authorizeVideoJoin(opts: {
   pairing: PairingForAuth
   round: RoundForAuth
   mySeat: SeatForAuth
+  eventState: string
   now: Date
 }): AuthDecision {
-  const { pairing, round, mySeat, now } = opts
+  const { pairing, round, mySeat, eventState, now } = opts
 
   if (!mySeat) return { ok: false, reason: 'You are not registered for this event' }
+  // A removed, withdrawn or waitlisted seat is not at the event. RLS still lets
+  // such a person READ their own seat, pairing and room_ref (sd_owns_participant
+  // has no status filter), so without this a person an organizer ejected mid-round
+  // could rejoin their partner's call until the round ended (security review
+  // 2026-10-18). Status is checked FIRST so the ejected person learns nothing else.
+  if (mySeat.status !== 'registered') {
+    return { ok: false, reason: 'You are not registered for this event' }
+  }
+  if (eventState !== 'running') {
+    return { ok: false, reason: 'This event is not running' }
+  }
+  if (round.state !== 'active') {
+    return { ok: false, reason: 'This round is not live' }
+  }
   if (mySeat.seatType !== 'participant') {
     return { ok: false, reason: 'Only participants join the video room' }
   }

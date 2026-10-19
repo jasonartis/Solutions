@@ -1280,6 +1280,13 @@ describe('speed-dating scoped authority (slice 2 — 20260726030000)', () => {
       .single()
     expect(eveRegErr).toBeNull()
 
+    // Since 20261017020000 a participant may only mark someone they were
+    // PAIRED with — so the organizer (alice) pairs them in round 1 first.
+    const pairIns = await alice
+      .from('sd_pairings')
+      .insert({ org_id: datingOrg, event_id: ids.event1, round_id: ids.round1, participant_a_id: charlieSeat!.id, participant_b_id: eveSeat!.id })
+    expect(pairIns.error).toBeNull()
+
     // Reciprocal interest — the AFTER trigger (sd_interest_mutual) upserts an
     // unrevealed sd_matches row.
     expect(
@@ -2434,6 +2441,20 @@ describe('data browser: the neverReadable claim is TRUE, not just declared', () 
         ])
         .select('id')
       if (parts.error) throw new Error(`fixture participants: ${parts.error.message}`)
+
+      // Since 20261017020000 a participant may only note someone they were
+      // PAIRED with, so the organizer pairs the two seats in a round first.
+      const rnd = await organizer
+        .from('sd_rounds')
+        .insert({ org_id: org.id, event_id: ev.data.id, round_number: 1 })
+        .select('id')
+        .single()
+      if (rnd.error) throw new Error(`fixture round: ${rnd.error.message}`)
+      const pr = await organizer.from('sd_pairings').insert({
+        org_id: org.id, event_id: ev.data.id, round_id: rnd.data.id,
+        participant_a_id: parts.data[0]!.id, participant_b_id: parts.data[1]!.id,
+      })
+      if (pr.error) throw new Error(`fixture pairing: ${pr.error.message}`)
 
       const note = await author
         .from('sd_notes')
@@ -4765,7 +4786,9 @@ describe('seat authority: a module roster row requires ACTIVE org membership (20
     )
     seatSdPartCharlie = await seatInsert(
       'sd_participants',
-      { org_id: seatOrgDating, event_id: seatSdEventId, user_id: seatCharlieId, seat_type: 'participant', status: 'registered' },
+      // allows_mentor: eve's mentor seat below points at charlie, and since
+      // 20261017020000 a mentee pointer requires the mentee's consent.
+      { org_id: seatOrgDating, event_id: seatSdEventId, user_id: seatCharlieId, seat_type: 'participant', status: 'registered', allows_mentor: true },
       'sd participant (charlie)',
     )
     seatSdPartDana = await seatInsert(

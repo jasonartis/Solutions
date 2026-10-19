@@ -47,6 +47,13 @@ const DEFAULT_TTL_SECONDS = 900
  *  the room being broken. */
 const NBF_SKEW_SECONDS = 10
 
+/** A join token must not outlive its round (security review 2026-10-18: a 15-minute token
+ *  on a 7-minute round let a person removed mid-round keep a working token). */
+function capExpiry(defaultExp: number, notAfter?: Date | null): number {
+  if (!notAfter) return defaultExp
+  return Math.min(defaultExp, Math.floor(notAfter.getTime() / 1000))
+}
+
 export function createJaasProvider(config: JaasConfig): VideoProvider {
   const ttl = config.tokenTtlSeconds ?? DEFAULT_TTL_SECONDS
 
@@ -86,9 +93,9 @@ export function createJaasProvider(config: JaasConfig): VideoProvider {
       return { roomRef: `sd-${randomBytes(16).toString('hex')}`, provider: 'jaas' }
     },
 
-    async issueToken({ roomRef, userId, displayName, email, moderator }: IssueTokenParams): Promise<IssuedToken> {
+    async issueToken({ roomRef, userId, displayName, email, moderator, notAfter }: IssueTokenParams): Promise<IssuedToken> {
       const now = Math.floor(Date.now() / 1000)
-      const exp = now + ttl
+      const exp = capExpiry(now + ttl, notAfter)
       const token = await new SignJWT({
         context: {
           user: {

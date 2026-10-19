@@ -171,6 +171,29 @@ describe('JaaS video provider', () => {
     await expect(provider.issueToken(params)).rejects.toThrow()
   })
 
+  it('caps the token expiry at the end of the round (it must not outlive the round)', async () => {
+    const provider = makeProvider() // default ttl 900s
+    const params = { roomRef: 'sd-cap', userId: 'u', displayName: 'U', moderator: false }
+    const now = Math.floor(Date.now() / 1000)
+
+    // Control: with no round end the token gets the full default lifetime.
+    const uncapped = await provider.issueToken(params)
+    const { payload: full } = await jwtVerify(uncapped.token, publicKey, { audience: 'jitsi', issuer: 'chat' })
+    expect(full.exp! - now).toBeGreaterThan(800)
+
+    // A round that ends in 60s caps it to ~60s.
+    const roundEnd = new Date((now + 60) * 1000)
+    const capped = await provider.issueToken({ ...params, notAfter: roundEnd })
+    const { payload } = await jwtVerify(capped.token, publicKey, { audience: 'jitsi', issuer: 'chat' })
+    expect(payload.exp).toBe(now + 60)
+    expect(capped.expiresAt.getTime()).toBe(roundEnd.getTime())
+
+    // A round end FURTHER away than the ttl does not extend it.
+    const far = await provider.issueToken({ ...params, notAfter: new Date((now + 7200) * 1000) })
+    const { payload: farPayload } = await jwtVerify(far.token, publicKey, { audience: 'jitsi', issuer: 'chat' })
+    expect(farPayload.exp! - now).toBeLessThanOrEqual(900)
+  })
+
   it('closeRoom never throws', async () => {
     await expect(makeProvider().closeRoom('sd-anything')).resolves.toBeUndefined()
   })

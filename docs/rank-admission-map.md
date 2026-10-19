@@ -181,10 +181,15 @@ Ladder: **4** director · **3** coordinator · **2** lead, professor · **1** ga
 | `cls_can_manage` | rank >= 2 | coordinator, director, lead, professor | cls_courses, storage.objects |
 | `cls_can_manage_class` | rank >= 2 | coordinator, director, lead, professor | cls_announcements, cls_class_members, cls_classes, cls_exam_papers, cls_exams, cls_grades, cls_homeworks, cls_publications, cls_review_assignments, cls_review_comments, cls_submission_files, cls_submissions, cls_survey_answers, cls_surveys |
 | `cls_can_manage_course` | rank >= 2 | coordinator, director, lead, professor | cls_classes, cls_courses, cls_materials |
+| `cls_guard_review_comment_insert` | rank >= 2 | coordinator, director, lead, professor | _no policy names it — reached through triggers/functions_ |
+| `cls_guard_submission_file_insert` | rank >= 2 | coordinator, director, lead, professor | _no policy names it — reached through triggers/functions_ |
+| `cls_guard_submission_insert` | rank >= 2 | coordinator, director, lead, professor | _no policy names it — reached through triggers/functions_ |
 | `cls_material_storage_visible` | rank >= 2 | coordinator, director, lead, professor | storage.objects |
 | `cls_pin_assignment_columns` | rank >= 2 | coordinator, director, lead, professor | _no policy names it — reached through triggers/functions_ |
 | `cls_pin_grade_author` | rank >= 2 | coordinator, director, lead, professor | _no policy names it — reached through triggers/functions_ |
+| `cls_pin_review_comment` | rank >= 2 | coordinator, director, lead, professor | _no policy names it — reached through triggers/functions_ |
 | `cls_pin_submission_columns` | rank >= 2 | coordinator, director, lead, professor | _no policy names it — reached through triggers/functions_ |
+| `cls_pin_survey_answer` | rank >= 2 | coordinator, director, lead, professor | _no policy names it — reached through triggers/functions_ |
 | `cls_survey_results` | rank >= 2 | coordinator, director, lead, professor | _no policy names it — reached through triggers/functions_ |
 | `module_caller_can_manage_seat` | rank = 3 | coordinator | _no policy names it — reached through triggers/functions_ |
 | `module_caller_covers_rank` | rank >= 2 | coordinator, director, lead, professor | _no policy names it — reached through triggers/functions_ |
@@ -241,8 +246,10 @@ Ladder: **4** director · **3** admin, coordinator · **2** lead, manager · **1
 | `sal_can_manage_location` | rank >= 2 | admin, coordinator, director, lead, manager | sal_appointments, sal_bill_items, sal_bills, sal_customers, sal_earnings_ledger, sal_expenses, sal_locations, sal_promotions, sal_services, sal_shopping_list, sal_worker_profiles, sal_worker_time_off |
 | `sal_can_operate` | rank >= 2 | admin, coordinator, director, lead, manager | _no policy names it — reached through triggers/functions_ |
 | `sal_can_operate_location` | rank >= 2 | admin, coordinator, director, lead, manager | sal_appointments, sal_bill_items, sal_bills, sal_customers, sal_expenses, sal_promotions, sal_shopping_list, sal_worker_time_off |
+| `sal_guard_appointment_insert` | rank >= 2 | admin, coordinator, director, lead, manager | _no policy names it — reached through triggers/functions_ |
 | `sal_guard_bill` | rank >= 2 | admin, coordinator, director, lead, manager | _no policy names it — reached through triggers/functions_ |
 | `sal_pin_appointment` | rank >= 2 | admin, coordinator, director, lead, manager | _no policy names it — reached through triggers/functions_ |
+| `sal_pin_appointment_stamps` | rank >= 2 | admin, coordinator, director, lead, manager | _no policy names it — reached through triggers/functions_ |
 
 _Relative gates (`module_caller_can_manage_seat`, `view_as_guard_session`) read straight off the ladder above: a position outranks exactly those below it._
 
@@ -292,10 +299,15 @@ Ladder: **4** director · **3** admin, coordinator · **2** lead, organizer · *
 | `sd_can_organize_event` | rank >= 2 | admin, coordinator, director, lead, organizer | sd_events, sd_interest, sd_matches, sd_pairings, sd_participants, sd_reports, sd_rounds |
 | `sd_can_staff_event` | rank >= 2 | admin, coordinator, director, lead, organizer | _no policy names it — reached through triggers/functions_ |
 | `sd_can_staff_event_of` | rank >= 2 | admin, coordinator, director, lead, organizer | sd_events, sd_pairings, sd_participants, sd_reports, sd_rounds |
+| `sd_interest_before_write` | rank >= 2 | admin, coordinator, director, lead, organizer | _no policy names it — reached through triggers/functions_ |
 | `sd_match_contacts` | rank >= 2 | admin, coordinator, director, lead, organizer | _no policy names it — reached through triggers/functions_ |
+| `sd_notes_guard` | rank >= 2 | admin, coordinator, director, lead, organizer | _no policy names it — reached through triggers/functions_ |
+| `sd_pairings_before_write` | rank >= 2 | admin, coordinator, director, lead, organizer | _no policy names it — reached through triggers/functions_ |
+| `sd_participants_insert_guard` | rank >= 2 | admin, coordinator, director, lead, organizer | _no policy names it — reached through triggers/functions_ |
 | `sd_pin_interest` | rank >= 2 | admin, coordinator, director, lead, organizer | _no policy names it — reached through triggers/functions_ |
 | `sd_pin_participant` | rank >= 2 | admin, coordinator, director, lead, organizer | _no policy names it — reached through triggers/functions_ |
 | `sd_pin_report` | rank >= 2 | admin, coordinator, director, lead, organizer | _no policy names it — reached through triggers/functions_ |
+| `sd_reports_guard` | rank >= 2 | admin, coordinator, director, lead, organizer | _no policy names it — reached through triggers/functions_ |
 | `sd_reveal_matches` | rank >= 2 | admin, coordinator, director, lead, organizer | _no policy names it — reached through triggers/functions_ |
 
 _Relative gates (`module_caller_can_manage_seat`, `view_as_guard_session`) read straight off the ladder above: a position outranks exactly those below it._

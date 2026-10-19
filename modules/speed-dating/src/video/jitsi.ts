@@ -45,9 +45,10 @@ export function createJitsiProvider(config: JitsiConfig): VideoProvider {
     // moderator UI. context.features explicitly disables recording/
     // livestreaming per-token — belt and suspenders alongside the product
     // promise, not a substitute for the server-side Jibri config.
-    async issueToken({ roomRef, userId, displayName, email, moderator }: IssueTokenParams): Promise<IssuedToken> {
+    async issueToken({ roomRef, userId, displayName, email, moderator, notAfter }: IssueTokenParams): Promise<IssuedToken> {
       const now = Math.floor(Date.now() / 1000)
-      const exp = now + ttl
+      // Never outlive the round (security review 2026-10-18).
+      const exp = notAfter ? Math.min(now + ttl, Math.floor(notAfter.getTime() / 1000)) : now + ttl
       const token = await new SignJWT({
         context: {
           user: {
