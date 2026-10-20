@@ -1171,7 +1171,7 @@ export default function LayerCanvas(props: {
           className={
             'flex items-center gap-1.5 rounded border px-2 py-1 text-xs ' +
             (xrayLevel === 0 ? 'border-gray-300 text-gray-600' : 'border-blue-500 bg-blue-50 text-blue-700') +
-            (mode === 'view' ? ' order-2' : '')
+            (mode === 'view' ? ' order-2 sm:order-none' : '')
           }
         >
           <XrayEye level={xrayLevel} />
@@ -1180,7 +1180,7 @@ export default function LayerCanvas(props: {
 
         {mode === 'view' && (
           <>
-            <span className="order-1 min-w-0 flex-1 text-[11px] text-gray-400">
+            <span className="order-1 min-w-0 flex-1 text-[11px] text-gray-400 sm:order-none sm:flex-none">
               swipe ← dive into replies · swipe → back up
             </span>
             {/* Its own full-width row on a phone, with a gap above it: when it sat
@@ -1191,7 +1191,7 @@ export default function LayerCanvas(props: {
               <button
                 type="button"
                 onClick={() => setMode('draw')}
-                className="order-3 mt-3 min-h-11 w-full rounded bg-blue-600 px-4 py-2 text-base font-medium text-white hover:bg-blue-700 sm:mt-0 sm:min-h-0 sm:w-auto sm:px-3 sm:py-1 sm:text-sm"
+                className="order-3 mt-3 min-h-11 w-full rounded bg-blue-600 px-4 py-2 text-base font-medium text-white hover:bg-blue-700 sm:order-none sm:mt-0 sm:min-h-0 sm:w-auto sm:px-3 sm:py-1 sm:text-sm"
               >
                 Draw a reply
               </button>
