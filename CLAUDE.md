@@ -1854,6 +1854,7 @@ ode-compile-cache`. **So `--concurrency=1` is not a universal fix and "134 means
   **The general rule: an assertion on a formatted TIME or other computed display value is a
   collision waiting to happen** — scope it to its row, and remember a zman-derived value can
   wander onto a fixed one on any given date.
+- **A RANDOM RED `check` JOB AT THE rls.test.ts "CI-ORDER GUARD" ("org_members differs from snapshot") WAS PARALLEL DB TEST FILES (2026-10-22):** several files commit rows to the shared database while that block snapshots `org_members`. Fixed by `fileParallelism: false` in `packages/db/vitest.config.ts` (docs/12 addendum 2026-10-22). Do not re-enable parallelism; scope a file's writes to a throwaway org in a rolled-back transaction instead.
 - **Do NOT edit app source while the e2e suite is running** (the local config serves
   `pnpm dev`, so an edit lands mid-run on a half-compiled app). Editing `docs/*.md` is safe.
   Related: piping the run through `| tail -N` swallows its exit code, so a failing suite

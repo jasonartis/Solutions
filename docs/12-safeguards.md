@@ -893,3 +893,7 @@ Guards against well-meaning but confused sessions (any AI, any tool):
   (the `apps/web/.../m/<key>` files are one-line wrappers); assembled
   migrations come from `schema-draft.sql` + `schema-fixes.sql`; never commit
   `.env*` or anything from `backups/`.
+
+## Addendum 2026-10-22 (item 1, CI): packages/db test files now run SERIALLY
+
+`packages/db/vitest.config.ts` sets `fileParallelism: false`. **Why:** every db test file shares ONE database and several (pending-invites, pending-invites-chat, account-deletion, org-delete) COMMIT real rows (users, orgs, org_members) before cleaning up. rls.test.ts's "CI-ORDER GUARD" snapshots the whole `org_members` table and asserts it unchanged at the end of its block, so any OTHER file committing a membership row while that block ran failed it at RANDOM. Seen 2026-10-20: CI red ("28 rows vs 44"), green on the same sha when re-run, and every deploy blocked behind it. Serial files make the guard meaningful and also removed the "5s timeout under parallel load" flakes the pending-invites files hit. **Cost:** about 57 s -> 119 s for the suite (471 tests). **If a db test file needs to be fast again,** scope its org_members writes to a throwaway org inside `sql.begin` ... rollback (as sd-self-rejoin / sd-hardening / insert-pins-other-modules do) instead of re-enabling parallelism.

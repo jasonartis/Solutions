@@ -4,6 +4,7 @@ The running, dated build journal that used to live in `CLAUDE.md`'s "## Current 
 section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every session)
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
+- **2026-10-21/22 — ORGANIZER-FLOW WALKTHROUGH FIXES + FINAL SECURITY CHECKS.** Double-click guard (six identical drafts -> one), camera-off cover, partner named in the status line, the db test files serial (CI flake), prod demo events cleaned to one, final adversarial checks of the consent rule and notes guard (held; three low items queued as ONE Opus follow-up migration), operational recipes plus two new scripts written down. Detail: module-6 spec 2026-10-21 and 2026-10-22 entries; docs/12 addendum.
 - **2026-10-18/19 (Opus) — PENDING INVITES SLICE 2 (CHAT PRE-INVITE + A MODULE ROLE ON AN ORG INVITE),
   `20261018020000`, WITH SLICES 3–4 FOLDED IN — ON PRODUCTION AND PROD-VERIFIED.** Backup
   `backups/2026-10-19T15-47-05`, applied right after the sweep below; prod verifier 21/42 → 63/0; slice-1 verifier
