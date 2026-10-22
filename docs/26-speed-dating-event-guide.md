@@ -20,7 +20,7 @@ With N registered people a round makes N/2 pairs (odd one out gets a **bye**). W
 
 | Person | Role | What they can do |
 |---|---|---|
-| **Organizer** (e.g. alice) | `organizer` | Create an event, open registration, start it, run rounds, complete it, reveal matches, review safety reports, reinstate a withdrawn person, cancel or (if empty) delete the event. Cannot take a seat in their own event. |
+| **Organizer** (e.g. alice) | `organizer` | Create an event, open registration, start it, run rounds, complete it, reveal matches, review safety reports, clear a removal so a removed person may register again (an organizer can NEVER put a withdrawn or removed person back — only that person can), cancel or (if empty) delete the event. Cannot take a seat in their own event. |
 | **Host** | `host` | Sees the roster and safety reports; may remove a participant. No setup rights. |
 | **Dater** (e.g. charlie, dana) | `participant` | Register, withdraw, join video, mark interest, write private notes, report, block. |
 
@@ -38,8 +38,7 @@ Audience and mentor seats exist in the schema but have no UI. **GAP.**
 3. **Daters: register** — event page -> *Register for this event* (pick a side only if the
    organizer enabled two sides; nothing is read from profiles). The list shows their status
    (registered / waitlisted / withdrawn / removed). Withdrawing is possible while the event is
-   open. **GAP (in build):** a person who withdrew cannot register again by themselves; today only
-   the organizer's *Reinstate* does it.
+   open. **A person who withdrew registers again THEMSELVES** with the *Register again* button while registration is open (live since 2026-10-19; the database decides registered vs waitlisted by capacity, and a rejoiner goes to the back of the waitlist). An organizer cannot re-seat them; for someone the organizer REMOVED, the roster offers *Allow to register again*, which only clears the removal, and the person must then register themselves.
 4. **Organizer: start** — *Start event*, then *Run next round (pair everyone)*. This builds the
    pairs, creates one private video room per pair, and starts the round clock.
 5. **Daters: the round** — "Right now: Round 1 — you're with X. Ends in …". *Join video* ->
