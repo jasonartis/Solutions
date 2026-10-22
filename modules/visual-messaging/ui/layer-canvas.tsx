@@ -105,6 +105,7 @@ export type LayerContent = {
   images: ResolvedImageStamp[]
 }
 type SwipeDir = 'left' | 'right' | 'up' | 'down'
+const EMPTY_CONTENT: LayerContent = { strokes: [], stamps: [], texts: [], images: [] }
 
 const COLORS = ['#e11d48', '#2563eb', '#16a34a', '#f59e0b', '#111111', '#ffffff']
 const EMOJIS = ['😀', '😍', '😂', '😢', '😡', '👍', '👎', '❤️', '🔥', '🎉', '⭐', '✅', '❌', '🤔']
@@ -160,25 +161,22 @@ export function useImageCache(urls: string[]): Record<string, HTMLImageElement> 
 export default function LayerCanvas(props: {
   imageUrl: string
   currentLayerId: string
-  baseLayers: Stroke[][]
-  currentStrokes: Stroke[]
-  baseStamps: Stamp[][]
-  currentStamps: Stamp[]
-  baseTexts: TextStamp[][]
-  currentTexts: TextStamp[]
-  baseImages: ResolvedImageStamp[][]
-  currentImages: ResolvedImageStamp[]
-  drawable: boolean
-  nav: LayerNav
-  /** every layer (id + parent, path order) — lets the markers update at once on a swipe */
+  /** every layer (id + parent, path order, frozen/tombstoned) */
   tree: TreeNode[]
-  /** what a layer ADDED (its own ink only, not the picture or its ancestors'),
-   *  for the layer each of these swipes leads to. Right (back up) needs none: it
-   *  slides the CURRENT layer's own ink away. */
-  neighbours: Record<'left' | 'up' | 'down', LayerContent | null>
+  /** What each layer in a WINDOW around the one on screen ADDED — its own ink only, never
+   *  the picture or its ancestors'. The canvas composes a layer from its ancestors' entries
+   *  and switches layers on its own, so a layer missing from here is simply not swipe-able
+   *  to until the server's page for it arrives. */
+  layersContent: Record<string, LayerContent>
+  canPost: boolean
+  conversationFrozen: boolean
   // Both return {ok, ...} rather than throwing (docs/03 #22) — a refusal shows
-  // inline and the draft stays on the canvas.
-  onSend?: (payloadJson: string) => Promise<{ ok: true; layerId: string } | { ok: false; reason: string }>
+  // inline and the draft stays on the canvas. onSend names the PARENT layer: the one
+  // on screen, which can be ahead of what the server last rendered.
+  onSend?: (
+    parentLayerId: string,
+    payloadJson: string,
+  ) => Promise<{ ok: true; layerId: string } | { ok: false; reason: string }>
   onUploadImage?: (file: File) => Promise<{ ok: true; path: string } | { ok: false; reason: string }>
   // Spec's image-stamp guards: "default max stamp size relative to canvas
   // (admin/org-tunable)" and "default slight transparency" — resolved by the
@@ -233,10 +231,37 @@ export default function LayerCanvas(props: {
   // targets follow it immediately (computed from the tree), so they no longer
   // lag a server round-trip behind the picture.
   const [pendingLayerId, setPendingLayerId] = useState<string | null>(null)
-  const nav = useMemo(
-    () => (pendingLayerId ? navFor(props.tree, pendingLayerId) : props.nav),
-    [pendingLayerId, props.tree, props.nav],
-  )
+  // THE LAYER ON SCREEN. The moment a swipe or click commits, it is the target — the canvas
+  // does not wait for the server (which re-renders the page behind it); once the server's
+  // page for that layer arrives, `pendingLayerId` clears and nothing visibly changes.
+  const effectiveId = pendingLayerId ?? props.currentLayerId
+  const nav = useMemo(() => navFor(props.tree, effectiveId), [props.tree, effectiveId])
+  const chainIds = useMemo(() => {
+    const byId = new Map(props.tree.map((n) => [n.id, n]))
+    const ids: string[] = []
+    for (let n = byId.get(effectiveId); n; n = n.parentId ? byId.get(n.parentId) : undefined) ids.unshift(n.id)
+    return ids
+  }, [props.tree, effectiveId])
+  const ownOf = (id: string) => props.layersContent[id] ?? EMPTY_CONTENT
+  const baseLayers = chainIds.slice(0, -1).map((id) => ownOf(id).strokes)
+  const baseStamps = chainIds.slice(0, -1).map((id) => ownOf(id).stamps)
+  const baseTexts = chainIds.slice(0, -1).map((id) => ownOf(id).texts)
+  const baseImages = chainIds.slice(0, -1).map((id) => ownOf(id).images)
+  const currentStrokes = ownOf(effectiveId).strokes
+  const currentStamps = ownOf(effectiveId).stamps
+  const currentTexts = ownOf(effectiveId).texts
+  const currentImages = ownOf(effectiveId).images
+  const neighbours: Record<'left' | 'up' | 'down', LayerContent | null> = {
+    left: (nav.firstChildId && props.layersContent[nav.firstChildId]) || null,
+    up: (nav.nextSiblingId && props.layersContent[nav.nextSiblingId]) || null,
+    down: (nav.prevSiblingId && props.layersContent[nav.prevSiblingId]) || null,
+  }
+  const treeNode = (id: string) => props.tree.find((n) => n.id === id)
+  const drawable =
+    props.canPost &&
+    !props.conversationFrozen &&
+    !chainIds.some((id) => treeNode(id)?.frozen) &&
+    !treeNode(effectiveId)?.tombstoned
   const nextDraftId = useRef(0)
   const genId = () => `d${nextDraftId.current++}`
   const shapeRefs = useRef<Record<string, any>>({})
@@ -247,7 +272,7 @@ export default function LayerCanvas(props: {
   // starts nudged in the direction it swiped FROM, then eases to rest —
   // a directional cue, not a scene transition, so the offset stays small.
   const lastSwipeDir = useRef<'left' | 'right' | 'up' | 'down' | null>(null)
-  const prevLayerId = useRef(props.currentLayerId)
+  const prevEffectiveId = useRef(effectiveId)
   const [slideStyle, setSlideStyle] = useState<{ transform: string; transition: string }>({
     transform: 'none',
     transition: 'none',
@@ -258,10 +283,10 @@ export default function LayerCanvas(props: {
   const selected = items.find((i) => i.id === selectedId) ?? null
 
   const imageCache = useImageCache([
-    ...props.baseImages.flatMap((layer) => layer.map((i) => i.url)),
-    ...props.currentImages.map((i) => i.url),
+    // Every picture in the window is fetched ahead of time, so a layer you swipe to is
+    // never blank while its stamps download.
+    ...Object.values(props.layersContent).flatMap((c) => c.images.map((i) => i.url)),
     ...Object.values(imageObjectUrls),
-    ...Object.values(props.neighbours).flatMap((n) => (n ? n.images.map((i) => i.url) : [])),
   ])
 
   // ---- the draft: every change goes through commit() so undo sees it -------
@@ -315,12 +340,16 @@ export default function LayerCanvas(props: {
   // from, then ease it to rest on the next two frames (the double rAF
   // ensures the browser paints the offset starting position before the
   // transition kicks in, or it'd snap instead of animating).
+  // The server's page for the target has arrived: stop overriding it.
   useEffect(() => {
-    if (props.currentLayerId === prevLayerId.current) return
-    prevLayerId.current = props.currentLayerId
-    // The navigation landed: the real layer replaces the sliding card.
+    if (pendingLayerId && props.currentLayerId === pendingLayerId) setPendingLayerId(null)
+  }, [props.currentLayerId, pendingLayerId])
+
+  useEffect(() => {
+    if (effectiveId === prevEffectiveId.current) return
+    prevEffectiveId.current = effectiveId
+    // The layer on screen changed: the sliding card (if any) has become the real layer.
     showSwipe(null)
-    setPendingLayerId(null)
     const dir = lastSwipeDir.current
     lastSwipeDir.current = null
     if (!dir) return
@@ -339,7 +368,7 @@ export default function LayerCanvas(props: {
         setSlideStyle({ transform: 'none', transition: 'transform 200ms ease-out' })
       })
     })
-  }, [props.currentLayerId])
+  }, [effectiveId])
 
   // A drag or a resize/rotate changes the Konva NODE (x/y/scale/rotation);
   // translate that back into our data and reset the node so nothing compounds.
@@ -480,8 +509,8 @@ export default function LayerCanvas(props: {
 
   // Keyboard + paste while drawing. The handlers are re-made every render, so
   // the listeners read them through a ref instead of re-attaching each time.
-  const latest = useRef({ mode, undo, redo, deleteSelected, handleImageFile, drawable: props.drawable })
-  latest.current = { mode, undo, redo, deleteSelected, handleImageFile, drawable: props.drawable }
+  const latest = useRef({ mode, undo, redo, deleteSelected, handleImageFile, drawable: drawable })
+  latest.current = { mode, undo, redo, deleteSelected, handleImageFile, drawable: drawable }
   useEffect(() => {
     const typingIn = (t: EventTarget | null) => {
       const el = t as HTMLElement | null
@@ -528,9 +557,13 @@ export default function LayerCanvas(props: {
   const goTo = (layerId: string | null, dir?: 'left' | 'right' | 'up' | 'down') => {
     if (!layerId) return // no target — don't touch lastSwipeDir, a no-op swipe shouldn't taint the next real one
     if (dir) lastSwipeDir.current = dir
-    setPendingLayerId(layerId)
-    // If the navigation never lands, fall back to what the server last said.
-    setTimeout(() => setPendingLayerId((p) => (p === layerId ? null : p)), 4000)
+    // Switch on screen at once — but only to a layer whose content we hold; otherwise just
+    // navigate and let the server's page bring it.
+    if (props.layersContent[layerId]) {
+      setPendingLayerId(layerId)
+      // If the navigation never lands, fall back to what the server last said.
+      setTimeout(() => setPendingLayerId((p) => (p === layerId ? null : p)), 4000)
+    }
     // scroll:false — a swipe changes the layer, not the page; without it the
     // browser jumped back to the top whenever you were scrolled down a little.
     router.push(`${pathname}?layer=${layerId}`, { scroll: false })
@@ -555,7 +588,7 @@ export default function LayerCanvas(props: {
 
   const handleDown = (e: any) => {
     const stage = e.target.getStage()
-    if (mode === 'draw' && props.drawable) {
+    if (mode === 'draw' && drawable) {
       // A press on one of the Transformer's handles (resize/rotate) belongs to
       // the Transformer — without this it deselected the shape and dropped a
       // NEW emoji/stroke under the handle.
@@ -611,14 +644,18 @@ export default function LayerCanvas(props: {
       if (pos) swipeStart.current = { x: pos.x, y: pos.y, axis: null, samples: [{ t: performance.now(), x: pos.x, y: pos.y }] }
     }
   }
-  const targetFor = (dir: SwipeDir): string | null =>
-    dir === 'left'
-      ? nav.firstChildId
-      : dir === 'right'
-        ? nav.parentId
-        : dir === 'up'
-          ? nav.nextSiblingId
-          : nav.prevSiblingId
+  const targetFor = (dir: SwipeDir): string | null => {
+    const id =
+      dir === 'left'
+        ? nav.firstChildId
+        : dir === 'right'
+          ? nav.parentId
+          : dir === 'up'
+            ? nav.nextSiblingId
+            : nav.prevSiblingId
+    // Not swipe-able until we hold that layer's content (see layersContent).
+    return id && props.layersContent[id] ? id : null
+  }
   const extentOf = (dir: SwipeDir) => (dir === 'left' || dir === 'right' ? displayW : displayH)
 
   // Move the sliding card to `to` (screen px along the swipe axis), then call done.
@@ -680,9 +717,10 @@ export default function LayerCanvas(props: {
       !!target && (Math.abs(s.offset) / extent > 0.5 || (Math.abs(s.offset) >= SWIPE_MIN && speed >= FLICK_SPEED))
     if (complete) {
       settleSwipe(s.dir, s.offset, sign * extent, () => {
+        // Same render: the layer on screen becomes the target and the sheet goes away, so
+        // the sheet (sitting exactly where that layer's ink now draws) hands over seamlessly.
         goTo(target)
-        // If the navigation never lands, do not leave the card stuck on screen.
-        setTimeout(() => showSwipe(null), 2500)
+        showSwipe(null)
       })
     } else {
       settleSwipe(s.dir, s.offset, 0, () => showSwipe(null))
@@ -741,7 +779,7 @@ export default function LayerCanvas(props: {
     const payload = JSON.stringify({ strokes, stamps, texts, images })
     setActionError(null)
     startTransition(async () => {
-      const result = await runAction(() => props.onSend!(payload))
+      const result = await runAction(() => props.onSend!(effectiveId, payload))
       if (!result.ok) {
         // Keep everything on the canvas so the person can retry.
         setActionError((result as { reason: string }).reason)
@@ -863,12 +901,12 @@ export default function LayerCanvas(props: {
             {img && <KonvaImage image={img} width={natural.w} height={natural.h} />}
           </Layer>
           <Layer opacity={xrayFactor}>
-            {props.baseLayers.flatMap((layerStrokes, li) =>
+            {baseLayers.flatMap((layerStrokes, li) =>
               layerStrokes.map((s, si) => (
                 <Line key={`b${li}-${si}`} points={strokeToPolygon(s)} closed fill={s.color} />
               )),
             )}
-            {props.baseStamps.flatMap((layerStamps, li) =>
+            {baseStamps.flatMap((layerStamps, li) =>
               layerStamps.map((st, si) => (
                 <KonvaText
                   key={`bs${li}-${si}`}
@@ -882,7 +920,7 @@ export default function LayerCanvas(props: {
                 />
               )),
             )}
-            {props.baseTexts.flatMap((layerTexts, li) =>
+            {baseTexts.flatMap((layerTexts, li) =>
               layerTexts.map((t, ti) => (
                 <KonvaText
                   key={`bt${li}-${ti}`}
@@ -895,7 +933,7 @@ export default function LayerCanvas(props: {
                 />
               )),
             )}
-            {props.baseImages.flatMap((layerImages, li) =>
+            {baseImages.flatMap((layerImages, li) =>
               layerImages.map(
                 (im, ii) =>
                   imageCache[im.url] && (
@@ -924,10 +962,10 @@ export default function LayerCanvas(props: {
               (outgoing ? 1 - 0.45 * Math.min(1, Math.abs(outgoing.offset) / extentOf(outgoing.dir)) : 1)
             }
           >
-            {props.currentStrokes.map((s, i) => (
+            {currentStrokes.map((s, i) => (
               <Line key={`c${i}`} points={strokeToPolygon(s)} closed fill={s.color} />
             ))}
-            {props.currentStamps.map((st, i) => (
+            {currentStamps.map((st, i) => (
               <KonvaText
                 key={`cs${i}`}
                 text={st.emoji}
@@ -939,7 +977,7 @@ export default function LayerCanvas(props: {
                 offsetY={st.fontSize / 2}
               />
             ))}
-            {props.currentTexts.map((t, i) => (
+            {currentTexts.map((t, i) => (
               <KonvaText
                 key={`ct${i}`}
                 text={t.text}
@@ -950,7 +988,7 @@ export default function LayerCanvas(props: {
                 y={t.y}
               />
             ))}
-            {props.currentImages.map(
+            {currentImages.map(
               (im, i) =>
                 imageCache[im.url] && (
                   <KonvaImage
@@ -1059,7 +1097,7 @@ export default function LayerCanvas(props: {
                 borderDash={[4, 3]}
               />}
           </Layer>
-          {swipe && swipe.dir !== 'right' && props.neighbours[swipe.dir] && (
+          {swipe && swipe.dir !== 'right' && neighbours[swipe.dir] && (
             // The layer being swiped TO — just what it ADDED, as a see-through
             // sheet with no picture of its own — riding the pointer in from the
             // side it will arrive from. It firms up as it gets closer (0.55 -> 1.0).
@@ -1077,10 +1115,10 @@ export default function LayerCanvas(props: {
                       : 0
                 }
               >
-                {props.neighbours[swipe.dir]!.strokes.map((s, i) => (
+                {neighbours[swipe.dir]!.strokes.map((s, i) => (
                   <Line key={`ns${i}`} points={strokeToPolygon(s)} closed fill={s.color} />
                 ))}
-                {props.neighbours[swipe.dir]!.stamps.map((st, i) => (
+                {neighbours[swipe.dir]!.stamps.map((st, i) => (
                   <KonvaText
                     key={`nst${i}`}
                     text={st.emoji}
@@ -1092,7 +1130,7 @@ export default function LayerCanvas(props: {
                     offsetY={st.fontSize / 2}
                   />
                 ))}
-                {props.neighbours[swipe.dir]!.texts.map((t, i) => (
+                {neighbours[swipe.dir]!.texts.map((t, i) => (
                   <KonvaText
                     key={`nt${i}`}
                     text={t.text}
@@ -1103,7 +1141,7 @@ export default function LayerCanvas(props: {
                     y={t.y}
                   />
                 ))}
-                {props.neighbours[swipe.dir]!.images.map(
+                {neighbours[swipe.dir]!.images.map(
                   (im, i) =>
                     imageCache[im.url] && (
                       <KonvaImage
@@ -1187,7 +1225,7 @@ export default function LayerCanvas(props: {
                 right under X-ray the two looked alike and a tap meant for X-ray
                 started a reply (founder, 2026-10-19). Different size, different
                 colour, different place. */}
-            {props.drawable && (
+            {drawable && (
               <button
                 type="button"
                 onClick={() => setMode('draw')}
@@ -1199,7 +1237,7 @@ export default function LayerCanvas(props: {
           </>
         )}
 
-        {mode === 'draw' && props.drawable && (
+        {mode === 'draw' && drawable && (
           <>
             {/* Select is not a drawing tool, so it stands apart from them. */}
             <div className="flex overflow-hidden rounded border border-gray-300 text-xs">{toolBtn('select', 'Select')}</div>
@@ -1214,7 +1252,7 @@ export default function LayerCanvas(props: {
         )}
       </div>
 
-      {mode === 'draw' && props.drawable && (
+      {mode === 'draw' && drawable && (
         <>
           <div className="mt-2 flex min-h-9 flex-wrap items-center gap-2 text-sm">
             {tool === 'pen' && (

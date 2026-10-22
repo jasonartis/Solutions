@@ -1217,3 +1217,30 @@ Full record: docs/25 §12. What changed for this module:
   other test using alice in parallel then fails with "Not signed in" (seen as a vm test failing only when a
   `-g` filter happened to include it). The full suite has passed with it, by timing — a latent flake source;
   run vm tests with filters that exclude it.
+
+### 2026-10-22 — the carousel: the canvas switches layers itself (founder: images still blinked, flashed the wrong layer, sometimes came in blank)
+
+Cause, beyond the signed-URL fix of 2026-10-19: the layer on screen was still tied to the server's page, so
+after a swipe the sheet sat there until the soft navigation returned and re-rendered everything — a window in
+which the wrong layer, a blank one, or a re-download could show. **Now the browser holds a WINDOW of layers and
+switches on its own:** the page sends the layer TREE (with frozen/tombstoned flags) plus each layer's OWN ink
+for every ancestor of the layer on screen and everything within two hops of it (`layersContent`); the canvas
+composes a layer from its ancestors' entries (`effectiveId` = the pending target, else the server's). A swipe
+that completes sets the target and removes the sheet in the SAME render, so the sheet hands over to the real
+layer seamlessly; the server's page then catches up quietly (breadcrumb, replies list) and nothing visibly
+changes. Every picture in the window is fetched ahead (the image cache is keyed by path, see 2026-10-19), so a
+layer you swipe to is never blank. A layer outside the window is simply not swipe-able until the server's page
+brings it (two swipes in a row stay inside the window).
+- **A reply attaches to the layer that was ON SCREEN, not the one the server last rendered:**
+  `replyWithDrawing(orgSlug, conversationId, parentLayerId, payload)` — the page binds only the first two; the
+  canvas passes `effectiveId` at send time (the page's "current" can lag the screen by a server round-trip).
+  e2e proves a reply sent right after a quick swipe becomes 1.1.1, not a second child of the root.
+- **Whether you may reply here is computed in the browser per layer** (`canPost`, `conversationFrozen`, and the
+  tree's frozen/tombstoned flags), since the layer can change before the server re-renders.
+- **Known, accepted:** the reaction/flag/moderation controls below the canvas are bound to the SERVER's current
+  layer for a moment after a swipe (until its page arrives, typically under a second). A heart tapped in that
+  window lands on the previous layer. Left as is; if it matters, disable those controls while a navigation is
+  pending (`pendingLayerId` is the signal).
+- **Payload bound:** the whole conversation is NOT shipped, only the window; a long tree stays small.
+- e2e (`visual-messaging.spec.ts`): the layer switches within 2s while page-data requests are delayed 4s; the
+  parent-correctness test above; 23 visual-messaging tests pass on a prebuilt app.

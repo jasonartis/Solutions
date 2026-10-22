@@ -18,7 +18,7 @@ export type LayerNav = {
   swipeCounts: { left: number; right: number; up: number; down: number }
 }
 
-export type TreeNode = { id: string; parentId: string | null }
+export type TreeNode = { id: string; parentId: string | null; frozen?: boolean; tombstoned?: boolean }
 
 export function navFor(tree: TreeNode[], currentId: string): LayerNav {
   const byId = new Map(tree.map((n) => [n.id, n]))

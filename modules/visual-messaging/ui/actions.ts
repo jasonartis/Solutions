@@ -327,6 +327,9 @@ export async function resendConversationInvite(
 export async function replyWithDrawing(
   orgSlug: string,
   conversationId: string,
+  // Passed by the canvas at send time, NOT bound by the page: the canvas switches layers
+  // itself the instant a swipe completes, and the page's own idea of "current" lags the
+  // server round-trip behind it. A reply must attach to the layer the person SAW.
   parentLayerId: string,
   payloadJson: string,
 ): Promise<{ ok: true; layerId: string } | { ok: false; reason: string }> {

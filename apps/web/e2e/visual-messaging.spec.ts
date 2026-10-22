@@ -248,7 +248,11 @@ test('visual messaging: inviting an address with NO account and an existing memb
 // exactly what a phone photo does to a 1 MB request-body cap. Built in the
 // browser (no image library in Node) and handed back as bytes.
 async function noisyPicture(page: Page, side: number, mime: 'image/jpeg' | 'image/png', alpha: number) {
-  const base64 = await page.evaluate(
+  // Built in a THROWAWAY page: generating tens of MB of noise inside the app page left it
+  // holding that garbage and stalled the following setInputFiles for 80+ seconds some runs.
+  const scratch = await page.context().newPage()
+  await scratch.goto('about:blank')
+  const base64 = await scratch.evaluate(
     async ({ side, mime, alpha }) => {
       const c = document.createElement('canvas')
       c.width = c.height = side
@@ -261,7 +265,7 @@ async function noisyPicture(page: Page, side: number, mime: 'image/jpeg' | 'imag
         img.data[i + 3] = alpha
       }
       ctx.putImageData(img, 0, 0)
-      const blob: Blob = await new Promise((r) => c.toBlob((b) => r(b!), mime, 1))
+      const blob: Blob = await new Promise((r) => c.toBlob((b) => r(b!), mime, 0.92))
       const buf = new Uint8Array(await blob.arrayBuffer())
       let s = ''
       for (let i = 0; i < buf.length; i += 0x8000) s += String.fromCharCode(...buf.subarray(i, i + 0x8000))
@@ -269,6 +273,7 @@ async function noisyPicture(page: Page, side: number, mime: 'image/jpeg' | 'imag
     },
     { side, mime, alpha },
   )
+  await scratch.close()
   return Buffer.from(base64, 'base64')
 }
 
@@ -279,8 +284,8 @@ test('visual messaging: a multi-megabyte picture is shrunk in the browser and up
   await signIn(page, 'alice@demo.local')
   await page.goto('/o/demo-visual/m/visual-messaging')
   const title = 'Big photo ' + Date.now()
-  const big = await noisyPicture(page, 3000, 'image/jpeg', 255)
-  expect(big.length).toBeGreaterThan(4_500_000) // over BOTH the 1 MB default and Vercel's ceiling
+  const big = await noisyPicture(page, 2200, 'image/jpeg', 255)
+  expect(big.length).toBeGreaterThan(4_200_000) // over the 4 MB action limit (and the old 1 MB default)
 
   await page.getByPlaceholder('Title').fill(title)
   await page.setInputFiles('input[name="image"]', { name: 'big.jpg', mimeType: 'image/jpeg', buffer: big })
@@ -289,7 +294,7 @@ test('visual messaging: a multi-megabyte picture is shrunk in the browser and up
   await expect(page.getByRole('heading', { name: title })).toBeVisible()
 
   // A big picture WITH transparency as an image stamp: shrunk, and still a PNG.
-  const sticker = await noisyPicture(page, 1400, 'image/png', 128)
+  const sticker = await noisyPicture(page, 1100, 'image/png', 128)
   expect(sticker.length).toBeGreaterThan(4_000_000)
   await page.getByRole('button', { name: 'Draw a reply' }).click()
   await page.getByRole('button', { name: 'Image', exact: true }).click()
@@ -717,4 +722,73 @@ test('visual messaging: moving between layers does not re-download the pictures'
   await expect(page.getByText('Replies to this layer (0)')).toBeVisible()
   await page.waitForTimeout(1500)
   expect(pictureRequests.length).toBe(before)
+})
+
+// ---- the carousel: layers are held in the browser and switched without waiting for the server
+
+async function sendFirstReply(page: Page, title: string) {
+  const box = await openDrawing(page, title)
+  await inkStroke(page, box, [60, 60], [220, 140])
+  await page.getByRole('button', { name: 'Send reply' }).click()
+  await expect(page.getByText('1.1', { exact: true })).toBeVisible()
+  // Back to the root so the reply is one swipe away.
+  await page.getByRole('button', { name: /swipe right: 1 back up/ }).click()
+  await expect(page.getByText('Replies to this layer (1)')).toBeVisible()
+  return (await page.locator('canvas').first().boundingBox())!
+}
+
+test('visual messaging: a completed swipe switches the layer on screen at once, even when the server is slow', async ({
+  page,
+}) => {
+  test.slow()
+  const b = await sendFirstReply(page, 'Carousel ' + Date.now())
+  // Every page-data request now takes 4s: anything waiting for the server is visibly late.
+  await page.route(/_rsc=/, async (route) => {
+    await new Promise((r) => setTimeout(r, 4000))
+    await route.continue()
+  })
+  const own = () =>
+    page.evaluate(() => {
+      const ls = (window as any).Konva.stages[0].getLayers()
+      return { layers: ls.length as number, ownLines: ls[2].find('Line').length as number }
+    })
+  expect(await own()).toEqual({ layers: 4, ownLines: 0 }) // the root has no ink of its own
+
+  await page.mouse.move(b.x + 300, b.y + 120)
+  await page.mouse.down()
+  await page.mouse.move(b.x + 80, b.y + 122, { steps: 6 }) // a flick: completes
+  await page.mouse.up()
+
+  // Well inside the 4s: the reply's ink is now the layer on screen and the sheet is gone…
+  await expect.poll(own, { timeout: 2000 }).toEqual({ layers: 4, ownLines: 1 })
+  // …while the server-rendered text still describes the root: the page has not caught up yet.
+  await expect(page.getByText('Replies to this layer (1)')).toBeVisible()
+  await page.unroute(/_rsc=/)
+  // Then the page catches up and nothing changes on the canvas.
+  await expect(page.getByText('Replies to this layer (0)')).toBeVisible({ timeout: 20_000 })
+  expect(await own()).toEqual({ layers: 4, ownLines: 1 })
+})
+
+test('visual messaging: a reply sent right after a quick swipe attaches to the layer that was on screen', async ({
+  page,
+}) => {
+  test.slow()
+  const b = await sendFirstReply(page, 'Parent check ' + Date.now())
+  await page.route(/_rsc=/, async (route) => {
+    await new Promise((r) => setTimeout(r, 4000))
+    await route.continue()
+  })
+  // Swipe to the reply (1.1) and start drawing at once — the server still thinks we are on the root.
+  await page.mouse.move(b.x + 300, b.y + 120)
+  await page.mouse.down()
+  await page.mouse.move(b.x + 80, b.y + 122, { steps: 6 })
+  await page.mouse.up()
+  await expect.poll(() => page.evaluate(() => (window as any).Konva.stages[0].getLayers()[2].find('Line').length)).toBe(1)
+  await page.getByRole('button', { name: 'Draw a reply' }).click()
+  const box = (await page.locator('canvas').first().boundingBox())!
+  await inkStroke(page, box, [60, 200], [220, 250])
+  await page.getByRole('button', { name: 'Send reply' }).click()
+  await page.unroute(/_rsc=/)
+  // The new layer is 1.1.1 (a reply to 1.1) — not 1.2 (a second reply to the root).
+  await expect(page.getByText('1.1.1', { exact: true })).toBeVisible({ timeout: 30_000 })
 })

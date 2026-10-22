@@ -7,7 +7,6 @@ import { PENDING_INVITE_WAITING_ON } from '@/lib/org-members'
 import { resolveVisualMessagingSettings, type VisualMessagingSettings } from '@/lib/visual-messaging-settings'
 import LayerCanvas, { type Stroke, type Stamp, type TextStamp, type ImageStamp } from '../../layer-canvas'
 import LayerGrid from '../../layer-grid'
-import { navFor } from '../../layer-nav'
 import { ActionForm } from '../../action-form'
 import {
   acceptConversationInvite,
@@ -239,35 +238,56 @@ export default async function ConversationPage(props: {
   const fmt = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
   const locked = conversation.frozen || chain.some((l) => l.frozen)
 
-  // Swipe-navigation targets + the edge-marker counts (layer-nav.ts is shared
-  // with the canvas, which recomputes them client-side the instant a swipe
-  // completes). rows are path-ordered, so sibling order is stable.
-  const tree = rows.map((l) => ({ id: l.id, parentId: l.parent_layer_id }))
-  const nav = navFor(tree, current.id)
-
-  // What each swipe direction leads to, composed along that layer's path, so
-  // the canvas can slide the incoming layer in under the finger. (The whole
-  // conversation is already loaded above; this only re-shapes it. Fine for
-  // conversation-sized trees — a very large one would want this fetched lazily.)
-  // Only what the layer itself ADDED — a reply is stored as its own ink, with no
-  // copy of the picture or of its ancestors, and the swipe shows exactly that.
-  const contentOf = (layer: LayerRow) => ({
-    strokes: layer.content.strokes ?? [],
-    stamps: layer.content.stamps ?? [],
-    texts: layer.content.texts ?? [],
-    images: resolveImages(layer.content.images ?? []),
-  })
-  const neighbourOf = (id: string | null) => {
-    const layer = id ? byId.get(id) : undefined
-    return layer ? contentOf(layer) : null
+  // THE CAROUSEL (founder, 2026-10-19: "every layer and the layers it can swipe to should
+  // be loaded and ready"). The canvas switches layers ITSELF the instant a swipe completes,
+  // so it is given the layer TREE plus the OWN content (a reply is stored as just what it
+  // added — no picture, no ancestors) of a WINDOW of layers: every ancestor of the layer on
+  // screen (they are composited under it) and everything within two hops of it (parent,
+  // children, siblings, and one step beyond), so two swipes in a row still need nothing from
+  // the server. The server's page then catches up quietly (breadcrumb, replies list).
+  // A very large conversation stays bounded: the window, not the whole tree.
+  const tree = rows.map((l) => ({
+    id: l.id,
+    parentId: l.parent_layer_id,
+    frozen: l.frozen,
+    tombstoned: l.tombstoned,
+  }))
+  const neighbours = new Map<string, string[]>()
+  for (const l of rows) {
+    if (!l.parent_layer_id) continue
+    neighbours.set(l.id, [...(neighbours.get(l.id) ?? []), l.parent_layer_id])
+    neighbours.set(l.parent_layer_id, [...(neighbours.get(l.parent_layer_id) ?? []), l.id])
   }
-  const neighbours = {
-    left: neighbourOf(nav.firstChildId),
-    up: neighbourOf(nav.nextSiblingId),
-    down: neighbourOf(nav.prevSiblingId),
+  const windowIds = new Set<string>(chain.map((l) => l.id)) // ancestors + the layer itself
+  let frontier = [current.id]
+  for (let hop = 0; hop < 2; hop++) {
+    const next: string[] = []
+    for (const id of frontier) {
+      for (const n of neighbours.get(id) ?? []) {
+        if (!windowIds.has(n)) {
+          windowIds.add(n)
+          next.push(n)
+        }
+      }
+    }
+    frontier = next
   }
+  const layersContent = Object.fromEntries(
+    [...windowIds].map((id) => {
+      const l = byId.get(id)!
+      return [
+        id,
+        {
+          strokes: l.content.strokes ?? [],
+          stamps: l.content.stamps ?? [],
+          texts: l.content.texts ?? [],
+          images: resolveImages(l.content.images ?? []),
+        },
+      ]
+    }),
+  )
 
-  const sendReply = replyWithDrawing.bind(null, orgSlug, conversationId, current.id)
+  const sendReply = replyWithDrawing.bind(null, orgSlug, conversationId)
   const pathOf = (id: string) => byId.get(id)?.path ?? '?'
 
   // Moderation queue: only fetched for moderators (vm_flags RLS would only
@@ -370,18 +390,10 @@ export default async function ConversationPage(props: {
         <LayerCanvas
           imageUrl={signed.signedUrl}
           currentLayerId={current.id}
-          baseLayers={chain.slice(0, -1).map((l) => l.content.strokes ?? [])}
-          currentStrokes={current.content.strokes ?? []}
-          baseStamps={chain.slice(0, -1).map((l) => l.content.stamps ?? [])}
-          currentStamps={current.content.stamps ?? []}
-          baseTexts={chain.slice(0, -1).map((l) => l.content.texts ?? [])}
-          currentTexts={current.content.texts ?? []}
-          baseImages={chain.slice(0, -1).map((l) => resolveImages(l.content.images ?? []))}
-          currentImages={resolveImages(current.content.images ?? [])}
-          drawable={!locked && !current.tombstoned && canPost}
-          nav={nav}
           tree={tree}
-          neighbours={neighbours}
+          layersContent={layersContent}
+          canPost={canPost}
+          conversationFrozen={conversation.frozen}
           onSend={sendReply}
           onUploadImage={uploadImageStamp.bind(null, orgSlug, conversationId)}
           imageStampMaxFraction={imageStampMaxFraction}
