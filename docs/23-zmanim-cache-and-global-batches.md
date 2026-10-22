@@ -542,3 +542,5 @@ except hand-written SQL, and a sweep that is seeded OFF. Deploying the screen an
 the schema together is what makes the feature operable; there is no benefit to
 landing the schema early, and docs/03 #28 means the migration cannot be amended
 once pushed anyway.
+
+**2026-10-22 note for whoever builds the deferred action buttons:** `job_requests` now has a BEFORE INSERT guard (`job_requests_guard_insert`, migration 20261017030000). A signed-in user's insert is forced to `status = 'pending'`, `synagogue-schedules.render` additionally requires `syn_can_write`, and **any other `kind` is refused** — add each new job kind (and who may queue it) to that function in a new migration before wiring a button to it.
