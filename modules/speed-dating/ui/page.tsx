@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { FORMER_MEMBER_LABEL, loadFormerMembers } from '@platform/core'
 import { requireOrgModule } from '@/lib/module-gate'
 import { createEvent, unblockUser } from './actions'
+import { SubmitButton } from './submit-button'
 
 const inputCls = 'rounded border border-gray-300 px-2 py-1 text-sm'
 const btnCls = 'rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700'
@@ -158,7 +159,9 @@ export default async function SpeedDatingPage(props: { params: Promise<{ orgSlug
                 <input name="sideBCapacity" type="number" min="1" placeholder="Side B capacity (blank = unlimited)" className={`${inputCls} w-56`} />
               </div>
             </details>
-            <button className={btnCls}>Create (draft)</button>
+            <SubmitButton className={btnCls} pendingLabel="Creating…">
+              Create (draft)
+            </SubmitButton>
           </form>
         </section>
       )}

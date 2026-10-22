@@ -175,14 +175,18 @@ export default function VideoRoom({
   orgSlug,
   eventId,
   pairingId,
+  partnerName,
   roundEndsAt,
 }: {
   orgSlug: string
   eventId: string
   pairingId: string
+  /** The partner's display name, for the status line and captions ("Dana", not "Them"). */
+  partnerName: string
   /** ISO timestamp, or null for a round with no tracked end (degrades to no auto-leave). */
   roundEndsAt: string | null
 }) {
+  const partnerFirstName = partnerName.trim().split(/\s+/)[0] || 'Partner'
   const [status, setStatus] = useState<Status>('idle')
   const [error, setError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
@@ -474,10 +478,25 @@ export default function VideoRoom({
           than narrowing it. Collapsed with h-0 rather than `hidden` because
           display:none can stop a browser starting playback at all. */}
       <div className={status === 'in_call' ? 'grid grid-cols-2 gap-2' : 'h-0 overflow-hidden opacity-0'}>
-        {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-        <video ref={localVideoRef} autoPlay muted playsInline className="aspect-video w-full rounded bg-black" />
-        {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-        <video ref={remoteVideoRef} autoPlay playsInline className="aspect-video w-full rounded bg-black" />
+        {/* Each tile is wrapped so a "camera is off" cover can sit on top. When a
+            camera is muted the <video> keeps painting the LAST frame it had, which
+            reads as a frozen call — so the tile is covered by a black panel with a
+            crossed-out camera and a plain-words caption instead. The <video>
+            elements themselves stay mounted (see the note above). */}
+        <div className="relative">
+          {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+          <video ref={localVideoRef} autoPlay muted playsInline className="aspect-video w-full rounded bg-black" />
+          {status === 'in_call' && !camOn && <CameraOffCover caption="Your camera is off" />}
+        </div>
+        <div className="relative">
+          {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+          <video ref={remoteVideoRef} autoPlay playsInline className="aspect-video w-full rounded bg-black" />
+          {status === 'in_call' && partnerVideo !== 'on' && (
+            <CameraOffCover
+              caption={partnerVideo === 'off' ? `${partnerFirstName}'s camera is off` : `Waiting for ${partnerFirstName}'s camera…`}
+            />
+          )}
+        </div>
         {/* The partner's microphone. Deliberately NOT muted — this element is
             the only thing that makes the call audible. */}
         {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
@@ -491,7 +510,7 @@ export default function VideoRoom({
             <p className="col-span-2 text-xs text-gray-600" data-testid="video-status">
               You: microphone {micOn ? 'on' : 'off'} · camera {camOn ? 'on' : 'off'}
               <br />
-              Them: microphone {mediaWord(partnerAudio)} · camera {mediaWord(partnerVideo)}
+              {partnerFirstName}: microphone {mediaWord(partnerAudio)} · camera {mediaWord(partnerVideo)}
             </p>
             <div className="col-span-2 mt-1 flex flex-wrap gap-2">
               <button
@@ -516,6 +535,23 @@ export default function VideoRoom({
           </>
         )}
       </div>
+    </div>
+  )
+}
+
+function CameraOffCover({ caption }: { caption: string }) {
+  return (
+    <div
+      className="absolute inset-0 flex flex-col items-center justify-center gap-1 rounded bg-black text-xs text-gray-300"
+      role="img"
+      aria-label={caption}
+    >
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M16 7l5-3v14l-5-3" />
+        <rect x="2" y="6" width="14" height="12" rx="2" />
+        <path d="M3 3l18 18" />
+      </svg>
+      <span>{caption}</span>
     </div>
   )
 }

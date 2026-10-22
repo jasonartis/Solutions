@@ -22,6 +22,7 @@ import {
 import { getEventSides, type SideKey } from '../../event-format'
 import LiveRoundRefresh from './live-round-refresh'
 import VideoRoom from './video-room'
+import { SubmitButton } from '../../submit-button'
 
 function formatCountdown(ms: number): string {
   const total = Math.max(0, Math.round(ms / 1000))
@@ -228,7 +229,9 @@ export default async function EventPage(props: {
               <>
                 <form action={runPairingRound.bind(null, orgSlug, eventId)}>
                   {/* Orchestrator stand-in until the worker is deployed. */}
-                  <button className={btnCls}>Run next round (pair everyone)</button>
+                  <SubmitButton className={btnCls} pendingLabel="Pairing…">
+                    Run next round (pair everyone)
+                  </SubmitButton>
                 </form>
                 <form action={setEventState.bind(null, orgSlug, eventId, 'complete')}>
                   <button className={btnCls}>Complete event</button>
@@ -399,7 +402,9 @@ export default async function EventPage(props: {
               </select>
             </label>
           )}
-          <button className={btnCls}>Register for this event</button>
+          <SubmitButton className={btnCls} pendingLabel="Registering…">
+            Register for this event
+          </SubmitButton>
         </form>
       )}
 
@@ -517,6 +522,7 @@ export default async function EventPage(props: {
                   orgSlug={orgSlug}
                   eventId={eventId}
                   pairingId={myCurrentPairing.id}
+                  partnerName={seatName(myCurrentPartnerId)}
                   roundEndsAt={roundEndsAt ? roundEndsAt.toISOString() : null}
                 />
               )}
