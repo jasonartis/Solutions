@@ -27,6 +27,16 @@ export default defineConfig({
   test: {
     // '' as the prefix means every var, not just VITE_-prefixed ones.
     env: loadEnv('', repoRoot, ''),
+    // TEST FILES RUN ONE AT A TIME. Every file here shares ONE database, and
+    // several commit real rows (users, orgs, org_members) before cleaning up.
+    // rls.test.ts's "CI-ORDER GUARD" snapshots the whole org_members table and
+    // asserts it is unchanged at the end of its block — so any OTHER file
+    // committing a membership row while that block runs fails it, at random
+    // (seen 2026-10-20: CI red on 28 rows vs 44, green on the same sha when
+    // re-run, blocking every deploy). Serial files make the guard meaningful and
+    // also remove the "5s timeout under parallel load" flakes the pending-invites
+    // files hit. Cost: ~1 min -> ~3 min for the suite (docs/12 item 1).
+    fileParallelism: false,
   },
   resolve: {
     alias: { '@platform/core': resolve(here, '../platform/src/index.ts') },
