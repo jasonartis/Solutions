@@ -48,17 +48,20 @@ export default async function EventPage(props: {
 
   const { data: event } = await supabase
     .from('sd_events')
-    .select('id, name, state, scheduled_at, resume_review_enabled, round_duration_seconds, break_duration_seconds, lobby_opens_at, format')
+    .select('id, org_id, name, state, scheduled_at, resume_review_enabled, round_duration_seconds, break_duration_seconds, allow_repeat_pairings, lobby_opens_at, format')
     .eq('id', eventId)
     .maybeSingle()
   if (!event) notFound()
   const sides = getEventSides(event.format)
 
-  const [{ data: canOrganize }, { data: canStaffEvent }, { data: me }] = await Promise.all([
+  const [{ data: canOrganize }, { data: canStaffEvent }, { data: canManage }, { data: me }] = await Promise.all([
     supabase.rpc('sd_can_organize', { check_org_id: org.id }),
     // Broader than canOrganize: also covers a pure 'host' role — lobby/rooms
     // duty without event-setup rights (sd_can_staff_event in the schema).
     supabase.rpc('sd_can_staff_event', { check_org_id: org.id }),
+    // sd_blocks is readable by the blocker and the manage tier only (RLS), so the
+    // excluded-pairs count below is shown only to a caller who can really see it.
+    supabase.rpc('sd_can_manage', { check_org_id: org.id }),
     supabase.auth.getUser().then(({ data }) => ({ data: data.user })),
   ])
 
@@ -95,6 +98,32 @@ export default async function EventPage(props: {
   ])
 
   const mySeat = (participants ?? []).find((p) => p.user_id === me?.id)
+
+  // How many pairings personal blocks are keeping out of this event. A NUMBER
+  // ONLY — never who blocked whom (founder-approved 2026-10-21). Counts unordered
+  // pairs of registered participants where either has blocked the other; with two
+  // sides only cross-side pairs could ever have met, so only those count.
+  let blockedPairCount: number | null = null
+  if (canOrganize && canManage) {
+    const seated = (participants ?? []).filter((p) => p.status === 'registered' && p.seat_type === 'participant')
+    const seatedUsers = seated.map((p) => p.user_id)
+    const { data: blockRows } = seatedUsers.length
+      ? await supabase
+          .from('sd_blocks')
+          .select('blocker_user_id, blocked_user_id')
+          .eq('org_id', event.org_id)
+          .in('blocker_user_id', seatedUsers)
+      : { data: [] }
+    const sideOf = new Map(seated.map((p) => [p.user_id, p.pool_side ?? '']))
+    const bipartite = new Set(seated.map((p) => p.pool_side ?? '')).size === 2
+    const pairKeys = new Set<string>()
+    for (const b of blockRows ?? []) {
+      if (!sideOf.has(b.blocked_user_id)) continue
+      if (bipartite && sideOf.get(b.blocker_user_id) === sideOf.get(b.blocked_user_id)) continue
+      pairKeys.add([b.blocker_user_id, b.blocked_user_id].sort().join('|'))
+    }
+    blockedPairCount = pairKeys.size
+  }
   const canDeleteEvent =
     !!canOrganize &&
     (rounds ?? []).length === 0 &&
@@ -187,6 +216,14 @@ export default async function EventPage(props: {
           Ask the organizer if you think this is a mistake.
         </p>
       )}
+      {notice === 'edit-saved' && (
+        <p className="mb-6 rounded border border-green-200 bg-green-50 px-4 py-2 text-sm text-green-900">Event updated.</p>
+      )}
+      {notice === 'edit-locked' && (
+        <p className="mb-6 rounded border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
+          This event can no longer be edited — it has started or ended.
+        </p>
+      )}
       {notice === 'register-closed' && (
         <p className="mb-6 rounded border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
           Registration for this event is not open.
@@ -215,6 +252,11 @@ export default async function EventPage(props: {
         <section className="mb-8 rounded-lg border border-gray-200 bg-white p-5">
           <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-gray-500">Organizer console</h2>
           <div className="mb-4 flex flex-wrap gap-3">
+            {(event.state === 'draft' || event.state === 'open') && (
+              <Link href={`/o/${orgSlug}/m/speed-dating/events/${eventId}/edit`} className="rounded border border-gray-300 px-3 py-1 text-sm text-gray-700 hover:bg-gray-50">
+                Edit details
+              </Link>
+            )}
             {event.state === 'draft' && (
               <form action={setEventState.bind(null, orgSlug, eventId, 'open')}>
                 <button className={btnCls}>Open registration</button>
@@ -266,6 +308,18 @@ export default async function EventPage(props: {
               Delete is only available for an event with no registrations and no rounds — cancel it instead.
             </p>
           )}
+          <p className="mb-2 text-xs text-gray-500">
+            Rounds of {Math.round(event.round_duration_seconds / 60)} min with {event.break_duration_seconds}s breaks
+            {event.allow_repeat_pairings ? ' · people may meet more than once' : ''}.
+            {blockedPairCount !== null && (
+              <>
+                {' '}
+                {blockedPairCount === 0
+                  ? 'No pairings are being skipped because of personal blocks.'
+                  : `${blockedPairCount} ${blockedPairCount === 1 ? 'pairing is' : 'pairings are'} being skipped because of personal blocks — that is why someone may sit out a round.`}
+              </>
+            )}
+          </p>
           <p className="text-xs text-gray-400">
             Rounds run: {(rounds ?? []).length} · Matches: {(matches ?? []).filter((m) => m.revealed).length} revealed / {(matches ?? []).length} total
             {activeRound && roundEndsAt && (

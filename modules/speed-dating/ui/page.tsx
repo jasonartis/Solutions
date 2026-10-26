@@ -3,14 +3,19 @@ import { FORMER_MEMBER_LABEL, loadFormerMembers } from '@platform/core'
 import { requireOrgModule } from '@/lib/module-gate'
 import { createEvent, unblockUser } from './actions'
 import { SubmitButton } from './submit-button'
+import { EventSettingsFields } from './event-settings-fields'
 
 const inputCls = 'rounded border border-gray-300 px-2 py-1 text-sm'
 const btnCls = 'rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700'
 
 // Module 6 (Speed Dating) landing: events list. Organizers create events;
 // participants see the events they can register for (RLS scopes both).
-export default async function SpeedDatingPage(props: { params: Promise<{ orgSlug: string }> }) {
+export default async function SpeedDatingPage(props: {
+  params: Promise<{ orgSlug: string }>
+  searchParams?: Promise<{ notice?: string }>
+}) {
   const { orgSlug } = await props.params
+  const notice = (await props.searchParams)?.notice
   const { supabase, org } = await requireOrgModule(orgSlug, 'speed-dating')
 
   const [{ data: canOrganize }, { data: events }, { data: me }] = await Promise.all([
@@ -59,6 +64,17 @@ export default async function SpeedDatingPage(props: { params: Promise<{ orgSlug
       <p className="mb-1 text-sm text-gray-400">{org.name}</p>
       <h1 className="mb-6 text-2xl font-semibold">Speed Dating — Events</h1>
 
+      {notice === 'create-timing' && (
+        <p className="mb-6 rounded border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
+          The event was not created: round length must be whole minutes (1–60) and the break whole seconds (0–600).
+        </p>
+      )}
+      {notice === 'create-format' && (
+        <p className="mb-6 rounded border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
+          The event was not created: both side labels are required, and a side capacity must be a positive whole number.
+        </p>
+      )}
+
       {(() => {
         const all = events ?? []
         const mine = all.filter((e) => seatStatus.has(e.id))
@@ -84,6 +100,12 @@ export default async function SpeedDatingPage(props: { params: Promise<{ orgSlug
               <Link href={`/o/${orgSlug}/m/speed-dating/events/${e.id}`} className="text-blue-600 hover:underline">
                 {e.name}
               </Link>
+              {canOrganize && (
+                <span className="ml-2 rounded bg-blue-100 px-1.5 py-0.5 text-xs font-medium text-blue-800">you organize</span>
+              )}
+              {seatStatus.has(e.id) && (
+                <span className="ml-2 text-xs text-gray-500">{canOrganize ? 'you also participate:' : 'you participate:'}</span>
+              )}
               {badge(seatStatus.get(e.id))}
             </span>
             <span className="text-sm text-gray-500">
@@ -135,30 +157,8 @@ export default async function SpeedDatingPage(props: { params: Promise<{ orgSlug
             <div className="flex flex-wrap items-center gap-2">
               <input name="name" required placeholder="Event name" className={`${inputCls} min-w-56`} />
               <input name="scheduledAt" type="datetime-local" className={inputCls} />
-              <label className="flex items-center gap-1 text-sm text-gray-600">
-                <input type="checkbox" name="resumeReview" />
-                Resume-review (participants see profile cards)
-              </label>
-              <label className="flex items-center gap-1 text-sm text-gray-600">
-                <input type="checkbox" name="shareContactOnMatch" />
-                Share contact info on mutual match
-              </label>
             </div>
-            <details className="rounded border border-gray-100 p-2">
-              <summary className="cursor-pointer text-sm text-gray-600">
-                Two sides (e.g. Men/Women) — optional, sets a capacity + waitlist per side
-              </summary>
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                <label className="flex items-center gap-1 text-sm text-gray-600">
-                  <input type="checkbox" name="sidesEnabled" />
-                  Enable two sides
-                </label>
-                <input name="sideALabel" placeholder="Side A label (e.g. Men)" className={`${inputCls} w-40`} />
-                <input name="sideACapacity" type="number" min="1" placeholder="Side A capacity (blank = unlimited)" className={`${inputCls} w-56`} />
-                <input name="sideBLabel" placeholder="Side B label (e.g. Women)" className={`${inputCls} w-40`} />
-                <input name="sideBCapacity" type="number" min="1" placeholder="Side B capacity (blank = unlimited)" className={`${inputCls} w-56`} />
-              </div>
-            </details>
+            <EventSettingsFields />
             <SubmitButton className={btnCls} pendingLabel="Creating…">
               Create (draft)
             </SubmitButton>

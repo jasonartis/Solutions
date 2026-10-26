@@ -2536,3 +2536,42 @@ test('owner console: account deletions page shows the runner and the cancelled r
   await page.getByRole('button', { name: 'Remove from platform' }).click()
   await expect(page.getByText(/Not removed: it is a platform owner account/)).toBeVisible()
 })
+
+// Organizer screens (2026-10-26): timing at creation with a live preview, the
+// "you organize" label, and editing a draft in place.
+test('speed-dating module: organizer sets round length at creation, sees the plan, and edits a draft', async ({ page }) => {
+  await signIn(page, 'alice@demo.local')
+  await page.goto('/o/demo-dating/m/speed-dating')
+  const eventName = 'Timing Test ' + Date.now()
+  await page.getByPlaceholder('Event name').fill(eventName)
+  // 8 people, one pool -> 7 rounds; 7*300s + 6*60s = 2460s = 41 min. Re-fill until
+  // it sticks: a fill that lands before hydration is reset by React's defaults.
+  await expect(async () => {
+    await page.getByLabel('Round length').fill('5')
+    await page.getByLabel('Break between rounds').fill('60')
+    await page.getByLabel('People you expect').fill('8')
+    await expect(page.getByText('8 people, up to 7 rounds, about 41 minutes')).toBeVisible({ timeout: 1500 })
+  }).toPass({ timeout: 15_000 })
+  await page.getByRole('button', { name: 'Create (draft)' }).click()
+  await expect(page.getByRole('link', { name: eventName })).toBeVisible()
+  await expect(page.getByText('you organize').first()).toBeVisible()
+
+  await page.getByRole('link', { name: eventName }).click()
+  await expect(page.getByText('Rounds of 5 min with 60s breaks')).toBeVisible()
+
+  // Edit the draft in place: new name, 4-minute rounds.
+  await page.getByRole('link', { name: 'Edit details' }).click()
+  await expect(page.getByLabel('Round length')).toHaveValue('5')
+  const renamed = eventName + ' (edited)'
+  await page.getByPlaceholder('Event name').fill(renamed)
+  await page.getByLabel('Round length').fill('4')
+  await page.getByRole('button', { name: 'Save changes' }).click()
+  await expect(page.getByText('Event updated.')).toBeVisible()
+  await expect(page.getByRole('heading', { name: renamed })).toBeVisible()
+  await expect(page.getByText('Rounds of 4 min with 60s breaks')).toBeVisible()
+
+  // A cancelled event can no longer be edited.
+  await page.getByRole('button', { name: 'Cancel event' }).click()
+  await page.goto(page.url().split('?')[0] + '/edit')
+  await expect(page).not.toHaveURL(/\/edit/)
+})

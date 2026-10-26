@@ -12,6 +12,7 @@ import {
 } from '@modules/speed-dating'
 import { createClient } from '@/lib/supabase/server'
 import { getEventSides, getShareContactOnMatch, parseEventFormat, type SideKey } from './event-format'
+import { parseTimings } from './event-plan'
 
 // Speed-dating actions. RLS + the sd_ guard triggers are the enforcement
 // layer (organize-write for event control, insert-self/pins for participants,
@@ -41,8 +42,18 @@ export async function createEvent(orgSlug: string, formData: FormData) {
   const name = String(formData.get('name') ?? '').trim()
   const scheduledAt = String(formData.get('scheduledAt') ?? '').trim()
   const resumeReview = formData.get('resumeReview') === 'on'
+  const listPath = `/o/${orgSlug}/m/speed-dating`
   if (!name) throw new Error('Event name is required')
-  const format = parseEventFormat(formData)
+  // Expected refusals redirect with a notice: a thrown message is redacted in
+  // production (docs/03 #22) and this is a <form action>.
+  const timings = parseTimings(formData)
+  if ('error' in timings) redirect(`${listPath}?notice=create-timing`)
+  let format
+  try {
+    format = parseEventFormat(formData)
+  } catch {
+    redirect(`${listPath}?notice=create-format`)
+  }
 
   const supabase = await createClient()
   const orgId = await resolveOrgId(supabase, orgSlug)
@@ -55,12 +66,75 @@ export async function createEvent(orgSlug: string, formData: FormData) {
     name,
     scheduled_at: scheduledAt ? new Date(scheduledAt).toISOString() : null,
     resume_review_enabled: resumeReview,
+    round_duration_seconds: timings.roundSeconds,
+    break_duration_seconds: timings.breakSeconds,
+    allow_repeat_pairings: formData.get('allowRepeats') === 'on',
     format,
     created_by: user?.id ?? null,
   })
   fail(error, 'Create event failed')
   await recordActivity(supabase, { moduleKey: 'speed-dating', action: 'event.created', orgSlug })
+  revalidatePath(listPath)
+}
+
+// Organizer: change an event's details. Allowed only while the event is a draft
+// or open for registration (RLS would let an organizer write anytime; these
+// rules are the product's, so they live here). Name, description and start time
+// are always editable then (lobby_opens_at is not exposed: nothing in the UI sets it). Round/break length, repeat rule, the
+// switches and the sides are editable only while NO round has run, and the SIDES
+// are locked once anyone holds a live seat, because people registered on a side
+// they chose. An invalid or refused edit changes nothing and redirects with a
+// notice (docs/03 #22).
+export async function updateEvent(orgSlug: string, eventId: string, formData: FormData) {
+  const base = `/o/${orgSlug}/m/speed-dating/events/${eventId}`
+  const name = String(formData.get('name') ?? '').trim()
+  const description = String(formData.get('description') ?? '').trim()
+  const scheduledAt = String(formData.get('scheduledAt') ?? '').trim()
+  if (!name) redirect(`${base}/edit?notice=edit-name`)
+  const timings = parseTimings(formData)
+  if ('error' in timings) redirect(`${base}/edit?notice=edit-timing`)
+  let format
+  try {
+    format = parseEventFormat(formData)
+  } catch {
+    redirect(`${base}/edit?notice=edit-format`)
+  }
+
+  const supabase = await createClient()
+  const [{ data: event }, { count: rounds }, { count: live }] = await Promise.all([
+    supabase.from('sd_events').select('state, format').eq('id', eventId).maybeSingle(),
+    supabase.from('sd_rounds').select('id', { count: 'exact', head: true }).eq('event_id', eventId),
+    supabase
+      .from('sd_participants')
+      .select('id', { count: 'exact', head: true })
+      .eq('event_id', eventId)
+      .in('status', ['registered', 'waitlisted']),
+  ])
+  if (!event || (event.state !== 'draft' && event.state !== 'open')) redirect(`${base}?notice=edit-locked`)
+  if ((rounds ?? 0) > 0) redirect(`${base}?notice=edit-locked`)
+  // Sides are compared as the stored shape; unchanged sides never trip the lock.
+  const sidesChanged = JSON.stringify(getEventSides(event.format) ?? null) !== JSON.stringify(format.sides ?? null)
+  if (sidesChanged && (live ?? 0) > 0) redirect(`${base}/edit?notice=edit-sides-locked`)
+
+  const { data: updated, error } = await supabase
+    .from('sd_events')
+    .update({
+      name,
+      description: description || null,
+      scheduled_at: scheduledAt ? new Date(scheduledAt).toISOString() : null,
+      resume_review_enabled: formData.get('resumeReview') === 'on',
+      round_duration_seconds: timings.roundSeconds,
+      break_duration_seconds: timings.breakSeconds,
+      allow_repeat_pairings: formData.get('allowRepeats') === 'on',
+      format,
+    })
+    .eq('id', eventId)
+    .select('id')
+  if (error || !updated || updated.length === 0) redirect(`${base}/edit?notice=edit-refused`)
+  await recordActivity(supabase, { moduleKey: 'speed-dating', action: 'event.updated', orgSlug })
   revalidatePath(`/o/${orgSlug}/m/speed-dating`)
+  revalidatePath(base)
+  redirect(`${base}?notice=edit-saved`)
 }
 
 // Resume-review profile card (spec: an opt-in event format where participants

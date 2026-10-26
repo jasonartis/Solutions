@@ -107,6 +107,7 @@ export const ACTIVITY_ACTIONS = {
     'event.registered', // strongest signal for a participant
     'round.interest_marked', // the core act the module exists for
     'event.created',
+    'event.updated',
     'pairing_round.run',
     'event.deleted',
     'event.rejoined',

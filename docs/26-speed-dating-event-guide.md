@@ -28,13 +28,17 @@ Audience and mentor seats exist in the schema but have no UI. **GAP.**
 
 ## One evening, in order
 
-1. **Organizer: create** — module page -> *Create event* (name; optional start time, resume-review,
-   share-contact, two sides). Event is a **draft** nobody else sees. **GAP:** round/break length,
-   number of rounds and total duration cannot be set or previewed here (set directly in the
-   database for tests); a draft has no detail/edit view.
+1. **Organizer: create** — module page -> *Create event* (name; optional start time, **round length
+   and break length**, "let people meet more than once", resume-review, share-contact, two sides).
+   A live line under the timing boxes reads e.g. "14 people, up to 13 rounds, about 1.5 hours"
+   (the number of rounds is fixed by who is registered, not typed in; personal blocks can only
+   shorten it). Event is a **draft** nobody else sees. A draft or open event has an *Edit details*
+   button on its page: name, description, start time, timing, switches and sides can change until
+   a round has run; the **sides lock once anyone has registered** (they chose one).
 2. **Organizer: open registration** — event page -> *Open registration*. Daters now see it under
-   "Open for registration" on their events list. **GAP:** an open event cannot be closed or
-   returned to draft.
+   "Open for registration" on their events list. An open event cannot be returned to draft or have registration closed
+   while staying alive: the state machine has no such state (a migration would be needed). To fix
+   a wrong time or name, *Edit details*; to end it, *Cancel event*.
 3. **Daters: register** — event page -> *Register for this event* (pick a side only if the
    organizer enabled two sides; nothing is read from profiles). The list shows their status
    (registered / waitlisted / withdrawn / removed). Withdrawing is possible while the event is
@@ -50,7 +54,9 @@ Audience and mentor seats exist in the schema but have no UI. **GAP.**
    survives across events, invisible even to organizers), **Report** (goes to the organizer's
    triage list; the reported person never sees it), **Never pair me with them again** (the
    rotation skips that pair in every future round and event in this org; the other person is not
-   told). **GAP:** organizers cannot see *why* someone got a bye.
+   told). Organizers with the manage tier see how many pairings personal blocks are
+   skipping ("3 pairings are being skipped…"), never who blocked whom — so a bye is explainable.
+   A plain organizer cannot read blocks (RLS), so sees no figure rather than a wrong zero.
 7. **Next round** — if the background **worker** is running it closes the round, waits out the
    break and builds the next one automatically; otherwise the organizer clicks *Run next round*
    each time. **Production has no worker running unless `pnpm worker:prod` is up.** When
@@ -61,8 +67,8 @@ Audience and mentor seats exist in the schema but have no UI. **GAP.**
 
 ## Things the screens do not tell you today
 
-- Whether you are the organizer or a participant in the events list (the Organizer console only
-  appears for organizers). **GAP.**
+- ~~Whether you are the organizer or a participant in the events list~~ — the list now shows
+  "you organize" and, for events you hold a seat in, "you participate".
 - Check-in: the lobby says "check in at the front desk", but **no screen sets checked-in** and
   pairing uses everyone *registered*, so it has no effect. **GAP.**
 - A round that ran out is treated as ended by the page, but its stored state stays `active`
