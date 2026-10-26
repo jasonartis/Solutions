@@ -684,7 +684,13 @@ export default function LayerCanvas(props: {
     const dy = pos.y - st.y
     if (!st.axis) {
       if (Math.max(Math.abs(dx), Math.abs(dy)) < SWIPE_AXIS_LOCK) return
-      st.axis = Math.abs(dx) >= Math.abs(dy) ? 'x' : 'y'
+      // Pick the dominant axis — but a thumb is rarely straight, so when the dominant one
+      // has nowhere to go and the other one does, take the other one.
+      const dominant: 'x' | 'y' = Math.abs(dx) >= Math.abs(dy) ? 'x' : 'y'
+      const alt: 'x' | 'y' = dominant === 'x' ? 'y' : 'x'
+      const dirOf = (axis: 'x' | 'y'): SwipeDir =>
+        axis === 'x' ? (dx < 0 ? 'left' : 'right') : dy < 0 ? 'up' : 'down'
+      st.axis = !targetFor(dirOf(dominant)) && targetFor(dirOf(alt)) ? alt : dominant
     }
     const raw = st.axis === 'x' ? dx : dy
     const dir: SwipeDir = st.axis === 'x' ? (raw < 0 ? 'left' : 'right') : raw < 0 ? 'up' : 'down'

@@ -792,3 +792,79 @@ test('visual messaging: a reply sent right after a quick swipe attaches to the l
   // The new layer is 1.1.1 (a reply to 1.1) — not 1.2 (a second reply to the root).
   await expect(page.getByText('1.1.1', { exact: true })).toBeVisible({ timeout: 30_000 })
 })
+
+// ---- siblings: up/down swipes
+
+test('visual messaging: swiping up/down between sibling replies works, with a thumb-like diagonal, and never blanks', async ({
+  page,
+}) => {
+  test.slow()
+  // Root with TWO replies: 1.1 (red) and 1.2 (blue).
+  const box = await openDrawing(page, 'Siblings ' + Date.now())
+  const inkReply = async (y: number, colour: string) => {
+    await page.getByLabel(`pen ${colour}`).click()
+    const b = (await page.locator('canvas').first().boundingBox())!
+    await inkStroke(page, { x: b.x, y: b.y }, [60, y], [300, y + 20])
+    await page.getByRole('button', { name: 'Send reply' }).click()
+  }
+  await inkReply(60, '#e11d48')
+  await expect(page.getByText('1.1', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: /swipe right: 1 back up/ }).click()
+  await expect(page.getByText('Replies to this layer (1)')).toBeVisible()
+  await page.getByRole('button', { name: 'Draw a reply' }).click()
+  await inkReply(200, '#2563eb')
+  await expect(page.getByText('1.2', { exact: true })).toBeVisible()
+  void box
+
+  // The layer on screen is identified by the colour of its own ink.
+  const ownColour = () =>
+    page.evaluate(() => {
+      const ls = (window as any).Konva.stages[0].getLayers()
+      return ls[2].find('Line').map((l: any) => l.fill()).join(',') as string
+    })
+  // A per-frame recorder: any frame where the layer shows NO ink of its own while
+  // swiping would be the "blank / blink" the founder saw.
+  const record = () =>
+    page.evaluate(() => {
+      ;(window as any).__frames = []
+      const t0 = performance.now()
+      const tick = () => {
+        const ls = (window as any).Konva.stages[0].getLayers()
+        const colours = ls[2].find('Line').map((l: any) => l.fill()).join(',')
+        const sheet = ls.length > 4 ? ls[4].find('Line').map((l: any) => l.fill()).join(',') : ''
+        ;(window as any).__frames.push({ colours, sheet, y: ls[2].y() })
+        if (performance.now() - t0 < 2000) requestAnimationFrame(tick)
+      }
+      requestAnimationFrame(tick)
+    })
+  const frames = () => page.evaluate(() => (window as any).__frames as { colours: string; sheet: string; y: number }[])
+
+  expect(await ownColour()).toBe('#2563eb')
+  const b = (await page.locator('canvas').first().boundingBox())!
+
+  // Swipe DOWN (to the previous sibling, 1.1) with a drifting, thumb-like path.
+  await record()
+  await page.mouse.move(b.x + 200, b.y + 90)
+  await page.mouse.down()
+  await page.mouse.move(b.x + 214, b.y + 140, { steps: 5 })
+  await page.mouse.move(b.x + 222, b.y + 270, { steps: 6 })
+  await page.mouse.up()
+  await expect.poll(ownColour, { timeout: 5000 }).toBe('#e11d48')
+  await page.waitForTimeout(2100)
+  let seen = await frames()
+  expect(seen.some((f) => f.sheet.includes('#e11d48'))).toBe(true) // the sibling's ink came in as a sheet
+  expect(seen.every((f) => f.colours !== '' || f.y !== 0)).toBe(true) // never an empty, settled layer
+
+  // And UP again (to 1.2): also recognised.
+  await record()
+  await page.mouse.move(b.x + 200, b.y + 250)
+  await page.mouse.down()
+  await page.mouse.move(b.x + 208, b.y + 190, { steps: 5 })
+  await page.mouse.move(b.x + 212, b.y + 40, { steps: 6 })
+  await page.mouse.up()
+  await expect.poll(ownColour, { timeout: 5000 }).toBe('#2563eb')
+  await page.waitForTimeout(2100)
+  seen = await frames()
+  expect(seen.some((f) => f.sheet.includes('#2563eb'))).toBe(true)
+  expect(seen.every((f) => f.colours !== '' || f.y !== 0)).toBe(true)
+})

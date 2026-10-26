@@ -258,20 +258,24 @@ export default async function ConversationPage(props: {
     neighbours.set(l.id, [...(neighbours.get(l.id) ?? []), l.parent_layer_id])
     neighbours.set(l.parent_layer_id, [...(neighbours.get(l.parent_layer_id) ?? []), l.id])
   }
-  const windowIds = new Set<string>(chain.map((l) => l.id)) // ancestors + the layer itself
+  // Walk two hops from the layer on screen. The walk keeps its OWN visited set: the ancestors
+  // are in the window anyway, and seeding the walk with them stopped it at the parent, so the
+  // siblings (parent's other children — what an up/down swipe needs) were never reached.
+  const visited = new Set<string>([current.id])
   let frontier = [current.id]
   for (let hop = 0; hop < 2; hop++) {
     const next: string[] = []
     for (const id of frontier) {
       for (const n of neighbours.get(id) ?? []) {
-        if (!windowIds.has(n)) {
-          windowIds.add(n)
+        if (!visited.has(n)) {
+          visited.add(n)
           next.push(n)
         }
       }
     }
     frontier = next
   }
+  const windowIds = new Set<string>([...chain.map((l) => l.id), ...visited]) // ancestors + the walk
   const layersContent = Object.fromEntries(
     [...windowIds].map((id) => {
       const l = byId.get(id)!

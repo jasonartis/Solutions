@@ -1244,3 +1244,17 @@ brings it (two swipes in a row stay inside the window).
 - **Payload bound:** the whole conversation is NOT shipped, only the window; a long tree stays small.
 - e2e (`visual-messaging.spec.ts`): the layer switches within 2s while page-data requests are delayed 4s; the
   parent-correctness test above; 23 visual-messaging tests pass on a prebuilt app.
+
+### 2026-10-26 — up/down swipes did nothing: the window never contained the siblings (founder report)
+
+The carousel window (2026-10-22) is "ancestors + everything within two hops". The walk was seeded with the
+ancestors already in the set, so from the layer on screen it reached the parent and **stopped** — the parent's
+other children (the SIBLINGS, which up/down swipes switch between) were never sent. The canvas then held no
+content for them, and `targetFor` refuses a direction it has no content for, so a vertical drag did nothing at all
+(the marker said "1 sibling", the drag was ignored, and the occasional navigation that did happen came from the
+server's page, hence the blink). Found by recording the canvas frame by frame and printing what it held
+(2 of 3 layers; `hasDown: false`). **Fix:** the walk keeps its own visited set. **Also:** the axis lock now prefers
+the other axis when the dominant one has nowhere to go (a thumb is rarely straight). **The lesson:** no test
+had ever swiped vertically — the swipe tests were all horizontal — so a whole direction was dead and green.
+New e2e: two sibling replies, a drifting diagonal swipe down then up, a per-frame check that the layer never
+settles empty and that the sibling's ink arrives as a sheet.
