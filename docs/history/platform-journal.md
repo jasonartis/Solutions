@@ -42,6 +42,16 @@ decision log, docs/03 conventions, docs/12 safeguards) — this is the chronolog
   relaunching it brought everything back with data intact. **(8) Teeth proven** by three deliberate
   breakages of the database functions, each turning the matching tests red. **Not measured:** whether GoTrue
   keeps an attacker's password when the real owner later confirms an unconfirmed signup (review note 5).
+- **2026-10-19 → 27 (Sonnet) — VISUAL MESSAGING, THE SWIPE ROUNDS (all on prod; founder: "quite good now").** Spec entries
+  2026-10-19/22/26/27 have the detail. What a future session would otherwise miss: **(1)** the reload after a swipe was
+  signed picture URLs (fresh token per render → image cache keyed by path now); **(2)** the carousel (browser holds a
+  window of layers, switches itself; reply names its parent at send time); **(3)** three bugs that only appear BETWEEN
+  swipes — siblings missing from the window (a whole direction dead while every test was horizontal), a timer keyed by
+  layer id clearing a later swipe's target, late pages pulling the screen back — found by recording the canvas frame by
+  frame and a seeded random-walk e2e (72–83 wrong frames/run before, 0 after); **(4)** the e2e collision: "sign out
+  returns to login" signs Alice out everywhere and breaks any parallel alice test; **(5)** CI's db suite now runs files
+  serially (another session's fix, `2bb66fc`) after an org_members snapshot guard flaked. Phone pass still waits on a
+  phone whose browser runs the app.
 - **2026-10-14/15 (Sonnet) — VISUAL MESSAGING FIX BATCH, UI HALF: BUILT, ON PRODUCTION, DESKTOP + TOUCH-SCREEN
   CHECKED BY THE FOUNDER; PHONE PASS NOT DONE** (commits `2a8e212` → `8402ea5`; no migration; full e2e 66/66 on a
   reset DB). Spec entries "2026-10-14 (build)", "…(founder … test) — fixes", "2026-10-15" have the detail. What a

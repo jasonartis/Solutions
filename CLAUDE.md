@@ -36,8 +36,15 @@ found a hole in the PREVIOUS fix (an error that distinguishes "none" from "not y
 "manager anywhere in the org" exemption must be class-level). **Open, founder-deferred:** an organizer can still
 seat an org member without their say-so (build the consent flow with audience/mentor seats). Full story:
 module-6 spec 2026-10-19.
-**2026-10-14, VISUAL MESSAGING FIX BATCH: THE SONNET UI HALF IS BUILT AND PUSHED (phases 1–7, no
-migration — spec "2026-10-14 (build)" entry); NOT YET CHECKED ON A PHONE.** The Opus half (viewers
+**2026-10-14 → 27, VISUAL MESSAGING FIX BATCH: THE SONNET UI HALF IS BUILT, ON PRODUCTION AND FOUNDER-CONFIRMED
+ON A DESKTOP/TOUCH SCREEN (no migration; spec entries 2026-10-14 → 2026-10-27).** Later rounds, all in the spec: phone-
+width dashboard; a three-level X-ray; **"the carousel" — the canvas holds a WINDOW of layers (ancestors + two hops) and
+switches on its own the instant a swipe completes, the server page catching up behind it, and a reply names its
+PARENT at send time (`replyWithDrawing(orgSlug, conversationId, parentLayerId, payload)`)**; three bugs found only by
+swiping MANY times under latency (the window omitted siblings so up/down did nothing; a layer-id-keyed timer cleared a
+later swipe's target; a late page pulled the screen back). Permanent e2e: a seeded random walk of 24 rapid swipes under
+200–1800 ms latency must show no wrong frame. **Accepted: the reaction/flag/moderation controls below the canvas bind
+to the SERVER's layer for under a second after a swipe.** The Opus half (viewers
 may react, `20261014020000`) is on prod and verified. **⚠ PLATFORM-WIDE FIX in it: `globals.css`'s
 `@source "../../../modules/*/ui"` scanned 0 files, so every Tailwind class used ONLY in module
 screens was missing from the built CSS — now `@source "../../../modules"`, verified in the built
