@@ -1009,6 +1009,11 @@ Everything below is open but unranked:
   `d653d4d` was found and fixed same-session — check-run annotations alone (`.../check-runs/
   <id>/annotations`) only gave a generic "exit code 1" with no Playwright reporter configured for
   GitHub, so the full log was genuinely necessary, not just a convenience.
+  **A failed `check` job can be re-run from the terminal with the same token (2026-10-20, answered 201):**
+  `POST /repos/<owner>/<repo>/actions/runs/<run_id>/rerun-failed-jobs`. Use it only after reading the failure and
+  deciding it is a flake (the same sha passing on a later scheduled run is the evidence); a docs-only commit whose
+  `check` flaked is not a reason to touch code. **Also: a Vercel deploy READY for a sha means `check` passed, even
+  while the Actions run still reads `in_progress` (a trailing cleanup step).**
   **CI also differs from local in two ways that matter for e2e:** `retries: 1` (local 0) and a
   PREBUILT server via `pnpm start` (local `pnpm dev` compiles routes mid-test) —
   `apps/web/playwright.config.ts:9,15`. So a test that flakes locally may be reliably green in CI
@@ -1831,6 +1836,11 @@ ode-compile-cache`. **So `--concurrency=1` is not a universal fix and "134 means
   the pid, then `Get-CimInstance Win32_Process -Filter "ProcessId=N"` and read `CommandLine` —
   **`next start` is a Playwright orphan and safe to kill; `next dev` is a live session's server
   and is not yours to touch** (with two sessions sharing this tree, that distinction matters).
+  **(2026-10-26) A `next start` that is NOT yours may be ANOTHER SESSION'S live e2e run** (its Playwright
+  processes are running too): do not kill it. Serve YOUR build on another port — `pnpm exec next start -p 3100`
+  plus a throwaway `playwright.config` with `baseURL: 'http://localhost:3100'` and no `webServer` — and delete both
+  afterwards. **And do not run `pnpm build` while another session's server is up: you overwrite the `.next` it is
+  serving.**
   4. **Docker not actually running** — see the Docker entries above; a dead or wrong-mode engine
      takes the database with it.
   **Measure, don't theorise** (the 2026-08-06 lesson cost an hour): `curl -X POST
