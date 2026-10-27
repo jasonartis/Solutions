@@ -2575,3 +2575,90 @@ test('speed-dating module: organizer sets round length at creation, sees the pla
   await page.goto(page.url().split('?')[0] + '/edit')
   await expect(page).not.toHaveURL(/\/edit/)
 })
+
+// Blocked-pairs count on the organizer console (2026-10-26). The count is a
+// NUMBER of registered pairs that a personal block keeps apart — never names —
+// and is shown only to the manage tier (alice owns demo-dating). Control: the
+// same event reads 0 before the block and 1 after, and a block between two
+// people on the SAME side of a two-sided event is not counted.
+test('speed-dating module: organizer console counts pairings skipped by personal blocks', async ({ page }) => {
+  test.slow()
+  const stamp = Date.now()
+  const pool = 'Block Count Pool ' + stamp
+  const sided = 'Block Count Sides ' + stamp
+  const registerAs = async (who: string, eventName: string, side?: string) => {
+    await signIn(page, who)
+    await page.goto('/o/demo-dating/m/speed-dating')
+    await page.getByRole('link', { name: eventName }).click()
+    if (side) await page.locator('select[name="side"]').selectOption({ label: side })
+    const posted = page.waitForResponse((r) => r.request().method() === 'POST')
+    await page.getByRole('button', { name: 'Register for this event' }).click()
+    await posted
+    await expect(page.getByText('You are')).toContainText('registered')
+  }
+
+  // Event 1: one pool, charlie + dana, a round is run so they have "met".
+  await signIn(page, 'alice@demo.local')
+  await page.goto('/o/demo-dating/m/speed-dating')
+  await page.getByPlaceholder('Event name').fill(pool)
+  await page.getByRole('button', { name: 'Create (draft)' }).click()
+  await page.getByRole('link', { name: pool }).click()
+  await page.getByRole('button', { name: 'Open registration' }).click()
+  await registerAs('charlie@demo.local', pool)
+  await registerAs('dana@demo.local', pool)
+  await signIn(page, 'alice@demo.local')
+  await page.goto('/o/demo-dating/m/speed-dating')
+  await page.getByRole('link', { name: pool }).click()
+  await page.getByRole('button', { name: 'Start event' }).click()
+  await expect(page.getByText('running', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Run next round (pair everyone)' }).click()
+  await expect(page.getByText(/Rounds run: 1/)).toBeVisible()
+  // Control: no block yet.
+  await expect(page.getByText('No pairings are being skipped because of personal blocks.')).toBeVisible()
+  const poolUrl = page.url()
+
+  // Charlie blocks Dana.
+  await signIn(page, 'charlie@demo.local')
+  await page.goto(poolUrl)
+  const blocked = page.waitForResponse((r) => r.request().method() === 'POST')
+  await page.getByRole('button', { name: 'Never pair me with them again' }).click()
+  await blocked
+
+  try {
+    await signIn(page, 'alice@demo.local')
+    await page.goto(poolUrl)
+    await expect(page.getByText('1 pairing is being skipped because of personal blocks')).toBeVisible()
+    // Names never appear in that line.
+    const countLine = page.locator('p', { hasText: 'being skipped because of personal blocks' })
+    await expect(countLine).toHaveCount(1)
+    await expect(countLine).not.toContainText(/Charlie|Dana/)
+
+    // Event 2: two sides; charlie + dana BOTH on Men, eve on Women. The block
+    // is between two people on the same side, who could never have met.
+    await page.goto('/o/demo-dating/m/speed-dating')
+    await page.getByPlaceholder('Event name').fill(sided)
+    await page.getByText('Two sides (e.g. Men/Women)', { exact: false }).click()
+    await page.getByLabel('Enable two sides').check()
+    await page.getByPlaceholder('Side A label (e.g. Men)').fill('Men')
+    await page.getByPlaceholder('Side B label (e.g. Women)').fill('Women')
+    await page.getByRole('button', { name: 'Create (draft)' }).click()
+    await page.getByRole('link', { name: sided }).click()
+    await page.getByRole('button', { name: 'Open registration' }).click()
+    await registerAs('charlie@demo.local', sided, 'Men')
+    await registerAs('dana@demo.local', sided, 'Men')
+    await registerAs('eve@demo.local', sided, 'Women')
+    await signIn(page, 'alice@demo.local')
+    await page.goto('/o/demo-dating/m/speed-dating')
+    await page.getByRole('link', { name: sided }).click()
+    await expect(page.getByText('Roster (3 registered)')).toBeVisible()
+    await expect(page.getByText('No pairings are being skipped because of personal blocks.')).toBeVisible()
+  } finally {
+    // The block is org-wide and would leak into later tests: always remove it.
+    await signIn(page, 'charlie@demo.local')
+    await page.goto('/o/demo-dating/m/speed-dating')
+    const unblocked = page.waitForResponse((r) => r.request().method() === 'POST')
+    await page.getByRole('button', { name: 'Unblock' }).click()
+    await unblocked
+    await expect(page.getByText('No one blocked.', { exact: false })).toBeVisible()
+  }
+})
