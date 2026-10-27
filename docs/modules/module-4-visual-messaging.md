@@ -1258,3 +1258,25 @@ the other axis when the dominant one has nowhere to go (a thumb is rarely straig
 had ever swiped vertically — the swipe tests were all horizontal — so a whole direction was dead and green.
 New e2e: two sibling replies, a drifting diagonal swipe down then up, a per-frame check that the layer never
 settles empty and that the sibling's ink arrives as a sheet.
+
+### 2026-10-26 (later) — "it jumped and showed the wrong thing quickly": reproduced and fixed
+
+Founder: swiping around a lot (left, left, up, right, left, up, right, left) sometimes flashed a wrong layer for an
+instant. **Reproduced** with a random walk of 30 rapid swipes over a 5-layer tree while every page-data request took a
+random 200–1800 ms: 72–83 wrong frames per run, each wrong state starting ~0.5 s after a release and lasting 150 ms –
+1.2 s. A per-frame recorder (what the canvas believed vs what the server last sent) pinned it:
+- **The fallback timer was keyed by layer id.** Each swipe started a 4 s "clear the target if it is still layer X"
+  timer; an older timer for the SAME layer (visited twice within 4 s) cleared a LATER swipe's target, so the screen fell
+  back to the server's stale layer until the real page arrived. Now each timer carries a navigation number and only acts
+  for its own navigation (and waits 8 s).
+- **Late pages from earlier swipes.** With several navigations in flight a page for an OLDER swipe can arrive after a
+  newer one and pull the screen back. The canvas now keeps the list of navigations IT started whose page has not
+  arrived; a page that answers one of them (and any older ones the router skipped) is consumed, and the server's layer
+  takes over only when none remain. A page the canvas did not ask for (back button, its own new reply) is authoritative.
+- **A late page with a smaller window blanked the layer.** Each server page carries a window around ITS layer, and
+  replacing what the browser held with that window lost the content of the layer on screen. Content is now ACCUMULATED
+  across renders (a layer's own ink never changes once sent).
+After the fix: 0 wrong frames in three runs of the same walk. Permanent e2e: "a random walk of rapid swipes (slow, uneven
+server) never shows the wrong layer" (24 swipes, seeded, with controls: frames were recorded, ≥4 distinct layers visited,
+final layer matches the model). Lesson: the earlier fixes were each verified on a single swipe; the failure only exists
+between swipes, so only a many-swipes-with-latency test could show it.

@@ -868,3 +868,123 @@ test('visual messaging: swiping up/down between sibling replies works, with a th
   expect(seen.some((f) => f.sheet.includes('#2563eb'))).toBe(true)
   expect(seen.every((f) => f.colours !== '' || f.y !== 0)).toBe(true)
 })
+
+// ---- a random walk of rapid swipes must never show a layer other than the one swiped to
+
+// Tree: R -> [A(red), A2(orange)]; A -> [B(blue), B2(green)]. A layer is recognised by its ink colour.
+const WALK_COLOUR: Record<string, string> = { R: '', A: '#e11d48', A2: '#f59e0b', B: '#2563eb', B2: '#16a34a' }
+const WALK_PARENT: Record<string, string | null> = { R: null, A: 'R', A2: 'R', B: 'A', B2: 'A' }
+const WALK_KIDS: Record<string, string[]> = { R: ['A', 'A2'], A: ['B', 'B2'], A2: [], B: [], B2: [] }
+function walkStep(at: string, dir: 'left' | 'right' | 'up' | 'down'): string | null {
+  if (dir === 'left') return WALK_KIDS[at]![0] ?? null
+  if (dir === 'right') return WALK_PARENT[at] ?? null
+  const p = WALK_PARENT[at]
+  if (!p) return null
+  const sib = WALK_KIDS[p]!
+  const i = sib.indexOf(at)
+  return dir === 'up' ? (sib[i + 1] ?? null) : (sib[i - 1] ?? null)
+}
+
+test('visual messaging: a random walk of rapid swipes (slow, uneven server) never shows the wrong layer', async ({
+  page,
+}) => {
+  // Found 2026-10-26 (founder: "it jumped and showed the wrong thing quickly"): a fallback timer
+  // keyed by layer id cleared a LATER swipe's target, and a late page from an earlier swipe pulled
+  // the screen back. Before the fix this walk showed ~75 wrong frames per run.
+  test.setTimeout(420_000)
+  await startConversation(page, 'Walk ' + Date.now())
+  const reply = async (y: number, colour: string, crumb: string) => {
+    await page.getByRole('button', { name: 'Draw a reply' }).click()
+    await page.getByLabel(`pen ${colour}`).click()
+    const b = (await page.locator('canvas').first().boundingBox())!
+    await inkStroke(page, { x: b.x, y: b.y }, [60, y], [300, y + 20])
+    await page.getByRole('button', { name: 'Send reply' }).click()
+    await expect(page.getByText(crumb, { exact: true })).toBeVisible()
+  }
+  const back = async () => {
+    await page.getByRole('button', { name: /swipe right/ }).click()
+    await page.waitForTimeout(1500)
+  }
+  await reply(60, WALK_COLOUR.A!, '1.1') // A
+  await back() // R
+  await reply(120, WALK_COLOUR.A2!, '1.2') // A2
+  await back() // R
+  await page.getByRole('button', { name: /swipe left/ }).click() // A
+  await page.waitForTimeout(1500)
+  await reply(180, WALK_COLOUR.B!, '1.1.1') // B
+  await back() // A
+  await reply(240, WALK_COLOUR.B2!, '1.1.2') // B2
+  await back()
+  await back() // R
+  await page.waitForTimeout(1500)
+
+  await page.evaluate(() => {
+    ;(window as any).__f = []
+    const t0 = performance.now()
+    ;(window as any).__t0 = t0
+    const tick = () => {
+      const ls = (window as any).Konva.stages[0].getLayers()
+      ;(window as any).__f.push({
+        t: performance.now() - t0,
+        c: ls[2].find('Line').map((l: any) => l.fill()).join(','),
+        sheet: ls.length > 4,
+      })
+      requestAnimationFrame(tick)
+    }
+    requestAnimationFrame(tick)
+  })
+  let seed = 12345
+  const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff)
+  // Every page-data request takes 200-1800ms, so pages from earlier swipes arrive late and out of step.
+  await page.route(/_rsc=/, async (route) => {
+    await new Promise((r) => setTimeout(r, 200 + rnd() * 1600))
+    await route.continue()
+  })
+
+  const b = (await page.locator('canvas').first().boundingBox())!
+  const flick = async (dir: 'left' | 'right' | 'up' | 'down') => {
+    const cx = b.x + 200
+    const cy = b.y + 150
+    const d = { left: [120, 0], right: [-120, 0], up: [0, 110], down: [0, -110] }[dir]
+    await page.mouse.move(cx + d[0], cy + d[1])
+    await page.mouse.down()
+    await page.mouse.move(cx - d[0], cy - d[1], { steps: 6 })
+    await page.mouse.up()
+  }
+  let at = 'R'
+  const timeline: { t0: number; t1: number; from: string; dir: string; to: string }[] = []
+  const dirs = ['left', 'right', 'up', 'down'] as const
+  for (let i = 0; i < 24; i++) {
+    const valid = dirs.filter((d) => walkStep(at, d))
+    const dir = valid[Math.floor(rnd() * valid.length)]!
+    const to = walkStep(at, dir)!
+    const tDown = await page.evaluate(() => performance.now() - (window as any).__t0)
+    await flick(dir)
+    const tUp = await page.evaluate(() => performance.now() - (window as any).__t0)
+    timeline.push({ t0: tDown, t1: tUp, from: at, dir, to })
+    at = to
+    await page.waitForTimeout(250 + rnd() * 450) // quick succession, like a person
+  }
+  await page.waitForTimeout(6000)
+  const frames = await page.evaluate(() => (window as any).__f as { t: number; c: string; sheet: boolean }[])
+
+  // From 350ms after each release until the next swipe starts, the layer on screen must be the target.
+  const bad: string[] = []
+  for (let i = 0; i < timeline.length; i++) {
+    const s = timeline[i]!
+    const until = i + 1 < timeline.length ? timeline[i + 1]!.t0 : Infinity
+    for (const f of frames) {
+      if (f.t < s.t1 + 350 || f.t >= until) continue
+      if (f.c !== WALK_COLOUR[s.to] && !f.sheet) bad.push(`#${i} ${s.from}-${s.dir}->${s.to} @${Math.round(f.t)}ms showed [${f.c}]`)
+    }
+  }
+  // Controls: the walk really visited several layers, and really recorded frames.
+  expect(frames.length).toBeGreaterThan(500)
+  expect(new Set(timeline.map((s) => s.to)).size).toBeGreaterThanOrEqual(4)
+  expect(bad.slice(0, 5)).toEqual([])
+  // And it ends where the model says it should.
+  const final = await page.evaluate(() =>
+    (window as any).Konva.stages[0].getLayers()[2].find('Line').map((l: any) => l.fill()).join(','),
+  )
+  expect(final).toBe(WALK_COLOUR[at])
+})

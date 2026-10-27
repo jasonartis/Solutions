@@ -231,9 +231,22 @@ export default function LayerCanvas(props: {
   // targets follow it immediately (computed from the tree), so they no longer
   // lag a server round-trip behind the picture.
   const [pendingLayerId, setPendingLayerId] = useState<string | null>(null)
+  // The navigations WE started whose server page has not arrived yet, oldest first, and a
+  // counter so a fallback timer only ever acts for the navigation that made it. (A timer keyed
+  // by layer id alone cleared a LATER swipe's target when the same layer was visited twice
+  // within its window — the screen then fell back to the server's stale layer for a second.)
+  const issuedRef = useRef<string[]>([])
+  const navSeq = useRef(0)
   // THE LAYER ON SCREEN. The moment a swipe or click commits, it is the target — the canvas
   // does not wait for the server (which re-renders the page behind it); once the server's
   // page for that layer arrives, `pendingLayerId` clears and nothing visibly changes.
+  // Content is ACCUMULATED across server renders. Each page the server sends carries a window
+  // around ITS layer, and with several swipes in flight a late page can be centred on a layer
+  // we have already left; replacing what we hold with that smaller window blanked the layer on
+  // screen. A layer's own ink never changes once sent, so keeping everything seen is safe.
+  const contentRef = useRef<Record<string, LayerContent>>({})
+  Object.assign(contentRef.current, props.layersContent)
+  const layersContent = contentRef.current
   const effectiveId = pendingLayerId ?? props.currentLayerId
   const nav = useMemo(() => navFor(props.tree, effectiveId), [props.tree, effectiveId])
   const chainIds = useMemo(() => {
@@ -242,7 +255,7 @@ export default function LayerCanvas(props: {
     for (let n = byId.get(effectiveId); n; n = n.parentId ? byId.get(n.parentId) : undefined) ids.unshift(n.id)
     return ids
   }, [props.tree, effectiveId])
-  const ownOf = (id: string) => props.layersContent[id] ?? EMPTY_CONTENT
+  const ownOf = (id: string) => layersContent[id] ?? EMPTY_CONTENT
   const baseLayers = chainIds.slice(0, -1).map((id) => ownOf(id).strokes)
   const baseStamps = chainIds.slice(0, -1).map((id) => ownOf(id).stamps)
   const baseTexts = chainIds.slice(0, -1).map((id) => ownOf(id).texts)
@@ -252,9 +265,9 @@ export default function LayerCanvas(props: {
   const currentTexts = ownOf(effectiveId).texts
   const currentImages = ownOf(effectiveId).images
   const neighbours: Record<'left' | 'up' | 'down', LayerContent | null> = {
-    left: (nav.firstChildId && props.layersContent[nav.firstChildId]) || null,
-    up: (nav.nextSiblingId && props.layersContent[nav.nextSiblingId]) || null,
-    down: (nav.prevSiblingId && props.layersContent[nav.prevSiblingId]) || null,
+    left: (nav.firstChildId && layersContent[nav.firstChildId]) || null,
+    up: (nav.nextSiblingId && layersContent[nav.nextSiblingId]) || null,
+    down: (nav.prevSiblingId && layersContent[nav.prevSiblingId]) || null,
   }
   const treeNode = (id: string) => props.tree.find((n) => n.id === id)
   const drawable =
@@ -285,7 +298,7 @@ export default function LayerCanvas(props: {
   const imageCache = useImageCache([
     // Every picture in the window is fetched ahead of time, so a layer you swipe to is
     // never blank while its stamps download.
-    ...Object.values(props.layersContent).flatMap((c) => c.images.map((i) => i.url)),
+    ...Object.values(layersContent).flatMap((c) => c.images.map((i) => i.url)),
     ...Object.values(imageObjectUrls),
   ])
 
@@ -340,10 +353,22 @@ export default function LayerCanvas(props: {
   // from, then ease it to rest on the next two frames (the double rAF
   // ensures the browser paints the offset starting position before the
   // transition kicks in, or it'd snap instead of animating).
-  // The server's page for the target has arrived: stop overriding it.
+  // A server page arrived. If it answers one of OUR navigations, drop it (and any older ones
+  // the router skipped) from the outstanding list; only when none remain does the server's
+  // layer take over again. A page for an OLDER swipe arriving after a newer one therefore does
+  // not pull the screen back. A page we did not ask for (back button, our own new reply) is
+  // authoritative.
   useEffect(() => {
-    if (pendingLayerId && props.currentLayerId === pendingLayerId) setPendingLayerId(null)
-  }, [props.currentLayerId, pendingLayerId])
+    const issued = issuedRef.current
+    const i = issued.indexOf(props.currentLayerId)
+    if (i >= 0) {
+      issued.splice(0, i + 1)
+      if (issued.length === 0) setPendingLayerId(null)
+    } else {
+      issuedRef.current = []
+      setPendingLayerId(null)
+    }
+  }, [props.currentLayerId])
 
   useEffect(() => {
     if (effectiveId === prevEffectiveId.current) return
@@ -559,10 +584,17 @@ export default function LayerCanvas(props: {
     if (dir) lastSwipeDir.current = dir
     // Switch on screen at once — but only to a layer whose content we hold; otherwise just
     // navigate and let the server's page bring it.
-    if (props.layersContent[layerId]) {
+    if (layersContent[layerId]) {
+      const mySeq = ++navSeq.current
+      issuedRef.current.push(layerId)
       setPendingLayerId(layerId)
-      // If the navigation never lands, fall back to what the server last said.
-      setTimeout(() => setPendingLayerId((p) => (p === layerId ? null : p)), 4000)
+      // If NO page ever lands for the latest navigation, fall back to what the server said.
+      setTimeout(() => {
+        if (navSeq.current === mySeq) {
+          issuedRef.current = []
+          setPendingLayerId(null)
+        }
+      }, 8000)
     }
     // scroll:false — a swipe changes the layer, not the page; without it the
     // browser jumped back to the top whenever you were scrolled down a little.
@@ -654,7 +686,7 @@ export default function LayerCanvas(props: {
             ? nav.nextSiblingId
             : nav.prevSiblingId
     // Not swipe-able until we hold that layer's content (see layersContent).
-    return id && props.layersContent[id] ? id : null
+    return id && layersContent[id] ? id : null
   }
   const extentOf = (dir: SwipeDir) => (dir === 'left' || dir === 'right' ? displayW : displayH)
 
