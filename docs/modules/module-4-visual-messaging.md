@@ -1280,3 +1280,5 @@ After the fix: 0 wrong frames in three runs of the same walk. Permanent e2e: "a 
 server) never shows the wrong layer" (24 swipes, seeded, with controls: frames were recorded, ≥4 distinct layers visited,
 final layer matches the model). Lesson: the earlier fixes were each verified on a single swipe; the failure only exists
 between swipes, so only a many-swipes-with-latency test could show it.
+
+**2026-10-27 — founder confirmation:** after the carousel, the sibling fix and the rapid-swipe fix were all live, the founder swiped around fast in tempw and reported it "quite good now" (desktop / touch-screen; the real-phone pass still waits on a phone whose browser can run the app). Open items for this module: the phone pass, and the below-canvas controls (reactions/flag/moderation) binding to the server's layer for a moment after a swipe (accepted, see 2026-10-22).
