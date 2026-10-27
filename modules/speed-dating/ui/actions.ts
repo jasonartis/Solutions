@@ -110,7 +110,7 @@ export async function updateEvent(orgSlug: string, eventId: string, formData: Fo
       .eq('event_id', eventId)
       .in('status', ['registered', 'waitlisted']),
   ])
-  if (!event || (event.state !== 'draft' && event.state !== 'open')) redirect(`${base}?notice=edit-locked`)
+  if (!event || !['draft', 'open', 'closed'].includes(event.state)) redirect(`${base}?notice=edit-locked`)
   if ((rounds ?? 0) > 0) redirect(`${base}?notice=edit-locked`)
   // Sides are compared as the stored shape; unchanged sides never trip the lock.
   const sidesChanged = JSON.stringify(getEventSides(event.format) ?? null) !== JSON.stringify(format.sides ?? null)
@@ -150,12 +150,21 @@ export async function saveProfileCard(orgSlug: string, eventId: string, particip
   revalidatePath(`/o/${orgSlug}/m/speed-dating/events/${eventId}`)
 }
 
+// The DATABASE owns the state machine (sd_guard_event, 20261027010000):
+// draft -> open; open <-> closed; open|closed -> running; open|closed -> draft
+// only with no live seats and no round; running -> complete; anything live ->
+// cancelled. A refusal is an expected state (e.g. someone registered a moment
+// ago, so back-to-draft is no longer possible), and a THROWN message is
+// redacted in production (docs/03 #22), so it comes back as a notice.
 export async function setEventState(orgSlug: string, eventId: string, state: string) {
   const supabase = await createClient()
-  const { error } = await supabase.from('sd_events').update({ state }).eq('id', eventId)
-  fail(error, `Move event to ${state} failed`)
+  const base = `/o/${orgSlug}/m/speed-dating/events/${eventId}`
+  const { data: updated, error } = await supabase.from('sd_events').update({ state }).eq('id', eventId).select('id')
+  if (error || !updated || updated.length === 0) {
+    redirect(`${base}?notice=${state === 'draft' ? 'draft-refused' : 'state-refused'}`)
+  }
   revalidatePath(`/o/${orgSlug}/m/speed-dating`)
-  revalidatePath(`/o/${orgSlug}/m/speed-dating/events/${eventId}`)
+  revalidatePath(base)
 }
 
 // Organizer: delete an event. IRREVERSIBLE, so (per the platform's "warn for
@@ -286,7 +295,7 @@ export async function registerForEvent(orgSlug: string, eventId: string, formDat
   // #22), so surface them as a notice the page renders.
   if (error) {
     const msg = error.message ?? ''
-    const notice = msg.includes('not open')
+    const notice = msg.includes('not open') || msg.includes('is closed')
       ? 'register-closed'
       : msg.includes('Choose a side')
         ? 'register-side'

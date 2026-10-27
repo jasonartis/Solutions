@@ -17,8 +17,8 @@ const NOTICES: Record<string, string> = {
   'edit-refused': 'Nothing was saved — you may not be allowed to change this event.',
 }
 
-// Organizer-only edit view for an event that is still a draft or open for
-// registration. The action re-checks every rule (state, rounds run, sides vs.
+// Organizer-only edit view for an event that has not started: draft, open, or
+// closed to new registrations. The action re-checks every rule (state, rounds run, sides vs.
 // registrants); this page only decides whether to show the form.
 export default async function EditEventPage(props: {
   params: Promise<{ orgSlug: string; eventId: string }>
@@ -36,7 +36,7 @@ export default async function EditEventPage(props: {
     .maybeSingle()
   if (!event) notFound()
   const { data: canOrganize } = await supabase.rpc('sd_can_organize', { check_org_id: org.id })
-  if (!canOrganize || (event.state !== 'draft' && event.state !== 'open')) redirect(base)
+  if (!canOrganize || !['draft', 'open', 'closed'].includes(event.state)) redirect(base)
 
   const { count: registered } = await supabase
     .from('sd_participants')
@@ -92,6 +92,11 @@ export default async function EditEventPage(props: {
             <p className="text-xs text-gray-500">
               {registered} {registered === 1 ? 'person has' : 'people have'} registered, so the two sides are locked.
               Everything else can change.
+            </p>
+          )}
+          {(registered ?? 0) > 0 && (
+            <p className="text-xs text-gray-500">
+              Nobody is notified of changes — if you move the time, tell the people who registered yourself.
             </p>
           )}
           <SubmitButton className={btnCls} pendingLabel="Saving…">

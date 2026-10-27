@@ -8,7 +8,7 @@ next build slice. Spec and decisions: [module-6-speed-dating.md](modules/module-
 
 | Word | Meaning | Has a timer? |
 |---|---|---|
-| **Event** | The whole evening: registration -> rounds -> reveal. States: draft, open, running, complete, cancelled. | No end timer. Only an optional start time and lobby-open time. |
+| **Event** | The whole evening: registration -> rounds -> reveal. States: draft, open, closed (registration closed, event still on), running, complete, cancelled. | No end timer. Only an optional start time and lobby-open time. |
 | **Round** | One slot where everyone is paired up, one pair per video room. Default 7 min (column `round_duration_seconds`). | Yes: "Ends in mm:ss" on the participant's page. |
 | **Break** | Short gap after a round (default 30 s) before the next. | Yes. |
 
@@ -20,7 +20,7 @@ With N registered people a round makes N/2 pairs (odd one out gets a **bye**). W
 
 | Person | Role | What they can do |
 |---|---|---|
-| **Organizer** (e.g. alice) | `organizer` | Create an event, open registration, start it, run rounds, complete it, reveal matches, review safety reports, clear a removal so a removed person may register again (an organizer can NEVER put a withdrawn or removed person back — only that person can), cancel or (if empty) delete the event. Cannot take a seat in their own event. |
+| **Organizer** (e.g. alice) | `organizer` | Create an event, open registration, start it, run rounds, complete it, reveal matches, review safety reports, clear a removal so a removed person may register again (an organizer can NEVER put a withdrawn or removed person back — only that person can), close and reopen registration, move an event with nobody registered back to draft, cancel or (if empty) delete the event. Cannot take a seat in their own event. |
 | **Host** | `host` | Sees the roster and safety reports; may remove a participant. No setup rights. |
 | **Dater** (e.g. charlie, dana) | `participant` | Register, withdraw, join video, mark interest, write private notes, report, block. |
 
@@ -32,17 +32,20 @@ Audience and mentor seats exist in the schema but have no UI. **GAP.**
    and break length**, "let people meet more than once", resume-review, share-contact, two sides).
    A live line under the timing boxes reads e.g. "14 people, up to 13 rounds, about 1.5 hours"
    (the number of rounds is fixed by who is registered, not typed in; personal blocks can only
-   shorten it). Event is a **draft** nobody else sees. A draft or open event has an *Edit details*
+   shorten it). Event is a **draft** nobody else sees. A draft, open or closed event has an *Edit details*
    button on its page: name, description, start time, timing, switches and sides can change until
    a round has run; the **sides lock once anyone has registered** (they chose one).
 2. **Organizer: open registration** — event page -> *Open registration*. Daters now see it under
-   "Open for registration" on their events list. An open event cannot be returned to draft or have registration closed
-   while staying alive: the state machine has no such state (a migration would be needed). To fix
-   a wrong time or name, *Edit details*; to end it, *Cancel event*.
+   "Open for registration" on their events list. *Close registration* stops new sign-ups and keeps the event (daters see "Registration is closed";
+   registered people can still withdraw; the organizer can still promote from the waitlist and clear a
+   removal); *Reopen registration* undoes it. *Start event* works from open or closed. *Back to draft*
+   is offered only while nobody is registered or waiting and no round has run (the database refuses it
+   otherwise, so people who signed up are never silently dropped). To fix a wrong time or name, *Edit
+   details* (nobody is notified); to end it, *Cancel event*. (Since 2026-10-27, `20261027010000`.)
 3. **Daters: register** — event page -> *Register for this event* (pick a side only if the
    organizer enabled two sides; nothing is read from profiles). The list shows their status
    (registered / waitlisted / withdrawn / removed). Withdrawing is possible while the event is
-   open. **A person who withdrew registers again THEMSELVES** with the *Register again* button while registration is open (live since 2026-10-19; the database decides registered vs waitlisted by capacity, and a rejoiner goes to the back of the waitlist). An organizer cannot re-seat them; for someone the organizer REMOVED, the roster offers *Allow to register again*, which only clears the removal, and the person must then register themselves.
+   open or closed. **A person who withdrew registers again THEMSELVES** with the *Register again* button while registration is open (live since 2026-10-19; the database decides registered vs waitlisted by capacity, and a rejoiner goes to the back of the waitlist). An organizer cannot re-seat them; for someone the organizer REMOVED, the roster offers *Allow to register again*, which only clears the removal, and the person must then register themselves.
 4. **Organizer: start** — *Start event*, then *Run next round (pair everyone)*. This builds the
    pairs, creates one private video room per pair, and starts the round clock.
 5. **Daters: the round** — "Right now: Round 1 — you're with X. Ends in …". *Join video* ->
@@ -87,4 +90,4 @@ alice = organizer; charlie, dana, eve, frank = participants. Shared demo passwor
 **Set up:** `node scripts/prod-setup-live-event.mjs 180` (see the module-6 spec, "OPERATIONAL RECIPES"). Do the AUTOMATED checks first (`scripts/prod-verify-*.mjs`, a fake-media mock of both sides) and hand a human only what needs real hardware.
 **Only one camera and microphone?** Best: a laptop plus a phone (separate devices, and cellular gives a second network). Next: two Chrome windows (one normal, one Incognito) on the same machine, with headphones on at least one side to avoid echo. Chrome plus Edge usually FAILS on Windows because the camera is exclusive to one browser app. Two tabs of one profile are not a real test.
 **The human call, step by step.** (1) Computer A: sign in as `dana@demo.local`, open the module page, open the event — "Round 1 — you're with Charlie C". (2) Computer B: sign in as `charlie@demo.local`, open the same event. (3) Both: **Join video**, allow camera and microphone. (4) Check each side sees and hears the other. (5) **Mute microphone** on one side: the other's status line should read "Charlie: microphone off (they muted it)"; **Turn camera off** should show a black panel with a crossed-out camera and "Charlie's camera is off", NOT a frozen frame. (6) **Leave**, then **Rejoin video**. (7) Under **People you met**, change interested / not interested / no show on both sides, add a private note, and (if wanted) file a report. Organizers (alice) cannot take a seat in their own event, so an organizer cannot be one of the two callers.
-**The `?notice=` messages on the event page** (a thrown server-action message is redacted in production, so refusals redirect with a fixed code the page renders): `rotation-complete` (Run next round when everyone has already met everyone), `rejoin-refused` (Register again / registration refused: closed event, banned, or not eligible), `register-closed`, `register-side` (two-sided event, no side chosen). Anything else is ignored.
+**The `?notice=` messages on the event page** (a thrown server-action message is redacted in production, so refusals redirect with a fixed code the page renders): `rotation-complete` (Run next round when everyone has already met everyone), `rejoin-refused` (Register again / registration refused: closed event, banned, or not eligible), `register-closed` (also a closed event), `register-side`, `draft-refused` (Back to draft with someone registered), `state-refused` (any other refused state change), `edit-saved`/`edit-locked` (two-sided event, no side chosen). Anything else is ignored.

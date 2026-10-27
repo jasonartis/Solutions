@@ -44,7 +44,9 @@ if (LOCAL) {
 // Every function body the two migrations define, exactly as Postgres stores
 // it in prosrc (everything between `as $$` and the closing `$$;`). The LAST
 // definition of a name wins, as it does when the files are applied in order.
-const FILES = ['20261017010000_sd_self_rejoin.sql', '20261017020000_sd_hardening.sql']
+// 20261027010000 re-creates sd_participants_insert_guard and sd_pin_participant
+// (closed state, FOR SHARE, event_id pin), so its bodies win.
+const FILES = ['20261017010000_sd_self_rejoin.sql', '20261017020000_sd_hardening.sql', '20261027010000_sd_closed_event_state.sql']
 const expected = new Map<string, string>()
 for (const f of FILES) {
   const text = readFileSync(resolve(root, 'supabase/migrations', f), 'utf8')

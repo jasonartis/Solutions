@@ -1443,6 +1443,22 @@ mechanism is proven in the managed environment, but it carries rules that are no
       then refreshes, so the dashboard renders twice; a banner shown "if the RPC just
       cancelled something" flashed and vanished. Read the recorded state instead. Caught
       by e2e, not by review.
+36. **A STATE CHANGE AND A CHILD INSERT THAT DEPENDS ON THAT STATE DO NOT SERIALISE BY
+    THEMSELVES — READ THE PARENT `FOR SHARE` IN THE CHILD'S GUARD (2026-10-27,
+    `20261027010000`).** A child INSERT's foreign-key check takes FOR KEY SHARE on the
+    parent row; an UPDATE of a non-key parent column (e.g. `state`) takes FOR NO KEY
+    UPDATE; **those two do not conflict.** So "the organizer's guard counts 0 live seats and
+    moves the event to draft" and "a dater's guard reads `open` and inserts a seat" both
+    commit, leaving a row the invariant forbids. Fix: the child's guard reads the parent
+    with `for share`, which DOES conflict with NO KEY UPDATE; a BEFORE ROW trigger on the
+    parent runs only after its row is locked, and its count — a fresh statement under READ
+    COMMITTED — sees the committed child. Prove it with two connections and a
+    `lock_timeout`, plus a mutation that removes `for share` and shows the slip
+    (`sd-closed-state.test.ts`). Same review, a second rule: **a pin trigger's
+    "authorised for OLD's parent" early return must not let the row MOVE to a new
+    parent** — an organizer scoped to event X re-pointed a seat's `event_id` at event Y
+    and skipped every Y-side gate, which lived only in the INSERT guard. Pin the parent
+    key, or authorise against NEW's parent too.
 
 ## Hard rules
 

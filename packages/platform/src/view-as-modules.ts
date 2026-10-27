@@ -1372,7 +1372,7 @@ export const speedDatingViewAs = declareViewAs({
           caveat:
             'No state filter — the staff arm of sd_events_select (sd_can_staff_event_of) sees ' +
             'every state including draft, unlike the participant arm which only shows ' +
-            'open/running/complete/cancelled.',
+            'open/closed/running/complete/cancelled.',
         },
         {
           table: 'sd_participants',
@@ -1666,7 +1666,7 @@ export const speedDatingViewAs = declareViewAs({
             'Not per-person by nature — the event is the same object for everyone in it. A ' +
             'participant reaches it through sd_in_event / the sd_is_participant arm, which is ' +
             'narrower than staff reach in one way worth knowing: staff see every state ' +
-            'including draft, participants only open/running/complete/cancelled. The column ' +
+            'including draft, participants only open/closed/running/complete/cancelled. The column ' +
             'list deliberately omits allow_repeat_pairings and created_by — organizer ' +
             'machinery a participant has no business reading.',
         },

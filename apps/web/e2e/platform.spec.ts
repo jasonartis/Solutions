@@ -2576,6 +2576,70 @@ test('speed-dating module: organizer sets round length at creation, sees the pla
   await expect(page).not.toHaveURL(/\/edit/)
 })
 
+// The `closed` event state (2026-10-27, 20261027010000): back to draft while
+// nobody is registered; once someone is, close registration -> a new dater sees
+// "closed" and no Register button while the registered one can still withdraw
+// -> reopen -> the new dater registers. Control for "closed": the same dater
+// registers as soon as it reopens.
+test('speed-dating module: organizer closes and reopens registration; back to draft only while empty', async ({ page }) => {
+  test.slow()
+  const eventName = 'Close Test ' + Date.now()
+  const openAs = async (who: string) => {
+    await signIn(page, who)
+    await page.goto('/o/demo-dating/m/speed-dating')
+    await page.getByRole('link', { name: eventName }).click()
+  }
+
+  await signIn(page, 'alice@demo.local')
+  await page.goto('/o/demo-dating/m/speed-dating')
+  await page.getByPlaceholder('Event name').fill(eventName)
+  await page.getByRole('button', { name: 'Create (draft)' }).click()
+  await page.getByRole('link', { name: eventName }).click()
+  await page.getByRole('button', { name: 'Open registration' }).click()
+  // Nobody registered yet: back to draft is offered and works.
+  await page.getByRole('button', { name: 'Back to draft' }).click()
+  await expect(page.getByText('draft', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Open registration' }).click()
+  await expect(page.getByRole('button', { name: 'Close registration' })).toBeVisible()
+
+  await openAs('charlie@demo.local')
+  const posted = page.waitForResponse((r) => r.request().method() === 'POST')
+  await page.getByRole('button', { name: 'Register for this event' }).click()
+  await posted
+  await expect(page.getByText('You are')).toContainText('registered')
+
+  // With a registration, back to draft is no longer offered; close instead.
+  await openAs('alice@demo.local')
+  await expect(page.getByRole('button', { name: 'Back to draft' })).toHaveCount(0)
+  await expect(page.getByText(/Back to draft is only available while nobody is registered/)).toBeVisible()
+  await page.getByRole('button', { name: 'Close registration' }).click()
+  await expect(page.getByText('registration closed', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Start event' })).toBeVisible()
+
+  // A new dater sees it, but cannot register.
+  await openAs('dana@demo.local')
+  await expect(page.getByText('Registration is closed for this event.')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Register for this event' })).toHaveCount(0)
+  // The registered dater can still withdraw while closed.
+  await openAs('charlie@demo.local')
+  await expect(page.getByRole('button', { name: 'Withdraw' })).toBeVisible()
+
+  // Reopen -> the same new dater registers (control).
+  await openAs('alice@demo.local')
+  await page.getByRole('button', { name: 'Reopen registration' }).click()
+  await expect(page.getByRole('button', { name: 'Close registration' })).toBeVisible()
+  await openAs('dana@demo.local')
+  const posted2 = page.waitForResponse((r) => r.request().method() === 'POST')
+  await page.getByRole('button', { name: 'Register for this event' }).click()
+  await posted2
+  await expect(page.getByText('You are')).toContainText('registered')
+
+  // Tidy: cancel it so it never lingers as an open event for other tests.
+  await openAs('alice@demo.local')
+  await page.getByRole('button', { name: 'Cancel event' }).click()
+  await expect(page.getByText('cancelled', { exact: true })).toBeVisible()
+})
+
 // Blocked-pairs count on the organizer console (2026-10-26). The count is a
 // NUMBER of registered pairs that a personal block keeps apart — never names —
 // and is shown only to the manage tier (alice owns demo-dating). Control: the

@@ -112,7 +112,7 @@ export default async function SpeedDatingPage(props: {
               {e.scheduled_at
                 ? `${fmt.format(new Date(e.scheduled_at))} · `
                 : `created ${fmt.format(new Date(e.created_at))} · `}
-              <span className="text-xs uppercase text-gray-400">{e.state}</span>
+              <span className="text-xs uppercase text-gray-400">{e.state === 'closed' ? 'registration closed' : e.state}</span>
             </span>
           </li>
         )

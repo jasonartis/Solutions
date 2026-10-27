@@ -33,6 +33,7 @@ function formatCountdown(ms: number): string {
 
 const btnCls = 'rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700'
 const linkBtn = 'px-1 py-1.5 text-xs text-blue-600 hover:underline'
+const secondaryBtn = 'rounded border border-gray-300 px-3 py-1 text-sm text-gray-700 hover:bg-gray-50'
 
 // Event page — role-adaptive. Organizer: lifecycle controls + pairing-round
 // stand-in + reveal. Staff (organizer OR host): roster + report triage.
@@ -128,6 +129,10 @@ export default async function EventPage(props: {
     !!canOrganize &&
     (rounds ?? []).length === 0 &&
     !(participants ?? []).some((p) => p.status === 'registered' || p.status === 'waitlisted')
+  // Same rule the database enforces (sd_guard_event): back to draft only while
+  // nobody holds a live seat and no round has run. The guard is the gate; this
+  // only decides whether to offer the button.
+  const canReturnToDraft = canDeleteEvent && (event.state === 'open' || event.state === 'closed')
   // docs/21 §7.5/§7.7: a deleted account renders as a former member, and a
   // revealed match whose counterparty has left (grace period or deleted) moves
   // to an archive with that reason. sd_my_departed_matches applies §7.8's
@@ -208,7 +213,21 @@ export default async function EventPage(props: {
           ← Events
         </Link>
       </div>
-      <p className="mb-6 text-sm uppercase tracking-wide text-gray-400">{event.state}</p>
+      <p className="mb-6 text-sm uppercase tracking-wide text-gray-400">
+        {event.state === 'closed' ? 'registration closed' : event.state}
+      </p>
+
+      {notice === 'draft-refused' && (
+        <p className="mb-6 rounded border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
+          The event was not moved back to draft: someone is registered or waiting (or a round has run). Close
+          registration instead, or cancel the event.
+        </p>
+      )}
+      {notice === 'state-refused' && (
+        <p className="mb-6 rounded border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
+          That change was not made — the event may have moved on since this page loaded. Reload and try again.
+        </p>
+      )}
 
       {notice === 'rejoin-refused' && (
         <p className="mb-6 rounded border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
@@ -242,7 +261,7 @@ export default async function EventPage(props: {
         </p>
       )}
 
-      {event.state === 'open' && lobbyOpen && (
+      {(event.state === 'open' || event.state === 'closed') && lobbyOpen && (
         <p className="mb-6 rounded border border-blue-100 bg-blue-50 px-4 py-2 text-sm text-blue-700">
           The lobby is open{event.scheduled_at ? ` — the event starts at ${new Date(event.scheduled_at).toLocaleString()}` : ''}.
         </p>
@@ -252,7 +271,7 @@ export default async function EventPage(props: {
         <section className="mb-8 rounded-lg border border-gray-200 bg-white p-5">
           <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-gray-500">Organizer console</h2>
           <div className="mb-4 flex flex-wrap gap-3">
-            {(event.state === 'draft' || event.state === 'open') && (
+            {(event.state === 'draft' || event.state === 'open' || event.state === 'closed') && (
               <Link href={`/o/${orgSlug}/m/speed-dating/events/${eventId}/edit`} className="rounded border border-gray-300 px-3 py-1 text-sm text-gray-700 hover:bg-gray-50">
                 Edit details
               </Link>
@@ -263,6 +282,27 @@ export default async function EventPage(props: {
               </form>
             )}
             {event.state === 'open' && (
+              <form action={setEventState.bind(null, orgSlug, eventId, 'closed')}>
+                <SubmitButton className={secondaryBtn} pendingLabel="Closing…">
+                  Close registration
+                </SubmitButton>
+              </form>
+            )}
+            {event.state === 'closed' && (
+              <form action={setEventState.bind(null, orgSlug, eventId, 'open')}>
+                <SubmitButton className={secondaryBtn} pendingLabel="Reopening…">
+                  Reopen registration
+                </SubmitButton>
+              </form>
+            )}
+            {canReturnToDraft && (
+              <form action={setEventState.bind(null, orgSlug, eventId, 'draft')}>
+                <SubmitButton className={secondaryBtn} pendingLabel="Moving…">
+                  Back to draft
+                </SubmitButton>
+              </form>
+            )}
+            {(event.state === 'open' || event.state === 'closed') && (
               <form action={setEventState.bind(null, orgSlug, eventId, 'running')}>
                 <button className={btnCls}>Start event</button>
               </form>
@@ -285,7 +325,7 @@ export default async function EventPage(props: {
                 <button className={btnCls}>Reveal mutual matches</button>
               </form>
             )}
-            {(event.state === 'draft' || event.state === 'open' || event.state === 'running') && (
+            {['draft', 'open', 'closed', 'running'].includes(event.state) && (
               <form action={setEventState.bind(null, orgSlug, eventId, 'cancelled')}>
                 <button className="rounded border border-gray-300 px-3 py-1 text-sm text-gray-700 hover:bg-gray-50">
                   Cancel event
@@ -306,6 +346,16 @@ export default async function EventPage(props: {
           {!canDeleteEvent && (
             <p className="mb-2 text-xs text-gray-400">
               Delete is only available for an event with no registrations and no rounds — cancel it instead.
+            </p>
+          )}
+          {(event.state === 'open' || event.state === 'closed') && !canReturnToDraft && (
+            <p className="mb-2 text-xs text-gray-400">
+              Back to draft is only available while nobody is registered or waiting — close registration instead.
+            </p>
+          )}
+          {event.state === 'closed' && (
+            <p className="mb-2 text-xs text-gray-400">
+              Registration is closed: nobody new can sign up, and people can still withdraw. Nobody is notified.
             </p>
           )}
           <p className="mb-2 text-xs text-gray-500">
@@ -461,6 +511,11 @@ export default async function EventPage(props: {
           </SubmitButton>
         </form>
       )}
+      {!mySeat && !canOrganize && event.state === 'closed' && (
+        <p className="rounded border border-gray-200 bg-gray-50 px-4 py-2 text-sm text-gray-700">
+          Registration is closed for this event.
+        </p>
+      )}
 
       {mySeat && (
         <div className="space-y-6">
@@ -479,7 +534,8 @@ export default async function EventPage(props: {
                   <button className={btnCls}>Register again</button>
                 </form>
               )}
-              {mySeat.status === 'registered' && event.state === 'open' && (
+              {(mySeat.status === 'registered' || mySeat.status === 'waitlisted') &&
+                (event.state === 'open' || event.state === 'closed') && (
                 <form action={withdrawFromEvent.bind(null, orgSlug, mySeat.id, eventId)}>
                   <button className="text-sm text-red-600 hover:underline">Withdraw</button>
                 </form>
