@@ -38,6 +38,8 @@ type JitsiTrack = {
   isLocal(): boolean
   getType(): 'audio' | 'video'
   isMuted(): boolean
+  /** The deviceId this local track was created from (absent on remote tracks). */
+  getDeviceId?(): string
   mute(): Promise<void>
   unmute(): Promise<void>
   attach(el: HTMLMediaElement): void
@@ -48,6 +50,8 @@ type JitsiConference = {
   join(): void
   leave(): Promise<void>
   addTrack(track: JitsiTrack): Promise<void>
+  /** Swaps a published local track for another of the same type without leaving. */
+  replaceTrack(oldTrack: JitsiTrack, newTrack: JitsiTrack): Promise<void>
   on(event: string, handler: (...args: unknown[]) => void): void
 }
 type JitsiConnection = {
@@ -58,7 +62,11 @@ type JitsiConnection = {
 }
 type JitsiMeetJSGlobal = {
   init(options: Record<string, unknown>): void
-  createLocalTracks(options: { devices: string[] }): Promise<JitsiTrack[]>
+  createLocalTracks(options: {
+    devices: string[]
+    cameraDeviceId?: string
+    micDeviceId?: string
+  }): Promise<JitsiTrack[]>
   JitsiConnection: new (appId: string | null, token: string, options: Record<string, unknown>) => JitsiConnection
   events: {
     connection: { CONNECTION_ESTABLISHED: string; CONNECTION_FAILED: string }
@@ -68,6 +76,10 @@ type JitsiMeetJSGlobal = {
       TRACK_MUTE_CHANGED: string
       CONFERENCE_JOINED: string
       CONFERENCE_FAILED: string
+      // Optional on older library builds, like TRACK_MUTE_CHANGED: without them a
+      // network drop simply shows no banner (the previous behaviour).
+      CONNECTION_INTERRUPTED?: string
+      CONNECTION_RESTORED?: string
     }
   }
 }
@@ -96,6 +108,13 @@ type CallSession = {
  *  "Connecting…" forever with no way out but a page reload — the Try-again
  *  button renders only in the 'error' state. */
 const CONNECT_TIMEOUT_MS = 20_000
+
+/** How long a dropped connection gets to come back by itself before we stop
+ *  pretending and show the Rejoin button. The library keeps retrying in the
+ *  background, so a short blip recovers with no action from anyone. */
+const RECONNECT_GIVE_UP_MS = 20_000
+
+type DeviceOption = { id: string; label: string }
 
 const scriptLoads = new Map<string, Promise<void>>()
 let jitsiInitialised = false
@@ -194,6 +213,16 @@ export default function VideoRoom({
   const [camOn, setCamOn] = useState(true)
   const [partnerAudio, setPartnerAudio] = useState<PartnerMedia>('none')
   const [partnerVideo, setPartnerVideo] = useState<PartnerMedia>('none')
+  // True from "connection interrupted" until restored or given up on.
+  const [reconnecting, setReconnecting] = useState(false)
+  // Why the person is in the 'left' state when it was not their own click.
+  const [leftNote, setLeftNote] = useState<string | null>(null)
+  const [cameras, setCameras] = useState<DeviceOption[]>([])
+  const [microphones, setMicrophones] = useState<DeviceOption[]>([])
+  const [cameraId, setCameraId] = useState('')
+  const [micId, setMicId] = useState('')
+  const [deviceError, setDeviceError] = useState<string | null>(null)
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const localVideoRef = useRef<HTMLVideoElement>(null)
   const remoteVideoRef = useRef<HTMLVideoElement>(null)
   // A SEPARATE element for the partner's microphone. A <video> element plays
@@ -213,14 +242,69 @@ export default function VideoRoom({
 
   const mediaElements = (): MediaElements => ({ audio: remoteAudioRef.current, video: remoteVideoRef.current })
 
-  const leave = async () => {
+  const clearReconnectTimer = () => {
+    if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current)
+    reconnectTimerRef.current = null
+  }
+
+  const leave = async (note: string | null = null) => {
+    clearReconnectTimer()
     const session = sessionRef.current
     sessionRef.current = null
     if (!session) return
     await teardownCall(session, mediaElements())
     setPartnerAudio('none')
     setPartnerVideo('none')
+    setReconnecting(false)
+    setLeftNote(note)
     setStatus('left')
+  }
+
+  // Cameras and microphones the browser can see right now. Labels are only
+  // readable after permission was granted, which is true once we are in a call;
+  // an unlabeled device falls back to "Camera 2". Only offered when there is a
+  // real choice, so a one-camera person sees nothing new.
+  const refreshDevices = async () => {
+    try {
+      const all = await navigator.mediaDevices.enumerateDevices()
+      const pick = (kind: MediaDeviceKind, fallback: string): DeviceOption[] =>
+        all
+          .filter((d) => d.kind === kind && d.deviceId)
+          .map((d, i) => ({ id: d.deviceId, label: d.label || `${fallback} ${i + 1}` }))
+      setCameras(pick('videoinput', 'Camera'))
+      setMicrophones(pick('audioinput', 'Microphone'))
+    } catch {
+      /* no device list available — the pickers simply stay hidden */
+    }
+  }
+
+  // Swap ONE published local track for another device's, without leaving the
+  // call. The new track is created first; if that fails the old one is untouched
+  // and keeps working. A muted track stays muted after the switch.
+  const switchDevice = async (type: 'audio' | 'video', deviceId: string) => {
+    const session = sessionRef.current
+    const JitsiMeetJS = window.JitsiMeetJS
+    if (!session?.room || !JitsiMeetJS) return
+    const old = session.localTracks.find((t) => t.getType() === type)
+    if (!old) return
+    setDeviceError(null)
+    try {
+      const fresh = (
+        await JitsiMeetJS.createLocalTracks(
+          type === 'video' ? { devices: ['video'], cameraDeviceId: deviceId } : { devices: ['audio'], micDeviceId: deviceId },
+        )
+      )[0]
+      if (!fresh) throw new Error('no track')
+      if (old.isMuted()) await fresh.mute()
+      await session.room.replaceTrack(old, fresh)
+      session.localTracks = session.localTracks.map((t) => (t === old ? fresh : t))
+      await settle(() => old.dispose())
+      if (type === 'video' && localVideoRef.current) fresh.attach(localVideoRef.current)
+      if (type === 'video') setCameraId(deviceId)
+      else setMicId(deviceId)
+    } catch {
+      setDeviceError('Could not switch to that device. Your previous one is still in use.')
+    }
   }
 
   // Mute / camera toggles act on OUR OWN published track (mute() keeps the
@@ -256,6 +340,14 @@ export default function VideoRoom({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roundEndsAt, status])
 
+  useEffect(() => {
+    if (status !== 'in_call' || !navigator.mediaDevices?.addEventListener) return
+    const onChange = () => void refreshDevices()
+    navigator.mediaDevices.addEventListener('devicechange', onChange)
+    return () => navigator.mediaDevices.removeEventListener('devicechange', onChange)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status])
+
   // Leave on unmount (next round starts, or the participant navigates away).
   useEffect(() => {
     cancelledRef.current = false
@@ -272,6 +364,9 @@ export default function VideoRoom({
     setCamOn(true)
     setPartnerAudio('none')
     setPartnerVideo('none')
+    setReconnecting(false)
+    setLeftNote(null)
+    setDeviceError(null)
     setStatus('joining')
     // getVideoJoinToken returns a discriminated union rather than throwing
     // for an expected refusal (not seated, round ended, video not
@@ -389,6 +484,28 @@ export default function VideoRoom({
         })
       }
 
+      // A dropped connection: tell the person, give the library its chance to
+      // recover, and only then fall back to the Rejoin button. These can fire
+      // after teardown started, so they check the cancel flag.
+      const conferenceEvents = JitsiMeetJS.events.conference
+      if (conferenceEvents.CONNECTION_INTERRUPTED) {
+        room.on(conferenceEvents.CONNECTION_INTERRUPTED, () => {
+          if (cancelledRef.current || !sessionRef.current) return
+          setReconnecting(true)
+          clearReconnectTimer()
+          reconnectTimerRef.current = setTimeout(
+            () => void leave('Your connection to the video room was lost. Rejoin when your connection is back.'),
+            RECONNECT_GIVE_UP_MS,
+          )
+        })
+      }
+      if (conferenceEvents.CONNECTION_RESTORED) {
+        room.on(conferenceEvents.CONNECTION_RESTORED, () => {
+          clearReconnectTimer()
+          setReconnecting(false)
+        })
+      }
+
       session.localTracks = await JitsiMeetJS.createLocalTracks({ devices: ['audio', 'video'] })
       if (await abandonIfCancelled()) return
       for (const track of session.localTracks) {
@@ -421,6 +538,9 @@ export default function VideoRoom({
       }
 
       setStatus('in_call')
+      setCameraId(session.localTracks.find((t) => t.getType() === 'video')?.getDeviceId?.() ?? '')
+      setMicId(session.localTracks.find((t) => t.getType() === 'audio')?.getDeviceId?.() ?? '')
+      void refreshDevices()
     } catch (err) {
       sessionRef.current = null
       await teardownCall(session, mediaElements())
@@ -442,7 +562,9 @@ export default function VideoRoom({
       )}
       {status === 'left' && (
         <div className="flex items-center gap-3">
-          <p className="text-sm text-gray-500">You left the video room.</p>
+          <p className="text-sm text-gray-500" data-testid="video-left-note">
+            {leftNote ?? 'You left the video room.'}
+          </p>
           <button
             onClick={() => startTransition(join)}
             disabled={isPending}
@@ -501,6 +623,15 @@ export default function VideoRoom({
             the only thing that makes the call audible. */}
         {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
         <audio ref={remoteAudioRef} autoPlay />
+        {status === 'in_call' && reconnecting && (
+          <p
+            role="status"
+            data-testid="video-reconnecting"
+            className="col-span-2 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-900"
+          >
+            Connection lost — reconnecting… You will be put back in the call automatically.
+          </p>
+        )}
         {status === 'in_call' && (
           <>
             {/* What each side is actually sending — the answer to "can you
@@ -532,6 +663,45 @@ export default function VideoRoom({
                 Leave
               </button>
             </div>
+            {(cameras.length > 1 || microphones.length > 1) && (
+              <div className="col-span-2 flex flex-wrap gap-3 text-xs text-gray-600">
+                {cameras.length > 1 && (
+                  <label className="flex items-center gap-1">
+                    Camera
+                    <select
+                      data-testid="video-camera-select"
+                      value={cameraId}
+                      onChange={(e) => void switchDevice('video', e.target.value)}
+                      className="rounded border border-gray-300 px-1 py-0.5 text-xs"
+                    >
+                      {cameras.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+                {microphones.length > 1 && (
+                  <label className="flex items-center gap-1">
+                    Microphone
+                    <select
+                      data-testid="video-mic-select"
+                      value={micId}
+                      onChange={(e) => void switchDevice('audio', e.target.value)}
+                      className="rounded border border-gray-300 px-1 py-0.5 text-xs"
+                    >
+                      {microphones.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+              </div>
+            )}
+            {deviceError && <p className="col-span-2 text-xs text-red-600">{deviceError}</p>}
           </>
         )}
       </div>
