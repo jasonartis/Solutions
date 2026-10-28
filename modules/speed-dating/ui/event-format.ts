@@ -13,7 +13,16 @@
 // with each side's display name + email, keyed by user id.
 export type SideKey = 'a' | 'b'
 export type EventSide = { label: string; capacity: number | null }
-export type EventFormat = { sides?: { a: EventSide; b: EventSide }; shareContactOnMatch?: boolean }
+// checkIn (founder 2026-10-28): absent = not used (everyone registered is paired). 'staff' = the
+// organizer marks people as arrived and ONLY arrived people are paired (in-person events). 'self' = people
+// check themselves in (online events). Lives in this jsonb, so no migration; the DB lets an organizer set
+// anyone's checked_in and a person set their own (sd_pin_participant), a host cannot set someone else's.
+export type CheckInMode = 'staff' | 'self'
+export type EventFormat = {
+  sides?: { a: EventSide; b: EventSide }
+  shareContactOnMatch?: boolean
+  checkIn?: CheckInMode
+}
 
 export function parseEventFormat(formData: FormData): EventFormat {
   const format: EventFormat = {}
@@ -21,6 +30,9 @@ export function parseEventFormat(formData: FormData): EventFormat {
   if (formData.get('shareContactOnMatch') === 'on') {
     format.shareContactOnMatch = true
   }
+
+  const checkIn = String(formData.get('checkIn') ?? '')
+  if (checkIn === 'staff' || checkIn === 'self') format.checkIn = checkIn
 
   if (formData.get('sidesEnabled') === 'on') {
     const sideALabel = String(formData.get('sideALabel') ?? '').trim()
@@ -53,4 +65,10 @@ export function getEventSides(format: unknown): EventFormat['sides'] | undefined
 
 export function getShareContactOnMatch(format: unknown): boolean {
   return Boolean((format as EventFormat | null | undefined)?.shareContactOnMatch)
+}
+
+/** How people are checked in for this event; null = check-in is not used. */
+export function getCheckInMode(format: unknown): CheckInMode | null {
+  const mode = (format as EventFormat | null | undefined)?.checkIn
+  return mode === 'staff' || mode === 'self' ? mode : null
 }

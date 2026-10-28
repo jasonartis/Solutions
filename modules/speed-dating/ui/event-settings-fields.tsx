@@ -1,5 +1,5 @@
 import { TimingFields } from './timing-fields'
-import { getEventSides, getShareContactOnMatch } from './event-format'
+import { getCheckInMode, getEventSides, getShareContactOnMatch } from './event-format'
 
 const inputCls = 'rounded border border-gray-300 px-2 py-1 text-sm'
 
@@ -10,6 +10,7 @@ export type EventSettingsDefaults = {
   breakSeconds?: number
   allowRepeats?: boolean
   people?: number
+  maxRounds?: number | null
 }
 
 // The settings shared by the create form and the edit form: timing (with the
@@ -24,6 +25,7 @@ export function EventSettingsFields({ defaults = {} }: { defaults?: EventSetting
         defaultBreakSeconds={defaults.breakSeconds}
         defaultAllowRepeats={defaults.allowRepeats}
         defaultPeople={defaults.people}
+        defaultMaxRounds={defaults.maxRounds}
       />
       <div className="flex flex-wrap items-center gap-3">
         <label className="flex items-center gap-1 text-sm text-gray-600">
@@ -35,6 +37,14 @@ export function EventSettingsFields({ defaults = {} }: { defaults?: EventSetting
           Share contact info on mutual match
         </label>
       </div>
+      <label className="flex flex-wrap items-center gap-2 text-sm text-gray-600">
+        Check-in
+        <select name="checkIn" defaultValue={getCheckInMode(defaults.format) ?? ''} className="rounded border border-gray-300 px-2 py-1 text-sm">
+          <option value="">Not used — everyone registered is paired</option>
+          <option value="staff">Staff mark people as arrived (in-person) — only arrived people are paired</option>
+          <option value="self">People check themselves in (online) — only checked-in people are paired</option>
+        </select>
+      </label>
       <details className="rounded border border-gray-100 p-2" open={Boolean(sides)}>
         <summary className="cursor-pointer text-sm text-gray-600">
           Two sides (e.g. Men/Women) — optional, sets a capacity + waitlist per side

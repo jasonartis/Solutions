@@ -2726,3 +2726,140 @@ test('speed-dating module: organizer console counts pairings skipped by personal
     await expect(page.getByText('No one blocked.', { exact: false })).toBeVisible()
   }
 })
+
+// Round cap (2026-10-28): the organizer states a number of rounds OR an event length and the other
+// fills in; the cap is saved as sd_events.rounds_planned and the manual "Run next round" stops there.
+test('speed-dating module: the organizer caps the rounds, the length follows, and the cap is enforced', async ({ page }) => {
+  test.slow()
+  const name = 'Round Cap Test ' + Date.now()
+  await signIn(page, 'alice@demo.local')
+  await page.goto('/o/demo-dating/m/speed-dating')
+  await page.getByPlaceholder('Event name').fill(name)
+  // Re-fill until it sticks (a fill before hydration is reset by React's defaults). 5 min rounds, 60 s
+  // breaks, 8 people; typing an event length of 30 min fits floor((1800+60)/360) = 5 rounds.
+  await expect(async () => {
+    await page.getByLabel('Round length').fill('5')
+    await page.getByLabel('Break between rounds').fill('60')
+    await page.getByLabel('People you expect').fill('8')
+    await page.getByLabel('Event length (at most)').fill('30')
+    await expect(page.getByLabel('Number of rounds (at most)')).toHaveValue('5', { timeout: 1500 })
+  }).toPass({ timeout: 15_000 })
+  // 5 rounds: 5*300 + 4*60 = 1740 s = 29 min — exact, no "up to".
+  await expect(page.getByText('8 people, 5 rounds, about 29 minutes.')).toBeVisible()
+  // The other direction: typing the round count fills the length in.
+  await page.getByLabel('Number of rounds (at most)').fill('1')
+  await expect(page.getByLabel('Event length (at most)')).toHaveValue('5')
+  await expect(page.getByText('8 people, 1 round, about 5 minutes.')).toBeVisible()
+  await page.getByRole('button', { name: 'Create (draft)' }).click()
+  await page.getByRole('link', { name }).click()
+  await expect(page.getByText('1 round planned')).toBeVisible()
+  await page.getByRole('button', { name: 'Open registration' }).click()
+  for (const who of ['charlie@demo.local', 'dana@demo.local']) {
+    await signIn(page, who)
+    await page.goto('/o/demo-dating/m/speed-dating')
+    await page.getByRole('link', { name }).click()
+    const posted = page.waitForResponse((r) => r.request().method() === 'POST')
+    await page.getByRole('button', { name: 'Register for this event' }).click()
+    await posted
+    await expect(page.getByText('You are')).toContainText('registered')
+  }
+  await signIn(page, 'alice@demo.local')
+  await page.goto('/o/demo-dating/m/speed-dating')
+  await page.getByRole('link', { name }).click()
+  await page.getByRole('button', { name: 'Start event' }).click()
+  await expect(page.getByText('running', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Run next round (pair everyone)' }).click()
+  await expect(page.getByText(/Rounds run: 1/)).toBeVisible()
+  const url = page.url()
+  // The dater sees how far along the evening is.
+  await signIn(page, 'charlie@demo.local')
+  await page.goto(url)
+  await expect(page.getByTestId('round-of-planned')).toContainText('round 1 of 1')
+  // The cap is enforced: a second press starts nothing and says why.
+  await signIn(page, 'alice@demo.local')
+  await page.goto(url)
+  await page.getByRole('button', { name: 'Run next round (pair everyone)' }).click()
+  await expect(page.getByText('all 1 planned rounds have run')).toBeVisible()
+  await expect(page.getByText(/Rounds run: 1/)).toBeVisible()
+})
+
+// Check-in (founder 2026-10-28): where an event uses it, ONLY arrived people are paired, and a person who
+// is registered but not checked in is told so loudly (they would otherwise wait for a round that never
+// includes them). Staff mode: the organizer marks arrivals. Self mode: the person checks themselves in.
+test('speed-dating module: staff check-in — un-arrived people are told, are not paired, and arrival fixes it', async ({ page }) => {
+  test.slow()
+  const name = 'Check-in Staff ' + Date.now()
+  await signIn(page, 'alice@demo.local')
+  await page.goto('/o/demo-dating/m/speed-dating')
+  await page.getByPlaceholder('Event name').fill(name)
+  await page.getByLabel('Check-in').selectOption('staff')
+  await page.getByRole('button', { name: 'Create (draft)' }).click()
+  await page.getByRole('link', { name }).click()
+  await page.getByRole('button', { name: 'Open registration' }).click()
+  const eventUrl = page.url()
+
+  for (const who of ['charlie@demo.local', 'dana@demo.local']) {
+    await signIn(page, who)
+    await page.goto('/o/demo-dating/m/speed-dating')
+    // On the list the badge says it too (only once registered).
+    await page.getByRole('link', { name }).click()
+    const posted = page.waitForResponse((r) => r.request().method() === 'POST')
+    await page.getByRole('button', { name: 'Register for this event' }).click()
+    await posted
+    await expect(page.getByTestId('not-checked-in')).toContainText('You are NOT checked in yet')
+    await expect(page.getByTestId('not-checked-in')).toContainText('tell the organizer')
+  }
+  await page.goto('/o/demo-dating/m/speed-dating')
+  await expect(page.getByText('NOT checked in — you will not be paired').first()).toBeVisible()
+
+  // Organizer: nobody has arrived, so no round can start.
+  await signIn(page, 'alice@demo.local')
+  await page.goto(eventUrl)
+  await expect(page.getByText('Roster (2 registered, 0 arrived)')).toBeVisible()
+  await expect(page.getByTestId('checkin-summary')).toContainText('0 of 2 registered are checked in')
+  await page.getByRole('button', { name: 'Start event' }).click()
+  await expect(page.getByText('running', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Run next round (pair everyone)' }).click()
+  await expect(page.getByText('fewer than two people are checked in')).toBeVisible()
+  await expect(page.getByText(/Rounds run: 0/)).toBeVisible()
+
+  // One arrival is still not enough; the second lets the round start.
+  await page.locator('li', { hasText: 'Charlie C' }).getByRole('button', { name: 'Mark arrived' }).click()
+  await expect(page.getByText('Roster (2 registered, 1 arrived)')).toBeVisible()
+  await page.locator('li', { hasText: 'Dana D' }).getByRole('button', { name: 'Mark arrived' }).click()
+  await expect(page.getByText('Roster (2 registered, 2 arrived)')).toBeVisible()
+  await page.getByRole('button', { name: 'Run next round (pair everyone)' }).click()
+  await expect(page.getByText(/Rounds run: 1/)).toBeVisible()
+
+  // The dater now sees they are checked in, and no alarm.
+  await signIn(page, 'charlie@demo.local')
+  await page.goto(eventUrl)
+  await expect(page.getByTestId('checked-in')).toContainText('You are checked in')
+  await expect(page.getByTestId('not-checked-in')).toHaveCount(0)
+})
+
+test('speed-dating module: self check-in — the person taps "I\'m here" and the alarm goes away', async ({ page }) => {
+  const name = 'Check-in Self ' + Date.now()
+  await signIn(page, 'alice@demo.local')
+  await page.goto('/o/demo-dating/m/speed-dating')
+  await page.getByPlaceholder('Event name').fill(name)
+  await page.getByLabel('Check-in').selectOption('self')
+  await page.getByRole('button', { name: 'Create (draft)' }).click()
+  await page.getByRole('link', { name }).click()
+  await page.getByRole('button', { name: 'Open registration' }).click()
+
+  await signIn(page, 'dana@demo.local')
+  await page.goto('/o/demo-dating/m/speed-dating')
+  await page.getByRole('link', { name }).click()
+  const posted = page.waitForResponse((r) => r.request().method() === 'POST')
+  await page.getByRole('button', { name: 'Register for this event' }).click()
+  await posted
+  await expect(page.getByTestId('not-checked-in')).toContainText('You are NOT checked in yet')
+  const checkIn = page.getByRole('button', { name: "I'm here — check me in" })
+  await expect(checkIn).toBeVisible()
+  const checked = page.waitForResponse((r) => r.request().method() === 'POST')
+  await checkIn.click()
+  await checked
+  await expect(page.getByTestId('checked-in')).toContainText('You are checked in')
+  await expect(page.getByTestId('not-checked-in')).toHaveCount(0)
+})

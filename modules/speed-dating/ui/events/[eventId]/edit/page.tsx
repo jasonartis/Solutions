@@ -10,7 +10,7 @@ const btnCls = 'rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hov
 
 const NOTICES: Record<string, string> = {
   'edit-name': 'The event needs a name.',
-  'edit-timing': 'Round length must be whole minutes (1–60) and the break whole seconds (0–600).',
+  'edit-timing': 'Round length must be whole minutes (1–60), the break whole seconds (0–600), and the number of rounds a whole number from 1 to 99.',
   'edit-format': 'Both side labels are required, and a side capacity must be a positive whole number.',
   'edit-sides-locked':
     'Nothing was saved: people have already registered on a side, so the sides cannot change. Everything else can — save again with the sides as they were.',
@@ -31,7 +31,7 @@ export default async function EditEventPage(props: {
 
   const { data: event } = await supabase
     .from('sd_events')
-    .select('id, name, description, state, scheduled_at, resume_review_enabled, round_duration_seconds, break_duration_seconds, allow_repeat_pairings, format')
+    .select('id, name, description, state, scheduled_at, resume_review_enabled, round_duration_seconds, break_duration_seconds, allow_repeat_pairings, rounds_planned, format')
     .eq('id', eventId)
     .maybeSingle()
   if (!event) notFound()
@@ -85,6 +85,7 @@ export default async function EditEventPage(props: {
               roundSeconds: event.round_duration_seconds,
               breakSeconds: event.break_duration_seconds,
               allowRepeats: event.allow_repeat_pairings,
+              maxRounds: event.rounds_planned,
               people: registered && registered >= 2 ? registered : undefined,
             }}
           />

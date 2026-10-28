@@ -11,7 +11,7 @@ import {
   type VideoConnectionOptions,
 } from '@modules/speed-dating'
 import { createClient } from '@/lib/supabase/server'
-import { getEventSides, getShareContactOnMatch, parseEventFormat, type SideKey } from './event-format'
+import { getCheckInMode, getEventSides, getShareContactOnMatch, parseEventFormat, type SideKey } from './event-format'
 import { parseTimings } from './event-plan'
 
 // Speed-dating actions. RLS + the sd_ guard triggers are the enforcement
@@ -68,6 +68,7 @@ export async function createEvent(orgSlug: string, formData: FormData) {
     resume_review_enabled: resumeReview,
     round_duration_seconds: timings.roundSeconds,
     break_duration_seconds: timings.breakSeconds,
+    rounds_planned: timings.maxRounds,
     allow_repeat_pairings: formData.get('allowRepeats') === 'on',
     format,
     created_by: user?.id ?? null,
@@ -125,6 +126,7 @@ export async function updateEvent(orgSlug: string, eventId: string, formData: Fo
       resume_review_enabled: formData.get('resumeReview') === 'on',
       round_duration_seconds: timings.roundSeconds,
       break_duration_seconds: timings.breakSeconds,
+      rounds_planned: timings.maxRounds,
       allow_repeat_pairings: formData.get('allowRepeats') === 'on',
       format,
     })
@@ -235,6 +237,37 @@ export async function allowRegisterAgain(orgSlug: string, participantId: string,
   fail(error, 'Could not clear the removal')
   await recordActivity(supabase, { moduleKey: 'speed-dating', action: 'participant.removal_cleared', orgSlug })
   revalidatePath(`/o/${orgSlug}/m/speed-dating/events/${eventId}`)
+}
+
+// Check-in (founder 2026-10-28). In an event that uses it (format.checkIn), ONLY people marked as
+// arrived are paired, by the manual button and by the worker alike. An organizer marks anyone (the
+// organizer tier is exempt from sd_pin_participant; a host is pinned off other people's rows); a
+// person marks THEMSELVES (their own checked_in is writable). checked_in_at is stamped here because
+// the organizer branch of the trigger returns before it would. A refusal redirects with a notice
+// (docs/03 #22).
+async function setCheckedIn(orgSlug: string, eventId: string, participantId: string, value: boolean) {
+  const supabase = await createClient()
+  const base = `/o/${orgSlug}/m/speed-dating/events/${eventId}`
+  const { data: updated, error } = await supabase
+    .from('sd_participants')
+    .update({ checked_in: value, checked_in_at: value ? new Date().toISOString() : null })
+    .eq('id', participantId)
+    .eq('event_id', eventId)
+    .eq('status', 'registered')
+    .select('id')
+  if (error || !updated || updated.length === 0) redirect(`${base}?notice=checkin-refused`)
+  await recordActivity(supabase, { moduleKey: 'speed-dating', action: value ? 'participant.checked_in' : 'participant.check_in_undone', orgSlug })
+  revalidatePath(base)
+  revalidatePath(`/o/${orgSlug}/m/speed-dating`)
+}
+
+export async function checkInParticipant(orgSlug: string, eventId: string, participantId: string, value: boolean) {
+  await setCheckedIn(orgSlug, eventId, participantId, value)
+}
+
+// "I'm here": a person checks THEMSELVES in. Only offered where the event lets people do that.
+export async function checkInSelf(orgSlug: string, eventId: string, participantId: string) {
+  await setCheckedIn(orgSlug, eventId, participantId, true)
 }
 
 // Two-sided events (opt-in, set at event creation — see event-format.ts):
@@ -371,11 +404,11 @@ export async function runPairingRound(orgSlug: string, eventId: string) {
 
   const [{ data: event }, { data: rounds }, { data: participants }, { data: pairings }] =
     await Promise.all([
-      supabase.from('sd_events').select('org_id, allow_repeat_pairings, round_duration_seconds').eq('id', eventId).single(),
+      supabase.from('sd_events').select('org_id, allow_repeat_pairings, round_duration_seconds, rounds_planned, format').eq('id', eventId).single(),
       supabase.from('sd_rounds').select('id, round_number, state').eq('event_id', eventId),
       supabase
         .from('sd_participants')
-        .select('id, user_id, pool_side')
+        .select('id, user_id, pool_side, checked_in')
         .eq('event_id', eventId)
         .eq('status', 'registered')
         .eq('seat_type', 'participant')
@@ -386,8 +419,21 @@ export async function runPairingRound(orgSlug: string, eventId: string) {
         .eq('event_id', eventId),
     ])
   if (!event) throw new Error('Event not found')
+  // The organizer's cap on rounds (founder 2026-10-28): every planned round has run, so
+  // there is nothing left to start. Same rule as the worker orchestrator. Closing the
+  // last round is left to the clock / the next press, exactly as before.
+  if (event.rounds_planned !== null && (rounds ?? []).length >= event.rounds_planned) {
+    redirect(`/o/${orgSlug}/m/speed-dating/events/${eventId}?notice=rounds-cap-reached`)
+  }
 
-  const seatUsers = (participants ?? []).map((p) => p.user_id)
+  // Check-in: where the event uses it, ONLY arrived people are paired (the worker applies the same rule).
+  const checkInMode = getCheckInMode(event.format)
+  const pairable = checkInMode ? (participants ?? []).filter((p) => p.checked_in) : (participants ?? [])
+  if (checkInMode && pairable.length < 2) {
+    redirect(`/o/${orgSlug}/m/speed-dating/events/${eventId}?notice=checkin-needed`)
+  }
+
+  const seatUsers = pairable.map((p) => p.user_id)
   const { data: blocks } = seatUsers.length
     ? await supabase
         .from('sd_blocks')
@@ -397,7 +443,7 @@ export async function runPairingRound(orgSlug: string, eventId: string) {
     : { data: [] }
 
   const plan = buildNextRound({
-    seats: (participants ?? []).map((p) => ({ id: p.id, userId: p.user_id, poolSide: p.pool_side })),
+    seats: pairable.map((p) => ({ id: p.id, userId: p.user_id, poolSide: p.pool_side })),
     history: (pairings ?? [])
       .filter((p) => p.participant_b_id !== null)
       .map((p) => ({ a: p.participant_a_id, b: p.participant_b_id! })),

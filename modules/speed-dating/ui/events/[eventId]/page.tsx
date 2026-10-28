@@ -6,6 +6,8 @@ import {
   blockUser,
   fileReport,
   allowRegisterAgain,
+  checkInParticipant,
+  checkInSelf,
   deleteEvent,
   markInterest,
   promoteNextWaitlisted,
@@ -19,10 +21,17 @@ import {
   setEventState,
   withdrawFromEvent,
 } from '../../actions'
-import { getEventSides, type SideKey } from '../../event-format'
+import { getCheckInMode, getEventSides, type SideKey } from '../../event-format'
 import LiveRoundRefresh from './live-round-refresh'
 import VideoRoom from './video-room'
 import { SubmitButton } from '../../submit-button'
+
+// Exact, because the organizer fixed the number of rounds: the event ends when the LAST planned round
+// does, i.e. the current round's end plus one (break + round) per round still to come.
+function describeTimeLeft(ms: number): string {
+  const minutes = Math.ceil(Math.max(0, ms) / 60000)
+  return minutes <= 1 ? 'about 1 min left' : `about ${minutes} min left`
+}
 
 function formatCountdown(ms: number): string {
   const total = Math.max(0, Math.round(ms / 1000))
@@ -49,11 +58,12 @@ export default async function EventPage(props: {
 
   const { data: event } = await supabase
     .from('sd_events')
-    .select('id, org_id, name, state, scheduled_at, resume_review_enabled, round_duration_seconds, break_duration_seconds, allow_repeat_pairings, lobby_opens_at, format')
+    .select('id, org_id, name, state, scheduled_at, resume_review_enabled, round_duration_seconds, break_duration_seconds, allow_repeat_pairings, rounds_planned, lobby_opens_at, format')
     .eq('id', eventId)
     .maybeSingle()
   if (!event) notFound()
   const sides = getEventSides(event.format)
+  const checkInMode = getCheckInMode(event.format)
 
   const [{ data: canOrganize }, { data: canStaffEvent }, { data: canManage }, { data: me }] = await Promise.all([
     supabase.rpc('sd_can_organize', { check_org_id: org.id }),
@@ -99,6 +109,9 @@ export default async function EventPage(props: {
   ])
 
   const mySeat = (participants ?? []).find((p) => p.user_id === me?.id)
+  // Check-in (founder 2026-10-28): where an event uses it, only ARRIVED people are paired. What staff see.
+  const registeredSeats = (participants ?? []).filter((p) => p.status === 'registered' && p.seat_type === 'participant')
+  const arrivedCount = registeredSeats.filter((p) => p.checked_in).length
 
   // How many pairings personal blocks are keeping out of this event. A NUMBER
   // ONLY — never who blocked whom (founder-approved 2026-10-21). Counts unordered
@@ -235,6 +248,17 @@ export default async function EventPage(props: {
           Ask the organizer if you think this is a mistake.
         </p>
       )}
+      {notice === 'checkin-needed' && (
+        <p className="mb-6 rounded border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
+          No round was started: this event uses check-in and fewer than two people are checked in. Mark people as arrived
+          in the roster below (or ask them to check in), then run the round.
+        </p>
+      )}
+      {notice === 'checkin-refused' && (
+        <p className="mb-6 rounded border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
+          That check-in could not be saved — only a registered person can be checked in, and only they or an organizer can do it.
+        </p>
+      )}
       {notice === 'edit-saved' && (
         <p className="mb-6 rounded border border-green-200 bg-green-50 px-4 py-2 text-sm text-green-900">Event updated.</p>
       )}
@@ -254,6 +278,11 @@ export default async function EventPage(props: {
         </p>
       )}
 
+      {notice === 'rounds-cap-reached' && (
+        <p className="mb-6 rounded border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
+          No new round was started: all {event.rounds_planned} planned rounds have run. Complete the event to continue.
+        </p>
+      )}
       {notice === 'rotation-complete' && (
         <p className="mb-6 rounded border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
           No new round was started: everyone registered has already met everyone else. Complete the event
@@ -358,8 +387,15 @@ export default async function EventPage(props: {
               Registration is closed: nobody new can sign up, and people can still withdraw. Nobody is notified.
             </p>
           )}
+          {checkInMode && (event.state === 'open' || event.state === 'closed' || event.state === 'running') && (
+            <p className="mb-2 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900" data-testid="checkin-summary">
+              Check-in is ON ({checkInMode === 'staff' ? 'you mark people as arrived' : 'people check themselves in'}): only people marked
+              arrived are paired. {arrivedCount} of {registeredSeats.length} registered {arrivedCount === 1 ? 'is' : 'are'} checked in.
+            </p>
+          )}
           <p className="mb-2 text-xs text-gray-500">
             Rounds of {Math.round(event.round_duration_seconds / 60)} min with {event.break_duration_seconds}s breaks
+            {event.rounds_planned !== null ? ` · ${event.rounds_planned} ${event.rounds_planned === 1 ? 'round' : 'rounds'} planned` : ''}
             {event.allow_repeat_pairings ? ' · people may meet more than once' : ''}.
             {blockedPairCount !== null && (
               <>
@@ -390,7 +426,7 @@ export default async function EventPage(props: {
             Roster & reports
           </h2>
           <h3 className="mb-1 text-xs uppercase tracking-wide text-gray-400">
-            Roster ({(participants ?? []).filter((p) => p.status === 'registered').length} registered)
+            Roster ({(participants ?? []).filter((p) => p.status === 'registered').length} registered{checkInMode ? `, ${arrivedCount} arrived` : ''})
           </h3>
           <ul className="mb-4 space-y-0.5 text-sm text-gray-700">
             {(participants ?? []).map((p) => (
@@ -401,6 +437,20 @@ export default async function EventPage(props: {
                   {p.seat_type !== 'participant' ? ` · ${p.seat_type}` : ''}
                   {sides && p.pool_side ? ` · ${sides[p.pool_side as SideKey]?.label ?? p.pool_side}` : ''}
                 </span>
+                {checkInMode && p.status === 'registered' && p.seat_type === 'participant' && (
+                  <>
+                    <span
+                      className={`ml-2 rounded px-1.5 py-0.5 text-xs font-medium ${p.checked_in ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}
+                    >
+                      {p.checked_in ? 'arrived' : 'not arrived'}
+                    </span>
+                    {canOrganize && (
+                      <form action={checkInParticipant.bind(null, orgSlug, eventId, p.id, !p.checked_in)} className="ml-2 inline">
+                        <button className={linkBtn}>{p.checked_in ? 'Undo arrival' : 'Mark arrived'}</button>
+                      </form>
+                    )}
+                  </>
+                )}
                 {/* Consent: an organizer never re-seats someone. A removal can be
                     CLEARED so the person may register again; they must do it. */}
                 {canOrganize && p.status === 'removed' && (
@@ -519,6 +569,34 @@ export default async function EventPage(props: {
 
       {mySeat && (
         <div className="space-y-6">
+          {/* Being registered is NOT being in the rounds: where check-in is used, an un-checked-in person is
+              skipped. Loud on purpose — the failure is someone waiting for a round that will never include them. */}
+          {checkInMode && mySeat.status === 'registered' && !mySeat.checked_in &&
+            (event.state === 'open' || event.state === 'closed' || event.state === 'running') && (
+              <section role="alert" data-testid="not-checked-in" className="rounded-lg border-2 border-amber-400 bg-amber-50 p-5">
+                <p className="text-base font-semibold text-amber-900">You are NOT checked in yet.</p>
+                <p className="mt-1 text-sm text-amber-900">
+                  Being registered is not enough: only people who are checked in are paired in the rounds. If you do not
+                  check in, you will sit the event out{event.state === 'running' ? ' — right now you are not in any round' : ''}.
+                </p>
+                {checkInMode === 'self' ? (
+                  <form action={checkInSelf.bind(null, orgSlug, eventId, mySeat.id)} className="mt-3">
+                    <SubmitButton className={btnCls} pendingLabel="Checking in…">
+                      I&apos;m here — check me in
+                    </SubmitButton>
+                  </form>
+                ) : (
+                  <p className="mt-2 text-sm font-medium text-amber-900">
+                    When you arrive, tell the organizer at the entrance so they can check you in.
+                  </p>
+                )}
+              </section>
+            )}
+          {checkInMode && mySeat.status === 'registered' && mySeat.checked_in && (event.state === 'open' || event.state === 'closed' || event.state === 'running') && (
+            <p data-testid="checked-in" className="rounded border border-green-200 bg-green-50 px-4 py-2 text-sm text-green-900">
+              You are checked in. You will be paired from the next round on.
+            </p>
+          )}
           <section className="rounded-lg border border-gray-200 bg-white p-5">
             <div className="flex items-center justify-between">
               <p className="text-sm">
@@ -571,7 +649,14 @@ export default async function EventPage(props: {
               )}
               {activeRound && !myCurrentPairing && (
                 <p className="text-sm text-indigo-900">
-                  You&apos;re not in this round{!mySeat.checked_in ? ' — check in at the front desk to join the next one' : ''}.
+                  {checkInMode && !mySeat.checked_in ? (
+                    <>
+                      You&apos;re <span className="font-semibold">not checked in</span>, so you are not in any round.{' '}
+                      {checkInMode === 'self' ? 'Check in above' : 'Ask the organizer to check you in'} and you&apos;ll join the next round.
+                    </>
+                  ) : (
+                    <>You&apos;re not in this round. You&apos;ll join the next one.</>
+                  )}
                 </p>
               )}
               {activeRound && myCurrentPairing && myCurrentPartnerId === null && (
@@ -602,6 +687,12 @@ export default async function EventPage(props: {
                       {' '}
                       Next round starts in <span className="font-medium">{formatCountdown(breakEndsAt.getTime() - now.getTime())}</span>.
                     </>
+                  )}
+                  {event.rounds_planned !== null && (
+                    <span className="ml-2 text-gray-500" data-testid="round-of-planned">
+                      (round {activeRound.round_number} of {event.rounds_planned}
+                      {roundEndsAt ? ` · ${describeTimeLeft(roundEndsAt.getTime() + (event.rounds_planned - activeRound.round_number) * (event.round_duration_seconds + event.break_duration_seconds) * 1000 - now.getTime())}` : ''})
+                    </span>
                   )}
                 </p>
               )}

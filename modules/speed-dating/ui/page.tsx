@@ -4,6 +4,7 @@ import { requireOrgModule } from '@/lib/module-gate'
 import { createEvent, unblockUser } from './actions'
 import { SubmitButton } from './submit-button'
 import { EventSettingsFields } from './event-settings-fields'
+import { getCheckInMode } from './event-format'
 
 const inputCls = 'rounded border border-gray-300 px-2 py-1 text-sm'
 const btnCls = 'rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700'
@@ -22,7 +23,7 @@ export default async function SpeedDatingPage(props: {
     supabase.rpc('sd_can_organize', { check_org_id: org.id }),
     supabase
       .from('sd_events')
-      .select('id, name, state, scheduled_at, created_at')
+      .select('id, name, state, scheduled_at, created_at, format')
       .eq('org_id', org.id)
       .order('scheduled_at', { ascending: false, nullsFirst: false }),
     supabase.auth.getUser().then(({ data }) => ({ data: data.user })),
@@ -32,9 +33,12 @@ export default async function SpeedDatingPage(props: {
   // seat rows; staff read all, so filter to me explicitly). Powers the
   // "Your events" grouping and the per-event badge.
   const { data: mySeats } = me
-    ? await supabase.from('sd_participants').select('event_id, status').eq('user_id', me.id)
+    ? await supabase.from('sd_participants').select('event_id, status, checked_in').eq('user_id', me.id)
     : { data: null }
   const seatStatus = new Map((mySeats ?? []).map((m) => [m.event_id as string, m.status as string]))
+  // Registered but NOT checked in, in an event that uses check-in: such a person is skipped by the
+  // rounds, so the list says so instead of leaving them waiting (founder 2026-10-28).
+  const seatCheckedIn = new Map((mySeats ?? []).map((m) => [m.event_id as string, Boolean(m.checked_in)]))
 
   // Personal, cross-event block list (spec: "never pair me with them again").
   // Filtered to MY OWN blocks even though RLS also lets the manage tier read
@@ -66,7 +70,7 @@ export default async function SpeedDatingPage(props: {
 
       {notice === 'create-timing' && (
         <p className="mb-6 rounded border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
-          The event was not created: round length must be whole minutes (1–60) and the break whole seconds (0–600).
+          The event was not created: round length must be whole minutes (1–60), the break whole seconds (0–600), and the number of rounds a whole number from 1 to 99.
         </p>
       )}
       {notice === 'create-format' && (
@@ -107,6 +111,14 @@ export default async function SpeedDatingPage(props: {
                 <span className="ml-2 text-xs text-gray-500">{canOrganize ? 'you also participate:' : 'you participate:'}</span>
               )}
               {badge(seatStatus.get(e.id))}
+              {getCheckInMode(e.format) &&
+                seatStatus.get(e.id) === 'registered' &&
+                seatCheckedIn.get(e.id) === false &&
+                (e.state === 'open' || e.state === 'closed' || e.state === 'running') && (
+                  <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-900">
+                    NOT checked in — you will not be paired
+                  </span>
+                )}
             </span>
             <span className="text-sm text-gray-500">
               {e.scheduled_at

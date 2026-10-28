@@ -1,25 +1,36 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { describePlan } from './event-plan'
+import { describePlan, naturalRounds, roundsForLength, totalMinutesFor } from './event-plan'
 
 const inputCls = 'rounded border border-gray-300 px-2 py-1 text-sm'
 
-// Round length, break length, and a live "how long will this take" line. Rendered
-// INSIDE the create/edit form: it reads the form's own side-capacity and
-// repeat-meeting fields as they change, so the preview follows what the
-// organizer is typing without a round trip. The expected-people box is a
-// planning aid only (no `name`, never submitted).
+// A starting cap when nothing is set yet: what the event would naturally take,
+// but no more than this, because 13 rounds of 7 minutes is a long evening.
+const SUGGESTED_MAX_ROUNDS = 8
+
+// Round length, break length, the cap on rounds / event length, and a live
+// "how long will this take" line. Rendered INSIDE the create/edit form: it reads
+// the form's own side-capacity and repeat-meeting fields as they change, so the
+// preview follows what the organizer is typing without a round trip. The
+// expected-people box is a planning aid only (no `name`, never submitted).
+//
+// ROUNDS vs LENGTH: the organizer states ONE of them and the other fills in from
+// round length + break length (founder 2026-10-28). Only the rounds field has a
+// `name`, so only the round count is submitted: when the length is the one being
+// typed, the rounds box shows the number that fits and THAT is what is saved.
 export function TimingFields({
   defaultRoundMinutes = 7,
   defaultBreakSeconds = 30,
   defaultPeople = 14,
   defaultAllowRepeats = false,
+  defaultMaxRounds,
 }: {
   defaultRoundMinutes?: number
   defaultBreakSeconds?: number
   defaultPeople?: number
   defaultAllowRepeats?: boolean
+  defaultMaxRounds?: number | null
 }) {
   const root = useRef<HTMLDivElement>(null)
   const [roundMinutes, setRoundMinutes] = useState(String(defaultRoundMinutes))
@@ -27,6 +38,12 @@ export function TimingFields({
   const [people, setPeople] = useState(String(defaultPeople))
   const [sides, setSides] = useState<{ on: boolean; a: number; b: number }>({ on: false, a: 0, b: 0 })
   const [repeats, setRepeats] = useState(false)
+  // Which of the two the organizer typed last; the other is computed from it.
+  const [driver, setDriver] = useState<'rounds' | 'length'>('rounds')
+  const [typedRounds, setTypedRounds] = useState(
+    String(defaultMaxRounds ?? (Math.min(naturalRounds({ people: defaultPeople }), SUGGESTED_MAX_ROUNDS) || SUGGESTED_MAX_ROUNDS)),
+  )
+  const [typedLength, setTypedLength] = useState('')
 
   useEffect(() => {
     const form = root.current?.closest('form')
@@ -58,6 +75,19 @@ export function TimingFields({
   const n = Math.max(0, Math.floor(Number(people) || 0))
   const sidePeople =
     sides.on ? { a: sides.a || Math.ceil(n / 2), b: sides.b || Math.floor(n / 2) } : undefined
+
+  // The pair: the typed one as typed, the other computed from round + break length.
+  const typedRoundsNum = Math.floor(Number(typedRounds))
+  const typedLengthNum = Math.floor(Number(typedLength))
+  const rounds =
+    driver === 'rounds'
+      ? typedRoundsNum
+      : valid && typedLengthNum > 0
+        ? roundsForLength(typedLengthNum, r * 60, b)
+        : 0
+  const roundsShown = driver === 'rounds' ? typedRounds : rounds > 0 ? String(rounds) : ''
+  const lengthShown =
+    driver === 'length' ? typedLength : valid && rounds > 0 ? String(totalMinutesFor(rounds, r * 60, b)) : ''
 
   return (
     <div ref={root} className="space-y-2">
@@ -105,6 +135,40 @@ export function TimingFields({
           Let people meet more than once
         </label>
       </div>
+      <div className="flex flex-wrap items-center gap-3 text-sm text-gray-600">
+        <label className="flex items-center gap-1">
+          Number of rounds (at most)
+          <input
+            name="maxRounds"
+            type="number"
+            min="1"
+            max="99"
+            required
+            value={roundsShown}
+            onChange={(e) => {
+              setDriver('rounds')
+              setTypedRounds(e.target.value)
+            }}
+            className={`${inputCls} w-16`}
+          />
+        </label>
+        <span className="text-gray-400">or</span>
+        <label className="flex items-center gap-1">
+          Event length (at most)
+          <input
+            type="number"
+            min="1"
+            value={lengthShown}
+            onChange={(e) => {
+              setDriver('length')
+              setTypedLength(e.target.value)
+            }}
+            className={`${inputCls} w-20`}
+          />
+          min
+        </label>
+        <span className="text-xs text-gray-500">Fill in either one — the other follows from the round and break length.</span>
+      </div>
       <p className="text-sm text-blue-700" aria-live="polite">
         {valid
           ? describePlan({
@@ -113,6 +177,7 @@ export function TimingFields({
               roundSeconds: r * 60,
               breakSeconds: b,
               allowRepeats: repeats,
+              maxRounds: rounds > 0 ? rounds : null,
             })
           : 'Enter a round length (whole minutes) and a break (whole seconds) to see the plan.'}
       </p>

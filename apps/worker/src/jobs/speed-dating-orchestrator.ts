@@ -22,7 +22,7 @@ export async function runOrchestratorTick(admin: SupabaseClient): Promise<void> 
   // than merely silent.
   const { data: events, error: eventsErr } = await admin
     .from('sd_events')
-    .select('id, org_id, round_duration_seconds, break_duration_seconds, allow_repeat_pairings')
+    .select('id, org_id, round_duration_seconds, break_duration_seconds, allow_repeat_pairings, rounds_planned, format')
     .eq('state', 'running')
   if (eventsErr) {
     console.error(`[orchestrator] could not read sd_events: ${eventsErr.message}`)
@@ -68,15 +68,24 @@ export async function runOrchestratorTick(admin: SupabaseClient): Promise<void> 
       continue // rounds exist but none active/complete (pending being built elsewhere)
     }
 
-    // Gather inputs: checked-in participants only (the lobby gate matters for
-    // a live event), full pairing history, org-wide personal blocks.
-    const { data: participants, error: participantsErr } = await admin
+    // The organizer's cap on rounds (sd_events.rounds_planned, founder 2026-10-28): once that many
+    // rounds exist and the last one has been closed above, there is nothing left to build — the
+    // organizer completes the event. Same rule as runPairingRound (modules/speed-dating/ui/actions.ts).
+    if (event.rounds_planned !== null && (rounds ?? []).length >= event.rounds_planned) continue
+
+    // Gather inputs: registered participants — and, where the event USES check-in (format.checkIn,
+    // founder 2026-10-28), only those marked arrived — plus the full pairing history and org-wide
+    // personal blocks. This used to filter on checked_in ALWAYS, while the manual button did not and
+    // nothing in the app set checked_in: a running worker would have paired nobody at any event.
+    const usesCheckIn = ['staff', 'self'].includes(String((event.format as { checkIn?: unknown } | null)?.checkIn ?? ''))
+    let participantsQuery = admin
       .from('sd_participants')
       .select('id, user_id, pool_side')
       .eq('event_id', event.id)
       .eq('status', 'registered')
       .eq('seat_type', 'participant')
-      .eq('checked_in', true)
+    if (usesCheckIn) participantsQuery = participantsQuery.eq('checked_in', true)
+    const { data: participants, error: participantsErr } = await participantsQuery
     if (participantsErr) {
       console.error(
         `[orchestrator] could not read sd_participants for event ${event.id}: ${participantsErr.message}`,

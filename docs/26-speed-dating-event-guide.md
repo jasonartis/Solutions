@@ -30,9 +30,11 @@ Audience and mentor seats exist in the schema but have no UI. **GAP.**
 
 1. **Organizer: create** — module page -> *Create event* (name; optional start time, **round length
    and break length**, "let people meet more than once", resume-review, share-contact, two sides).
-   A live line under the timing boxes reads e.g. "14 people, up to 13 rounds, about 1.5 hours"
-   (the number of rounds is fixed by who is registered, not typed in; personal blocks can only
-   shorten it). Event is a **draft** nobody else sees. A draft, open or closed event has an *Edit details*
+   The organizer also sets **how many rounds at most OR how long the event may run** — fill in
+   either one and the other follows from the round and break length (6 rounds of 7 min with 30 s
+   breaks = 45 min). A live line reads e.g. "14 people, 6 rounds, about 45 minutes". Both the
+   *Run next round* button and the worker stop at that number. (Without a cap — older events —
+   the rotation runs until everyone has met everyone and the line says "up to".) Event is a **draft** nobody else sees. A draft, open or closed event has an *Edit details*
    button on its page: name, description, start time, timing, switches and sides can change until
    a round has run; the **sides lock once anyone has registered** (they chose one).
 2. **Organizer: open registration** — event page -> *Open registration*. Daters now see it under
@@ -72,8 +74,17 @@ Audience and mentor seats exist in the schema but have no UI. **GAP.**
 
 - ~~Whether you are the organizer or a participant in the events list~~ — the list now shows
   "you organize" and, for events you hold a seat in, "you participate".
-- Check-in: the lobby says "check in at the front desk", but **no screen sets checked-in** and
-  pairing uses everyone *registered*, so it has no effect. **GAP.**
+- **Check-in** is a per-event setting (create/edit form, "Check-in"): *Not used* (everyone
+  registered is paired), *Staff mark people as arrived* (in-person) or *People check themselves in*
+  (online). Where it is used, ONLY checked-in people are paired, by the manual button and the worker
+  alike. A registered-but-not-checked-in person sees a loud amber **"You are NOT checked in yet"**
+  box (with an "I'm here" button in the online mode, "tell the organizer at the entrance" in the staff
+  mode), a "NOT checked in — you will not be paired" badge on the events list, and, during a round,
+  "You're not checked in, so you are not in any round". Organizers see "Check-in is ON: 9 of 12
+  registered are checked in", an arrived/not-arrived mark per person with *Mark arrived* / *Undo
+  arrival*, and *Run next round* refuses (with a notice) until two people are checked in. Someone
+  who checks in mid-event joins at the next round; the round already running is not touched. Only
+  an organizer can check others in — a host cannot (the database pins that).
 - A round that ran out is treated as ended by the page, but its stored state stays `active`
   until the worker (or the next manual round) closes it.
 
