@@ -1459,6 +1459,16 @@ mechanism is proven in the managed environment, but it carries rules that are no
     parent** — an organizer scoped to event X re-pointed a seat's `event_id` at event Y
     and skipped every Y-side gate, which lived only in the INSERT guard. Pin the parent
     key, or authorise against NEW's parent too.
+    **A cheap, permanent MUTATION CHECK for any trigger/function rule (same slice):**
+    function definitions are transactional, so a test can read the deployed body with
+    `pg_get_functiondef`, swap one line (e.g. `if new.state = 'draft' then` -> `if false
+    then`), re-create it INSIDE a transaction that is always rolled back, and assert the
+    refused act now SUCCEEDS. The helper should throw if the target text is absent, or the
+    mutation silently mutates nothing. Worked example: `mutate()` in
+    `packages/db/src/sd-closed-state.test.ts` (four such checks, incl. one across two
+    connections). Watch for a DIFFERENT gate refusing the mutated act — there, a
+    non-definer scope trigger raised "Unknown event" until the fixture user could see the
+    target event — or the mutation check passes for an unrelated reason.
 
 ## Hard rules
 
