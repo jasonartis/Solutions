@@ -42,7 +42,7 @@ Audience and mentor seats exist in the schema but have no UI. **GAP.**
    registered people can still withdraw; the organizer can still promote from the waitlist and clear a
    removal); *Reopen registration* undoes it. *Start event* works from open or closed. *Back to draft*
    is offered only while nobody is registered or waiting and no round has run (the database refuses it
-   otherwise, so people who signed up are never silently dropped). To fix a wrong time or name, *Edit
+   otherwise, so people who signed up are never silently dropped). A dater who only had the page open (never registered) and reloads after *Back to draft* sees "This event isn't available right now" with a link back to the events list — the same panel as for a deleted or unknown event, so it reveals nothing (since `7e7c88f`). To fix a wrong time or name, *Edit
    details* (nobody is notified); to end it, *Cancel event*. (Since 2026-10-27, `20261027010000`.)
 3. **Daters: register** — event page -> *Register for this event* (pick a side only if the
    organizer enabled two sides; nothing is read from profiles). The list shows their status
