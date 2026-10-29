@@ -1572,7 +1572,7 @@ in the sections below.
   and 8 Claude sessions (3.6 GB). Turbopack (Rust) dies first, then the shell. Check
   `(Get-CimInstance Win32_OperatingSystem).FreeVirtualMemory` before debugging; the fix is the
   founder closing apps/sessions — never kill processes that are not yours. CI is unaffected,
-  so a pushed change still gets its e2e run there. **AFTER such a crash the dev server can keep failing even with memory back: `[WebServer] Compaction failed` / `Persisting failed` in the e2e log = Turbopack's cache is corrupted — delete `apps/web/.next/dev` (git-ignored, regenerable) with no server running and retry (2026-10-29).**
+  so a pushed change still gets its e2e run there. **AFTER such a crash the dev server can keep failing even with memory back: `[WebServer] Compaction failed` / `Persisting failed` in the e2e log = Turbopack's cache is corrupted — delete `apps/web/.next/dev` (git-ignored, regenerable) with no server running and retry (2026-10-29). Playwright's own shutdown re-corrupts it, so delete it BEFORE EVERY local e2e run.**
 - **NO LOG ACCESS FROM THE TERMINAL FOR PAST PROD ERRORS (tried 2026-10-14, don't retry blind):**
   the Management API `analytics/endpoints/logs.all` is REMOVED (410); its replacement
   `.../analytics/endpoints/logs` answers `Table "postgres_logs" does not exist` with our

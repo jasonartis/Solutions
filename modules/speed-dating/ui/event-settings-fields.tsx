@@ -41,8 +41,8 @@ export function EventSettingsFields({ defaults = {} }: { defaults?: EventSetting
         Check-in
         <select name="checkIn" defaultValue={getCheckInMode(defaults.format) ?? ''} className="rounded border border-gray-300 px-2 py-1 text-sm">
           <option value="">Not used — everyone registered is paired</option>
-          <option value="staff">Staff mark people as arrived (in-person) — only arrived people are paired</option>
-          <option value="self">People check themselves in (online) — only checked-in people are paired</option>
+          <option value="staff">The organizer checks people in — only people they mark as arrived are paired</option>
+          <option value="self">People check themselves in (from about 15 min before the start) — only checked-in people are paired</option>
         </select>
       </label>
       <details className="rounded border border-gray-100 p-2" open={Boolean(sides)}>

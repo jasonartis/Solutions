@@ -1,5 +1,4 @@
 import Link from 'next/link'
-import { notFound } from 'next/navigation'
 import { FORMER_MEMBER_LABEL, loadFormerMembers } from '@platform/core'
 import { requireOrgModule } from '@/lib/module-gate'
 import {
@@ -8,6 +7,7 @@ import {
   allowRegisterAgain,
   checkInParticipant,
   checkInSelf,
+  markEveryoneArrived,
   deleteEvent,
   markInterest,
   promoteNextWaitlisted,
@@ -22,6 +22,7 @@ import {
   withdrawFromEvent,
 } from '../../actions'
 import { getCheckInMode, getEventSides, type SideKey } from '../../event-format'
+import { selfCheckInOpen } from '../../event-plan'
 import LiveRoundRefresh from './live-round-refresh'
 import VideoRoom from './video-room'
 import { SubmitButton } from '../../submit-button'
@@ -61,7 +62,26 @@ export default async function EventPage(props: {
     .select('id, org_id, name, state, scheduled_at, resume_review_enabled, round_duration_seconds, break_duration_seconds, allow_repeat_pairings, rounds_planned, lobby_opens_at, format')
     .eq('id', eventId)
     .maybeSingle()
-  if (!event) notFound()
+  if (!event) {
+    // RLS hides a DRAFT (and a deleted event) from anyone without a seat, so a dater who had the page open
+    // when the organizer moved the event back to draft used to get a bare 404. One friendly panel with the
+    // SAME text for "back to draft", "deleted" and "never existed" — so the page is not an oracle for which
+    // it is. (Fix requested by the closed-state session, solutions-platform-b3, 2026-10-29.)
+    return (
+      <div>
+        <p className="mb-1 text-sm text-gray-400">{org.name}</p>
+        <section className="rounded-lg border border-gray-200 bg-white p-5" data-testid="event-unavailable">
+          <h1 className="mb-2 text-lg font-semibold">This event isn&apos;t available right now</h1>
+          <p className="text-sm text-gray-600">
+            The organizer may have moved it back to draft or removed it. Check the events list for what is open.
+          </p>
+          <Link href={`/o/${orgSlug}/m/speed-dating`} className="mt-3 inline-block text-sm text-blue-600 hover:underline">
+            ← Back to events
+          </Link>
+        </section>
+      </div>
+    )
+  }
   const sides = getEventSides(event.format)
   const checkInMode = getCheckInMode(event.format)
 
@@ -216,6 +236,11 @@ export default async function EventPage(props: {
   const breakEndsAt = roundEndsAt ? new Date(roundEndsAt.getTime() + event.break_duration_seconds * 1000) : null
   const onBreak = Boolean(roundEndsAt && now >= roundEndsAt)
   const lobbyOpen = event.lobby_opens_at ? now >= new Date(event.lobby_opens_at) : null
+  // The last planned round: after it there is no "next round", only the organizer wrapping up.
+  const isLastRound = event.rounds_planned !== null && activeRound !== null && activeRound.round_number >= event.rounds_planned
+  const allRoundsRun = event.rounds_planned !== null && (rounds ?? []).length >= event.rounds_planned
+  // Self check-in is only offered inside the lobby window (see selfCheckInOpen).
+  const selfCheckInIsOpen = selfCheckInOpen({ state: event.state, scheduledAt: event.scheduled_at, lobbyOpensAt: event.lobby_opens_at })
 
   return (
     <div>
@@ -252,6 +277,11 @@ export default async function EventPage(props: {
         <p className="mb-6 rounded border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
           No round was started: this event uses check-in and fewer than two people are checked in. Mark people as arrived
           in the roster below (or ask them to check in), then run the round.
+        </p>
+      )}
+      {notice === 'checkin-not-open' && (
+        <p className="mb-6 rounded border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
+          Check-in is not open yet. It opens about 15 minutes before the event starts, or when the organizer starts it.
         </p>
       )}
       {notice === 'checkin-refused' && (
@@ -387,6 +417,12 @@ export default async function EventPage(props: {
               Registration is closed: nobody new can sign up, and people can still withdraw. Nobody is notified.
             </p>
           )}
+          {event.state === 'running' && allRoundsRun && (
+            <p className="mb-2 rounded border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm text-indigo-900" data-testid="all-rounds-run">
+              All {event.rounds_planned} planned {event.rounds_planned === 1 ? 'round has' : 'rounds have'} run. When the last one is over,
+              press <span className="font-medium">Complete event</span>, then <span className="font-medium">Reveal mutual matches</span>.
+            </p>
+          )}
           {checkInMode && (event.state === 'open' || event.state === 'closed' || event.state === 'running') && (
             <p className="mb-2 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900" data-testid="checkin-summary">
               Check-in is ON ({checkInMode === 'staff' ? 'you mark people as arrived' : 'people check themselves in'}): only people marked
@@ -428,6 +464,13 @@ export default async function EventPage(props: {
           <h3 className="mb-1 text-xs uppercase tracking-wide text-gray-400">
             Roster ({(participants ?? []).filter((p) => p.status === 'registered').length} registered{checkInMode ? `, ${arrivedCount} arrived` : ''})
           </h3>
+          {canOrganize && checkInMode && registeredSeats.some((p) => !p.checked_in) && (
+            <form action={markEveryoneArrived.bind(null, orgSlug, eventId)} className="mb-2">
+              <SubmitButton className={linkBtn} pendingLabel="Marking…">
+                Mark everyone arrived
+              </SubmitButton>
+            </form>
+          )}
           <ul className="mb-4 space-y-0.5 text-sm text-gray-700">
             {(participants ?? []).map((p) => (
               <li key={p.id}>
@@ -576,18 +619,26 @@ export default async function EventPage(props: {
               <section role="alert" data-testid="not-checked-in" className="rounded-lg border-2 border-amber-400 bg-amber-50 p-5">
                 <p className="text-base font-semibold text-amber-900">You are NOT checked in yet.</p>
                 <p className="mt-1 text-sm text-amber-900">
-                  Being registered is not enough: only people who are checked in are paired in the rounds. If you do not
+                  {event.state !== 'running' && 'That is normal before the event starts — but '}
+                  {event.state === 'running' ? 'O' : 'o'}nly people who are checked in are paired in the rounds. If you do not
                   check in, you will sit the event out{event.state === 'running' ? ' — right now you are not in any round' : ''}.
                 </p>
                 {checkInMode === 'self' ? (
-                  <form action={checkInSelf.bind(null, orgSlug, eventId, mySeat.id)} className="mt-3">
-                    <SubmitButton className={btnCls} pendingLabel="Checking in…">
-                      I&apos;m here — check me in
-                    </SubmitButton>
-                  </form>
+                  selfCheckInIsOpen ? (
+                    <form action={checkInSelf.bind(null, orgSlug, eventId, mySeat.id)} className="mt-3">
+                      <SubmitButton className={btnCls} pendingLabel="Checking in…">
+                        I&apos;m here — check me in
+                      </SubmitButton>
+                    </form>
+                  ) : (
+                    <p className="mt-2 text-sm font-medium text-amber-900">
+                      Check-in opens about 15 minutes before the event starts (or when the organizer starts it). When it opens,
+                      come back to this page and tap &quot;I&apos;m here&quot;.
+                    </p>
+                  )
                 ) : (
                   <p className="mt-2 text-sm font-medium text-amber-900">
-                    When you arrive, tell the organizer at the entrance so they can check you in.
+                    When you are ready, tell the organizer you are here so they can check you in.
                   </p>
                 )}
               </section>
@@ -645,7 +696,11 @@ export default async function EventPage(props: {
                 Right now
               </h2>
               {!activeRound && (
-                <p className="text-sm text-indigo-900">Waiting for the next round to start…</p>
+                <p className="text-sm text-indigo-900">
+                  {allRoundsRun
+                    ? 'All the rounds are done. The organizer will finish the event and reveal your matches.'
+                    : 'Waiting for the next round to start…'}
+                </p>
               )}
               {activeRound && !myCurrentPairing && (
                 <p className="text-sm text-indigo-900">
@@ -667,7 +722,12 @@ export default async function EventPage(props: {
               {activeRound && myCurrentPairing && myCurrentPartnerId && (
                 <p className="text-sm text-indigo-900">
                   {onBreak ? (
-                    <>Round {activeRound.round_number} complete — you were with {seatName(myCurrentPartnerId)}. Take a break.</>
+                    <>
+                      Round {activeRound.round_number} complete — you were with {seatName(myCurrentPartnerId)}.{' '}
+                      {isLastRound
+                        ? 'That was the last round — the organizer will finish the event and reveal your matches.'
+                        : 'Take a break.'}
+                    </>
                   ) : (
                     <>
                       Round {activeRound.round_number} — you&apos;re with{' '}
@@ -682,7 +742,7 @@ export default async function EventPage(props: {
                       Ends in <span className="font-medium">{formatCountdown(roundEndsAt.getTime() - now.getTime())}</span>.
                     </>
                   )}
-                  {onBreak && breakEndsAt && (
+                  {onBreak && breakEndsAt && !isLastRound && (
                     <>
                       {' '}
                       Next round starts in <span className="font-medium">{formatCountdown(breakEndsAt.getTime() - now.getTime())}</span>.

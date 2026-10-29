@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import {
   buildNextRound,
+  naturalRoundsForSeats,
   rotationExhausted,
   tryCreateVideoRoom,
   type SeatPair,
@@ -135,6 +136,15 @@ export async function runOrchestratorTick(admin: SupabaseClient): Promise<void> 
 
     const seats = participants.map((p) => ({ id: p.id, userId: p.user_id, poolSide: p.pool_side }))
     const blockedUserPairs = (blocks ?? []).map((b) => ({ a: b.blocker_user_id, b: b.blocked_user_id }))
+
+    // Same rule as runPairingRound: the cap cannot promise more rounds than the people can use.
+    if ((rounds ?? []).length === 0 && event.rounds_planned !== null && !event.allow_repeat_pairings) {
+      const natural = naturalRoundsForSeats(seats)
+      if (natural > 0 && natural < event.rounds_planned) {
+        const { error } = await admin.from('sd_events').update({ rounds_planned: natural }).eq('id', event.id)
+        if (error) console.error(`[orchestrator] could not shrink rounds_planned for event ${event.id}: ${error.message}`)
+      }
+    }
 
     const plan = buildNextRound({
       seats,

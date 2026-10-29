@@ -7,12 +7,13 @@ import {
   authorizeVideoJoin,
   buildNextRound,
   getVideoProvider,
+  naturalRoundsForSeats,
   tryCreateVideoRoom,
   type VideoConnectionOptions,
 } from '@modules/speed-dating'
 import { createClient } from '@/lib/supabase/server'
 import { getCheckInMode, getEventSides, getShareContactOnMatch, parseEventFormat, type SideKey } from './event-format'
-import { parseTimings } from './event-plan'
+import { parseTimings, selfCheckInOpen } from './event-plan'
 
 // Speed-dating actions. RLS + the sd_ guard triggers are the enforcement
 // layer (organize-write for event control, insert-self/pins for participants,
@@ -167,6 +168,10 @@ export async function setEventState(orgSlug: string, eventId: string, state: str
   }
   revalidatePath(`/o/${orgSlug}/m/speed-dating`)
   revalidatePath(base)
+  // Land on the clean URL: without this, after "Save changes" (?notice=edit-saved) every later button on the
+  // page kept showing "Event updated." because the form posted back to the same URL (found in the founder's
+  // prod walkthrough by the closed-state session, 2026-10-29).
+  redirect(base)
 }
 
 // Organizer: delete an event. IRREVERSIBLE, so (per the platform's "warn for
@@ -266,8 +271,41 @@ export async function checkInParticipant(orgSlug: string, eventId: string, parti
 }
 
 // "I'm here": a person checks THEMSELVES in. Only offered where the event lets people do that.
+// Only inside the lobby window (selfCheckInOpen: ~15 min before the scheduled start, or once the organizer
+// has started the event) and only where the event lets people check themselves in — otherwise someone could
+// tap "I'm here" a week early and never show up. An app-level rule: the database lets a person set their
+// own checked_in whenever, which only ever affects their own pairing.
 export async function checkInSelf(orgSlug: string, eventId: string, participantId: string) {
+  const supabase = await createClient()
+  const { data: event } = await supabase
+    .from('sd_events')
+    .select('state, format, scheduled_at, lobby_opens_at')
+    .eq('id', eventId)
+    .maybeSingle()
+  const open =
+    event &&
+    getCheckInMode(event.format) === 'self' &&
+    selfCheckInOpen({ state: event.state, scheduledAt: event.scheduled_at, lobbyOpensAt: event.lobby_opens_at })
+  if (!open) redirect(`/o/${orgSlug}/m/speed-dating/events/${eventId}?notice=checkin-not-open`)
   await setCheckedIn(orgSlug, eventId, participantId, true)
+}
+
+// "Mark everyone arrived": one tap for the organizer instead of one per person. Only people who are
+// registered participants and not yet arrived are touched; the organizer tier is exempt from
+// sd_pin_participant, so this needs no migration.
+export async function markEveryoneArrived(orgSlug: string, eventId: string) {
+  const supabase = await createClient()
+  const base = `/o/${orgSlug}/m/speed-dating/events/${eventId}`
+  const { error } = await supabase
+    .from('sd_participants')
+    .update({ checked_in: true, checked_in_at: new Date().toISOString() })
+    .eq('event_id', eventId)
+    .eq('status', 'registered')
+    .eq('seat_type', 'participant')
+    .eq('checked_in', false)
+  if (error) redirect(`${base}?notice=checkin-refused`)
+  await recordActivity(supabase, { moduleKey: 'speed-dating', action: 'participants.checked_in_all', orgSlug })
+  revalidatePath(base)
 }
 
 // Two-sided events (opt-in, set at event creation — see event-format.ts):
@@ -431,6 +469,17 @@ export async function runPairingRound(orgSlug: string, eventId: string) {
   const pairable = checkInMode ? (participants ?? []).filter((p) => p.checked_in) : (participants ?? [])
   if (checkInMode && pairable.length < 2) {
     redirect(`/o/${orgSlug}/m/speed-dating/events/${eventId}?notice=checkin-needed`)
+  }
+
+  // THE CAP CANNOT PROMISE MORE ROUNDS THAN THE PEOPLE CAN USE. When the first round starts, shrink the
+  // organizer's cap to the number of rounds that gets everyone to meet everyone (the worker applies the same
+  // rule) — so a dater's "round 7 of 8" is never shown for an event that will run out after 7. Repeat-meeting
+  // events have no natural end and keep the cap as typed.
+  if ((rounds ?? []).length === 0 && event.rounds_planned !== null && !event.allow_repeat_pairings) {
+    const natural = naturalRoundsForSeats(pairable.map((p) => ({ poolSide: p.pool_side })))
+    if (natural > 0 && natural < event.rounds_planned) {
+      await supabase.from('sd_events').update({ rounds_planned: natural }).eq('id', eventId)
+    }
   }
 
   const seatUsers = pairable.map((p) => p.user_id)

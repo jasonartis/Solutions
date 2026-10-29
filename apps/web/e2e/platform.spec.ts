@@ -1126,6 +1126,7 @@ test('speed-dating module: resume-review profile card is self-write and gated by
   await page.getByRole('button', { name: 'Create (draft)' }).click()
   await page.getByRole('link', { name: eventName }).click()
   await page.getByRole('button', { name: 'Open registration' }).click()
+  await expect(page.getByRole('button', { name: 'Start event' })).toBeVisible()
 
   await signIn(page, 'charlie@demo.local')
   await page.goto('/o/demo-dating/m/speed-dating')
@@ -1159,6 +1160,7 @@ test('speed-dating module: two-sided event lets a participant pick a side at reg
   await page.getByRole('button', { name: 'Create (draft)' }).click()
   await page.getByRole('link', { name: eventName }).click()
   await page.getByRole('button', { name: 'Open registration' }).click()
+  await expect(page.getByRole('button', { name: 'Start event' })).toBeVisible()
 
   await signIn(page, 'charlie@demo.local')
   await page.goto('/o/demo-dating/m/speed-dating')
@@ -1205,6 +1207,7 @@ test('speed-dating module: two-sided event enforces per-side capacity and waitli
   await page.getByRole('button', { name: 'Create (draft)' }).click()
   await page.getByRole('link', { name: eventName }).click()
   await page.getByRole('button', { name: 'Open registration' }).click()
+  await expect(page.getByRole('button', { name: 'Start event' })).toBeVisible()
 
   // Charlie takes the only Men seat.
   await signIn(page, 'charlie@demo.local')
@@ -2552,6 +2555,10 @@ test('speed-dating module: organizer sets round length at creation, sees the pla
     await page.getByLabel('People you expect').fill('8')
     await expect(page.getByText('8 people, up to 7 rounds, about 41 minutes')).toBeVisible({ timeout: 1500 })
   }).toPass({ timeout: 15_000 })
+  // Nothing typed into the rounds/length boxes yet, so they FOLLOW the people: 8 people can use 7 rounds,
+  // which is 41 minutes — the same figures the preview line gives (they used to say 8 / 47 min vs 7 / 41).
+  await expect(page.getByLabel('Number of rounds (at most)')).toHaveValue('7')
+  await expect(page.getByLabel('Event length (at most)')).toHaveValue('41')
   await page.getByRole('button', { name: 'Create (draft)' }).click()
   await expect(page.getByRole('link', { name: eventName })).toBeVisible()
   await expect(page.getByText('you organize').first()).toBeVisible()
@@ -2569,6 +2576,10 @@ test('speed-dating module: organizer sets round length at creation, sees the pla
   await expect(page.getByText('Event updated.')).toBeVisible()
   await expect(page.getByRole('heading', { name: renamed })).toBeVisible()
   await expect(page.getByText('Rounds of 4 min with 60s breaks')).toBeVisible()
+  // ...and the "Event updated." notice must not outlive the next button press (it used to stay forever).
+  await page.getByRole('button', { name: 'Open registration' }).click()
+  await expect(page.getByRole('button', { name: 'Start event' })).toBeVisible()
+  await expect(page.getByText('Event updated.')).toHaveCount(0)
 
   // A cancelled event can no longer be edited.
   await page.getByRole('button', { name: 'Cancel event' }).click()
@@ -2596,10 +2607,12 @@ test('speed-dating module: organizer closes and reopens registration; back to dr
   await page.getByRole('button', { name: 'Create (draft)' }).click()
   await page.getByRole('link', { name: eventName }).click()
   await page.getByRole('button', { name: 'Open registration' }).click()
+  await expect(page.getByRole('button', { name: 'Start event' })).toBeVisible()
   // Nobody registered yet: back to draft is offered and works.
   await page.getByRole('button', { name: 'Back to draft' }).click()
   await expect(page.getByText('draft', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Open registration' }).click()
+  await expect(page.getByRole('button', { name: 'Start event' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Close registration' })).toBeVisible()
 
   await openAs('charlie@demo.local')
@@ -2668,6 +2681,7 @@ test('speed-dating module: organizer console counts pairings skipped by personal
   await page.getByRole('button', { name: 'Create (draft)' }).click()
   await page.getByRole('link', { name: pool }).click()
   await page.getByRole('button', { name: 'Open registration' }).click()
+  await expect(page.getByRole('button', { name: 'Start event' })).toBeVisible()
   await registerAs('charlie@demo.local', pool)
   await registerAs('dana@demo.local', pool)
   await signIn(page, 'alice@demo.local')
@@ -2708,6 +2722,7 @@ test('speed-dating module: organizer console counts pairings skipped by personal
     await page.getByRole('button', { name: 'Create (draft)' }).click()
     await page.getByRole('link', { name: sided }).click()
     await page.getByRole('button', { name: 'Open registration' }).click()
+    await expect(page.getByRole('button', { name: 'Start event' })).toBeVisible()
     await registerAs('charlie@demo.local', sided, 'Men')
     await registerAs('dana@demo.local', sided, 'Men')
     await registerAs('eve@demo.local', sided, 'Women')
@@ -2754,6 +2769,7 @@ test('speed-dating module: the organizer caps the rounds, the length follows, an
   await page.getByRole('link', { name }).click()
   await expect(page.getByText('1 round planned')).toBeVisible()
   await page.getByRole('button', { name: 'Open registration' }).click()
+  await expect(page.getByRole('button', { name: 'Start event' })).toBeVisible()
   for (const who of ['charlie@demo.local', 'dana@demo.local']) {
     await signIn(page, who)
     await page.goto('/o/demo-dating/m/speed-dating')
@@ -2770,6 +2786,7 @@ test('speed-dating module: the organizer caps the rounds, the length follows, an
   await expect(page.getByText('running', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Run next round (pair everyone)' }).click()
   await expect(page.getByText(/Rounds run: 1/)).toBeVisible()
+  await expect(page.getByTestId('all-rounds-run')).toContainText('All 1 planned round has run')
   const url = page.url()
   // The dater sees how far along the evening is.
   await signIn(page, 'charlie@demo.local')
@@ -2796,6 +2813,7 @@ test('speed-dating module: staff check-in — un-arrived people are told, are no
   await page.getByRole('button', { name: 'Create (draft)' }).click()
   await page.getByRole('link', { name }).click()
   await page.getByRole('button', { name: 'Open registration' }).click()
+  await expect(page.getByRole('button', { name: 'Start event' })).toBeVisible()
   const eventUrl = page.url()
 
   for (const who of ['charlie@demo.local', 'dana@demo.local']) {
@@ -2826,10 +2844,17 @@ test('speed-dating module: staff check-in — un-arrived people are told, are no
   // One arrival is still not enough; the second lets the round start.
   await page.locator('li', { hasText: 'Charlie C' }).getByRole('button', { name: 'Mark arrived' }).click()
   await expect(page.getByText('Roster (2 registered, 1 arrived)')).toBeVisible()
-  await page.locator('li', { hasText: 'Dana D' }).getByRole('button', { name: 'Mark arrived' }).click()
+  // One tap for the rest instead of one per person.
+  await page.getByRole('button', { name: 'Mark everyone arrived' }).click()
   await expect(page.getByText('Roster (2 registered, 2 arrived)')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Mark everyone arrived' })).toHaveCount(0)
+  await expect(page.getByText('8 rounds planned')).toBeVisible()
   await page.getByRole('button', { name: 'Run next round (pair everyone)' }).click()
   await expect(page.getByText(/Rounds run: 1/)).toBeVisible()
+  // The default cap was 8, but two people can only ever have ONE round: it shrank when the round started,
+  // so a dater is never shown "round 1 of 8" for an event that is over after round 1.
+  await expect(page.getByText('1 round planned')).toBeVisible()
+  await expect(page.getByTestId('all-rounds-run')).toBeVisible()
 
   // The dater now sees they are checked in, and no alarm.
   await signIn(page, 'charlie@demo.local')
@@ -2839,6 +2864,7 @@ test('speed-dating module: staff check-in — un-arrived people are told, are no
 })
 
 test('speed-dating module: self check-in — the person taps "I\'m here" and the alarm goes away', async ({ page }) => {
+  test.slow() // several sign-ins and a dev server compiling routes mid-test
   const name = 'Check-in Self ' + Date.now()
   await signIn(page, 'alice@demo.local')
   await page.goto('/o/demo-dating/m/speed-dating')
@@ -2847,6 +2873,7 @@ test('speed-dating module: self check-in — the person taps "I\'m here" and the
   await page.getByRole('button', { name: 'Create (draft)' }).click()
   await page.getByRole('link', { name }).click()
   await page.getByRole('button', { name: 'Open registration' }).click()
+  await expect(page.getByRole('button', { name: 'Start event' })).toBeVisible()
 
   await signIn(page, 'dana@demo.local')
   await page.goto('/o/demo-dating/m/speed-dating')
@@ -2855,6 +2882,20 @@ test('speed-dating module: self check-in — the person taps "I\'m here" and the
   await page.getByRole('button', { name: 'Register for this event' }).click()
   await posted
   await expect(page.getByTestId('not-checked-in')).toContainText('You are NOT checked in yet')
+  // Registered a week early: no button yet, and the page says when it opens (nobody can tap "I'm here" from home
+  // days ahead and then not show up).
+  await expect(page.getByTestId('not-checked-in')).toContainText('Check-in opens about 15 minutes before')
+  await expect(page.getByRole('button', { name: "I'm here — check me in" })).toHaveCount(0)
+  const eventUrl = page.url()
+
+  // The organizer starts the event: the window is open.
+  await signIn(page, 'alice@demo.local')
+  await page.goto(eventUrl)
+  await page.getByRole('button', { name: 'Start event' }).click()
+  await expect(page.getByText('running', { exact: true })).toBeVisible()
+
+  await signIn(page, 'dana@demo.local')
+  await page.goto(eventUrl)
   const checkIn = page.getByRole('button', { name: "I'm here — check me in" })
   await expect(checkIn).toBeVisible()
   const checked = page.waitForResponse((r) => r.request().method() === 'POST')
@@ -2862,4 +2903,16 @@ test('speed-dating module: self check-in — the person taps "I\'m here" and the
   await checked
   await expect(page.getByTestId('checked-in')).toContainText('You are checked in')
   await expect(page.getByTestId('not-checked-in')).toHaveCount(0)
+})
+
+// A dater whose event vanished (moved back to draft, deleted, or never existed) gets one friendly panel, the SAME
+// for all three, instead of a bare 404 — so the page is not an oracle for which it was.
+test('speed-dating module: an unavailable event shows a friendly panel, not a 404', async ({ page }) => {
+  await signIn(page, 'charlie@demo.local')
+  await page.goto('/o/demo-dating/m/speed-dating/events/00000000-0000-0000-0000-000000000000')
+  await expect(page.getByTestId('event-unavailable')).toContainText("This event isn't available right now")
+  await expect(page.getByRole('link', { name: '← Back to events' })).toBeVisible()
+  // A value that is not even a UUID gets the identical panel.
+  await page.goto('/o/demo-dating/m/speed-dating/events/not-an-id')
+  await expect(page.getByTestId('event-unavailable')).toBeVisible()
 })

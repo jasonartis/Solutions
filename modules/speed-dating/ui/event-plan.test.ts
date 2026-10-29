@@ -34,6 +34,11 @@ describe('planEvent with a round cap (rounds_planned)', () => {
     expect(plan.rounds).toBe(5)
     expect(plan.capped).toBe(false)
   })
+  it('a cap EQUAL to the natural count is not a decision: still "up to" (blocks can shorten it)', () => {
+    const plan = planEvent({ people: 8, ...t, allowRepeats: false, maxRounds: 7 })
+    expect(plan.rounds).toBe(7)
+    expect(plan.capped).toBe(false)
+  })
   it('a cap makes a repeat-meetings event plannable', () => {
     expect(planEvent({ people: 14, ...t, allowRepeats: true, maxRounds: 6 })).toEqual({ rounds: 6, totalMinutes: 45, capped: true })
   })
@@ -95,6 +100,34 @@ describe('parseTimings', () => {
   it('rejects out-of-range and non-integer values, including the round cap', () => {
     for (const [r, b, n] of [['0', '30', '6'], ['61', '30', '6'], ['2.5', '30', '6'], ['7', '-1', '6'], ['7', '601', '6'], ['', '30', '6'], ['7', 'x', '6'], ['7', '30', '0'], ['7', '30', '100'], ['7', '30', ''], ['7', '30', '2.5']]) {
       expect('error' in parseTimings(form(r!, b!, n!))).toBe(true)
+    }
+  })
+})
+
+import { selfCheckInOpen, lobbyOpenFrom } from './event-plan'
+
+describe('self check-in window', () => {
+  const start = '2026-11-01T20:00:00.000Z'
+  const at = (iso: string) => new Date(iso)
+  it('is open while the event is running, whatever the schedule', () => {
+    expect(selfCheckInOpen({ state: 'running', scheduledAt: null, lobbyOpensAt: null })).toBe(true)
+    expect(selfCheckInOpen({ state: 'running', scheduledAt: start, lobbyOpensAt: null, now: at('2026-10-01T00:00:00Z') })).toBe(true)
+  })
+  it('opens 15 minutes before the scheduled start, not before', () => {
+    expect(selfCheckInOpen({ state: 'open', scheduledAt: start, lobbyOpensAt: null, now: at('2026-11-01T19:44:59Z') })).toBe(false)
+    expect(selfCheckInOpen({ state: 'open', scheduledAt: start, lobbyOpensAt: null, now: at('2026-11-01T19:45:00Z') })).toBe(true)
+    expect(selfCheckInOpen({ state: 'closed', scheduledAt: start, lobbyOpensAt: null, now: at('2026-11-01T19:50:00Z') })).toBe(true)
+  })
+  it('an event with no scheduled time cannot be self-checked-in before it starts', () => {
+    expect(selfCheckInOpen({ state: 'open', scheduledAt: null, lobbyOpensAt: null })).toBe(false)
+  })
+  it('an explicit lobby_opens_at wins over the 15-minute default', () => {
+    expect(lobbyOpenFrom(start, '2026-11-01T18:00:00Z')?.toISOString()).toBe('2026-11-01T18:00:00.000Z')
+    expect(selfCheckInOpen({ state: 'open', scheduledAt: start, lobbyOpensAt: '2026-11-01T18:00:00Z', now: at('2026-11-01T18:30:00Z') })).toBe(true)
+  })
+  it('never in a draft, complete or cancelled event', () => {
+    for (const state of ['draft', 'complete', 'cancelled']) {
+      expect(selfCheckInOpen({ state, scheduledAt: start, lobbyOpensAt: null, now: at('2026-11-01T20:30:00Z') })).toBe(false)
     }
   })
 })

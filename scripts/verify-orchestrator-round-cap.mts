@@ -132,5 +132,40 @@ check('CONTROL check-in USED (staff), everybody arrived: the round IS built', (a
 check('check-in USED (self), nobody arrived: NO round is built', (await firstTickRounds({ checkIn: 'self' }, false)) === 0)
 check('check-in NOT used, nobody arrived: the round IS built (the old worker built none)', (await firstTickRounds({}, false)) === 1)
 
+// ---- The cap cannot promise more rounds than the people can use (founder 2026-10-29) ------------------
+// When the first round starts, rounds_planned shrinks to what gets everyone to meet everyone. Two people
+// can only ever have ONE round, so a cap of 8 must become 1 — unless repeats are allowed (no natural end).
+async function capAfterFirstTick(cap: number, allowRepeats: boolean) {
+  const name = `Cap shrink check ${Date.now()}`
+  const ev = must(
+    await admin
+      .from('sd_events')
+      .insert({ org_id: org!.id, name, rounds_planned: cap, allow_repeat_pairings: allowRepeats, round_duration_seconds: 60, break_duration_seconds: 0 })
+      .select('id')
+      .single(),
+    'create event',
+  )
+  try {
+    for (const state of ['open', 'running']) {
+      const { error } = await admin.from('sd_events').update({ state }).eq('id', ev.id)
+      if (error) throw new Error(`-> ${state}: ${error.message}`)
+    }
+    for (const p of people!) {
+      const { error } = await admin.from('sd_participants').insert({
+        org_id: org!.id, event_id: ev.id, user_id: p.user_id, status: 'registered', seat_type: 'participant', checked_in: true,
+      })
+      if (error) throw new Error(`seat: ${error.message}`)
+    }
+    await runOrchestratorTick(admin)
+    const row = must(await admin.from('sd_events').select('rounds_planned').eq('id', ev.id).single(), 'read cap')
+    return row.rounds_planned as number | null
+  } finally {
+    await admin.from('sd_events').delete().eq('id', ev.id)
+  }
+}
+check('cap 8 with two people shrinks to 1 when the first round starts', (await capAfterFirstTick(8, false)) === 1)
+check('CONTROL: repeats allowed keeps the cap as typed (8)', (await capAfterFirstTick(8, true)) === 8)
+check('CONTROL: a cap already at the natural count (1) is left alone', (await capAfterFirstTick(1, false)) === 1)
+
 console.log(fails ? `\n${fails} FAILED` : '\nALL PASSED')
 process.exit(fails ? 1 : 0)

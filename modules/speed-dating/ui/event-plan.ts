@@ -12,6 +12,8 @@
 // (rounds - 1) * break. A cap also makes an event with repeat meetings
 // plannable, which it never was before (no natural end).
 
+import { roundsToMeetEveryone } from '../src/plan'
+
 export const MAX_ROUND_MINUTES = 60
 export const MAX_BREAK_SECONDS = 600
 export const MAX_ROUNDS = 99
@@ -37,9 +39,7 @@ export function parseTimings(formData: FormData): EventTimings | { error: string
 
 /** How many rounds the rotation would run with nobody capping it. */
 export function naturalRounds(opts: { people: number; sides?: { a: number; b: number } }): number {
-  if (opts.sides) return opts.sides.a > 0 && opts.sides.b > 0 ? Math.max(opts.sides.a, opts.sides.b) : 0
-  if (opts.people < 2) return 0
-  return opts.people % 2 === 0 ? opts.people - 1 : opts.people
+  return roundsToMeetEveryone(opts.people, opts.sides)
 }
 
 /** Total minutes for `rounds` rounds: a break between rounds, none after the last. */
@@ -79,7 +79,7 @@ export function planEvent(opts: {
     // No natural end: a cap is the only thing that makes this plannable.
     rounds = cap
     capped = cap !== null
-  } else if (cap !== null && cap <= natural) {
+  } else if (cap !== null && cap < natural) {
     rounds = cap
     capped = true
   } else {
@@ -108,4 +108,30 @@ export function describePlan(opts: Parameters<typeof planEvent>[0]): string {
     return `${people} people, ${plan.rounds} ${plan.rounds === 1 ? 'round' : 'rounds'}, ${describeDuration(plan.totalMinutes)}.`
   }
   return `${people} people, up to ${plan.rounds} ${plan.rounds === 1 ? 'round' : 'rounds'}, ${describeDuration(plan.totalMinutes)} (fewer if people block each other).`
+}
+
+// ---- self check-in window (founder 2026-10-28/29) ---------------------------------------------------
+// A person checking THEMSELVES in is only meaningful once the event is about to start: otherwise someone
+// can tap "I'm here" a week early and never show up. The window opens when the lobby does — the spec's
+// "~15 minutes early" before the scheduled start (or sd_events.lobby_opens_at where one is set), or
+// the moment the organizer starts the event. App-level rule only (the database lets a person set their own
+// checked_in at any time; that only affects their own pairing).
+export const LOBBY_LEAD_MINUTES = 15
+
+export function lobbyOpenFrom(scheduledAt: string | null, lobbyOpensAt: string | null): Date | null {
+  if (lobbyOpensAt) return new Date(lobbyOpensAt)
+  if (scheduledAt) return new Date(new Date(scheduledAt).getTime() - LOBBY_LEAD_MINUTES * 60_000)
+  return null
+}
+
+export function selfCheckInOpen(opts: {
+  state: string
+  scheduledAt: string | null
+  lobbyOpensAt: string | null
+  now?: Date
+}): boolean {
+  if (opts.state === 'running') return true
+  if (opts.state !== 'open' && opts.state !== 'closed') return false
+  const from = lobbyOpenFrom(opts.scheduledAt, opts.lobbyOpensAt)
+  return from !== null && (opts.now ?? new Date()).getTime() >= from.getTime()
 }

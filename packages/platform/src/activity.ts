@@ -110,6 +110,7 @@ export const ACTIVITY_ACTIONS = {
     'event.updated',
     'participant.checked_in',
     'participant.check_in_undone',
+    'participants.checked_in_all',
     'pairing_round.run',
     'event.deleted',
     'event.rejoined',

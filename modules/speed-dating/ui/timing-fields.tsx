@@ -39,10 +39,10 @@ export function TimingFields({
   const [sides, setSides] = useState<{ on: boolean; a: number; b: number }>({ on: false, a: 0, b: 0 })
   const [repeats, setRepeats] = useState(false)
   // Which of the two the organizer typed last; the other is computed from it.
-  const [driver, setDriver] = useState<'rounds' | 'length'>('rounds')
-  const [typedRounds, setTypedRounds] = useState(
-    String(defaultMaxRounds ?? (Math.min(naturalRounds({ people: defaultPeople }), SUGGESTED_MAX_ROUNDS) || SUGGESTED_MAX_ROUNDS)),
-  )
+  // 'auto' = nothing typed yet: the rounds box follows what the expected people can actually use (so the box,
+  // the length and the preview line never disagree). An existing event (edit form) starts on its saved cap.
+  const [driver, setDriver] = useState<'auto' | 'rounds' | 'length'>(defaultMaxRounds ? 'rounds' : 'auto')
+  const [typedRounds, setTypedRounds] = useState(String(defaultMaxRounds ?? SUGGESTED_MAX_ROUNDS))
   const [typedLength, setTypedLength] = useState('')
 
   useEffect(() => {
@@ -79,12 +79,16 @@ export function TimingFields({
   // The pair: the typed one as typed, the other computed from round + break length.
   const typedRoundsNum = Math.floor(Number(typedRounds))
   const typedLengthNum = Math.floor(Number(typedLength))
+  const natural = naturalRounds({ people: n, sides: sidePeople })
+  const autoRounds = natural > 0 ? Math.min(natural, SUGGESTED_MAX_ROUNDS) : SUGGESTED_MAX_ROUNDS
   const rounds =
-    driver === 'rounds'
-      ? typedRoundsNum
-      : valid && typedLengthNum > 0
-        ? roundsForLength(typedLengthNum, r * 60, b)
-        : 0
+    driver === 'auto'
+      ? autoRounds
+      : driver === 'rounds'
+        ? typedRoundsNum
+        : valid && typedLengthNum > 0
+          ? roundsForLength(typedLengthNum, r * 60, b)
+          : 0
   const roundsShown = driver === 'rounds' ? typedRounds : rounds > 0 ? String(rounds) : ''
   const lengthShown =
     driver === 'length' ? typedLength : valid && rounds > 0 ? String(totalMinutesFor(rounds, r * 60, b)) : ''
