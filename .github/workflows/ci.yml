@@ -109,7 +109,12 @@ jobs:
       # mismatch was measured between them) and periodically failed CI outright
       # on GitHub's release-API rate limit. `pnpm exec` always resolves to the
       # lockfile-pinned version; bump it with `pnpm up` like any other dep.
-      - run: pnpm exec supabase start
+      # -x imgproxy (founder-approved 2026-10-29): Storage's on-the-fly image
+      # resizer. Nothing uses it (image_transformation is off in config.toml, no
+      # code requests a transform), and its image pull is what twice hit the
+      # registries' "toomanyrequests" limit on 2026-10-27, killing the run before
+      # any test. Remove the flag if image transforms are ever turned on.
+      - run: pnpm exec supabase start -x imgproxy
 
       - name: Export Supabase env
         run: |
