@@ -218,6 +218,35 @@ rot; pipelines don't.
   (not a permanent archive) is a known tradeoff — Backblaze B2 stays the
   earmarked upgrade (docs/14) for unbounded off-site retention once that's
   worth a new account.
+- **⚠ FOUND 2026-11-03: THE NIGHTLY BACKUP ARTIFACTS ARE UNENCRYPTED AND THE
+  REPO IS PUBLIC.** `backup.yml` was built 2026-09-01 when the repo was
+  private; the repo went public the next day (2026-09-02) and the workflow
+  kept uploading. Measured: the artifact LIST is readable with no login
+  (63 artifacts, ~600 KB each, newest 2026-11-02); an anonymous zip download
+  is refused (401). GitHub's documented rule (not tested here, to avoid
+  using a second account) is that any signed-in GitHub user may download a
+  public repo's artifacts. Contents, read from the identical local dump
+  `backups/2026-10-27T04-45-06/data.sql`: **`auth.users` incl. password
+  hashes, `auth.sessions`, `auth.refresh_tokens`, `auth.identities`**, every
+  public table (names, `user_private`, `pending_invites` addresses, module
+  data). GitHub keeps no artifact-download log for a personal account, so
+  whether anyone downloaded one cannot be known.
+  **REMEDIATED 2026-11-03/04 (founder-approved, each step):** all 64
+  artifacts downloaded and zip-verified into `backups/github-artifacts/`
+  (git-ignored, 33 MB, local only), then deleted from GitHub (public list
+  reads `total_count: 0`); `backup.yml` DISABLED (`disabled_manually`);
+  every prod session revoked by `scripts/prod-sign-out-everyone.mts`
+  (sessions 144 → 0, refresh tokens 199 → 0, users 13 → 13). Founder to
+  change the superadmin password. **⚠ THERE ARE NO AUTOMATIC BACKUPS UNTIL
+  THE REPLACEMENT EXISTS** — run `pnpm backup:prod` by hand meanwhile.
+  **Founder decision: backups never go to a public place again, encrypted
+  or not** ("collect now, decrypt later"). Replacement: the job dumps,
+  encrypts, and writes straight to a private Backblaze B2 bucket with a
+  WRITE-ONLY key and object lock; the read key stays offline with the
+  founder; GitHub keeps no copy. Plan with the offsite-snapshot item above.
+  **Lesson:** flipping a repo public changes the exposure of EVERY workflow
+  output (artifacts, logs), not just the code — re-audit workflows whenever
+  visibility changes.
 - **RESTORE REHEARSED AND PROVEN, 2026-09-01/02** — the deliverable item 2
   actually asked for, not just the dump script. Restored the tested backup
   artifact's `schema.sql` + `data.sql` into a real throwaway Supabase

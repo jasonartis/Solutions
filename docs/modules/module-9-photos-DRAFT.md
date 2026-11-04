@@ -359,6 +359,26 @@ contributors who do not log in on their own never come back.
 6. Legal B1–B4 are platform-wide (removal route, quarantine, age gate,
    terms licence). Build them as their own platform slice before this module?
 
+### G. Founder answers, 2026-11-03 (second round)
+
+1. **Showcase on the FREE tier** (about 20 photos), built so moving to Pro is
+   a configuration change, not a rewrite. Free tier limits apply to the
+   whole platform: 1 GB storage shared with every module, 50 MB per file,
+   project pauses after a week of inactivity.
+2. Backup key placement — answered by the finding recorded in docs/12 on
+   2026-11-03 (the nightly database backup's artifacts on a public repo).
+3. **A file-capable scheduled runner (Edge Function on a cron): approved.**
+4. **No pins and no stored point for now.** Adding an optional point later
+   is a nullable column — additive and cheap — so nothing is lost by waiting.
+5. **PENDING tags are visible to everyone right away** (decision 5 stands;
+   the security reviewer's alternative was declined).
+6. Platform-wide legal slice: explained to the founder, decision pending.
+7. **Children: no logins under 13 for now (option A)**; an "I am 13 or
+   older" confirmation at signup. Children appear in and are tagged in
+   photos regardless (COPPA governs children USING the service, not photos
+   of them posted by adults). Parent-managed child accounts with verified
+   consent (option B) can be ADDED later; nothing in A has to be undone.
+
 ## Out of scope for v1
 
 Face recognition (never), video, links outside the org, per-album audiences,
