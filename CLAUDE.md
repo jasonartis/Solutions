@@ -44,6 +44,13 @@ section, keep it a SUMMARY with pointers: add the dated story to the journal / t
   `git add <path>` is not enough — the index may hold another session's files); before pushing, `git log --oneline
   origin/master..HEAD` and ask the owner of any commit that is not yours; claim migration version numbers with the other
   sessions first (`ListAgents` → `SendMessage`). Red CI is shared state: one bad migration blocks everyone's deploys.
+  **When another session has edits (or a STAGED copy) in a file you also changed** (2026-11-05, worked several times):
+  `git commit -- <path>` takes the WHOLE working-tree file, theirs included. Commit only your hunks from a private index:
+  `git diff HEAD -- <path> > p` → keep only your hunks → `GIT_INDEX_FILE=<tmp> git read-tree HEAD` → `git apply --cached p`
+  → commit with that `GIT_INDEX_FILE` set; then `git reset -q -- <path>` in the real index so it doesn't show a staged revert.
+- **`migrate:prod` is gated by Claude Code's auto-mode check ("Production Deploy")** even after the founder approved the
+  work earlier in the chat (2026-11-05): it needs his explicit go-ahead for THAT apply in the current turn. Do the backup and
+  dry run first, then ask with the dry-run list in hand; never reshape the command to slip past the check.
 - **The prod Before-User-Created signup hook is ON, deliberately (2026-10-13). Do not switch it off** (docs/21 §7.12.1).
 - **Dead Windows profile:** per-user state under `C:\Users\yarmishj` (no suffix) is the OLD profile — stale copies answer
   confidently and wrongly. Use `C:\Users\yarmishj.AEI-LT-JYARMISH`. Its leftover permission entries are the founder's call

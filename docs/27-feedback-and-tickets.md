@@ -114,7 +114,10 @@ needs pinning: `feedback_open(kind, title, body, org_id, module_key, context)`, 
 `/feedback/new`, `/feedback` (My feedback), `/feedback/[id]` (author-only; a superadmin opening someone else's is sent to the
 console); `/console/feedback` (queue: new+open by default, filters by status/kind) and `/console/feedback/[id]` (thread with
 internal notes, context panel, current positions, the 24 h activity trail, reply / internal note / status). `/privacy` gained a
-feedback paragraph (draft page; founder review of the wording is owed with the rest of it, docs/18 item 3).
+feedback paragraph — **wording APPROVED by the founder 2026-11-05** after he shortened it: "If you send feedback, we keep
+it and the replies, plus (unless you turn it off) the page you were on and your browser. Only platform staff read it."
+(`f576095`; "staff" chosen over "platform team" so it stays true if routing to org admins is ever decided — docs/27's open
+item 6; if that is decided, this sentence is the first thing to re-read). The rest of `/privacy` is still a draft (docs/18 item 3).
 
 **Verified:** `packages/db/src/feedback.test.ts` 11/11 (every refusal with a control; db suite 503/503); e2e
 `feedback: a person sends feedback…` passes locally (send from a module page, a second user gets 404, the superadmin sees the
