@@ -782,3 +782,39 @@ Built exactly as the 2026-10-26 handoff decided. **Moves (`sd_guard_event`):** d
 **BUILT (stage A of the founder's readiness grid):** a "Ready (n of m)" board on the organizer console for events that use check-in: one tile per registered participant, green "✓ Ready for N min" / amber "Not ready yet", side label for two-sided events, **Un-tick (not ready)** on ready tiles for organizers (a host sees the board, cannot un-tick — pinned by the database; letting a host un-tick would be a small Opus migration, not built). Test: `speed-dating module: check-in — un-ticked people are told and not paired; the organizer can only un-tick` (local e2e 2/2 with the self-check-in-window test).
 **NOT BUILT, recorded so it is not re-derived (founder 2026-11-05, "something like that"):** (B) the tiles also showing camera / mic / connected status — needs the person's browser to REPORT it, i.e. a new column or table, so a migration (Opus); (C) a **jump-in help room** (a staff member opens a separate 1:1 room with someone whose camera or mic is failing, helps, leaves, then starts the round) — a separate room rather than dropping into a pairing room, because video authorization admits only the two paired seats today and daters would otherwise have a staff member appear in a private date; (D) **live video thumbnails** with the tick in the corner — heavy (the organizer's browser receives every stream; not tested on the free JaaS tier) and a consent question (watching a face before the round is not watching a status), so it should be disclosed on the check-in screen. The original spec's organizer console is "grid of rooms with connection status only".
 **VERIFIED:** module vitest 90/90, apps/web typecheck clean, local e2e 2/2 (the rewritten check-in test; the self-check-in window test). `scripts/prod-verify-checkin-and-cap.mjs` rewritten for the self flow and NOT yet run against prod (needs the deploy first).
+
+## 2026-11-05 — SECURITY FOLLOW-UP SHIPPED; A LATE CHECK-IN COULD NEVER BE PAIRED (fixed); "reports I filed" export (Opus)
+
+**SECURITY FOLLOW-UP (the 2026-10-22 entry's three items) — `20261105010000`, ON PRODUCTION AND PROD-VERIFIED** (backup
+`backups/2026-11-05T10-25-36`; `prod-verify-sd-self-rejoin.mts` **167/7 before → 174/0 after**, the 7 being exactly the changed
+bodies; `prod-verify-sd-closed-state.mts` 37/0 and `prod-verify-insert-pins.mts` 271/0 after; ACL 17/17 on prod;
+`prod-verify-migration.ts` 0 failures, 2 benign trigger-function warnings). (1) `sd_pin_participant` refuses a `user_id` change
+for EVERY JWT caller ("A registration cannot be given to another person"); the no-JWT backend path is unchanged and the
+consent reset on that path still fires (test). (2) `sd_notes_guard` computes every check first and raises once — a seatless
+author and a seated-but-unmet author now cost the SAME scans (test reads `pg_stat_xact_user_tables`; it failed against the old
+body). (3) a note's `pairing_id` must be the pairing between the author's seat and the subject's seat. All four new/changed
+tests were mutation-checked against the old bodies. Adversarial review: no defects; ONE LOW residual recorded in the migration
+header and unchanged from before: an UNKNOWN event id still costs different work than a known one inside
+`sd_can_organize_event`, so a guessed uuid could reveal that an event exists (never who is registered). **The organizer-seating
+consent work (invite-then-accept) is still founder-deferred**; this migration only removed the organizer's ability to hand an
+existing seat to someone else.
+
+**SELF-ONLY CHECK-IN ON PROD (the other session's `10aae78`):** `scripts/prod-verify-checkin-and-cap.mjs` **12/12** against
+production after `10aae78` went READY (run by that session, 2026-11-05; recorded here at its request). The trailing
+"Assertion failed … async.c" after "ALL PASSED" is the known Node/Windows shutdown quirk.
+
+**BUG FIXED (`f6fe128`): a person who checked in after round 1 could NEVER be paired when a round cap was set — i.e. at every
+new event, since the cap is now required.** At the first round both `runPairingRound` and the worker orchestrator shrank
+`rounds_planned` to the natural count of the CHECKED-IN seats: 2 of 3 arrived → cap 1 → "all planned rounds have run" on the
+second press, and the third person sat out the whole event. That contradicted the 2026-10-28 rule "mid-event arrivals join at
+the next round". **Both now count every REGISTERED participant seat** (the upper bound on who can still arrive). Trade-off,
+accepted: if registered people never show, "round 2 of 5" can promise rounds that never run — a display overstatement, against
+the old failure of a person who can never be paired. `scripts/verify-orchestrator-round-cap.mts` gained the case (cap 3 vs the
+old 1; FAILS against the old worker). Prod check: `scripts/prod-verify-late-arrival.mjs` (charlie + dana check in, round 1,
+eve checks in, round 2 pairs eve) — result recorded below once the deploy is READY.
+
+**EXPORT: "Safety reports I filed"** (`ui/export.ts`, key `my-reports`, participant hat). The manifest's header already
+promised "reports they filed" but the data set did not exist. Exports reason, detail, during_call, state, created_at and the
+event name — never who was reported, never who reviewed it. `scripts/verify-sd-export-reports.mts` 6/6 locally as real users
+(charlie gets exactly his seeded report; dana, who filed none, gets none). **Still open from the 2026-10-28 Opus list:** names
+in the organizer's roster export (it carries `user_id`) — a privacy-rules question, not changed.

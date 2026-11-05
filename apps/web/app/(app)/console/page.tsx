@@ -103,6 +103,13 @@ export default async function ConsolePage(props: {
           zmanim prefetch coverage
         </span>
         <span className="text-gray-300">·</span>
+        <Link href="/console/feedback" className="text-blue-600 hover:underline">
+          Feedback
+        </Link>
+        <span className="text-gray-400" title="Bug reports, suggestions and questions people sent from inside the product">
+          what people are telling us
+        </span>
+        <span className="text-gray-300">·</span>
         <Link href="/console/positions" className="text-blue-600 hover:underline">
           Positions
         </Link>

@@ -12,7 +12,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getProfile } from '@/lib/platform'
 import { AppHeader } from '@/components/app-header'
 
-const LAST_UPDATED = 'October 16, 2026'
+const LAST_UPDATED = 'November 5, 2026'
 
 export default async function PrivacyPage() {
   // Public page, but signed-in people reach it from the footer too: give them
@@ -59,6 +59,12 @@ export default async function PrivacyPage() {
           up. It is deleted when you
           join, when the invitation is cancelled, or when it expires. Copies may remain in backups for
           a limited time.
+        </p>
+        <p>
+          If you send us feedback, we keep your message and the replies. Unless you choose
+          otherwise when sending, we also keep details about the page you were on and your
+          browser, to help us understand the problem. Only our platform team reads feedback;
+          your organization&apos;s administrators do not.
         </p>
         <p>
           If anyone on our staff ever needs to look at your account (for example, to help with a

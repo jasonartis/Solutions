@@ -2940,3 +2940,58 @@ test('speed-dating module: an unavailable event shows a friendly panel, not a 40
   await page.goto('/o/demo-dating/m/speed-dating/events/not-an-id')
   await expect(page.getByTestId('event-unavailable')).toBeVisible()
 })
+
+test('feedback: a person sends feedback from a page, the platform owner replies, the person sees it; nobody else can open it', async ({ page }) => {
+  test.slow()
+  const title = `Camera picker empty ${Date.now().toString().slice(-6)}`
+
+  // charlie, on a module page, opens Feedback: the preview names the page he came from.
+  await signIn(page, 'charlie@demo.local')
+  await page.goto('/o/demo-dating/m/speed-dating')
+  const link = page.getByTestId('feedback-link')
+  await expect(link).toHaveAttribute('href', /from=%2Fo%2Fdemo-dating%2Fm%2Fspeed-dating/)
+  await link.click()
+  await expect(page.getByRole('heading', { name: 'Send feedback' })).toBeVisible()
+  const preview = page.getByTestId('feedback-preview')
+  await expect(preview).toContainText('Page: /o/demo-dating/m/speed-dating')
+  await expect(preview).toContainText('Module: speed-dating')
+  await page.getByLabel('Short title').fill(title)
+  await page.getByLabel('What happened, or what would you like?').fill('The camera list is empty on my laptop.')
+  await page.getByRole('button', { name: 'Send' }).click()
+  await expect(page.getByText('Thank you — your feedback was sent.')).toBeVisible({ timeout: 15000 })
+  const ticketUrl = page.url().split('?')[0]!
+  const ticketPath = new URL(ticketUrl).pathname
+  await expect(page.getByTestId('ticket-status')).toHaveText('Sent')
+
+  // dana cannot open charlie's ticket (same answer as a ticket that does not exist).
+  await page.context().clearCookies()
+  await signIn(page, 'dana@demo.local')
+  const resp = await page.goto(ticketPath)
+  expect(resp?.status()).toBe(404)
+
+  // The platform owner sees it in the queue, with the page context, and replies.
+  await page.context().clearCookies()
+  await signIn(page, 'owner@demo.local')
+  await page.goto('/console/feedback')
+  await page.getByRole('link', { name: title }).click()
+  await expect(page.getByText('"path": "/o/demo-dating/m/speed-dating"')).toBeVisible()
+  await page.getByLabel('Your message').fill('Which browser are you using?')
+  await page.getByRole('button', { name: 'Send reply' }).click()
+  await expect(page.getByText('Which browser are you using?')).toBeVisible({ timeout: 15000 })
+  await expect(page.getByTestId('console-ticket-status')).toHaveText('waiting_on_user')
+
+  // charlie sees the badge, the reply, and the status wording meant for him.
+  await page.context().clearCookies()
+  await signIn(page, 'charlie@demo.local')
+  await expect(page.getByTestId('feedback-link')).toContainText('1')
+  await page.goto('/feedback')
+  const row = page.locator('li', { hasText: title })
+  await expect(row.getByTestId('unread')).toBeVisible()
+  await row.getByRole('link', { name: title }).click()
+  await expect(page.getByText('Which browser are you using?')).toBeVisible()
+  await expect(page.getByText('The platform team')).toBeVisible()
+  await expect(page.getByTestId('ticket-status')).toHaveText('Answered — waiting for you')
+  // Opening it marked it read: the badge is gone on the next page.
+  await page.goto('/feedback')
+  await expect(page.locator('li', { hasText: title }).getByTestId('unread')).toHaveCount(0)
+})

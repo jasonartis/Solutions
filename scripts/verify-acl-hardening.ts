@@ -100,6 +100,10 @@ const TABLE_EXCEPTIONS: Record<string, string[]> = {
   // Pending invites (20261016010000, docs/25). SELECT only (org admins, by
   // policy); every write is a SECURITY DEFINER that re-checks its own gate.
   pending_invites: ['SELECT'],
+  // Feedback tickets (20261106010000, docs/27). SELECT only (author + superadmin,
+  // by policy); every write goes through the feedback_* definers.
+  feedback_tickets: ['SELECT'],
+  feedback_messages: ['SELECT'],
 }
 
 // Functions whose intended EXECUTE differs from the blanket
@@ -192,6 +196,12 @@ const FUNCTION_EXCEPTIONS: Record<string, { auth: boolean; svc: boolean }> = {
   'pending_invites_pruner_last_run()': { auth: true, svc: false },
   'pending_invite_apply(invite_id uuid, invitee uuid)': { auth: false, svc: false },
   'pending_invites_prune_expired()': { auth: false, svc: false },
+  // 20261106010000 (docs/27): the four feedback writes; each re-checks auth.uid()
+  // and is_superadmin() itself. The worker has no business with tickets.
+  'feedback_open(p_kind text, p_title text, p_body text, p_org_id uuid, p_module_key text, p_context jsonb)': { auth: true, svc: false },
+  'feedback_reply(p_ticket_id uuid, p_body text, p_internal boolean)': { auth: true, svc: false },
+  'feedback_set_status(p_ticket_id uuid, p_status text)': { auth: true, svc: false },
+  'feedback_mark_read(p_ticket_id uuid)': { auth: true, svc: false },
 }
 const FULL_CRUD = ['SELECT', 'INSERT', 'UPDATE', 'DELETE']
 // `settings` moved to `public.user_private` with the email slice (2026-09-17,
@@ -565,6 +575,9 @@ async function main() {
     // 20261016010000 revokes service_role and never re-grants: addresses of
     // people who may have no account; definers only.
     pending_invites: [],
+    // 20261106010000: tickets are between a person and the platform owner only.
+    feedback_tickets: [],
+    feedback_messages: [],
   }
   const svcLost = tables.filter((t) => {
     const want = SVC_EXCEPTIONS[t.relname] ?? FULL_CRUD

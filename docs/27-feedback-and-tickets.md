@@ -1,7 +1,7 @@
 # 27 — Feedback, bug reports and requests (a platform-wide ticket tool)
 
-**Status: DESIGN NOTE, nothing built (2026-10-28). Founder-initiated; do not start building without an Opus session.**
-It records what the founder decided and what is still open, so the design is not re-derived.
+**Status: v1 BUILT 2026-11-05 (Opus) — read "v1 AS BUILT" at the end first.** The sections before it are the 2026-10-28
+design note (founder decisions, unchanged) and the routing questions that are still open.
 
 ## Why
 
@@ -74,3 +74,60 @@ Opus: the tables, RLS, privacy/deletion handling, the verifier, the context-capt
 user's inbox and the superadmin queue UI on the verified tables. Fits the platform rule *extract, don't speculate*: the founder
 has named a real need (untestable features), and every module needs it, so it is one primitive in `packages/platform`, not a
 speed-dating feature.
+
+## v1 AS BUILT (2026-11-05, Opus; founder said "go" on the list that included it)
+
+**Migration `20261106010000_feedback_tickets.sql`.** Tables `feedback_tickets` and `feedback_messages`; the API roles hold
+**SELECT only** (revoke-before-grant); every write goes through four SECURITY DEFINER functions, so no client-writable column
+needs pinning: `feedback_open(kind, title, body, org_id, module_key, context)`, `feedback_reply(ticket_id, body, internal)`,
+`feedback_set_status(ticket_id, status)`, `feedback_mark_read(ticket_id)`.
+- **Who reads:** the author (own tickets, non-internal messages) and the superadmin (everything). **No one else — an org admin
+  of the org on the ticket reads nothing** (org_id is where the person was, context only). Pinned by tests and by the prod verifier.
+- **Who writes what:** author and `author_kind` are server-set; only staff can write an internal note; the person may only
+  CLOSE their own ticket, every other status is staff's; a ticket can only name an org the person is an active member of.
+  "Not yours" and "does not exist" give the same answer ("Ticket not found").
+- **Status flow:** new → (staff reply) waiting_on_user → (person replies) open; resolved/closed are set by staff (closed also
+  by the person); a person replying on a resolved/closed ticket reopens it.
+- **Unread:** `last_staff_message_at` vs `user_read_at` (the person's badge in the top bar and "New reply" on My feedback);
+  `last_user_message_at` vs `staff_read_at` ("unread" in the console). Opening a ticket marks it read.
+- **Limits:** 10 new tickets and 60 messages per person per rolling 24 h (superadmin exempt); title ≤ 200, body ≤ 5000,
+  context ≤ 8000 bytes. No attachments.
+- Times inside the functions are `clock_timestamp()` (now() ties within one transaction — found by the unread test).
+
+**Decisions made in the build (technical calls, recorded so they are not re-derived):**
+1. **The activity trail is NOT copied into the ticket.** The console reads it LIVE from `activity_events` (the 24 h before the
+   ticket). A copy would be a second, unpruned, deletion-blind record of what someone did; the live read ages out at 90 days with
+   everything else. The person is told the team "may also look at what you did on the platform shortly before you wrote".
+2. **Account deletion (docs/21):** tickets and messages are the person's own words — human acts — so the silhouette keeps them;
+   the author shows as "Former member". `context` (page/browser, not identity) is kept so a report stays reproducible. No change
+   to the silhouette function was needed. FKs are ON DELETE CASCADE (only a raw superadmin delete reaches them).
+3. **The person's role/grants are not stored either** — the console shows their CURRENT module positions in the ticket's org.
+4. **No superadmin-lookup logging** for reading tickets: a ticket is addressed TO the platform owner, so reading it is not a
+   lookup of a person (unlike the data browser / view-as).
+5. **The "what will be sent" preview** lists every optional field before sending, with ONE switch ("include page and browser
+   details") that drops all of them, module key included.
+6. **Not built in v1:** the module extension point for extra context (e.g. the video room's device list), a Sentry event id,
+   routing to an org admin (the open review above stands), email, attachments, a personal-export data set for tickets, and an
+   activity_events entry for sending feedback (a ticket may have no org, and activity rows are org-scoped).
+
+**Screens:** "Feedback" in the top bar of every signed-in page (carries the current page as `?from=`, with an unread count);
+`/feedback/new`, `/feedback` (My feedback), `/feedback/[id]` (author-only; a superadmin opening someone else's is sent to the
+console); `/console/feedback` (queue: new+open by default, filters by status/kind) and `/console/feedback/[id]` (thread with
+internal notes, context panel, current positions, the 24 h activity trail, reply / internal note / status). `/privacy` gained a
+feedback paragraph (draft page; founder review of the wording is owed with the rest of it, docs/18 item 3).
+
+**Verified:** `packages/db/src/feedback.test.ts` 11/11 (every refusal with a control; db suite 503/503); e2e
+`feedback: a person sends feedback…` passes locally (send from a module page, a second user gets 404, the superadmin sees the
+context and replies, the person sees the badge, the reply and "Answered — waiting for you", and opening clears the badge);
+`scripts/prod-verify-feedback.mts` (structure + rolled-back behaviour as real demo users) local 36/0, prod pre-apply 7/24 with
+every control green. Registered in `verify-acl-hardening.ts` (local 17/17) and the data browser (`data-browser-modules.ts`).
+
+**Adversarial review (2026-11-05): no tenancy-isolation defect.** Fixed before shipping: `feedback_set_status`'s owner guard is
+now `is distinct from 'closed'` (a NULL status had slipped the guard and was stopped only by the NOT NULL check); the console's
+context panel is labelled self-reported (`context` and `module_key` are whatever the author's call sends — a lead, not evidence).
+**Accepted, recorded:** (a) the author can read every column of their own rows, so a staff reply's `author_id` (the superadmin's
+user id) and the ticket's `staff_read_at` are visible to them — low; narrow it with a definer view if it ever matters; (b) the
+daily caps count without a lock, so concurrent calls can overshoot slightly; (c) "the person may only close" really means
+"close, or reopen by replying" — intended (see the status flow); (d) a superadmin opening their OWN ticket on `/feedback/[id]`
+also stamps `staff_read_at`, hiding its console "unread" mark — cosmetic; (e) `parseFromPath` accepts `/\host` (harmless: the
+value is only parsed and stored, never redirected to) — do not reuse it as a redirect guard.

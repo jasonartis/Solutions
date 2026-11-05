@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import type { User } from '@supabase/supabase-js'
+import { FeedbackLink } from './feedback-link'
 
 // The top bar of every signed-in page. Shared by the (app) layout and by
 // public pages that a signed-in person also reaches (e.g. /privacy from the
@@ -8,10 +9,12 @@ export function AppHeader({
   user,
   displayName,
   isSuperadmin,
+  feedbackUnread = 0,
 }: {
   user: User | null
   displayName?: string | null
   isSuperadmin?: boolean
+  feedbackUnread?: number
 }) {
   return (
     <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-gray-200 bg-white px-4 py-3 sm:px-6">
@@ -28,6 +31,7 @@ export function AppHeader({
       <div className="flex items-center gap-4 text-sm text-gray-600">
         {user ? (
           <>
+            <FeedbackLink unread={feedbackUnread} />
             <Link href="/account" className="max-w-[40vw] truncate hover:underline sm:max-w-none">
               {displayName || user.email}
             </Link>

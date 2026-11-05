@@ -86,6 +86,30 @@ export const platformDataBrowser = declareDataBrowser({
       orderBy: { column: 'created_at', ascending: false },
     },
     {
+      table: 'feedback_tickets',
+      label: 'Feedback they sent',
+      personColumns: ['created_by'],
+      // org_id is where they were when they wrote it (context, never authority);
+      // a platform-level ticket has none, so filtering by org drops those.
+      orgColumn: 'org_id',
+      orderBy: { column: 'created_at', ascending: false },
+      limit: 100,
+      note:
+        'Bug reports, suggestions and questions sent from inside the product (docs/27), with ' +
+        'the page and browser details they chose to attach. Only the author and the superadmin ' +
+        'can read a ticket.',
+    },
+    {
+      table: 'feedback_messages',
+      label: 'Feedback messages they wrote',
+      // The author of a message: the person on their own tickets, or the superadmin
+      // replying (staff messages and internal notes name the staff author).
+      personColumns: ['author_id'],
+      orgColumn: null,
+      orderBy: { column: 'created_at', ascending: false },
+      limit: 200,
+    },
+    {
       table: 'job_requests',
       activity: true,
       label: 'Background jobs they requested',
