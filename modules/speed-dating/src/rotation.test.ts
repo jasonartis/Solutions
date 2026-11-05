@@ -123,3 +123,85 @@ describe('blocks and repeats', () => {
     expect(a).toEqual(b)
   })
 })
+
+// FILL THE BYES (2026-11-05). Before this, the rotation pattern (built for a fixed room) left people who
+// never met whenever the room changed: one late arrival -> 20–83% of events ended with unmet pairs
+// (measured over random seat ids). The ids here are varied with a seed so the seat ORDER (the engine sorts
+// by id) covers many arrangements, as real uuids do.
+describe('a changing room: everyone still meets everyone', () => {
+  // Deterministic pseudo-random ids so a failure reproduces.
+  const idsFor = (n: number, seed: number) =>
+    Array.from({ length: n }, (_, i) => `${((seed * 7919 + i * 104729) % 9973).toString(36).padStart(4, '0')}-${i}`)
+  const play = (all: RotationSeat[], presentAt: (round: number) => RotationSeat[], blocked: { a: string; b: string }[] = []) => {
+    const history: SeatPair[] = []
+    let rounds = 0
+    for (; rounds < 60; rounds++) {
+      const plan = buildNextRound({ seats: presentAt(rounds), history, blockedUserPairs: blocked, allowRepeats: false, roundNumber: rounds })
+      if (!plan) break
+      for (const p of plan.pairs) if (p.b) history.push({ a: p.a, b: p.b })
+    }
+    return { met: new Set(history.map((p) => (p.a < p.b ? `${p.a}|${p.b}` : `${p.b}|${p.a}`))), rounds, history }
+  }
+  const allPairs = (s: RotationSeat[], twoSided: boolean) => {
+    const out: string[] = []
+    for (let i = 0; i < s.length; i++)
+      for (let j = i + 1; j < s.length; j++)
+        if (!twoSided || s[i]!.poolSide !== s[j]!.poolSide) out.push(s[i]!.id < s[j]!.id ? `${s[i]!.id}|${s[j]!.id}` : `${s[j]!.id}|${s[i]!.id}`)
+    return out
+  }
+
+  it.each([
+    [3, 1, 1],
+    [4, 1, 1],
+    [4, 1, 2],
+    [5, 1, 2],
+    [6, 2, 2],
+  ])('one pool: %i present, %i arrive before round %i+1 — every pair meets', (early, late, lateAt) => {
+    for (let seed = 1; seed <= 60; seed++) {
+      const all = idsFor(early + late, seed).map((id) => seat(id))
+      const { met } = play(all, (r) => (r < lateAt ? all.slice(0, early) : all))
+      expect(allPairs(all, false).filter((p) => !met.has(p))).toEqual([])
+    }
+  })
+
+  it('two sides with a late arrival on each side — every cross pair meets, never same side', () => {
+    for (let seed = 1; seed <= 60; seed++) {
+      const ids = idsFor(6, seed)
+      const all = ids.map((id, i) => seat(id, i % 2 === 0 ? 'a' : 'b'))
+      const { met, history } = play(all, (r) => (r < 1 ? all.slice(0, 4) : all))
+      expect(allPairs(all, true).filter((p) => !met.has(p))).toEqual([])
+      const sideOf = new Map(all.map((s) => [s.id, s.poolSide]))
+      expect(history.every((p) => sideOf.get(p.a) !== sideOf.get(p.b))).toBe(true)
+    }
+  })
+
+  it('someone leaving mid-event: the people still there all meet', () => {
+    for (let seed = 1; seed <= 60; seed++) {
+      const all = idsFor(6, seed).map((id) => seat(id))
+      const stay = all.slice(0, 5)
+      const { met } = play(all, (r) => (r < 2 ? all : stay))
+      expect(allPairs(stay, false).filter((p) => !met.has(p))).toEqual([])
+    }
+  })
+
+  it('pairing the byes never seats two people who blocked each other', () => {
+    for (let seed = 1; seed <= 60; seed++) {
+      const all = idsFor(5, seed).map((id) => seat(id))
+      const blocked = [{ a: all[0]!.userId, b: all[4]!.userId }]
+      const { history } = play(all, (r) => (r < 1 ? all.slice(0, 4) : all), blocked)
+      expect(history.some((p) => [p.a, p.b].sort().join() === [all[0]!.id, all[4]!.id].sort().join())).toBe(false)
+      // CONTROL: the blocked person still met everyone else.
+      const metIds = new Set(history.filter((p) => p.a === all[0]!.id || p.b === all[0]!.id).map((p) => (p.a === all[0]!.id ? p.b : p.a)))
+      expect(metIds.size).toBe(3)
+    }
+  })
+
+  it('a full, unchanged room keeps the classic rotation length (N-1 even, N odd; larger side)', () => {
+    for (let seed = 1; seed <= 20; seed++) {
+      for (const n of [4, 5, 6, 7, 8]) {
+        const all = idsFor(n, seed).map((id) => seat(id))
+        expect(play(all, () => all).rounds).toBe(n % 2 === 0 ? n - 1 : n)
+      }
+    }
+  })
+})

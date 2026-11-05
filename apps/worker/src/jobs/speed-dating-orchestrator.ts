@@ -58,7 +58,12 @@ export async function runOrchestratorTick(admin: SupabaseClient): Promise<void> 
       const deadline = active.ends_at
         ? new Date(active.ends_at).getTime() + event.break_duration_seconds * 1000
         : null
-      if (deadline === null || now < deadline) continue
+      if (deadline === null || now < deadline) {
+        // Mid-round: keep "round X of N" current when someone arrives, is un-ticked or withdraws, instead of
+        // waiting for the next round to start (founder 2026-11-05: "don't leave any concerns").
+        await refreshRoundsExpected(admin, event, rounds ?? [])
+        continue
+      }
       const { error } = await admin.from('sd_rounds').update({ state: 'complete' }).eq('id', active.id)
       if (error) {
         console.error(`[orchestrator] close round failed for event ${event.id}: ${error.message}`)
@@ -206,7 +211,9 @@ export async function runOrchestratorTick(admin: SupabaseClient): Promise<void> 
     // The dater's "round X of N", recounted from who is here now. Rebuilt from WHO WAS IN each round, never
     // from the block-shaped history, so N cannot reveal a block (projectedTotalRounds). Before activation, so
     // the round and its N appear together; display only.
-    const { data: everySeat } = await admin.from('sd_participants').select('id, pool_side').eq('event_id', event.id)
+    // A failed seat read would replay every past round as one pool and skew N (review 2026-11-05): skip the
+    // write instead — the previous N stays until the next recount.
+    const { data: everySeat, error: everySeatErr } = await admin.from('sd_participants').select('id, pool_side').eq('event_id', event.id)
     const sideOf = new Map((everySeat ?? []).map((s) => [s.id as string, s.pool_side as string | null]))
     const expected = projectedTotalRounds({
       roundsSoFar: [...seatsPerRound(rounds ?? [], pairings ?? [], (id) => sideOf.get(id) ?? null), seats],
@@ -214,10 +221,12 @@ export async function runOrchestratorTick(admin: SupabaseClient): Promise<void> 
       allowRepeats: event.allow_repeat_pairings,
       cap: event.rounds_planned,
     })
-    const { error: expectedErr } = await admin
-      .from('sd_events')
-      .update({ rounds_expected: expected === null ? null : Math.min(expected, 99) })
-      .eq('id', event.id)
+    const { error: expectedErr } = everySeatErr
+      ? { error: everySeatErr }
+      : await admin
+          .from('sd_events')
+          .update({ rounds_expected: expected === null ? null : Math.min(expected, 99) })
+          .eq('id', event.id)
     if (expectedErr) console.error(`[orchestrator] could not set rounds_expected for event ${event.id}: ${expectedErr.message}`)
 
     const { error: activateErr } = await admin
@@ -232,4 +241,35 @@ export async function runOrchestratorTick(admin: SupabaseClient): Promise<void> 
       `[orchestrator] event ${event.id}: round ${nextNumber} live — ${plan.pairs.filter((p) => p.b).length} rooms, ${plan.pairs.filter((p) => !p.b).length} byes, ends ${endsAt.toISOString()}`,
     )
   }
+}
+
+// Recount sd_events.rounds_expected while a round is running, from the people pairable NOW (the same rule
+// the round start uses — projectedTotalRounds, block-free by construction). Writes only when the number
+// changes, so a quiet tick costs three reads and no write. Display only: any failed read just skips.
+async function refreshRoundsExpected(
+  admin: SupabaseClient,
+  event: { id: string; rounds_planned: number | null; rounds_expected: number | null; allow_repeat_pairings: boolean; format: unknown },
+  rounds: { id: string; round_number: number }[],
+): Promise<void> {
+  if (event.allow_repeat_pairings) return // N is the cap; nobody arriving changes it
+  const usesCheckIn = ['staff', 'self'].includes(String((event.format as { checkIn?: unknown } | null)?.checkIn ?? ''))
+  const [{ data: seats, error: seatsErr }, { data: pairings, error: pairingsErr }] = await Promise.all([
+    admin.from('sd_participants').select('id, user_id, pool_side, status, seat_type, checked_in').eq('event_id', event.id),
+    admin.from('sd_pairings').select('round_id, participant_a_id, participant_b_id').eq('event_id', event.id),
+  ])
+  if (seatsErr || pairingsErr || !seats || !pairings) return
+  const sideOf = new Map(seats.map((s) => [s.id as string, s.pool_side as string | null]))
+  const present = seats
+    .filter((s) => s.status === 'registered' && s.seat_type === 'participant' && (!usesCheckIn || s.checked_in))
+    .map((s) => ({ id: s.id as string, userId: s.user_id as string, poolSide: s.pool_side as string | null }))
+  const expected = projectedTotalRounds({
+    roundsSoFar: seatsPerRound(rounds, pairings, (id) => sideOf.get(id) ?? null),
+    present,
+    allowRepeats: false,
+    cap: event.rounds_planned,
+  })
+  const next = expected === null ? null : Math.min(expected, 99)
+  if (next === event.rounds_expected) return
+  const { error } = await admin.from('sd_events').update({ rounds_expected: next }).eq('id', event.id)
+  if (error) console.error(`[orchestrator] could not refresh rounds_expected for event ${event.id}: ${error.message}`)
 }

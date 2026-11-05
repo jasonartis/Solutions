@@ -153,6 +153,7 @@ async function playEvent(opts: { arrived: string[]; noShows: string[]; late?: { 
     'create event',
   )
   const seen: { round: number; planned: number | null; expected: number | null }[] = []
+  let lateSeat = "(no late arrival)"
   try {
     for (const state of ['open', 'running']) {
       const { error } = await admin.from('sd_events').update({ state }).eq('id', ev.id)
@@ -174,12 +175,13 @@ async function playEvent(opts: { arrived: string[]; noShows: string[]; late?: { 
       if (opts.late && before + 1 === opts.late.beforeRound) {
         const { error } = await admin.from('sd_participants').update({ checked_in: true }).eq('event_id', ev.id).eq('user_id', opts.late.userId)
         if (error) throw new Error(`late check-in: ${error.message}`)
+        lateSeat = JSON.stringify((await admin.from('sd_participants').select('checked_in, status').eq('event_id', ev.id).eq('user_id', opts.late.userId)).data)
       }
       await runOrchestratorTick(admin)
       const after = must(await admin.from('sd_rounds').select('id').eq('event_id', ev.id), 'read rounds').length
       const row = must(await admin.from('sd_events').select('rounds_planned, rounds_expected').eq('id', ev.id).single(), 'read event')
       if (after > before) seen.push({ round: after, planned: row.rounds_planned, expected: row.rounds_expected })
-      else return { seen, ran: after, finalExpected: row.rounds_expected, finalPlanned: row.rounds_planned }
+      else return { seen, ran: after, finalExpected: row.rounds_expected, finalPlanned: row.rounds_planned, lateSeat }
       // run this round's clock out so the next tick closes it and builds the next
       const { error } = await admin.from('sd_rounds').update({ ends_at: new Date(Date.now() - 3_600_000).toISOString() }).eq('event_id', ev.id)
       if (error) throw new Error(`clock: ${error.message}`)
@@ -208,6 +210,109 @@ check('late arrival: the organizer cap stays 8', late.finalPlanned === 8)
 // Repeats allowed: no natural end, so N is the organizer's cap.
 const repeats = await playEvent({ arrived: [charlie!, dana!], noShows: [], allowRepeats: true })
 check('CONTROL repeats allowed: N is the cap (8) and 8 rounds run', repeats.seen.every((s) => s.expected === 8) && repeats.ran === 8, JSON.stringify(repeats))
+
+// ---- The organizer's manual path computes the same N as the worker (re-review 2026-11-05) ---------------
+// runPairingRound runs AS THE ORGANIZER under RLS; the worker runs as service role. N is only consistent if
+// the organizer can read every pairing row and every seat (incl. a WITHDRAWN one) the worker reads. Measured:
+// the worker runs two rounds, someone withdraws in between, then alice — signed in as herself — rebuilds N
+// from exactly what RLS lets her read, and it must equal what the worker stored.
+import { projectedTotalRounds, seatsPerRound } from '../modules/speed-dating/src/index.ts'
+const anonKey = fromEnvFile('apps/web/.env.local', 'NEXT_PUBLIC_SUPABASE_ANON_KEY')
+if (!anonKey) throw new Error('NEXT_PUBLIC_SUPABASE_ANON_KEY missing in apps/web/.env.local')
+const asAlice: SupabaseClient = createClient(url, anonKey, { auth: { persistSession: false } })
+{
+  const { error } = await asAlice.auth.signInWithPassword({ email: 'alice@demo.local', password: 'password123' })
+  if (error) throw new Error(`alice sign-in: ${error.message}`)
+}
+{
+  const ev = must(
+    await admin
+      .from('sd_events')
+      .insert({ org_id: org!.id, name: `Organizer N check ${Date.now()}`, rounds_planned: 8, allow_repeat_pairings: false, round_duration_seconds: 60, break_duration_seconds: 0 })
+      .select('id')
+      .single(),
+    'create event',
+  )
+  try {
+    for (const state of ['open', 'running']) {
+      const { error } = await admin.from('sd_events').update({ state }).eq('id', ev.id)
+      if (error) throw new Error(`-> ${state}: ${error.message}`)
+    }
+    for (const user_id of [charlie!, dana!, eve.user_id, frank.user_id]) {
+      const { error } = await admin.from('sd_participants').insert({ org_id: org!.id, event_id: ev.id, user_id, status: 'registered', seat_type: 'participant' })
+      if (error) throw new Error(`seat: ${error.message}`)
+    }
+    await runOrchestratorTick(admin) // round 1, four people
+    const { error: wErr } = await admin.from('sd_participants').update({ status: 'withdrawn' }).eq('event_id', ev.id).eq('user_id', frank.user_id)
+    if (wErr) throw new Error(`withdraw: ${wErr.message}`)
+    await admin.from('sd_rounds').update({ ends_at: new Date(Date.now() - 3_600_000).toISOString() }).eq('event_id', ev.id)
+    await runOrchestratorTick(admin) // round 2, three people
+    const stored = must(await admin.from('sd_events').select('rounds_expected').eq('id', ev.id).single(), 'read event').rounds_expected as number | null
+
+    // What the worker reads (service role) vs what alice reads (RLS).
+    const count = async (c: SupabaseClient, t: string) => (await c.from(t).select('id', { count: 'exact', head: true }).eq('event_id', ev.id)).count
+    const svcPairings = await count(admin, 'sd_pairings'), alicePairings = await count(asAlice, 'sd_pairings')
+    const svcSeats = await count(admin, 'sd_participants'), aliceSeats = await count(asAlice, 'sd_participants')
+    check('CONTROL: two rounds ran and the withdrawn seat is in round 1\'s rows', (svcPairings ?? 0) >= 4 && svcSeats === 4, `pairings ${svcPairings}, seats ${svcSeats}`)
+    check('the organizer reads every pairing row the worker reads', alicePairings === svcPairings, `alice ${alicePairings} vs ${svcPairings}`)
+    check('the organizer reads every seat, the WITHDRAWN one included', aliceSeats === svcSeats, `alice ${aliceSeats} vs ${svcSeats}`)
+
+    // Alice rebuilds N exactly as runPairingRound does, from her own reads.
+    const rounds = must(await asAlice.from('sd_rounds').select('id, round_number').eq('event_id', ev.id), 'alice rounds')
+    const pairings = must(await asAlice.from('sd_pairings').select('round_id, participant_a_id, participant_b_id').eq('event_id', ev.id), 'alice pairings')
+    const every = must(await asAlice.from('sd_participants').select('id, user_id, pool_side, status').eq('event_id', ev.id), 'alice seats')
+    const sideOf = new Map(every.map((s) => [s.id as string, s.pool_side as string | null]))
+    const present = every.filter((s) => s.status === 'registered').map((s) => ({ id: s.id as string, userId: s.user_id as string, poolSide: s.pool_side as string | null }))
+    const aliceN = projectedTotalRounds({ roundsSoFar: seatsPerRound(rounds, pairings, (id) => sideOf.get(id) ?? null), present, allowRepeats: false, cap: 8 })
+    check('the organizer\'s N equals the worker\'s stored N', aliceN === stored, `alice ${aliceN} vs worker ${stored}`)
+  } finally {
+    await admin.from('sd_events').delete().eq('id', ev.id)
+  }
+}
+await asAlice.auth.signOut()
+
+// ---- Mid-round: N follows an arrival / un-tick without waiting for the next round (2026-11-05) -----------
+{
+  const ev = must(
+    await admin
+      .from('sd_events')
+      .insert({ org_id: org!.id, name: `Mid-round N check ${Date.now()}`, rounds_planned: 8, allow_repeat_pairings: false, round_duration_seconds: 600, break_duration_seconds: 0, format: { checkIn: 'self' } })
+      .select('id')
+      .single(),
+    'create event',
+  )
+  try {
+    for (const state of ['open', 'running']) {
+      const { error } = await admin.from('sd_events').update({ state }).eq('id', ev.id)
+      if (error) throw new Error(`-> ${state}: ${error.message}`)
+    }
+    for (const [user_id, checked_in] of [[charlie!, true], [dana!, true], [eve.user_id, true], [frank.user_id, false]] as const) {
+      const { error } = await admin.from('sd_participants').insert({ org_id: org!.id, event_id: ev.id, user_id, status: 'registered', seat_type: 'participant', checked_in })
+      if (error) throw new Error(`seat: ${error.message}`)
+    }
+    const n = async () => must(await admin.from('sd_events').select('rounds_expected').eq('id', ev.id).single(), 'read').rounds_expected as number | null
+    const roundCount = async () => must(await admin.from('sd_rounds').select('id').eq('event_id', ev.id), 'rounds').length
+    await runOrchestratorTick(admin) // round 1 with three; its 10-minute clock keeps running
+    const atStart = await n()
+    const setFrank = async (checked_in: boolean) => {
+      const { error } = await admin.from('sd_participants').update({ checked_in }).eq('event_id', ev.id).eq('user_id', frank.user_id)
+      if (error) throw new Error(`frank: ${error.message}`)
+    }
+    await runOrchestratorTick(admin)
+    check('CONTROL mid-round: a quiet tick leaves N alone (3) and builds no round', (await n()) === 3 && (await roundCount()) === 1 && atStart === 3, `start ${atStart}`)
+    await setFrank(true)
+    const frankSeat = JSON.stringify((await admin.from('sd_participants').select('checked_in, status').eq('event_id', ev.id).eq('user_id', frank.user_id)).data)
+    const roundsBefore = JSON.stringify((await admin.from('sd_rounds').select('round_number, state, ends_at').eq('event_id', ev.id)).data)
+    await runOrchestratorTick(admin)
+    const afterArrival = await n()
+    check('mid-round: Frank arriving raises N at once (3 -> 4), still in round 1', afterArrival === 4 && (await roundCount()) === 1, `N ${afterArrival}; frank ${frankSeat}; rounds ${roundsBefore}; now ${new Date().toISOString()}`)
+    await setFrank(false)
+    await runOrchestratorTick(admin)
+    check('mid-round: Frank un-ticked lowers N again (back to 3)', (await n()) === 3, `N ${await n()}`)
+  } finally {
+    await admin.from('sd_events').delete().eq('id', ev.id)
+  }
+}
 
 console.log(fails ? `\n${fails} FAILED` : '\nALL PASSED')
 process.exit(fails ? 1 : 0)

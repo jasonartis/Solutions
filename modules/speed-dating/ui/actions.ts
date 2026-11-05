@@ -547,7 +547,9 @@ export async function runPairingRound(orgSlug: string, eventId: string) {
   // only: a failed write is logged, never allowed to stop the round.
   // Rebuilt from WHO WAS IN each round (never from the block-shaped history), so N cannot reveal a block.
   // Every seat that has ever been in a round, whatever its status now, for its pool side.
-  const { data: everySeat } = await supabase.from('sd_participants').select('id, pool_side').eq('event_id', eventId)
+  // A failed seat read would replay every past round as one pool and skew N (review 2026-11-05): skip the
+  // write instead — the previous N stays until the next recount.
+  const { data: everySeat, error: everySeatErr } = await supabase.from('sd_participants').select('id, pool_side').eq('event_id', eventId)
   const sideOf = new Map((everySeat ?? []).map((s) => [s.id, s.pool_side as string | null]))
   const present = pairable.map((p) => ({ id: p.id, userId: p.user_id, poolSide: p.pool_side }))
   const expected = projectedTotalRounds({
@@ -556,10 +558,12 @@ export async function runPairingRound(orgSlug: string, eventId: string) {
     allowRepeats: event.allow_repeat_pairings,
     cap: event.rounds_planned,
   })
-  const { error: expectedErr } = await supabase
-    .from('sd_events')
-    .update({ rounds_expected: expected === null ? null : Math.min(expected, 99) })
-    .eq('id', eventId)
+  const { error: expectedErr } = everySeatErr
+    ? { error: everySeatErr }
+    : await supabase
+        .from('sd_events')
+        .update({ rounds_expected: expected === null ? null : Math.min(expected, 99) })
+        .eq('id', eventId)
   if (expectedErr) console.error(`[speed-dating] could not set rounds_expected for event ${eventId}: ${expectedErr.message}`)
 
   const { error: activateErr } = await supabase

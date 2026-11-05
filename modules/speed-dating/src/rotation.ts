@@ -134,8 +134,43 @@ export function buildNextRound(opts: {
     }
   }
 
-  const hasMeeting = pairs.some((p) => p.b !== null)
+  // FILL THE BYES (2026-11-05). The rotation pattern above is built for a FIXED set of people. Once the
+  // set changes (a late arrival, someone leaving) or blocks force byes, it can leave two people sitting out
+  // who have never met — and eventually produce a round with no meeting at all and end the event while
+  // pairs still have not met. Measured before this fix: one late arrival left 20–83% of events with people
+  // who never met. So: any two people on a bye who may legally meet (never met, not blocked, opposite sides
+  // in a two-sided event) are paired. For a full, unchanged room this never fires (the pattern leaves at
+  // most one bye per side), so the classic rotation is untouched.
+  const sideOf = new Map(seats.map((s) => [s.id, s.poolSide ?? '']))
+  const bipartite = sides.size === 2
+  const canMeet = (x: string, y: string) => legal(x, y) && (!bipartite || sideOf.get(x) !== sideOf.get(y))
+  const fillByes = (list: { a: string; b: string | null }[]) => {
+    const waiting = list.filter((p) => p.b === null).map((p) => p.a).sort()
+    const paired = new Set<string>()
+    const extra: { a: string; b: string }[] = []
+    for (let i = 0; i < waiting.length; i++) {
+      const x = waiting[i]!
+      if (paired.has(x)) continue
+      const y = waiting.slice(i + 1).find((c) => !paired.has(c) && canMeet(x, c))
+      if (y === undefined) continue
+      paired.add(x)
+      paired.add(y)
+      extra.push({ a: x, b: y })
+    }
+    return [...list.filter((p) => p.b !== null || !paired.has(p.a)), ...extra]
+  }
+  let filled = fillByes(pairs)
+
+  // The pattern produced no meeting at all, but people who have not met are here: pair them directly
+  // (everyone starts on a bye) instead of ending the event early.
+  if (!filled.some((p) => p.b !== null)) {
+    filled = fillByes(seats.map((s) => ({ a: s.id, b: null })))
+  }
+
+  const hasMeeting = filled.some((p) => p.b !== null)
   if (!hasMeeting) return null
+  pairs.length = 0
+  pairs.push(...filled)
 
   // Stable output order (deterministic for tests and for the DB writer).
   pairs.sort((x, y) => (x.a < y.a ? -1 : 1))
