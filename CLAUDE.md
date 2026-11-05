@@ -56,7 +56,8 @@ section, keep it a SUMMARY with pointers: add the dated story to the journal / t
 - **2026-11-05 (Opus, founder's "do the decided list" session):**
   - **Speed dating "round X of N" follows who is there (`20261107010000` — ON PROD, verified 3/5 → 13/0):** the organizer's
     cap is never rewritten; `sd_events.rounds_expected` is recounted each round, block-free by construction. Module-6 spec
-    2026-11-05 (later).
+    2026-11-05 (later). **Then every review finding closed** (spec "latest"): the engine now fills byes, so a late
+    arrival meets everyone (was 20–83% of events with unmet pairs, `562457b`); side lock `20261110010000` ON PROD 6/6 → 12/0.
   - **Speed-dating SECURITY FOLLOW-UP `20261105010000` — ON PROD, verified** (sd self-rejoin verifier 167/7 → 174/0): a seat's
     `user_id` never changes for a JWT caller; the notes guard runs every lookup and raises once; a note's `pairing_id` must join
     author and subject. Module-6 spec 2026-11-05.
@@ -96,7 +97,8 @@ founder decision** — record it where it belongs, flag it, move on (2026-08-29)
 - Speed dating: organizer-invites-then-person-accepts (consent for organizer-created seats; build with docs/25), an always-on
   worker host so rounds advance by themselves (spec "OPERATIONAL RECIPES" #4), help room / live thumbnails (spec
   2026-11-05), names in the organizer roster export. (Host un-tick + camera/mic status: database DONE `20261109010000`;
-  the client half is a decided Sonnet slice, not a pending decision.)
+  the client half is a decided Sonnet slice, not a pending decision. Open founder call: a migration to drop the stale
+  status row of someone who LEAVES THE ORG mid-event — recommended no; module-6 spec 2026-11-05 "THE MIGRATION".)
 - Speed dating's role conjunct / audience+mentor seats — blocked on docs/24 §7's second decision.
 - Feedback routing to org admins — docs/27's open review (founder item 6).
 - Go-live items 4–7 and 9 paused until a real client signs (docs/18); 2FA deferred; custom SMTP is a blocker for onboarding a
@@ -128,7 +130,8 @@ gitignored, only if the founder asks).
   GitHub REST API (runs, jobs, `curl -L …/jobs/<id>/logs`, `rerun-failed-jobs`); `VERCEL_TOKEN` in `.env.deploy` +
   `GET https://api.vercel.com/v6/deployments?limit=8` (match `meta.githubCommitSha`; READY ⇒ `check` passed). Curl the stable
   alias `https://solutions-platform.vercel.app` (per-deployment URLs 302). A red `check` in `supabase/setup-cli`/`supabase
-  start` with `rate limit`/`toomanyrequests` is not your diff — re-run the failed job.
+  start` with `rate limit`/`toomanyrequests` — or `failed to bind host port … address already in use` (2026-11-05, port
+  54324 on the runner) — is not your diff — re-run the failed job.
 - **CI runs the db suite then e2e on the SAME database with no reset** — reproduce that order before calling a failure a flake;
   db test files run serially (`fileParallelism: false`, do not re-enable); CI e2e is stricter (prebuilt server, 5 s expect).
 - **Signing in as a demo user on PROD:** password = `.env.deploy`'s `PROD_DEMO_PASSWORD` (not `.env.accounts`'s 74-char line).

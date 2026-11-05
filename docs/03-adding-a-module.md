@@ -1469,6 +1469,11 @@ mechanism is proven in the managed environment, but it carries rules that are no
     connections). Watch for a DIFFERENT gate refusing the mutated act — there, a
     non-definer scope trigger raised "Unknown event" until the fixture user could see the
     target event — or the mutation check passes for an unrelated reason.
+    **Before re-creating a function "verbatim + one line" from an old migration, md5 the LIVE prod body
+    against the file you copied (2026-11-05, `20261109010000`).** `create or replace` from a stale copy
+    silently reverts whatever a later migration or a hotfix changed. Hash `prosrc` on prod through the pooler
+    and the text between `as $$` and `$$;` in the source file (the regex the `prod-verify-*.mts` scripts use);
+    they must match BEFORE you apply. `account_silhouette` and `sd_pin_participant` were checked this way.
 
 ## Hard rules
 
