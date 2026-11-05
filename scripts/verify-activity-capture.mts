@@ -38,6 +38,17 @@ async function signIn(email: string): Promise<SupabaseClient> {
   return c
 }
 
+// profiles has no email column since 20260917020000 (auth.users is the only
+// copy), so ids are resolved with a read-only owner query.
+async function userIdOf(email: string): Promise<string> {
+  const q = postgres(dbUrl, { prepare: false, max: 1 })
+  try {
+    const [row] = await q<{ id: string }[]>`select id from auth.users where email = ${email}`
+    if (!row) throw new Error(`no auth user ${email}`)
+    return row.id
+  } finally { await q.end() }
+}
+
 const main = async () => {
   if (!anonKey) throw new Error('SUPABASE_ANON_KEY not set')
 
@@ -48,8 +59,8 @@ const main = async () => {
 
   const salon = (await owner.from('orgs').select('id').eq('slug', 'demo-salon').single()).data!.id as string
   const orgB = (await owner.from('orgs').select('id').eq('slug', 'demo-org-b').maybeSingle()).data?.id as string | undefined
-  const danaId = (await owner.from('profiles').select('user_id').eq('email', 'dana@demo.local').single()).data!.user_id as string
-  const charlieId = (await owner.from('profiles').select('user_id').eq('email', 'charlie@demo.local').single()).data!.user_id as string
+  const danaId = await userIdOf('dana@demo.local')
+  const charlieId = await userIdOf('charlie@demo.local')
 
   // Start from a clean slate so the probe is RE-RUNNABLE. Several assertions
   // below count rows exactly, and a second run against leftovers from the first
@@ -196,7 +207,7 @@ const main = async () => {
   // whole actor_grants design turns on is real and not a flattened role name.
   try {
     const grace = await signIn('grace@demo.local')
-    const graceId = (await owner.from('profiles').select('user_id').eq('email', 'grace@demo.local').single()).data!.user_id as string
+    const graceId = await userIdOf('grace@demo.local')
     const gIns = await grace.from('activity_events').insert({
       org_id: salon, module_key: 'nail-salon', action: 'walk_in.added',
     })
@@ -211,6 +222,21 @@ const main = async () => {
       gRows.length > 0 && gRows[0]!.actor_org_role != null, JSON.stringify(gRows[0]?.actor_org_role))
   } catch (e) {
     ok('grace@demo.local is reachable', false, String(e))
+  } finally {
+    // Signing in as grace records a login, and the platform e2e suite asserts
+    // she has NEVER signed in (she is the one active member it never uses).
+    // Same cleanup as rls.test.ts's afterAll (CLAUDE.md gotcha): both tables
+    // are read-only to every API role, so it needs the owner connection.
+    const graceId = await userIdOf('grace@demo.local')
+    const q = postgres(dbUrl, { prepare: false, max: 1 })
+    try {
+      await q`delete from public.login_events where user_id = ${graceId}`
+      await q`delete from public.login_rollup where user_id = ${graceId}`
+      const [g] = await q<{ n: number }[]>`select count(*)::int as n from public.login_rollup where user_id = ${graceId}`
+      const [others] = await q<{ n: number }[]>`select count(*)::int as n from public.login_rollup where user_id <> ${graceId}`
+      ok('grace has no login rows left (e2e asserts she never signed in)', g!.n === 0)
+      ok('CONTROL: other users still have login rows (capture is alive)', others!.n > 0)
+    } finally { await q.end() }
   }
 
   console.log('\n--- 7. THE READ RULE: superadmin only, at any rank')
