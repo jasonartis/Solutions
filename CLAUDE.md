@@ -50,6 +50,9 @@ section, keep it a SUMMARY with pointers: add the dated story to the journal / t
   (archive file, "Host state").
 
 ### Shipped most recently (newest first; full stories in the linked docs)
+- **2026-11-05 (Opus): speed-dating host un-tick + camera/mic status table `20261109010000` — ON PROD, verified** (15/22 → 46/0):
+  only the person ticks in (database rule now, organizers too); `sd_device_status` + `sd_report_device_status`. The CLIENT half
+  (reporting, tile status, host Un-tick button) is the next Sonnet slice — contract in the module-6 spec's 2026-11-05 "THE MIGRATION" entry.
 - **2026-11-05 (Opus, founder's "do the decided list" session):**
   - **Speed dating "round X of N" follows who is there (`20261107010000` — ON PROD, verified 3/5 → 13/0):** the organizer's
     cap is never rewritten; `sd_events.rounds_expected` is recounted each round, block-free by construction. Module-6 spec
@@ -91,8 +94,9 @@ founder decision** — record it where it belongs, flag it, move on (2026-08-29)
 - Two offsite-snapshot zips (whole platform; credential files) — docs/12 "TO BE PLANNED"; next step is a planning session.
 - The private B2 backup replacement (needs an account).
 - Speed dating: organizer-invites-then-person-accepts (consent for organizer-created seats; build with docs/25), an always-on
-  worker host so rounds advance by themselves (spec "OPERATIONAL RECIPES" #4), host check-in / host un-tick, Ready-board
-  camera/mic status / help room / live thumbnails (spec 2026-11-05), names in the organizer roster export.
+  worker host so rounds advance by themselves (spec "OPERATIONAL RECIPES" #4), help room / live thumbnails (spec
+  2026-11-05), names in the organizer roster export. (Host un-tick + camera/mic status: database DONE `20261109010000`;
+  the client half is a decided Sonnet slice, not a pending decision.)
 - Speed dating's role conjunct / audience+mentor seats — blocked on docs/24 §7's second decision.
 - Feedback routing to org admins — docs/27's open review (founder item 6).
 - Go-live items 4–7 and 9 paused until a real client signs (docs/18); 2FA deferred; custom SMTP is a blocker for onboarding a

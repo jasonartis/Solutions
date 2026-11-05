@@ -1339,7 +1339,7 @@ export const speedDatingViewAs = declareViewAs({
   scopeEntity: { table: 'sd_events', idColumn: 'id', nodeColumn: 'scope_node_id' },
 
   // ---------------------------------------------------------------------
-  // Surfaces. Both positions below account for all TEN sd_ tables — role,
+  // Surfaces. Each position below accounts for all ELEVEN sd_ tables — role,
   // unreadableByPosition, personal, or excluded — none fall through.
   // `personal` is empty for both, and that emptiness is itself the finding:
   // speed-dating has no staff-personal layer (sd_notes is a PARTICIPANT
@@ -1427,6 +1427,19 @@ export const speedDatingViewAs = declareViewAs({
             'same under-showing reason as sd_events.created_by (see the pair notes above). ' +
             'reported_participant_id can be null (ON DELETE SET NULL) if the reported seat is ' +
             'later removed.',
+        },
+        {
+          table: 'sd_device_status',
+          label: 'Camera / mic status (Ready board)',
+          columns: ['participant_id', 'event_id', 'camera', 'mic', 'connection', 'reported_at'],
+          subjectColumn: null,
+          scopeColumn: 'event_id',
+          orderBy: { column: 'reported_at', ascending: false },
+          caveat:
+            'What each person\'s browser last reported (20261109010000): one overwritten row per ' +
+            'seat, no device names. Rows exist only while the event is open/closed/running and the ' +
+            'seat registered/waitlisted, so an empty section outside a live event is expected. ' +
+            'user_id is left off the allow-list: participant_id already joins to the roster.',
         },
       ],
       personal: [],
@@ -1562,6 +1575,17 @@ export const speedDatingViewAs = declareViewAs({
             'This is host\'s core duty per the module comment ("handles reported rooms") — ' +
             'host gets its own sd_reports_update_staff policy (organize-write does not cover ' +
             'host) so it can triage state/review fields.',
+        },
+        {
+          table: 'sd_device_status',
+          label: 'Camera / mic status (Ready board)',
+          columns: ['participant_id', 'event_id', 'camera', 'mic', 'connection', 'reported_at'],
+          subjectColumn: null,
+          scopeColumn: 'event_id',
+          orderBy: { column: 'reported_at', ascending: false },
+          caveat:
+            'Same staff arm as the organizer (sd_can_staff_event_of) — a host sees the status so ' +
+            'they can spot "can\'t see / hear them" and un-tick someone (20261109010000).',
         },
       ],
       personal: [],
@@ -1781,6 +1805,14 @@ export const speedDatingViewAs = declareViewAs({
             'entity tree is refused by viewAsCompleteness (§8.1 point 10). Org-wide and ' +
             'outside any single event\'s experience, so excluded is also the honest answer ' +
             'rather than a workaround.',
+        },
+        {
+          table: 'sd_device_status',
+          why:
+            'Readable by the caller (own row: user_id = auth.uid() and an active member) but no ' +
+            'participant screen shows it — the person\'s browser WRITES it (through ' +
+            'sd_report_device_status) for the staff Ready board. Excluded rather than ' +
+            'unreadableByPosition because "cannot read" would be false.',
         },
       ],
       unreadableByPosition: [

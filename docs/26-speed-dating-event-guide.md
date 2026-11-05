@@ -91,7 +91,10 @@ Audience and mentor seats exist in the schema but have no UI. **GAP.**
   **Un-tick (not ready)** a tile (someone who has plainly walked off); nobody can tick for anyone, and there is
   no "Mark everyone arrived". *Run next round* refuses (with a notice) until two people are checked in.
   Someone who checks in mid-event joins at the next round; the round already running is not touched. A host
-  sees the board but cannot un-tick (the database pins another person's row for a host).
+  sees the board; **since `20261109010000` the database lets a host un-tick too** (and refuses ANY tick-in
+  of another person, organizers included — the rule is the database's, not just the screen's). The host's
+  Un-tick button and the camera / mic / connection status on each tile ("last seen …") are the next client
+  slice (module-6 spec, 2026-11-05 "HOST UN-TICK + DEVICE STATUS"); until it ships, a host still has no button.
 - A round that ran out is treated as ended by the page, but its stored state stays `active`
   until the worker (or the next manual round) closes it.
 

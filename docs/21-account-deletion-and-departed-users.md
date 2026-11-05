@@ -489,7 +489,7 @@ request, by the daily job. It is not instant, and the copy does not claim it is.
 | Verdict | Tables |
 |---|---|
 | **REVOKE** (membership) | `org_members`, `module_roles`, `mm_group_members` (the pool — left in place, the rescore job would keep pairing a silhouette) |
-| **DELETE** (machine-derived) | `login_events`, `login_rollup`, `activity_events`, `activity_rollup`, `mm_pair_scores`, `sd_pairings` *except* one a safety note or report points at |
+| **DELETE** (machine-derived) | `login_events`, `login_rollup`, `activity_events`, `activity_rollup`, `mm_pair_scores`, `sd_pairings` *except* one a safety note or report points at, `sd_device_status` (camera/mic/connection reports a browser sent — added by `20261109010000`, which re-creates `account_silhouette` verbatim plus that one delete; the row also goes when the silhouette withdraws the seat, by that table's own seat trigger) |
 | **DELETE** (personal, touches nobody) | `mm_answers` |
 | **SCRUB** (copies of identity) | `profiles.display_name`, `user_private.settings`/`is_superadmin`, `cls_class_members` preferred names, `sal_worker_profiles.display_name` (+ `active=false`), `sd_participants.profile`/`profile_card` (+ withdrawn from events not yet complete), the person's key in `sd_matches.contact_shared`, `sal_customers.user_id` → NULL |
 | **AUTH** | `email`, `phone` NULL (the address is free for a fresh signup — §7.2); password blanked; metadata emptied; banned 100 years; identities, sessions, MFA, one-time tokens, webauthn, OAuth consents, flow state and GoTrue audit rows deleted. Token columns deliberately **not** NULLed — GoTrue scans some as plain strings. GoTrue still loads the row (tested). |

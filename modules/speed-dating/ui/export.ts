@@ -3,6 +3,10 @@
 // private notepad, and reports they filed. One-sided interest ABOUT them and
 // other people's data are never theirs to export (same privacy chain as the
 // live product). Organizers export the event domain they operate.
+// NOT exported by anyone: sd_device_status (20261109010000) — camera/mic/connection
+// reports a person's browser sends during an event. Machine-derived, one overwritten
+// row per seat, and deleted when the event ends or the seat is withdrawn, so there
+// is nothing durable to export (the data browser shows it while it exists).
 import type { ExportDb, ExportContext, ModuleExport } from '@platform/core'
 
 async function rows(query: any): Promise<Record<string, unknown>[]> {

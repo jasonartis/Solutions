@@ -684,6 +684,17 @@ export const speedDatingDataBrowser = declareDataBrowser({
       note: 'The via path finds rows where this person is someone else\'s mentee.',
     },
     {
+      table: 'sd_device_status',
+      label: 'Camera / mic status reports',
+      personColumns: ['user_id'],
+      orgColumn: 'org_id',
+      orderBy: { column: 'reported_at', ascending: false },
+      note:
+        'One row per seat, the latest report only, written by the person\'s own browser ' +
+        '(20261109010000). Deleted when the event ends or the seat is withdrawn/removed, so an ' +
+        'empty section after an event is the expected state, not a gap.',
+    },
+    {
       table: 'sd_events',
       label: 'Events they created',
       personColumns: ['created_by'],

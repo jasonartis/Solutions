@@ -104,6 +104,9 @@ const TABLE_EXCEPTIONS: Record<string, string[]> = {
   // by policy); every write goes through the feedback_* definers.
   feedback_tickets: ['SELECT'],
   feedback_messages: ['SELECT'],
+  // Speed-dating device status (20261109010000). SELECT only (event staff + the
+  // person, by policy); the one writer is sd_report_device_status.
+  sd_device_status: ['SELECT'],
 }
 
 // Functions whose intended EXECUTE differs from the blanket
@@ -202,6 +205,9 @@ const FUNCTION_EXCEPTIONS: Record<string, { auth: boolean; svc: boolean }> = {
   'feedback_reply(p_ticket_id uuid, p_body text, p_internal boolean)': { auth: true, svc: false },
   'feedback_set_status(p_ticket_id uuid, p_status text)': { auth: true, svc: false },
   'feedback_mark_read(p_ticket_id uuid)': { auth: true, svc: false },
+  // 20261109010000: a person reports their own seat's camera/mic/connection.
+  // Acts on auth.uid(); the worker has nothing to report.
+  'sd_report_device_status(p_event_id uuid, p_camera text, p_mic text, p_connection text)': { auth: true, svc: false },
 }
 const FULL_CRUD = ['SELECT', 'INSERT', 'UPDATE', 'DELETE']
 // `settings` moved to `public.user_private` with the email slice (2026-09-17,
@@ -578,6 +584,8 @@ async function main() {
     // 20261106010000: tickets are between a person and the platform owner only.
     feedback_tickets: [],
     feedback_messages: [],
+    // 20261109010000: browser-reported device status; nothing server-side writes it.
+    sd_device_status: [],
   }
   const svcLost = tables.filter((t) => {
     const want = SVC_EXCEPTIONS[t.relname] ?? FULL_CRUD

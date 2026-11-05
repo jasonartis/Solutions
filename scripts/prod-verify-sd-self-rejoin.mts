@@ -47,12 +47,15 @@ if (LOCAL) {
 // 20261027010000 re-creates sd_participants_insert_guard and sd_pin_participant
 // (closed state, FOR SHARE, event_id pin), and 20261105010000 re-creates
 // sd_pin_participant (user_id refusal) and sd_notes_guard (all checks computed,
-// pairing tied to author + subject), so the later bodies win.
+// pairing tied to author + subject), and 20261109010000 re-creates
+// sd_pin_participant again (another person's check-in: un-tick only), so the
+// later bodies win.
 const FILES = [
   '20261017010000_sd_self_rejoin.sql',
   '20261017020000_sd_hardening.sql',
   '20261027010000_sd_closed_event_state.sql',
   '20261105010000_sd_security_followup.sql',
+  '20261109010000_sd_host_untick_device_status.sql',
 ]
 const expected = new Map<string, string>()
 for (const f of FILES) {

@@ -50,9 +50,14 @@ function bodies(file: string): Map<string, string> {
   for (let m = re.exec(text); m; m = re.exec(text)) out.set(m[1]!, createHash('md5').update(m[2]!).digest('hex'))
   return out
 }
-// 20261105010000 re-creates sd_pin_participant (user_id refusal), so its body
-// wins where it defines one; the other two still come from 20261027010000.
-const mine = new Map([...bodies('20261027010000_sd_closed_event_state.sql'), ...bodies('20261105010000_sd_security_followup.sql')])
+// 20261105010000 and then 20261109010000 re-create sd_pin_participant (user_id
+// refusal; another person's check-in un-tick only), so the latest body wins where
+// it defines one; the other two still come from 20261027010000.
+const mine = new Map([
+  ...bodies('20261027010000_sd_closed_event_state.sql'),
+  ...bodies('20261105010000_sd_security_followup.sql'),
+  ...bodies('20261109010000_sd_host_untick_device_status.sql'),
+])
 const control = bodies('20261017010000_sd_self_rejoin.sql')
 
 const FUNCTIONS = ['sd_guard_event', 'sd_participants_insert_guard', 'sd_pin_participant']

@@ -153,6 +153,7 @@ are out of scope here entirely.
 | `sd_can_organize_event` | rank >= 2 | `module_caller_covers_rank` | sd_participants (all) |
 | `sd_can_organize_event` | rank >= 2 | `module_caller_covers_rank` | sd_reports (all) |
 | `sd_can_organize_event` | rank >= 2 | `module_caller_covers_rank` | sd_rounds (all) |
+| `sd_can_staff_event_of` | rank >= 2 | `sd_can_organize_event` | sd_device_status (select) |
 | `sd_can_staff_event_of` | rank >= 2 | `sd_can_organize_event` | sd_events (select) |
 | `sd_can_staff_event_of` | rank >= 2 | `sd_can_organize_event` | sd_pairings (select) |
 | `sd_can_staff_event_of` | rank >= 2 | `sd_can_organize_event` | sd_participants (select) |
@@ -298,7 +299,7 @@ Ladder: **4** director · **3** admin, coordinator · **2** lead, organizer · *
 | `sd_can_organize` | rank >= 2 | admin, coordinator, director, lead, organizer | _no policy names it — reached through triggers/functions_ |
 | `sd_can_organize_event` | rank >= 2 | admin, coordinator, director, lead, organizer | sd_events, sd_interest, sd_matches, sd_pairings, sd_participants, sd_reports, sd_rounds |
 | `sd_can_staff_event` | rank >= 2 | admin, coordinator, director, lead, organizer | _no policy names it — reached through triggers/functions_ |
-| `sd_can_staff_event_of` | rank >= 2 | admin, coordinator, director, lead, organizer | sd_events, sd_pairings, sd_participants, sd_reports, sd_rounds |
+| `sd_can_staff_event_of` | rank >= 2 | admin, coordinator, director, lead, organizer | sd_device_status, sd_events, sd_pairings, sd_participants, sd_reports, sd_rounds |
 | `sd_interest_before_write` | rank >= 2 | admin, coordinator, director, lead, organizer | _no policy names it — reached through triggers/functions_ |
 | `sd_match_contacts` | rank >= 2 | admin, coordinator, director, lead, organizer | _no policy names it — reached through triggers/functions_ |
 | `sd_notes_guard` | rank >= 2 | admin, coordinator, director, lead, organizer | _no policy names it — reached through triggers/functions_ |
