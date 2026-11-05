@@ -55,8 +55,8 @@ section, keep it a SUMMARY with pointers: add the dated story to the journal / t
     `user_id` never changes for a JWT caller; the notes guard runs every lookup and raises once; a note's `pairing_id` must join
     author and subject. Module-6 spec 2026-11-05.
   - **Late check-in bug fixed (`f6fe128`)** — at every event with a round cap, a person checking in after round 1 could never
-    be paired (the cap shrank to the early arrivals). Now counts all registered seats. Same spec entry.
-  - **Feedback/ticket tool v1 — docs/27 "v1 AS BUILT"** (`20261106010000`; see that doc for its prod status). Author +
+    be paired (the cap shrank to the early arrivals). Now counts all registered seats; prod check 8/8. Same spec entry.
+  - **Feedback/ticket tool v1 — docs/27 "v1 AS BUILT"** (`20261106010000` — ON PROD, verified 7/24 → 36/0 + a real-browser check 5/5). Author +
     superadmin only, writes through four definers, no org-admin read path.
   - Speed-dating export gains "Safety reports I filed"; turbo typecheck/build for `apps/web`/`apps/worker` now see
     `modules/` and `packages/` (`apps/*/turbo.json` — the old "edits to nail-salon/visual-messaging replay FULL TURBO" gotcha

@@ -1,6 +1,6 @@
 # 27 — Feedback, bug reports and requests (a platform-wide ticket tool)
 
-**Status: v1 BUILT 2026-11-05 (Opus) — read "v1 AS BUILT" at the end first.** The sections before it are the 2026-10-28
+**Status: v1 BUILT, ON PRODUCTION AND PROD-VERIFIED 2026-11-05 (Opus) — read "v1 AS BUILT" at the end first.** Backup `backups/2026-11-05T10-53-25`; `scripts/prod-verify-feedback.mts` 7/24 before → **36/0** after; ACL 17/17 on prod; `prod-verify-migration.ts` 0/0; CI green on `17c2066` (incl. the e2e); `scripts/prod-verify-feedback-ui.mjs` **5/5 in a real browser on prod** (send from a module page, preview, My feedback, another user gets 404; its ticket deleted afterwards). The sections before it are the 2026-10-28
 design note (founder decisions, unchanged) and the routing questions that are still open.
 
 ## Why

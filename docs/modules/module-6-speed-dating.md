@@ -811,10 +811,11 @@ the next round". **Both now count every REGISTERED participant seat** (the upper
 accepted: if registered people never show, "round 2 of 5" can promise rounds that never run — a display overstatement, against
 the old failure of a person who can never be paired. `scripts/verify-orchestrator-round-cap.mts` gained the case (cap 3 vs the
 old 1; FAILS against the old worker). Prod check: `scripts/prod-verify-late-arrival.mjs` (charlie + dana check in, round 1,
-eve checks in, round 2 pairs eve) — result recorded below once the deploy is READY.
+eve checks in, round 2 pairs eve) — **8/8 on PROD** after `17c2066` went READY (2026-11-05): cap stayed 3, eve paired in round 2.
 
 **EXPORT: "Safety reports I filed"** (`ui/export.ts`, key `my-reports`, participant hat). The manifest's header already
 promised "reports they filed" but the data set did not exist. Exports reason, detail, during_call, state, created_at and the
 event name — never who was reported, never who reviewed it. `scripts/verify-sd-export-reports.mts` 6/6 locally as real users
 (charlie gets exactly his seeded report; dana, who filed none, gets none). **Still open from the 2026-10-28 Opus list:** names
 in the organizer's roster export (it carries `user_id`) — a privacy-rules question, not changed.
+**CI note:** `f6fe128` went red on the e2e "organizer sets round length… edits a draft" (twice, retry included): the test clicked *Cancel event* and navigated at once, aborting the server action. Fixed in the test (`17c2066`, waits for "cancelled"); no app change.
