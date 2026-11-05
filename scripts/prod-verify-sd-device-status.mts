@@ -65,6 +65,10 @@ try {
   const [sp] = await sql<{ acl: string | null }[]>`select relacl::text as acl from pg_class where oid = 'public.sd_participants'::regclass`
   check('CONTROL: sd_participants is readable in the catalog and grants authenticated', /authenticated=/.test(sp?.acl ?? ''), sp?.acl ?? '-')
 
+  // The "holds nothing" checks below would pass vacuously for a role that does not exist (review B).
+  const roles = await sql<{ rolname: string }[]>`select rolname from pg_roles where rolname in ('anon', 'authenticated', 'service_role')`
+  check('CONTROL: anon, authenticated and service_role all exist', roles.length === 3, roles.map((r) => r.rolname).join(','))
+
   const [row] = await sql<{ rls: boolean; acl: string | null }[]>`
     select c.relrowsecurity as rls, c.relacl::text as acl from pg_class c
     where c.relnamespace = 'public'::regnamespace and c.relname = 'sd_device_status'`

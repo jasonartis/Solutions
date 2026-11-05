@@ -554,9 +554,9 @@ describe('speed dating: device status — lifetime', () => {
     expect(r).toBe(1)
   })
 
-  // Belt and braces, stated honestly: the silhouette also WITHDRAWS live seats, which the seat trigger
-  // already answers, so this passes with either mechanism alone. The explicit line is docs/03 #35's
-  // classification and survives a future silhouette that stops withdrawing.
+  // The silhouette also WITHDRAWS live seats, which the seat trigger answers on its own, so this test passes
+  // with either mechanism. The two MUTATION tests below separate them: the silhouette's own delete line
+  // works with the seat trigger switched off, and with BOTH off the row survives (the tests have teeth).
   it('the account silhouette deletes the person\'s rows; another person\'s row survives (control)', async () => {
     const r = await rolledBack(async (tx) => {
       const org = await makeOrg(tx)
@@ -573,6 +573,44 @@ describe('speed dating: device status — lifetime', () => {
     })
     expect(r.before).toEqual({ p: 1, q: 1 })
     expect(r.after).toEqual({ p: 0, q: 1 })
+  })
+
+  /** p and q each report at a running event; returns a counter by user. */
+  async function twoReports(tx: Tx) {
+    const org = await makeOrg(tx)
+    const ev = await makeEvent(tx, org, 'running')
+    await seat(tx, org, ev, 'p')
+    await seat(tx, org, ev, 'q')
+    expect((await as(tx, 'p', report(tx, ev))).value).toBe('saved')
+    expect((await as(tx, 'q', report(tx, ev))).value).toBe('saved')
+    return async (u: Who) =>
+      (await tx<{ n: number }[]>`select count(*)::int as n from sd_device_status where user_id = ${ids[u]}`)[0]!.n
+  }
+  const SEAT_TRIGGER_TEST = "if new.status not in ('registered', 'waitlisted')"
+  const SILHOUETTE_LINE = '  delete from public.sd_device_status where user_id = target;   -- 20261109010000\n'
+
+  it('MUTATION: with the seat trigger switched OFF, the silhouette\'s own delete line still removes the rows', async () => {
+    const r = await rolledBack(async (tx) => {
+      const count = await twoReports(tx)
+      await mutate(tx, 'sd_participants_clear_device_status()', SEAT_TRIGGER_TEST, 'if false')
+      await tx`select public.account_silhouette(${ids.p})`
+      const [seatStatus] = await tx<{ status: string }[]>`select status from sd_participants where user_id = ${ids.p}`
+      return { p: await count('p'), q: await count('q'), seatStatus: seatStatus!.status }
+    })
+    expect(r.seatStatus, 'premise: the silhouette withdrew the seat (so only the line can have deleted the row)').toBe('withdrawn')
+    expect(r.p).toBe(0)
+    expect(r.q, 'CONTROL: another person\'s row survives').toBe(1)
+  })
+
+  it('MUTATION: with the seat trigger AND the silhouette line both removed, the row survives (the test above has teeth)', async () => {
+    const r = await rolledBack(async (tx) => {
+      const count = await twoReports(tx)
+      await mutate(tx, 'sd_participants_clear_device_status()', SEAT_TRIGGER_TEST, 'if false')
+      await mutate(tx, 'account_silhouette(uuid)', SILHOUETTE_LINE, '')
+      await tx`select public.account_silhouette(${ids.p})`
+      return await count('p')
+    })
+    expect(r).toBe(1)
   })
 })
 
@@ -622,6 +660,70 @@ describe('speed dating: device status — a report in flight blocks the event le
       })
       // Not blocked: had the dater committed, a status row would outlive the event's live state.
       expect(organizer.error).toBeNull()
+    } finally {
+      await sql`delete from orgs where id = ${org}`
+    }
+  })
+
+  // The same race on the SEAT (review B, LOW): a withdraw/removal whose trigger deletes the seat's row must
+  // wait for a report in flight. The report's FK check takes only FOR KEY SHARE on the seat, which does NOT
+  // conflict with the status UPDATE's FOR NO KEY UPDATE — so without the FOR SHARE read the withdraw slips by.
+  const SEAT_LOCK = 'where p.event_id = p_event_id and p.user_id = me\n  for share;'
+
+  it('a withdrawal waits for an uncommitted report (FOR SHARE on the seat)', async () => {
+    const org = await makeOrg(sql)
+    try {
+      const ev = await makeEvent(sql, org, 'running')
+      const [s] = await sql<{ id: string }[]>`
+        insert into sd_participants (org_id, event_id, user_id, status) values (${org}, ${ev}, ${ids.p}, 'registered') returning id`
+      let withdraw: { error: string | null } = { error: 'not run' }
+      await rolledBack(async (tx) => {
+        expect((await as(tx, 'p', report(tx, ev))).value, 'premise: the report itself succeeded').toBe('saved')
+        await sql2.begin(async (t2) => {
+          await t2.unsafe("set local lock_timeout = '400ms'")
+          await t2`update sd_participants set status = 'withdrawn' where id = ${s!.id}`
+          throw new Error('__rollback2__')
+        }).then(
+          () => { withdraw = { error: null } },
+          (e: unknown) => {
+            const m = String((e as Error).message)
+            withdraw = { error: m === '__rollback2__' ? null : m }
+          },
+        )
+      })
+      expect(withdraw.error).toContain('lock timeout')
+      // CONTROL: with the report gone, the same withdrawal goes straight through.
+      const [after] = await sql2<{ status: string }[]>`update sd_participants set status = 'withdrawn' where id = ${s!.id} returning status`
+      expect(after!.status).toBe('withdrawn')
+    } finally {
+      await sql`delete from orgs where id = ${org}`
+    }
+  })
+
+  it('MUTATION: without FOR SHARE on the seat the withdrawal slips past an uncommitted report (the race is real)', async () => {
+    const org = await makeOrg(sql)
+    try {
+      const ev = await makeEvent(sql, org, 'running')
+      const [s] = await sql<{ id: string }[]>`
+        insert into sd_participants (org_id, event_id, user_id, status) values (${org}, ${ev}, ${ids.p}, 'registered') returning id`
+      let withdraw: { error: string | null } = { error: 'not run' }
+      await rolledBack(async (tx) => {
+        await mutate(tx, 'sd_report_device_status(uuid,text,text,text)', SEAT_LOCK, 'where p.event_id = p_event_id and p.user_id = me;')
+        expect((await as(tx, 'p', report(tx, ev))).value, 'premise: the report itself succeeded').toBe('saved')
+        await sql2.begin(async (t2) => {
+          await t2.unsafe("set local lock_timeout = '400ms'")
+          await t2`update sd_participants set status = 'withdrawn' where id = ${s!.id}`
+          throw new Error('__rollback2__')
+        }).then(
+          () => { withdraw = { error: null } },
+          (e: unknown) => {
+            const m = String((e as Error).message)
+            withdraw = { error: m === '__rollback2__' ? null : m }
+          },
+        )
+      })
+      // Not blocked: had the dater committed, a status row would sit on a withdrawn seat.
+      expect(withdraw.error).toBeNull()
     } finally {
       await sql`delete from orgs where id = ${org}`
     }
