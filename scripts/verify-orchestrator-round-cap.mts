@@ -132,77 +132,82 @@ check('CONTROL check-in USED (staff), everybody arrived: the round IS built', (a
 check('check-in USED (self), nobody arrived: NO round is built', (await firstTickRounds({ checkIn: 'self' }, false)) === 0)
 check('check-in NOT used, nobody arrived: the round IS built (the old worker built none)', (await firstTickRounds({}, false)) === 1)
 
-// ---- The cap cannot promise more rounds than the people can use (founder 2026-10-29) ------------------
-// When the first round starts, rounds_planned shrinks to what gets everyone to meet everyone. Two people
-// can only ever have ONE round, so a cap of 8 must become 1 — unless repeats are allowed (no natural end).
-async function capAfterFirstTick(cap: number, allowRepeats: boolean) {
-  const name = `Cap shrink check ${Date.now()}`
-  const ev = must(
-    await admin
-      .from('sd_events')
-      .insert({ org_id: org!.id, name, rounds_planned: cap, allow_repeat_pairings: allowRepeats, round_duration_seconds: 60, break_duration_seconds: 0 })
-      .select('id')
-      .single(),
-    'create event',
-  )
-  try {
-    for (const state of ['open', 'running']) {
-      const { error } = await admin.from('sd_events').update({ state }).eq('id', ev.id)
-      if (error) throw new Error(`-> ${state}: ${error.message}`)
-    }
-    for (const p of people!) {
-      const { error } = await admin.from('sd_participants').insert({
-        org_id: org!.id, event_id: ev.id, user_id: p.user_id, status: 'registered', seat_type: 'participant', checked_in: true,
-      })
-      if (error) throw new Error(`seat: ${error.message}`)
-    }
-    await runOrchestratorTick(admin)
-    const row = must(await admin.from('sd_events').select('rounds_planned').eq('id', ev.id).single(), 'read cap')
-    return row.rounds_planned as number | null
-  } finally {
-    await admin.from('sd_events').delete().eq('id', ev.id)
-  }
-}
-check('cap 8 with two people shrinks to 1 when the first round starts', (await capAfterFirstTick(8, false)) === 1)
-check('CONTROL: repeats allowed keeps the cap as typed (8)', (await capAfterFirstTick(8, true)) === 8)
-check('CONTROL: a cap already at the natural count (1) is left alone', (await capAfterFirstTick(1, false)) === 1)
+// ---- "Round X of N" follows who is actually there (founder 2026-11-05) -----------------------------------
+// The organizer's cap (rounds_planned) is never rewritten any more; the worker recounts sd_events.rounds_expected
+// at every round start from the people checked in. Check-in used, cap 8 throughout.
+const { data: more } = await admin.from('profiles').select('user_id, display_name').in('display_name', ['Eve E', 'Frank F'])
+const eve = more?.find((p) => p.display_name === 'Eve E')
+const frank = more?.find((p) => p.display_name === 'Frank F')
+if (!eve || !frank) throw new Error('Eve E / Frank F not found — seed first')
 
-// ---- A late arrival still has a round to join (2026-11-05) --------------------------------------------
-// Check-in used; three registered, only Charlie and Dana arrived when round 1 starts. The shrink must count
-// all three (single pool, odd -> 3 rounds), not the two arrivals (-> 1 round, leaving Eve no round at all).
-const { data: eve } = await admin.from('profiles').select('user_id').eq('display_name', 'Eve E').single()
-if (!eve) throw new Error('Eve E not found — seed first')
-async function capWithLateArrival() {
+// Plays the event through the worker: `arrived` are checked in from the start; `lateBeforeRound` (if any)
+// checks in just before that round is built. Records rounds_planned / rounds_expected after every tick
+// that built a round, and runs until the worker builds no more.
+async function playEvent(opts: { arrived: string[]; noShows: string[]; late?: { userId: string; beforeRound: number }; allowRepeats?: boolean }) {
   const ev = must(
     await admin
       .from('sd_events')
-      .insert({ org_id: org!.id, name: `Late arrival cap check ${Date.now()}`, rounds_planned: 8, allow_repeat_pairings: false, round_duration_seconds: 60, break_duration_seconds: 0, format: { checkIn: 'self' } })
+      .insert({ org_id: org!.id, name: `Rounds expected check ${Date.now()}`, rounds_planned: 8, allow_repeat_pairings: opts.allowRepeats ?? false, round_duration_seconds: 60, break_duration_seconds: 0, format: { checkIn: 'self' } })
       .select('id')
       .single(),
     'create event',
   )
+  const seen: { round: number; planned: number | null; expected: number | null }[] = []
   try {
     for (const state of ['open', 'running']) {
       const { error } = await admin.from('sd_events').update({ state }).eq('id', ev.id)
       if (error) throw new Error(`-> ${state}: ${error.message}`)
     }
-    for (const [user_id, checked_in] of [...people!.map((p) => [p.user_id, true] as const), [eve!.user_id, false] as const]) {
+    const seats = [
+      ...opts.arrived.map((u) => [u, true] as const),
+      ...opts.noShows.map((u) => [u, false] as const),
+      ...(opts.late ? [[opts.late.userId, false] as const] : []),
+    ]
+    for (const [user_id, checked_in] of seats) {
       const { error } = await admin.from('sd_participants').insert({
         org_id: org!.id, event_id: ev.id, user_id, status: 'registered', seat_type: 'participant', checked_in,
       })
       if (error) throw new Error(`seat: ${error.message}`)
     }
-    await runOrchestratorTick(admin)
-    const rounds = must(await admin.from('sd_rounds').select('id').eq('event_id', ev.id), 'read rounds')
-    const row = must(await admin.from('sd_events').select('rounds_planned').eq('id', ev.id).single(), 'read cap')
-    return { rounds: rounds.length, cap: row.rounds_planned as number | null }
+    for (let i = 0; i < 12; i++) {
+      const before = must(await admin.from('sd_rounds').select('id').eq('event_id', ev.id), 'read rounds').length
+      if (opts.late && before + 1 === opts.late.beforeRound) {
+        const { error } = await admin.from('sd_participants').update({ checked_in: true }).eq('event_id', ev.id).eq('user_id', opts.late.userId)
+        if (error) throw new Error(`late check-in: ${error.message}`)
+      }
+      await runOrchestratorTick(admin)
+      const after = must(await admin.from('sd_rounds').select('id').eq('event_id', ev.id), 'read rounds').length
+      const row = must(await admin.from('sd_events').select('rounds_planned, rounds_expected').eq('id', ev.id).single(), 'read event')
+      if (after > before) seen.push({ round: after, planned: row.rounds_planned, expected: row.rounds_expected })
+      else return { seen, ran: after, finalExpected: row.rounds_expected, finalPlanned: row.rounds_planned }
+      // run this round's clock out so the next tick closes it and builds the next
+      const { error } = await admin.from('sd_rounds').update({ ends_at: new Date(Date.now() - 3_600_000).toISOString() }).eq('event_id', ev.id)
+      if (error) throw new Error(`clock: ${error.message}`)
+    }
+    throw new Error('runaway: the worker kept building rounds')
   } finally {
     await admin.from('sd_events').delete().eq('id', ev.id)
   }
 }
-const late = await capWithLateArrival()
-check('CONTROL: with two of three arrived, round 1 is built', late.rounds === 1, JSON.stringify(late))
-check('the cap counts all three registered (3), leaving the late arrival rounds to join — not the two arrivals (1)', late.cap === 3, JSON.stringify(late))
+const [charlie, dana] = people!.map((p) => p.user_id)
+
+// No-show: four registered, three come (odd pool of three -> three rounds). The old rule said "of 4".
+const noShow = await playEvent({ arrived: [charlie!, dana!, eve.user_id], noShows: [frank.user_id] })
+check('no-show: the organizer cap stays as typed (8) every round', noShow.seen.every((s) => s.planned === 8) && noShow.finalPlanned === 8, JSON.stringify(noShow))
+check('no-show: N counts the three who came, not the four registered', noShow.seen.every((s) => s.expected === 3), JSON.stringify(noShow.seen))
+check('no-show: N was exact — exactly that many rounds ran', noShow.ran === 3, `${noShow.ran} ran`)
+
+// Late arrival: three come, Frank checks in just before round 2. N goes up from round 2 and is then exact.
+const late = await playEvent({ arrived: [charlie!, dana!, eve.user_id], noShows: [], late: { userId: frank.user_id, beforeRound: 2 } })
+check('late arrival: round 1 says 3 (the three there)', late.seen[0]?.expected === 3, JSON.stringify(late.seen))
+check('late arrival: from round 2, N is exactly the rounds that then ran', late.seen.slice(1).every((s) => s.expected === late.ran), `${JSON.stringify(late.seen)}; ran ${late.ran}`)
+check('CONTROL late arrival: the late arrival really added rounds (more than 3 ran)', late.ran > 3, `${late.ran} ran`)
+check('late arrival: when the rotation ran out, N equals the rounds run', late.finalExpected === late.ran, JSON.stringify(late))
+check('late arrival: the organizer cap stays 8', late.finalPlanned === 8)
+
+// Repeats allowed: no natural end, so N is the organizer's cap.
+const repeats = await playEvent({ arrived: [charlie!, dana!], noShows: [], allowRepeats: true })
+check('CONTROL repeats allowed: N is the cap (8) and 8 rounds run', repeats.seen.every((s) => s.expected === 8) && repeats.ran === 8, JSON.stringify(repeats))
 
 console.log(fails ? `\n${fails} FAILED` : '\nALL PASSED')
 process.exit(fails ? 1 : 0)

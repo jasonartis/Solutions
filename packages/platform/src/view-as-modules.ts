@@ -1362,7 +1362,7 @@ export const speedDatingViewAs = declareViewAs({
           label: 'Events in reach',
           columns: [
             'id', 'name', 'description', 'scheduled_at', 'lobby_opens_at', 'state',
-            'round_duration_seconds', 'break_duration_seconds', 'rounds_planned', 'format',
+            'round_duration_seconds', 'break_duration_seconds', 'rounds_planned', 'rounds_expected', 'format',
             'allow_repeat_pairings', 'resume_review_enabled', 'current_round_id',
             'created_by', 'created_at',
           ],
@@ -1499,7 +1499,7 @@ export const speedDatingViewAs = declareViewAs({
           label: 'Events in reach',
           columns: [
             'id', 'name', 'description', 'scheduled_at', 'lobby_opens_at', 'state',
-            'round_duration_seconds', 'break_duration_seconds', 'rounds_planned', 'format',
+            'round_duration_seconds', 'break_duration_seconds', 'rounds_planned', 'rounds_expected', 'format',
             'allow_repeat_pairings', 'resume_review_enabled', 'current_round_id',
             'created_by', 'created_at',
           ],
@@ -1656,7 +1656,7 @@ export const speedDatingViewAs = declareViewAs({
           label: 'My event',
           columns: [
             'id', 'name', 'description', 'scheduled_at', 'lobby_opens_at', 'state',
-            'round_duration_seconds', 'break_duration_seconds', 'rounds_planned', 'format',
+            'round_duration_seconds', 'break_duration_seconds', 'rounds_planned', 'rounds_expected', 'format',
             'resume_review_enabled', 'current_round_id', 'created_at',
           ],
           subjectColumn: null,

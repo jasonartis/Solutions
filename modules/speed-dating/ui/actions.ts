@@ -7,7 +7,8 @@ import {
   authorizeVideoJoin,
   buildNextRound,
   getVideoProvider,
-  naturalRoundsForSeats,
+  projectedTotalRounds,
+  seatsPerRound,
   tryCreateVideoRoom,
   type VideoConnectionOptions,
 } from '@modules/speed-dating'
@@ -438,7 +439,7 @@ export async function runPairingRound(orgSlug: string, eventId: string) {
         .order('created_at'),
       supabase
         .from('sd_pairings')
-        .select('participant_a_id, participant_b_id')
+        .select('round_id, participant_a_id, participant_b_id')
         .eq('event_id', eventId),
     ])
   if (!event) throw new Error('Event not found')
@@ -456,20 +457,9 @@ export async function runPairingRound(orgSlug: string, eventId: string) {
     redirect(`/o/${orgSlug}/m/speed-dating/events/${eventId}?notice=checkin-needed`)
   }
 
-  // THE CAP CANNOT PROMISE MORE ROUNDS THAN THE PEOPLE CAN USE. When the first round starts, shrink the
-  // organizer's cap to the number of rounds that gets everyone to meet everyone (the worker applies the same
-  // rule) — so a dater's "round 7 of 8" is never shown for an event that will run out after 7. Repeat-meeting
-  // events have no natural end and keep the cap as typed.
-  // Counted over everyone REGISTERED, not only those checked in (2026-11-05): someone still on their way
-  // checks in later and joins the next round, and a cap shrunk to the early arrivals would leave no round
-  // for them (2 of 3 arrived -> cap 1 -> the third is never paired). Registered is the upper bound on who
-  // can still arrive; the cost is that no-shows can leave "round 2 of 5" promising rounds that never run.
-  if ((rounds ?? []).length === 0 && event.rounds_planned !== null && !event.allow_repeat_pairings) {
-    const natural = naturalRoundsForSeats((participants ?? []).map((p) => ({ poolSide: p.pool_side })))
-    if (natural > 0 && natural < event.rounds_planned) {
-      await supabase.from('sd_events').update({ rounds_planned: natural }).eq('id', eventId)
-    }
-  }
+  // The organizer's cap (rounds_planned) is NEVER rewritten here any more (2026-11-05). The dater's "round X
+  // of N" comes from sd_events.rounds_expected, recomputed below at every round start from the people
+  // present — see projectedTotalRounds (modules/speed-dating/src/plan.ts). The worker does the same.
 
   const seatUsers = pairable.map((p) => p.user_id)
   const { data: blocks } = seatUsers.length
@@ -493,7 +483,15 @@ export async function runPairingRound(orgSlug: string, eventId: string) {
   // message REDACTED in production (docs/03 #22) — the organizer saw only the
   // generic "Something went wrong" page. This action is a <form action>, so
   // there is no return value to render; redirect with a notice the page shows.
-  if (!plan) redirect(`/o/${orgSlug}/m/speed-dating/events/${eventId}?notice=rotation-complete`)
+  if (!plan) {
+    // Ran out of new pairs before the projection said: the last round that ran WAS the last one, so the
+    // dater's "round 3 of 4" becomes "round 3 of 3". Display only — a failed write must not block the notice.
+    if ((rounds ?? []).length > 0) {
+      const { error } = await supabase.from('sd_events').update({ rounds_expected: Math.min((rounds ?? []).length, 99) }).eq('id', eventId)
+      if (error) console.error(`[speed-dating] could not set rounds_expected for event ${eventId}: ${error.message}`)
+    }
+    redirect(`/o/${orgSlug}/m/speed-dating/events/${eventId}?notice=rotation-complete`)
+  }
 
   // Close any active round first (active -> complete is a legal transition).
   for (const r of rounds ?? []) {
@@ -540,6 +538,26 @@ export async function runPairingRound(orgSlug: string, eventId: string) {
     })
     fail(error, 'Create pairing failed')
   }
+
+  // The dater's "round X of N", recounted from who is here now (late arrivals raise it, no-shows never
+  // inflate it). Written BEFORE the round goes active so the new round and its N appear together. Display
+  // only: a failed write is logged, never allowed to stop the round.
+  // Rebuilt from WHO WAS IN each round (never from the block-shaped history), so N cannot reveal a block.
+  // Every seat that has ever been in a round, whatever its status now, for its pool side.
+  const { data: everySeat } = await supabase.from('sd_participants').select('id, pool_side').eq('event_id', eventId)
+  const sideOf = new Map((everySeat ?? []).map((s) => [s.id, s.pool_side as string | null]))
+  const present = pairable.map((p) => ({ id: p.id, userId: p.user_id, poolSide: p.pool_side }))
+  const expected = projectedTotalRounds({
+    roundsSoFar: [...seatsPerRound(rounds ?? [], pairings ?? [], (id) => sideOf.get(id) ?? null), present],
+    present,
+    allowRepeats: event.allow_repeat_pairings,
+    cap: event.rounds_planned,
+  })
+  const { error: expectedErr } = await supabase
+    .from('sd_events')
+    .update({ rounds_expected: expected === null ? null : Math.min(expected, 99) })
+    .eq('id', eventId)
+  if (expectedErr) console.error(`[speed-dating] could not set rounds_expected for event ${eventId}: ${expectedErr.message}`)
 
   const { error: activateErr } = await supabase
     .from('sd_rounds')

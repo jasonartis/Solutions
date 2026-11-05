@@ -1,7 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import {
   buildNextRound,
-  naturalRoundsForSeats,
+  projectedTotalRounds,
+  seatsPerRound,
   rotationExhausted,
   tryCreateVideoRoom,
   type SeatPair,
@@ -23,7 +24,7 @@ export async function runOrchestratorTick(admin: SupabaseClient): Promise<void> 
   // than merely silent.
   const { data: events, error: eventsErr } = await admin
     .from('sd_events')
-    .select('id, org_id, round_duration_seconds, break_duration_seconds, allow_repeat_pairings, rounds_planned, format')
+    .select('id, org_id, round_duration_seconds, break_duration_seconds, allow_repeat_pairings, rounds_planned, rounds_expected, format')
     .eq('state', 'running')
   if (eventsErr) {
     console.error(`[orchestrator] could not read sd_events: ${eventsErr.message}`)
@@ -79,8 +80,7 @@ export async function runOrchestratorTick(admin: SupabaseClient): Promise<void> 
     // personal blocks. This used to filter on checked_in ALWAYS, while the manual button did not and
     // nothing in the app set checked_in: a running worker would have paired nobody at any event.
     const usesCheckIn = ['staff', 'self'].includes(String((event.format as { checkIn?: unknown } | null)?.checkIn ?? ''))
-    // Read every registered seat; the check-in filter is applied below, because the cap shrink further
-    // down counts ALL registered seats (a late arrival must still have a round to join).
+    // Read every registered seat, then keep only the arrived ones where the event uses check-in.
     const { data: registered, error: participantsErr } = await admin
       .from('sd_participants')
       .select('id, user_id, pool_side, checked_in')
@@ -102,7 +102,7 @@ export async function runOrchestratorTick(admin: SupabaseClient): Promise<void> 
     // would pair people who have already met, so the two are checked as well.
     const { data: pairings, error: pairingsErr } = await admin
       .from('sd_pairings')
-      .select('participant_a_id, participant_b_id')
+      .select('round_id, participant_a_id, participant_b_id')
       .eq('event_id', event.id)
     if (pairingsErr) {
       console.error(
@@ -138,16 +138,8 @@ export async function runOrchestratorTick(admin: SupabaseClient): Promise<void> 
     const seats = participants.map((p) => ({ id: p.id, userId: p.user_id, poolSide: p.pool_side }))
     const blockedUserPairs = (blocks ?? []).map((b) => ({ a: b.blocker_user_id, b: b.blocked_user_id }))
 
-    // Same rule as runPairingRound: the cap cannot promise more rounds than the people can use —
-    // counted over everyone REGISTERED, not only the early arrivals, so a late check-in still has a
-    // round to join (2026-11-05).
-    if ((rounds ?? []).length === 0 && event.rounds_planned !== null && !event.allow_repeat_pairings) {
-      const natural = naturalRoundsForSeats((registered ?? []).map((p) => ({ poolSide: p.pool_side })))
-      if (natural > 0 && natural < event.rounds_planned) {
-        const { error } = await admin.from('sd_events').update({ rounds_planned: natural }).eq('id', event.id)
-        if (error) console.error(`[orchestrator] could not shrink rounds_planned for event ${event.id}: ${error.message}`)
-      }
-    }
+    // The organizer's cap (rounds_planned) is never rewritten (2026-11-05); the dater's "round X of N" is
+    // sd_events.rounds_expected, recounted below at every round start. Same rule as runPairingRound.
 
     const plan = buildNextRound({
       seats,
@@ -159,6 +151,13 @@ export async function runOrchestratorTick(admin: SupabaseClient): Promise<void> 
     if (!plan) {
       if (rotationExhausted({ seats, history, blockedUserPairs, allowRepeats: event.allow_repeat_pairings })) {
         console.log(`[orchestrator] event ${event.id}: rotation complete — awaiting organizer`)
+      }
+      // Ran out of new pairs: the last round that ran was the last one, so "round 3 of 4" becomes "3 of 3".
+      // Only written when it changes (this branch repeats every tick until the organizer completes).
+      const ran = Math.min((rounds ?? []).length, 99)
+      if (ran > 0 && event.rounds_expected !== ran) {
+        const { error } = await admin.from('sd_events').update({ rounds_expected: ran }).eq('id', event.id)
+        if (error) console.error(`[orchestrator] could not set rounds_expected for event ${event.id}: ${error.message}`)
       }
       continue
     }
@@ -203,6 +202,23 @@ export async function runOrchestratorTick(admin: SupabaseClient): Promise<void> 
       })
       if (error) console.error(`[orchestrator] pairing failed: ${error.message}`)
     }
+
+    // The dater's "round X of N", recounted from who is here now. Rebuilt from WHO WAS IN each round, never
+    // from the block-shaped history, so N cannot reveal a block (projectedTotalRounds). Before activation, so
+    // the round and its N appear together; display only.
+    const { data: everySeat } = await admin.from('sd_participants').select('id, pool_side').eq('event_id', event.id)
+    const sideOf = new Map((everySeat ?? []).map((s) => [s.id as string, s.pool_side as string | null]))
+    const expected = projectedTotalRounds({
+      roundsSoFar: [...seatsPerRound(rounds ?? [], pairings ?? [], (id) => sideOf.get(id) ?? null), seats],
+      present: seats,
+      allowRepeats: event.allow_repeat_pairings,
+      cap: event.rounds_planned,
+    })
+    const { error: expectedErr } = await admin
+      .from('sd_events')
+      .update({ rounds_expected: expected === null ? null : Math.min(expected, 99) })
+      .eq('id', event.id)
+    if (expectedErr) console.error(`[orchestrator] could not set rounds_expected for event ${event.id}: ${expectedErr.message}`)
 
     const { error: activateErr } = await admin
       .from('sd_rounds')

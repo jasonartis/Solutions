@@ -2885,10 +2885,14 @@ test('speed-dating module: check-in — un-ticked people are told and not paired
   await expect(page.getByText('8 rounds planned')).toBeVisible()
   await page.getByRole('button', { name: 'Run next round (pair everyone)' }).click()
   await expect(page.getByText(/Rounds run: 1/)).toBeVisible()
-  // The default cap was 8, but two people can only ever have ONE round: it shrank when the round started,
-  // so a dater is never shown "round 1 of 8" for an event that is over after round 1.
-  await expect(page.getByText('1 round planned')).toBeVisible()
-  await expect(page.getByTestId('all-rounds-run')).toBeVisible()
+  // The organizer's cap stays 8 as typed (2026-11-05), but two people can only ever have ONE round: the
+  // count for the people here is 1, so a dater sees "round 1 of 1", never "round 1 of 8".
+  await expect(page.getByText('8 rounds planned (1 for the people here)')).toBeVisible()
+  await expect(page.getByTestId('all-rounds-run')).toContainText('everyone here has met everyone')
+  // The dater's own screen (the "round X of N" line is shown to a seated person, not the organizer).
+  await signIn(page, 'charlie@demo.local')
+  await page.goto(eventUrl)
+  await expect(page.getByTestId('round-of-planned')).toContainText('round 1 of 1')
 })
 
 test('speed-dating module: self check-in — the person taps "I\'m here" and the alarm goes away', async ({ page }) => {

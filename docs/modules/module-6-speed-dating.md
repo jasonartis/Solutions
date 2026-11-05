@@ -826,3 +826,34 @@ Founder asked (2026-11-05) for this to go to an Opus session (it needs a migrati
 **Migration (Opus):** (1) let a host (and an event-scoped host) UN-tick: allow only `checked_in` true→false and `checked_in_at`→null on another person's seat, never true (the database currently pins another person's row for a host, `sd_pin_participant`). (2) a status-reporting table for camera / mic / connected: written ONLY by the person for their own seat, read ONLY by staff of that event; no device names; throttled writes; a staleness rule ("last seen"); deleted with the silhouette; added to the export manifest and the view-as ratchet; revoke-before-grant (docs/03 #27); classify in `scripts/verify-acl-hardening.ts` and the data browser; must apply to an EMPTY database; a per-migration prod verifier; claim a version later than `20261106010000` with the other sessions first.
 **Client half (Sonnet, after the migration):** the browser reports camera/mic/connected (throttled); tiles on the Ready board show them with "last seen"; a host Un-tick button; e2e tests; docs; a prod check with real browsers.
 **Not decided, not recorded as fact:** a jump-in help room (stage C) and live thumbnails (stage D) — see the check-in entry above. The founder's recollection of a host who runs a group in the room, group rounds, silent audience seats, and a mentor/coaching event type is UNVERIFIED against the original specs (founder: "don't record it yet"); module-6 has only `allows_mentor` consent, `sd_mentors()` and a mentee pointer, and docs/24 §5.1 decided "audience/mentor seat = scoped grant" (not built). Mentor private feedback has no design.
+
+## 2026-11-05 (later) — "ROUND X OF N" FOLLOWS WHO IS ACTUALLY THERE; the organizer's cap is never rewritten (Opus, `20261107010000`)
+**Founder decision (2026-11-05):** "make sure it always says accurate based on who is there; take late-comers into account" —
+replacing the trade-off recorded in the entry above (no-shows could leave "round 2 of 5" promising rounds that never run).
+**Built:** `rounds_planned` is now ONLY the organizer's cap, exactly as typed (a hard stop, unchanged) — neither
+`runPairingRound` nor the worker rewrites it any more. A new display-only column `sd_events.rounds_expected` holds the N daters see.
+At EVERY round start both writers compute it with `projectedTotalRounds` (`src/plan.ts`): it replays the real rotation engine
+forward over the people checked in at that moment until nobody new is left to meet (never above the cap; never below the rounds
+already run; repeats allowed → the cap). When the rotation runs out early, it is set to the rounds actually run ("3 of 3").
+The page reads `rounds_expected ?? rounds_planned` for "round X of N", the time left, the last-round state and "all rounds have
+run"; the organizer's info line shows both ("8 rounds planned (3 for the people here)").
+**Why a stored column:** a dater cannot compute it — RLS rightly hides other people's pairing history from them.
+**Decisions taken in-session (founder can overturn):** (1) **blocks can never move N.** The first draft left blocks out of the
+projection but replayed from the REAL pairing history — and a block shapes that history (swaps, byes), so the adversarial review
+MEASURED N moving because of a block with nobody arriving (7 people: "of 7" → "of 8"; 4×4: 4 → 6), which tells a dater that two
+present people blocked each other. Fixed before shipping: the projection rebuilds its OWN block-free history from WHO WAS IN each
+round (`seatsPerRound` — every present seat gets a pairing row, bye or not, independent of blocks), so N depends only on arrivals
+and departures. `plan.test.ts` pins it: same people, with and without a block, identical N every round (with a control that the
+block really changed who met whom, and a mutation check that the first design does move N). The cost: where present people HAVE
+blocked each other, the real event can run a little shorter or longer than N — no more than its real length already shows — and N
+is then corrected (ran out early → rounds run; ran past N → recounted at that round's start). (2) The count changes at a round
+START, not the moment someone checks in, is un-ticked or withdraws: for the rest of that round the screen can be off by them.
+(3) N reveals a COUNT of arrivals/departures between rounds (never a name) to anyone who can see the event — accepted (review LOW).
+**Verified locally:** `plan.test.ts` (projection = what the engine actually runs, at every round, for 2–8 people, two sides, a
+late arrival at round 2 or 3, cap, repeats); `scripts/verify-orchestrator-round-cap.mts` 18/18 through the real worker
+(no-show: cap stays 8, N 3, exactly 3 ran; late arrival: 3 then 4 and exactly 4 ran; repeats: 8); e2e check-in test now asserts
+"8 rounds planned (1 for the people here)" and "round 1 of 1". `scripts/prod-verify-rounds-expected.mts` (structure + rolled-back
+probes: organizer writes, participant 0 rows, participant reads, CHECK 1..99) — local 13/0.
+**ON PROD, verified (2026-11-05):** backup `backups/2026-11-05T18-27-45`; dry run listed only `20261107010000`; applied; prod
+verifier **3/5 before → 13/0 after**. Local e2e: the full suite 87/88 with the one failure being this entry's own new assertion
+(it looked for "round 1 of 1" on the organizer's screen; the line is shown to a seated dater) — fixed, speed-dating e2e 11/11.

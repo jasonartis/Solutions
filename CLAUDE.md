@@ -51,6 +51,9 @@ section, keep it a SUMMARY with pointers: add the dated story to the journal / t
 
 ### Shipped most recently (newest first; full stories in the linked docs)
 - **2026-11-05 (Opus, founder's "do the decided list" session):**
+  - **Speed dating "round X of N" follows who is there (`20261107010000` — ON PROD, verified 3/5 → 13/0):** the organizer's
+    cap is never rewritten; `sd_events.rounds_expected` is recounted each round, block-free by construction. Module-6 spec
+    2026-11-05 (later).
   - **Speed-dating SECURITY FOLLOW-UP `20261105010000` — ON PROD, verified** (sd self-rejoin verifier 167/7 → 174/0): a seat's
     `user_id` never changes for a JWT caller; the notes guard runs every lookup and raises once; a note's `pairing_id` must join
     author and subject. Module-6 spec 2026-11-05.

@@ -58,7 +58,7 @@ export default async function EventPage(props: {
 
   const { data: event } = await supabase
     .from('sd_events')
-    .select('id, org_id, name, state, scheduled_at, resume_review_enabled, round_duration_seconds, break_duration_seconds, allow_repeat_pairings, rounds_planned, lobby_opens_at, format')
+    .select('id, org_id, name, state, scheduled_at, resume_review_enabled, round_duration_seconds, break_duration_seconds, allow_repeat_pairings, rounds_planned, rounds_expected, lobby_opens_at, format')
     .eq('id', eventId)
     .maybeSingle()
   if (!event) {
@@ -235,9 +235,13 @@ export default async function EventPage(props: {
   const breakEndsAt = roundEndsAt ? new Date(roundEndsAt.getTime() + event.break_duration_seconds * 1000) : null
   const onBreak = Boolean(roundEndsAt && now >= roundEndsAt)
   const lobbyOpen = event.lobby_opens_at ? now >= new Date(event.lobby_opens_at) : null
-  // The last planned round: after it there is no "next round", only the organizer wrapping up.
-  const isLastRound = event.rounds_planned !== null && activeRound !== null && activeRound.round_number >= event.rounds_planned
-  const allRoundsRun = event.rounds_planned !== null && (rounds ?? []).length >= event.rounds_planned
+  // The N in "round X of N" (2026-11-05): rounds_expected is recounted at every round start from who is
+  // actually there (projectedTotalRounds), so no-shows never inflate it and a late arrival raises it. It falls
+  // back to the organizer's cap for an event whose rounds started before that column existed.
+  const roundsTotal: number | null = event.rounds_expected ?? event.rounds_planned
+  // The last round: after it there is no "next round", only the organizer wrapping up.
+  const isLastRound = roundsTotal !== null && activeRound !== null && activeRound.round_number >= roundsTotal
+  const allRoundsRun = roundsTotal !== null && (rounds ?? []).length >= roundsTotal
   // Self check-in is only offered inside the lobby window (see selfCheckInOpen).
   const selfCheckInIsOpen = selfCheckInOpen({ state: event.state, scheduledAt: event.scheduled_at, lobbyOpensAt: event.lobby_opens_at })
 
@@ -418,8 +422,9 @@ export default async function EventPage(props: {
           )}
           {event.state === 'running' && allRoundsRun && (
             <p className="mb-2 rounded border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm text-indigo-900" data-testid="all-rounds-run">
-              All {event.rounds_planned} planned {event.rounds_planned === 1 ? 'round has' : 'rounds have'} run. When the last one is over,
-              press <span className="font-medium">Complete event</span>, then <span className="font-medium">Reveal mutual matches</span>.
+              All {roundsTotal} {roundsTotal === event.rounds_planned ? 'planned ' : ''}{roundsTotal === 1 ? 'round has' : 'rounds have'} run
+              {roundsTotal !== event.rounds_planned ? ' — everyone here has met everyone (someone checking in now still gets a round)' : ''}.
+              When the last one is over, press <span className="font-medium">Complete event</span>, then <span className="font-medium">Reveal mutual matches</span>.
             </p>
           )}
           {checkInMode && (event.state === 'open' || event.state === 'closed' || event.state === 'running') && (
@@ -431,6 +436,9 @@ export default async function EventPage(props: {
           <p className="mb-2 text-xs text-gray-500">
             Rounds of {Math.round(event.round_duration_seconds / 60)} min with {event.break_duration_seconds}s breaks
             {event.rounds_planned !== null ? ` · ${event.rounds_planned} ${event.rounds_planned === 1 ? 'round' : 'rounds'} planned` : ''}
+            {event.state === 'running' && event.rounds_expected !== null && event.rounds_expected !== event.rounds_planned
+              ? ` (${event.rounds_expected} for the people here)`
+              : ''}
             {event.allow_repeat_pairings ? ' · people may meet more than once' : ''}.
             {blockedPairCount !== null && (
               <>
@@ -764,10 +772,10 @@ export default async function EventPage(props: {
                       Next round starts in <span className="font-medium">{formatCountdown(breakEndsAt.getTime() - now.getTime())}</span>.
                     </>
                   )}
-                  {event.rounds_planned !== null && (
+                  {roundsTotal !== null && (
                     <span className="ml-2 text-gray-500" data-testid="round-of-planned">
-                      (round {activeRound.round_number} of {event.rounds_planned}
-                      {roundEndsAt ? ` · ${describeTimeLeft(roundEndsAt.getTime() + (event.rounds_planned - activeRound.round_number) * (event.round_duration_seconds + event.break_duration_seconds) * 1000 - now.getTime())}` : ''})
+                      (round {activeRound.round_number} of {roundsTotal}
+                      {roundEndsAt ? ` · ${describeTimeLeft(roundEndsAt.getTime() + (roundsTotal - activeRound.round_number) * (event.round_duration_seconds + event.break_duration_seconds) * 1000 - now.getTime())}` : ''})
                     </span>
                   )}
                 </p>
