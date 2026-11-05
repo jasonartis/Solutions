@@ -3003,3 +3003,80 @@ test('feedback: a person sends feedback from a page, the platform owner replies,
   await page.goto('/feedback')
   await expect(page.locator('li', { hasText: title }).getByTestId('unread')).toHaveCount(0)
 })
+
+// Camera/mic/connection reporting + host un-tick (module-6 spec 2026-11-05, client slice). Fake media devices
+// so the dater's browser really has a camera and mic. The owner DB connection (a) ages a report to prove it
+// reads STALE and (b) gives eve a global host grant (the demo org has no host); both are undone at the end.
+test('speed-dating: device status board + host un-tick — a dater reports camera/mic, a stale report reads stale, a host un-ticks', async ({ playwright }) => {
+    test.setTimeout(240_000)
+    // Own browser: launch args cannot be set per-test, and this test needs fake camera/mic devices.
+    const browser = await playwright.chromium.launch({ args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'] })
+    const { default: postgres } = await import('postgres')
+    const sql = postgres(process.env.DATABASE_URL ?? 'postgresql://postgres:postgres@127.0.0.1:54322/postgres', { prepare: false, max: 1 })
+    const name = 'Device status ' + Date.now()
+    const open = async (email: string, media = false) => {
+      const context = await browser.newContext(media ? { permissions: ['camera', 'microphone'] } : {})
+      const page = await context.newPage()
+      await signIn(page, email)
+      return { context, page }
+    }
+    let hostGranted = false
+    const eve = await sql<{ id: string; org_id: string }[]>`
+      select u.id, o.id as org_id from auth.users u, orgs o where u.email = 'eve@demo.local' and o.slug = 'demo-dating'`
+    try {
+      const alice = await open('alice@demo.local')
+      await alice.page.goto('/o/demo-dating/m/speed-dating')
+      await alice.page.getByPlaceholder('Event name').fill(name)
+      await alice.page.getByLabel('Check-in').selectOption('self')
+      await alice.page.getByRole('button', { name: 'Create (draft)' }).click()
+      await alice.page.getByRole('link', { name }).click()
+      await alice.page.getByRole('button', { name: 'Open registration' }).click()
+      await expect(alice.page.getByRole('button', { name: 'Start event' })).toBeVisible()
+      const eventUrl = alice.page.url().split('?')[0]!
+
+      // charlie registers (registration closes once the event runs), then alice starts the event.
+      const charlie = await open('charlie@demo.local', true)
+      await charlie.page.goto(eventUrl)
+      await charlie.page.getByRole('button', { name: 'Register for this event' }).click()
+      await expect(charlie.page.getByTestId('not-checked-in')).toBeVisible()
+      await alice.page.getByRole('button', { name: 'Start event' }).click()
+      await expect(alice.page.getByText('running', { exact: true })).toBeVisible()
+
+      // charlie ticks himself in; his page then reports from his own browser.
+      await charlie.page.reload()
+      await charlie.page.getByRole('button', { name: "I'm here — check me in" }).click()
+      await expect(charlie.page.getByTestId('checked-in')).toBeVisible()
+
+      // alice's board: charlie's tile carries his camera, mic and "last seen".
+      await alice.page.goto(eventUrl)
+      const tile = alice.page.getByTestId('ready-tile-ready').filter({ hasText: 'Charlie' })
+      await expect(async () => {
+        await alice.page.reload()
+        await expect(tile.getByTestId('device-status')).toContainText('last seen', { timeout: 2_000 })
+      }).toPass({ timeout: 40_000 })
+      await expect(tile.getByTestId('device-status')).toContainText('📷 ok')
+      await expect(tile.getByTestId('device-status')).toContainText('🎤 ok')
+
+      // Close his page (heartbeat stops), age the row to 5 minutes: the tile reads STALE.
+      await charlie.context.close()
+      await sql`update sd_device_status set reported_at = now() - interval '5 minutes'
+                where event_id = ${eventUrl.split('/events/')[1]!}`
+      await alice.page.reload()
+      await expect(tile.getByTestId('device-status')).toHaveAttribute('data-device-state', 'stale')
+      await expect(tile.getByTestId('device-status')).toContainText('not seen for 5 min')
+
+      // A HOST (not an organizer) un-ticks charlie; the tile flips to "not ready".
+      await sql`insert into module_roles (org_id, user_id, module_key, role) values (${eve[0]!.org_id}, ${eve[0]!.id}, 'speed-dating', 'host')`
+      hostGranted = true
+      const host = await open('eve@demo.local')
+      await host.page.goto(eventUrl)
+      await host.page.getByTestId('ready-tile-ready').filter({ hasText: 'Charlie' }).getByRole('button', { name: 'Un-tick (not ready)' }).click()
+      await expect(host.page.getByTestId('ready-tile-waiting').filter({ hasText: 'Charlie' })).toBeVisible()
+    } finally {
+      if (hostGranted) {
+        await sql`delete from module_roles where org_id = ${eve[0]!.org_id} and user_id = ${eve[0]!.id} and module_key = 'speed-dating' and role = 'host'`
+      }
+      await sql.end()
+      await browser.close()
+    }
+  })

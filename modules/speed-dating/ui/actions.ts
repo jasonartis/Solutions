@@ -249,9 +249,8 @@ export async function allowRegisterAgain(orgSlug: string, participantId: string,
 // people checked in are paired, by the manual button and by the worker alike. A person ticks THEMSELVES
 // (their own checked_in is writable); on anyone else's seat, staff (organizer or host) can only UN-tick —
 // since 20261109010000 that is the DATABASE's rule too: sd_pin_participant refuses any tick-in of another
-// person and clears checked_in_at itself on an un-tick. checked_in_at is still sent here because an
-// organizer's OWN seat skips the trigger's self branch (which would stamp now()). A refusal redirects
-// with a notice (docs/03 #22).
+// person (organizers included) and clears checked_in_at itself on an un-tick. checked_in_at is still sent
+// here (null on an un-tick) so the write is self-describing. A refusal redirects with a notice (docs/03 #22).
 async function setCheckedIn(orgSlug: string, eventId: string, participantId: string, value: boolean) {
   const supabase = await createClient()
   const base = `/o/${orgSlug}/m/speed-dating/events/${eventId}`
@@ -268,11 +267,11 @@ async function setCheckedIn(orgSlug: string, eventId: string, participantId: str
   revalidatePath(`/o/${orgSlug}/m/speed-dating`)
 }
 
-// An organizer can only UN-tick someone (founder 2026-11-05): only the person knows they are ready, and a
-// wrongly ticked person is paired with a partner who then sits alone. The value is fixed to false HERE, so
-// no form field can turn this into a tick-in — and the database refuses one anyway (20261109010000). A HOST
-// may un-tick too at the database level; the board offers the button to organizers only until the client
-// slice adds it for hosts (module-6 spec, 2026-11-05).
+// Staff (organizer OR host) can only UN-tick someone (founder 2026-11-05): only the person knows they are
+// ready, and a wrongly ticked person is paired with a partner who then sits alone. The value is fixed to
+// false HERE, so no form field can turn this into a tick-in — and the database refuses one anyway
+// (20261109010000, which also lets a host un-tick: before it, a host's un-tick was silently reverted). The
+// Ready board offers the button to both.
 export async function undoCheckIn(orgSlug: string, eventId: string, participantId: string) {
   await setCheckedIn(orgSlug, eventId, participantId, false)
 }

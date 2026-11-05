@@ -24,6 +24,7 @@ import { getCheckInMode, getEventSides, type SideKey } from '../../event-format'
 import { selfCheckInOpen } from '../../event-plan'
 import LiveRoundRefresh from './live-round-refresh'
 import VideoRoom from './video-room'
+import DeviceReporter from './device-reporter'
 import { SubmitButton } from '../../submit-button'
 
 // Exact, because the organizer fixed the number of rounds: the event ends when the LAST planned round
@@ -40,7 +41,17 @@ function formatCountdown(ms: number): string {
   return `${mm}:${String(ss).padStart(2, '0')}`
 }
 
-const btnCls = 'rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700'
+// A device report older than this is STALE: the page is closed, asleep or offline (heartbeat is 30 s).
+const DEVICE_STALE_MS = 75_000
+const DEVICE_WORD: Record<string, string> = { ok: 'ok', missing: 'none found', blocked: 'blocked', unknown: 'unknown' }
+const CONNECTION_WORD: Record<string, string> = { connected: 'in call', reconnecting: 'reconnecting', not_in_call: 'not in call' }
+
+function formatAge(ms: number): string {
+  const s = Math.max(0, Math.round(ms / 1000))
+  return s < 60 ? `${s} s` : `${Math.floor(s / 60)} min`
+}
+
+const btnCls ='rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700'
 const linkBtn = 'px-1 py-1.5 text-xs text-blue-600 hover:underline'
 const secondaryBtn = 'rounded border border-gray-300 px-3 py-1 text-sm text-gray-700 hover:bg-gray-50'
 
@@ -131,6 +142,13 @@ export default async function EventPage(props: {
   // Check-in (founder 2026-10-28): where an event uses it, only ARRIVED people are paired. What staff see.
   const registeredSeats = (participants ?? []).filter((p) => p.status === 'registered' && p.seat_type === 'participant')
   const arrivedCount = registeredSeats.filter((p) => p.checked_in).length
+  // Camera / mic / connection per seat, for the Ready board (20261109010000). RLS lets event staff (and the
+  // person, their own row) read it; only staff ask. One row per seat, keyed by participant_id.
+  const { data: deviceRows } =
+    canStaffEvent && checkInMode && (event.state === 'open' || event.state === 'closed' || event.state === 'running')
+      ? await supabase.from('sd_device_status').select('participant_id, camera, mic, connection, reported_at').eq('event_id', eventId)
+      : { data: null }
+  const deviceByParticipant = new Map((deviceRows ?? []).map((d) => [d.participant_id, d]))
 
   // How many pairings personal blocks are keeping out of this event. A NUMBER
   // ONLY — never who blocked whom (founder-approved 2026-10-21). Counts unordered
@@ -469,10 +487,11 @@ export default async function EventPage(props: {
             Roster & reports
           </h2>
           {checkInMode && (event.state === 'open' || event.state === 'closed' || event.state === 'running') && (
-            // Who is ready, at a glance. Ready is the PERSON'S own tick; an organizer can only take it away
-            // (someone who has plainly walked off), and nobody can tick for them. Hosts see the board but
-            // cannot change it (the database pins another person's row for them).
+            // Who is ready, at a glance. Ready is the PERSON'S own tick; staff (organizer or host) can only take
+            // it away (someone who has plainly walked off), and nobody can tick for them. Each tile also shows
+            // the person's last device report (camera / mic / connection); polled so it stays current.
             <div className="mb-4" data-testid="ready-board">
+              <LiveRoundRefresh intervalMs={10000} />
               <h3 className="mb-1 text-xs uppercase tracking-wide text-gray-400">
                 Ready ({arrivedCount} of {registeredSeats.length})
               </h3>
@@ -482,6 +501,10 @@ export default async function EventPage(props: {
                 <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
                   {registeredSeats.map((p) => {
                     const minutes = p.checked_in_at ? Math.max(0, Math.floor((now.getTime() - new Date(p.checked_in_at).getTime()) / 60000)) : null
+                    const dev = deviceByParticipant.get(p.id)
+                    const devAgeMs = dev ? now.getTime() - new Date(dev.reported_at).getTime() : null
+                    const devStale = devAgeMs !== null && devAgeMs > DEVICE_STALE_MS
+                    const devProblem = !!dev && !devStale && (dev.camera !== 'ok' || dev.mic !== 'ok' || dev.connection === 'reconnecting')
                     return (
                       <li
                         key={p.id}
@@ -493,7 +516,18 @@ export default async function EventPage(props: {
                           {p.checked_in ? (minutes === null || minutes < 1 ? '✓ Ready just now' : `✓ Ready for ${minutes} min`) : 'Not ready yet'}
                           {sides && p.pool_side ? ` · ${sides[p.pool_side as SideKey]?.label ?? p.pool_side}` : ''}
                         </p>
-                        {canOrganize && p.checked_in && (
+                        <p
+                          data-testid="device-status"
+                          data-device-state={!dev ? 'none' : devStale ? 'stale' : devProblem ? 'problem' : 'ok'}
+                          className={`mt-1 text-xs ${!dev || devStale ? 'text-gray-400' : devProblem ? 'font-medium text-red-700' : ''}`}
+                        >
+                          {!dev
+                            ? 'no report yet'
+                            : devStale
+                              ? `not seen for ${formatAge(devAgeMs!)}`
+                              : `📷 ${DEVICE_WORD[dev.camera] ?? dev.camera} · 🎤 ${DEVICE_WORD[dev.mic] ?? dev.mic} · ${CONNECTION_WORD[dev.connection] ?? dev.connection} · last seen ${formatAge(devAgeMs!)} ago`}
+                        </p>
+                        {canStaffEvent && p.checked_in && (
                           <form action={undoCheckIn.bind(null, orgSlug, eventId, p.id)} className="mt-1">
                             <button className={linkBtn}>Un-tick (not ready)</button>
                           </form>
@@ -642,6 +676,11 @@ export default async function EventPage(props: {
 
       {mySeat && (
         <div className="space-y-6">
+          {/* Reports this person's camera/mic/connection to the organizer's Ready board. Renders nothing. */}
+          {(mySeat.status === 'registered' || mySeat.status === 'waitlisted') &&
+            (event.state === 'open' || event.state === 'closed' || event.state === 'running') && (
+              <DeviceReporter eventId={eventId} />
+            )}
           {/* Being registered is NOT being in the rounds: where check-in is used, an un-checked-in person is
               skipped. Loud on purpose — the failure is someone waiting for a round that will never include them. */}
           {checkInMode && mySeat.status === 'registered' && !mySeat.checked_in &&

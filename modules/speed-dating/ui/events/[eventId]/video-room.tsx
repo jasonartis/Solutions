@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from 'react'
 import type { VideoConnectionOptions } from '@modules/speed-dating'
 import { getVideoJoinToken } from '../../actions'
+import { announceCallState, type DeviceWord as Device } from './device-reporter'
 
 // The bare video surface behind the module's own chrome (timer, notepad,
 // partner list — spec, decided 2026-07-06: "Embedded via lib-jitsi-meet so
@@ -348,11 +349,24 @@ export default function VideoRoom({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status])
 
+  // Tell the device reporter (device-reporter.tsx → the organizer's Ready board) what the call looks like.
+  // In the call = connected with live tracks (a muted mic is still 'ok'); between CONNECTION_INTERRUPTED and
+  // RESTORED = reconnecting; anything else (not joined, left, gave up, error) = not_in_call, with no device
+  // claim so the reporter's own probe speaks for the devices. A failed join's cause is announced from join().
+  useEffect(() => {
+    if (status === 'in_call') {
+      announceCallState({ connection: reconnecting ? 'reconnecting' : 'connected', camera: 'ok', mic: 'ok' })
+    } else if (status !== 'error') {
+      announceCallState({ connection: 'not_in_call' })
+    }
+  }, [status, reconnecting])
+
   // Leave on unmount (next round starts, or the participant navigates away).
   useEffect(() => {
     cancelledRef.current = false
     return () => {
       cancelledRef.current = true
+      announceCallState({ connection: 'not_in_call' })
       void leave()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -544,6 +558,17 @@ export default function VideoRoom({
     } catch (err) {
       sessionRef.current = null
       await teardownCall(session, mediaElements())
+      // NotAllowedError = blocked, NotFoundError = missing (module-6 spec CLIENT CONTRACT). getUserMedia does
+      // not say which of camera/mic, so both are reported with the same word; any other failure says nothing
+      // about devices.
+      const errName = typeof err === 'object' && err !== null && 'name' in err ? String((err as { name: unknown }).name) : ''
+      const deviceFault: Device | null =
+        errName === 'NotAllowedError' || errName === 'SecurityError'
+          ? 'blocked'
+          : errName === 'NotFoundError' || errName === 'DevicesNotFoundError'
+            ? 'missing'
+            : null
+      announceCallState(deviceFault ? { connection: 'not_in_call', camera: deviceFault, mic: deviceFault } : { connection: 'not_in_call' })
       setError(toJoinErrorMessage(err))
       setStatus('error')
     }
