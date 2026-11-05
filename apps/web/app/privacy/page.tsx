@@ -61,10 +61,8 @@ export default async function PrivacyPage() {
           a limited time.
         </p>
         <p>
-          If you send us feedback, we keep your message and the replies. Unless you choose
-          otherwise when sending, we also keep details about the page you were on and your
-          browser, to help us understand the problem. Only our platform team reads feedback;
-          your organization&apos;s administrators do not.
+          If you send feedback, we keep it and the replies, plus (unless you turn it off) the
+          page you were on and your browser. Only platform staff read it.
         </p>
         <p>
           If anyone on our staff ever needs to look at your account (for example, to help with a
