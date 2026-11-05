@@ -45,8 +45,15 @@ if (LOCAL) {
 // it in prosrc (everything between `as $$` and the closing `$$;`). The LAST
 // definition of a name wins, as it does when the files are applied in order.
 // 20261027010000 re-creates sd_participants_insert_guard and sd_pin_participant
-// (closed state, FOR SHARE, event_id pin), so its bodies win.
-const FILES = ['20261017010000_sd_self_rejoin.sql', '20261017020000_sd_hardening.sql', '20261027010000_sd_closed_event_state.sql']
+// (closed state, FOR SHARE, event_id pin), and 20261105010000 re-creates
+// sd_pin_participant (user_id refusal) and sd_notes_guard (all checks computed,
+// pairing tied to author + subject), so the later bodies win.
+const FILES = [
+  '20261017010000_sd_self_rejoin.sql',
+  '20261017020000_sd_hardening.sql',
+  '20261027010000_sd_closed_event_state.sql',
+  '20261105010000_sd_security_followup.sql',
+]
 const expected = new Map<string, string>()
 for (const f of FILES) {
   const text = readFileSync(resolve(root, 'supabase/migrations', f), 'utf8')
@@ -169,9 +176,16 @@ try {
   check("pin: consent rule covers 'removed' too (no two-step bypass)",
     /if old\.status in \('withdrawn', 'removed'\)\s+and new\.status in \('registered', 'waitlisted'\)/.test(src('sd_pin_participant')))
   check('notes: non-staff authors only about someone they were paired with',
-    /join public\.sd_pairings pr/.test(src('sd_notes_guard')))
-  check('notes: author must hold a seat (or staff) before anything else',
-    /where a\.event_id = e\.id and a\.user_id = auth\.uid\(\)/.test(src('sd_notes_guard')))
+    /and \(is_staff or met\)/.test(src('sd_notes_guard')))
+  check('notes: author must hold a seat (or staff)',
+    /where a\.event_id = new\.event_id and a\.user_id = auth\.uid\(\)/.test(src('sd_notes_guard'))
+      && /\(author_seat is not null or is_staff\)/.test(src('sd_notes_guard')))
+  check('notes (20261105010000): one combined refusal, no OR chain',
+    /if not \(\s+ev_org is not null/.test(src('sd_notes_guard')))
+  check('notes (20261105010000): pairing_id must join the author seat to the subject seat',
+    /pr\.id = new\.pairing_id[\s\S]*?participant_a_id = author_seat and pr\.participant_b_id = subject_seat/.test(src('sd_notes_guard')))
+  check('pin (20261105010000): user_id never changes for a JWT caller',
+    /if new\.user_id is distinct from old\.user_id then\s+raise exception 'A registration cannot be given to another person'/.test(src('sd_pin_participant')))
   check("reports: a foreign reporter seat is refused first",
     /rep\.user_id is distinct from auth\.uid\(\)/.test(src('sd_reports_guard')))
   check('interest: retraction carve-out', /tg_op = 'UPDATE' and new\.verdict <> 'interested'/.test(src('sd_interest_before_write')))

@@ -50,7 +50,9 @@ function bodies(file: string): Map<string, string> {
   for (let m = re.exec(text); m; m = re.exec(text)) out.set(m[1]!, createHash('md5').update(m[2]!).digest('hex'))
   return out
 }
-const mine = bodies('20261027010000_sd_closed_event_state.sql')
+// 20261105010000 re-creates sd_pin_participant (user_id refusal), so its body
+// wins where it defines one; the other two still come from 20261027010000.
+const mine = new Map([...bodies('20261027010000_sd_closed_event_state.sql'), ...bodies('20261105010000_sd_security_followup.sql')])
 const control = bodies('20261017010000_sd_self_rejoin.sql')
 
 const FUNCTIONS = ['sd_guard_event', 'sd_participants_insert_guard', 'sd_pin_participant']
@@ -91,7 +93,7 @@ try {
     !!reg && reg.md5 === control.get('sd_registration_status'), `db=${reg?.md5 ?? '-'}`)
   for (const name of FUNCTIONS) {
     const f = fns.find((x) => x.proname === name)
-    check(`${name} body md5 matches 20261027010000`, f?.md5 === mine.get(name), `db=${f?.md5 ?? '-'} file=${mine.get(name) ?? '-'}`)
+    check(`${name} body md5 matches its latest migration`, f?.md5 === mine.get(name), `db=${f?.md5 ?? '-'} file=${mine.get(name) ?? '-'}`)
     check(`  SECURITY DEFINER`, f?.prosecdef === true)
     check(`  VOLATILE`, f?.provolatile === 'v')
     check(`  search_path pinned to public`, (f?.proconfig ?? []).includes('search_path=public'))

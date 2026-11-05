@@ -515,7 +515,10 @@ describe('finding 9: an organizer can only seat active org members', () => {
     })
     expect(r.outsider.error).toMatch(/Only active members of this organization/)
     expect(r.member.error, 'CONTROL').toBeNull()
-    expect(r.swap.error).toMatch(/Only active members of this organization/)
+    // Since 20261105010000 a seat's user_id never changes for a JWT caller, so
+    // the swap is refused by sd_pin_participant (sd_participants_a_pin) before
+    // the member check is reached.
+    expect(r.swap.error).toMatch(/cannot be given to another person/)
   })
 })
 
@@ -579,7 +582,11 @@ describe('re-review 2: a foreign reporter seat reveals nothing', () => {
 })
 
 describe('re-review 3: consents do not travel with a reassigned seat; a mentee must be a participant seat', () => {
-  it('organizer reassigns user_id -> consents reset (control: a non-identity edit keeps them)', async () => {
+  // Since 20261105010000 (SECURITY FOLLOW-UP item 1) no JWT caller can reassign
+  // a seat at all, so the consent reset is only reachable on the trusted
+  // no-JWT path. Both halves are asserted: the refusal for every JWT tier, and
+  // the reset still firing for the backend.
+  it('nobody with a JWT can reassign user_id (organizer, manager, holder); the backend can and consents reset (control: a non-identity edit keeps them)', async () => {
     const r = await rolledBack(async (tx) => {
       const a = await orgA(tx)
       const ev = await event(tx, a)
@@ -587,15 +594,23 @@ describe('re-review 3: consents do not travel with a reassigned seat; a mentee m
       const keep = await as(tx, 'o', () => tx`update sd_participants set profile_card = 'x' where id = ${s}`)
       const [kept] = await tx<{ allows_mentor: boolean; allows_audience: boolean }[]>`
         select allows_mentor, allows_audience from sd_participants where id = ${s}`
-      const move = await as(tx, 'o', () => tx`update sd_participants set user_id = ${ids.q} where id = ${s}`)
+      const move = (u: Who) => as(tx, u, () => tx`update sd_participants set user_id = ${ids.q} where id = ${s}`)
+      const byOrganizer = await move('o')
+      const byManager = await move('m')
+      const byHolder = await move('p')
+      const [still] = await tx<{ user_id: string }[]>`select user_id from sd_participants where id = ${s}`
+      await tx`update sd_participants set user_id = ${ids.q} where id = ${s}` // owner connection, no JWT
       const [moved] = await tx<{ allows_mentor: boolean; allows_audience: boolean; user_id: string }[]>`
         select allows_mentor, allows_audience, user_id from sd_participants where id = ${s}`
-      return { keep, kept: kept!, move, moved: moved! }
+      return { keep, kept: kept!, byOrganizer, byManager, byHolder, still: still!.user_id, moved: moved! }
     })
     expect(r.keep.rows).toBe(1)
     expect(r.kept, 'CONTROL').toEqual({ allows_mentor: true, allows_audience: true })
-    expect(r.move.rows).toBe(1)
-    expect(r.moved).toEqual({ allows_mentor: false, allows_audience: false, user_id: ids.q })
+    expect(r.byOrganizer.error).toMatch(/cannot be given to another person/)
+    expect(r.byManager.error).toMatch(/cannot be given to another person/)
+    expect(r.byHolder.error).toMatch(/cannot be given to another person/)
+    expect(r.still).toBe(ids.p)
+    expect(r.moved, 'backend path: reassigned, consents reset').toEqual({ allows_mentor: false, allows_audience: false, user_id: ids.q })
   })
 
   it('sd_mentors ignores a mentee pointer at a non-participant seat (planted), control: participant seat reads', async () => {
@@ -695,5 +710,87 @@ describe('re-review 5: a withdrawn rater can retract interest', () => {
     expect(r.retract).toMatchObject({ error: null, rows: 1 })
     expect(r.after).toBe(0)
     expect(r.raise.error).toMatch(/someone you met at this event/)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// SECURITY FOLLOW-UP (20261105010000), items 2 and 3: sd_notes_guard.
+// ---------------------------------------------------------------------------
+describe('follow-up: a note pairing_id must be the pairing between author and subject', () => {
+  it("someone else's pairing in the same event is refused (same message); the author's own pairing works (control)", async () => {
+    const r = await rolledBack(async (tx) => {
+      const a = await orgA(tx)
+      const ev = await event(tx, a, 'running')
+      const pS = await seat(tx, a, ev, 'p')
+      const qS = await seat(tx, a, ev, 'q')
+      const mS = await seat(tx, a, ev, 'm')
+      const r1 = await round(tx, a, ev, 1)
+      const r2 = await round(tx, a, ev, 2)
+      await pair(tx, a, ev, r1, pS, qS)
+      await pair(tx, a, ev, r2, qS, mS)
+      const [own] = await tx<{ id: string }[]>`
+        select id from sd_pairings where participant_a_id = ${pS} and participant_b_id = ${qS}`
+      const [others] = await tx<{ id: string }[]>`
+        select id from sd_pairings where participant_a_id = ${qS} and participant_b_id = ${mS}`
+      const note = (author: Who, about: Who, pairing: string | null) => () =>
+        tx`insert into sd_notes (org_id, event_id, author_user_id, about_user_id, pairing_id, body)
+           values (${a}, ${ev}, ${ids[author]}, ${ids[about]}, ${pairing}, 'n')`
+      // p met q; the q<->m pairing is in the SAME event but is not p's.
+      const wrong = await as(tx, 'p', note('p', 'q', others!.id))
+      const unpaired = await as(tx, 'p', note('p', 'm', null))
+      const right = await as(tx, 'p', note('p', 'q', own!.id))
+      // Staff (o holds no seat): a pairing_id cannot be attached; without one the note is fine.
+      const staffWithPairing = await as(tx, 'o', note('o', 'q', own!.id))
+      const staffPlain = await as(tx, 'o', note('o', 'q', null))
+      return { wrong, unpaired, right, staffWithPairing, staffPlain }
+    })
+    expect(r.unpaired.error).toMatch(/only keep notes about someone at this event/)
+    expect(r.wrong.error).toBe(r.unpaired.error)
+    expect(r.staffWithPairing.error).toBe(r.unpaired.error)
+    expect(r.right.error, 'CONTROL: the pairing between author and subject is accepted').toBeNull()
+    expect(r.staffPlain.error, 'CONTROL: staff can note without a pairing').toBeNull()
+  })
+
+  it('every refusal runs the same lookups: a seatless author and a seated-but-unmet author scan the same tables the same number of times', async () => {
+    // Scan counters for THIS transaction (pg_stat_xact_user_tables). Before
+    // the follow-up, the guard's OR chain stopped at the first failing arm, so
+    // a seatless author cost fewer scans than a seated one who never met the
+    // subject — a timing oracle for "is this person registered here".
+    const r = await rolledBack(async (tx) => {
+      const a = await orgA(tx)
+      const ev = await event(tx, a, 'running')
+      const pS = await seat(tx, a, ev, 'p')
+      const qS = await seat(tx, a, ev, 'q')
+      await seat(tx, a, ev, 'm')
+      await pair(tx, a, ev, await round(tx, a, ev), pS, qS)
+      await tx`insert into org_members (org_id, user_id, role, status, accepted_at) values (${a}, ${ids.x}, 'member', 'active', now())`
+      const scans = async () => {
+        const rows = await tx<{ relname: string; n: string }[]>`
+          select relname, (coalesce(seq_scan, 0) + coalesce(idx_scan, 0))::text as n
+          from pg_stat_xact_user_tables
+          where schemaname = 'public' and relname in ('sd_events', 'sd_participants', 'sd_pairings')
+          order by relname`
+        return Object.fromEntries(rows.map((x) => [x.relname, Number(x.n)]))
+      }
+      const cost = async (author: Who, about: Who) => {
+        const before = await scans()
+        const out = await as(tx, author, () =>
+          tx`insert into sd_notes (org_id, event_id, author_user_id, about_user_id, body)
+             values (${a}, ${ev}, ${ids[author]}, ${ids[about]}, 'n')`)
+        const after = await scans()
+        const delta = Object.fromEntries(Object.keys(after).map((k) => [k, after[k]! - (before[k] ?? 0)]))
+        return { error: out.error, delta }
+      }
+      return {
+        seatless: await cost('x', 'm'),   // x: org member, no seat
+        unmet: await cost('p', 'm'),      // p: seated, never paired with m
+        met: await cost('p', 'q'),        // CONTROL: accepted
+      }
+    })
+    expect(r.seatless.error).toMatch(/only keep notes about someone at this event/)
+    expect(r.unmet.error).toBe(r.seatless.error)
+    expect(r.met.error, 'CONTROL').toBeNull()
+    expect(r.seatless.delta.sd_participants, 'CONTROL: the counters move at all').toBeGreaterThan(0)
+    expect(r.unmet.delta).toEqual(r.seatless.delta)
   })
 })
