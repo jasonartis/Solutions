@@ -874,3 +874,38 @@ Built the database half of the entry above. **(1) Check-in on someone else's sea
 **FOLLOW-UP SAME DAY — every review gap closed or recorded (tests and comments only, no migration):** (a) the reporter's FOR SHARE on the SEAT now has its own two-connection test plus a mutation showing the withdraw slipping past without it; (b) the silhouette's delete line is proven ON ITS OWN (seat trigger switched off -> the line still deletes; both removed -> the row survives); (c) `prod-verify-sd-device-status.mts` gained a control that anon/authenticated/service_role exist, so its "holds nothing" checks cannot pass vacuously (prod **47/0**) — the migration's own assertion block has the same blind spot and is frozen (docs/03 #28); (d) the stale comments in `ui/actions.ts` corrected. `sd-device-status.test.ts` **24/24** (six mutation checks). **Recorded, deliberately unchanged:** (1) an organizer writing their OWN seat skips the trigger's self branch, so the `checked_in_at` the app sends (client clock) is stored as-is — holder-only, pre-existing, harmless; (2) a person who leaves the ORG keeps a stale status row on a still-live seat until the event ends (closing it needs a membership trigger = a new migration; not worth one unless asked); (3) a seat with a NULL `user_id` would defeat a host's un-tick — unreachable, the column is NOT NULL.
 **CI on `0a20567`: green, deploy READY** — attempt 1 died in `supabase start` before any test (`failed to bind host port 0.0.0.0:54324/tcp: address already in use` on the GitHub runner, infra); `rerun-failed-jobs` passed. **FOUNDER'S CALL, open:** whether item (2) above (a stale status row for someone who left the ORG) is worth a migration — recommended no.
 **CLIENT SLICE CHECKLIST (Sonnet; the starter prompt given to the founder 2026-11-05 condensed — another session had begun it, `device-reporter.tsx`, uncommitted at the time):** read this entry's CLIENT CONTRACT, `ui/actions.ts` setCheckedIn/undoCheckIn, `ui/events/[eventId]/page.tsx` (Ready board), `video-room.tsx` (JaaS events, reconnect banner, device picker), docs/03 #22. Build (1) the browser reporter per the contract; (2) tiles: camera/mic/connection + "last seen", stale > 75 s, no row = "no report yet", visible to hosts too; (3) offer *Un-tick (not ready)* to HOSTS (same `undoCheckIn`; the database already allows it). Tests: e2e — a host un-ticks and the tile flips; a dater's page reports and the organizer's tile shows it (fake media); a stale row reads stale (age `reported_at` with the owner connection); delete `apps/web/.next/dev` before every local e2e. Prod check with real browsers copying `scripts/prod-verify-checkin-and-cap.mjs` — **prod `demo-dating` has NO host seeded**: grant one inside a rolled-back transaction the way `prod-verify-sd-device-status.mts` does (eve), or create and remove a grant explicitly. Then docs/26, this spec, journal, CLAUDE.md one-liner, a lettered walkthrough for the founder.
+
+## 2026-11-05 (latest) — CLOSING EVERY REVIEW FINDING ON "ROUND X OF N"; A LATE ARRIVAL NOW MEETS EVERYONE (Opus, `20261110010000`) — STATUS: see the last line
+Founder (2026-11-05): "close them please. Don't leave any concerns or flaws not taken care of."
+**(1) Re-review of the block-free fix (`fa8be06`):** no way left for a block to reach N (3,599 block sets measured, 0
+differences except where the event's real length differs, which the event already shows); nothing else private reaches N;
+N exact without blocks (3,000 random events, 0 wrong); organizer and worker compute the same N. **Measured, not assumed:**
+`scripts/verify-orchestrator-round-cap.mts` signs in as alice and rebuilds N from what RLS lets her read — 4/4 pairings, 4/4
+seats incl. a WITHDRAWN one, her N = the worker's.
+**(2) A PRE-EXISTING ENGINE FLAW, found while closing (1) — fixed.** The rotation pattern is built for a fixed room; when the
+room changed, it could stop with people who never met. Measured over random seat ids: one late arrival left **20–83% of
+events** with unmet pairs (3+1 → 50%, 4+1 at round 3 → 60%, 5+1 at round 3 → 83%). The local check flapped because of it (it
+depends on the uuids' sort order). **Fix in `buildNextRound`: fill the byes** — two people sitting out who may legally meet
+(never met, not blocked, opposite sides when two-sided) are paired; and a round whose pattern has no meeting pairs unmet people
+directly instead of ending the event. After: **0% unmet** in every measured case; a full, unchanged room keeps the classic
+length. `rotation.test.ts` "a changing room" (late arrivals, both sides, a departure, blocks honoured, full room unchanged —
+60 seat orders each); **mutation check: 7 of them fail on the old engine.** N needs no change (it replays the same engine).
+**(3) Review LOW — a failed seat read skewed N:** both writers now skip the write when that read errors.
+**(4) Review LOW — a seat moved to the other side mid-event skewed N (and the real pairing):** `20261110010000` — a trigger
+refuses any `pool_side` change once the event has a round, for every caller (the app never does it; only a direct organizer
+API write could). `sd-hardening.test.ts` "side lock" (control: before round 1 the organizer may move a seat; another column
+still updates) — **mutation check: fails with the trigger disabled.** `scripts/prod-verify-sd-side-lock.mts`.
+**(5) Mid-round lag (was accepted) — closed where a worker runs:** while a round is running the worker recounts N every tick
+and writes only on change (arrival 3 → 4, un-tick back to 3, measured). With no worker (prod today, rounds run by the
+organizer's button) N refreshes at each round start — tied to the pending always-on-worker decision.
+**Still deliberate (not flaws, decisions):** N counts arrivals/departures (that IS the founder's "based on who is there");
+where present people blocked each other the event can run a round shorter/longer than N and N then corrects — an accurate N
+would reveal the block.
+**Verified locally:** module tests 105 → all pass + 7 new; db suite 528/528; worker check 25/25 three runs in a row (was flapping);
+prod side-lock verifier BEFORE 6/6 (the flaw demonstrated live on prod: an organizer moved a side after round 1).
+A second adversarial review (engine + side lock): no HIGH/MED; fuzzed 40,000 rooms (0 blocked/repeat/same-side pairs, every seat
+exactly once), a full unchanged room identical to the old engine over 3,000 events, `null` now exactly when the rotation is
+exhausted. Its one LOW (repeats ON with NO cap could now keep building rounds where the old engine stopped) cannot occur: the
+form always sets a cap 1–99, and prod has no event with repeats on (measured 2026-11-05).
+**SHIPPED:** engine + recount + LOWs in `562457b`. **`20261110010000` ON PROD, verified:** backup `backups/2026-11-05T19-14-21`,
+dry run listed only it, applied (founder: "apply it"); prod verifier **6/6 → 12/0**; ACL hardening on prod **17/17**.

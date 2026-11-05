@@ -794,3 +794,38 @@ describe('follow-up: a note pairing_id must be the pairing between author and su
     expect(r.unmet.delta).toEqual(r.seatless.delta)
   })
 })
+
+// ---------------------------------------------------------------------------
+// 20261110010000: a seat's side is locked once the event has run a round (re-review of rounds_expected,
+// 2026-11-05). Moving sides mid-event reshapes everyone's pairing and the dater's "round X of N".
+describe('side lock: pool_side cannot change once rounds have run', () => {
+  it('before any round the organizer may move a seat (control); after round 1 nobody can — organizer, backend; other edits still work (control)', async () => {
+    const r = await rolledBack(async (tx) => {
+      const a = await orgA(tx)
+      const ev = await event(tx, a, 'running', twoSided(null))
+      const s = await seat(tx, a, ev, 'p', { pool_side: 'a' })
+      const before = await as(tx, 'o', () => tx`update sd_participants set pool_side = 'b' where id = ${s}`)
+      const [sideBefore] = await tx<{ pool_side: string }[]>`select pool_side from sd_participants where id = ${s}`
+      await round(tx, a, ev)
+      const organizer = await as(tx, 'o', () => tx`update sd_participants set pool_side = 'a' where id = ${s}`)
+      let backend: string | null = null
+      await tx.unsafe('savepoint b')
+      try {
+        await tx`update sd_participants set pool_side = 'a' where id = ${s}`
+        await tx.unsafe('release savepoint b')
+      } catch (e) {
+        backend = (e as Error).message
+        await tx.unsafe('rollback to savepoint b')
+      }
+      const otherEdit = await as(tx, 'o', () => tx`update sd_participants set status = 'removed' where id = ${s}`)
+      const [after] = await tx<{ pool_side: string; status: string }[]>`select pool_side, status from sd_participants where id = ${s}`
+      return { before, sideBefore: sideBefore!.pool_side, organizer, backend, otherEdit, after }
+    })
+    expect(r.before.error, 'CONTROL: before any round, the organizer moves the seat').toBeNull()
+    expect(r.sideBefore).toBe('b')
+    expect(r.organizer.error).toMatch(/A side cannot be changed once rounds have run/)
+    expect(r.backend).toMatch(/A side cannot be changed once rounds have run/)
+    expect(r.otherEdit.error, 'CONTROL: another column on the same seat still updates after rounds').toBeNull()
+    expect(r.after).toEqual({ pool_side: 'b', status: 'removed' })
+  })
+})
