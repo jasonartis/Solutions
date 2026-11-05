@@ -2583,6 +2583,10 @@ test('speed-dating module: organizer sets round length at creation, sees the pla
 
   // A cancelled event can no longer be edited.
   await page.getByRole('button', { name: 'Cancel event' }).click()
+  // Wait for the cancel to LAND before navigating: a goto while the server action is in flight aborts it
+  // (module-6 spec 2026-10-29 gotcha), the event stays open, and /edit is then rightly allowed. This failed
+  // twice in a row on CI for f6fe128 (2026-11-05), a commit that touched neither the cancel nor the edit page.
+  await expect(page.getByText('cancelled', { exact: true })).toBeVisible({ timeout: 15000 })
   await page.goto(page.url().split('?')[0] + '/edit')
   await expect(page).not.toHaveURL(/\/edit/)
 })
