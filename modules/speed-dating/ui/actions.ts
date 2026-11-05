@@ -244,12 +244,11 @@ export async function allowRegisterAgain(orgSlug: string, participantId: string,
   revalidatePath(`/o/${orgSlug}/m/speed-dating/events/${eventId}`)
 }
 
-// Check-in (founder 2026-10-28). In an event that uses it (format.checkIn), ONLY people marked as
-// arrived are paired, by the manual button and by the worker alike. An organizer marks anyone (the
-// organizer tier is exempt from sd_pin_participant; a host is pinned off other people's rows); a
-// person marks THEMSELVES (their own checked_in is writable). checked_in_at is stamped here because
-// the organizer branch of the trigger returns before it would. A refusal redirects with a notice
-// (docs/03 #22).
+// Check-in (founder 2026-10-28, self-only 2026-11-05). In an event that uses it (format.checkIn), ONLY
+// people checked in are paired, by the manual button and by the worker alike. A person ticks THEMSELVES
+// (their own checked_in is writable); an organizer can only UN-tick (a host is pinned off other people's
+// rows). checked_in_at is stamped here because the organizer branch of the trigger returns before it
+// would. A refusal redirects with a notice (docs/03 #22).
 async function setCheckedIn(orgSlug: string, eventId: string, participantId: string, value: boolean) {
   const supabase = await createClient()
   const base = `/o/${orgSlug}/m/speed-dating/events/${eventId}`
@@ -266,8 +265,12 @@ async function setCheckedIn(orgSlug: string, eventId: string, participantId: str
   revalidatePath(`/o/${orgSlug}/m/speed-dating`)
 }
 
-export async function checkInParticipant(orgSlug: string, eventId: string, participantId: string, value: boolean) {
-  await setCheckedIn(orgSlug, eventId, participantId, value)
+// An organizer can only UN-tick someone (founder 2026-11-05): only the person knows they are ready, and a
+// wrongly ticked person is paired with a partner who then sits alone. The value is fixed to false HERE, so
+// no form field can turn this into a tick-in. (The database would let an organizer set true — the rule is the
+// app's; a host cannot change anyone else's row at all, see sd_pin_participant.)
+export async function undoCheckIn(orgSlug: string, eventId: string, participantId: string) {
+  await setCheckedIn(orgSlug, eventId, participantId, false)
 }
 
 // "I'm here": a person checks THEMSELVES in. Only offered where the event lets people do that.
@@ -288,24 +291,6 @@ export async function checkInSelf(orgSlug: string, eventId: string, participantI
     selfCheckInOpen({ state: event.state, scheduledAt: event.scheduled_at, lobbyOpensAt: event.lobby_opens_at })
   if (!open) redirect(`/o/${orgSlug}/m/speed-dating/events/${eventId}?notice=checkin-not-open`)
   await setCheckedIn(orgSlug, eventId, participantId, true)
-}
-
-// "Mark everyone arrived": one tap for the organizer instead of one per person. Only people who are
-// registered participants and not yet arrived are touched; the organizer tier is exempt from
-// sd_pin_participant, so this needs no migration.
-export async function markEveryoneArrived(orgSlug: string, eventId: string) {
-  const supabase = await createClient()
-  const base = `/o/${orgSlug}/m/speed-dating/events/${eventId}`
-  const { error } = await supabase
-    .from('sd_participants')
-    .update({ checked_in: true, checked_in_at: new Date().toISOString() })
-    .eq('event_id', eventId)
-    .eq('status', 'registered')
-    .eq('seat_type', 'participant')
-    .eq('checked_in', false)
-  if (error) redirect(`${base}?notice=checkin-refused`)
-  await recordActivity(supabase, { moduleKey: 'speed-dating', action: 'participants.checked_in_all', orgSlug })
-  revalidatePath(base)
 }
 
 // Two-sided events (opt-in, set at event creation — see event-format.ts):

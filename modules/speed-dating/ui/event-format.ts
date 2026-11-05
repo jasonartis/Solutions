@@ -13,11 +13,12 @@
 // with each side's display name + email, keyed by user id.
 export type SideKey = 'a' | 'b'
 export type EventSide = { label: string; capacity: number | null }
-// checkIn (founder 2026-10-28): absent = not used (everyone registered is paired). 'staff' = the
-// organizer marks people as arrived and ONLY arrived people are paired (in-person events). 'self' = people
-// check themselves in (online events). Lives in this jsonb, so no migration; the DB lets an organizer set
-// anyone's checked_in and a person set their own (sd_pin_participant), a host cannot set someone else's.
-export type CheckInMode = 'staff' | 'self'
+// checkIn (founder 2026-10-28, narrowed 2026-11-05): absent = not used (everyone registered is paired).
+// 'self' = people check themselves in and ONLY checked-in people are paired. Only the person can know they
+// are ready (camera/mic working, at their screen), so nobody ticks someone else IN; an organizer can only
+// UN-tick (see undoCheckIn). Earlier events may have stored 'staff' (the organizer ticks people in):
+// that mode is withdrawn and reads as 'self'. Lives in this jsonb, so no migration.
+export type CheckInMode = 'self'
 export type EventFormat = {
   sides?: { a: EventSide; b: EventSide }
   shareContactOnMatch?: boolean
@@ -32,7 +33,7 @@ export function parseEventFormat(formData: FormData): EventFormat {
   }
 
   const checkIn = String(formData.get('checkIn') ?? '')
-  if (checkIn === 'staff' || checkIn === 'self') format.checkIn = checkIn
+  if (checkIn === 'self') format.checkIn = 'self'
 
   if (formData.get('sidesEnabled') === 'on') {
     const sideALabel = String(formData.get('sideALabel') ?? '').trim()
@@ -70,5 +71,6 @@ export function getShareContactOnMatch(format: unknown): boolean {
 /** How people are checked in for this event; null = check-in is not used. */
 export function getCheckInMode(format: unknown): CheckInMode | null {
   const mode = (format as EventFormat | null | undefined)?.checkIn
-  return mode === 'staff' || mode === 'self' ? mode : null
+  // 'staff' is the withdrawn organizer-ticks mode: an event that stored it still uses check-in.
+  return (mode as string) === 'staff' || mode === 'self' ? 'self' : null
 }

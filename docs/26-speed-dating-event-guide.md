@@ -75,19 +75,23 @@ Audience and mentor seats exist in the schema but have no UI. **GAP.**
 - ~~Whether you are the organizer or a participant in the events list~~ — the list now shows
   "you organize" and, for events you hold a seat in, "you participate".
 - **Check-in** is a per-event setting (create/edit form, "Check-in"): *Not used* (everyone
-  registered is paired), *The organizer checks people in* or *People check themselves in* (from about 15 minutes
-  before the scheduled start, or once the organizer starts the event — never a week early). Every round is a
-  video room; "check-in" means "I am here and ready", the lobby's camera/mic test in the original spec. Where it is used, ONLY checked-in people are paired, by the manual button and the worker
-  alike. A registered-but-not-checked-in person sees a loud amber **"You are NOT checked in yet"**
-  box (with an "I'm here" button in the online mode, "tell the organizer at the entrance" in the staff
-  mode), a "NOT checked in — you will not be paired" badge on the events list, and, during a round,
+  registered is paired) or *People check themselves in* (from about 15 minutes before the scheduled start, or
+  once the organizer starts the event — never a week early). **Only the person can tick themselves in**
+  (founder 2026-11-05: only they know they are at their screen with camera and mic working; an organizer who
+  ticks someone in pairs them with a partner who then sits alone). The older "organizer checks people in" mode
+  is withdrawn; an event that stored it reads as self check-in. Every round is a video room; "check-in" means
+  "I am here and ready", the lobby's camera/mic test in the original spec. Where it is used, ONLY checked-in
+  people are paired, by the manual button and the worker alike. A registered-but-not-checked-in person sees a
+  loud amber **"You are NOT checked in yet"** box (with an "I'm here" button once check-in is open, or the time
+  it opens), a "NOT checked in — you will not be paired" badge on the events list, and, during a round,
   "You're not checked in, so you are not in any round". Before the event starts the box says so calmly
-  ("That is normal before the event starts — but only checked-in people are paired") and, in the
-  self mode, tells the person when check-in opens instead of offering a button too early. Organizers see "Check-in is ON: 9 of 12
-  registered are checked in", an arrived/not-arrived mark per person with *Mark arrived* / *Undo
-  arrival*, a **Mark everyone arrived** button, and *Run next round* refuses (with a notice) until two people are checked in. Someone
-  who checks in mid-event joins at the next round; the round already running is not touched. Only
-  an organizer can check others in — a host cannot (the database pins that).
+  ("That is normal before the event starts — but only checked-in people are paired").
+  **Organizers see a "Ready (9 of 12)" board** — one tile per registered person, green "✓ Ready for N min" or
+  amber "Not ready yet" — and "Check-in is ON: 9 of 12 registered are ready". An organizer can only
+  **Un-tick (not ready)** a tile (someone who has plainly walked off); nobody can tick for anyone, and there is
+  no "Mark everyone arrived". *Run next round* refuses (with a notice) until two people are checked in.
+  Someone who checks in mid-event joins at the next round; the round already running is not touched. A host
+  sees the board but cannot un-tick (the database pins another person's row for a host).
 - A round that ran out is treated as ended by the page, but its stored state stays `active`
   until the worker (or the next manual round) closes it.
 

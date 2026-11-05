@@ -5,9 +5,8 @@ import {
   blockUser,
   fileReport,
   allowRegisterAgain,
-  checkInParticipant,
+  undoCheckIn,
   checkInSelf,
-  markEveryoneArrived,
   deleteEvent,
   markInterest,
   promoteNextWaitlisted,
@@ -109,7 +108,7 @@ export default async function EventPage(props: {
     { data: reports },
     { data: myNotes },
   ] = await Promise.all([
-    supabase.from('sd_participants').select('id, user_id, status, seat_type, checked_in, profile_card, pool_side').eq('event_id', eventId),
+    supabase.from('sd_participants').select('id, user_id, status, seat_type, checked_in, checked_in_at, profile_card, pool_side').eq('event_id', eventId),
     supabase.from('sd_pairings').select('id, round_id, participant_a_id, participant_b_id').eq('event_id', eventId),
     supabase.from('sd_interest').select('rater_participant_id, target_participant_id, verdict').eq('event_id', eventId),
     supabase
@@ -425,8 +424,8 @@ export default async function EventPage(props: {
           )}
           {checkInMode && (event.state === 'open' || event.state === 'closed' || event.state === 'running') && (
             <p className="mb-2 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900" data-testid="checkin-summary">
-              Check-in is ON ({checkInMode === 'staff' ? 'you mark people as arrived' : 'people check themselves in'}): only people marked
-              arrived are paired. {arrivedCount} of {registeredSeats.length} registered {arrivedCount === 1 ? 'is' : 'are'} checked in.
+              Check-in is ON (people check themselves in): only checked-in people are paired.{' '}
+              {arrivedCount} of {registeredSeats.length} registered {arrivedCount === 1 ? 'is' : 'are'} ready.
             </p>
           )}
           <p className="mb-2 text-xs text-gray-500">
@@ -461,16 +460,46 @@ export default async function EventPage(props: {
           <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-gray-500">
             Roster & reports
           </h2>
-          <h3 className="mb-1 text-xs uppercase tracking-wide text-gray-400">
-            Roster ({(participants ?? []).filter((p) => p.status === 'registered').length} registered{checkInMode ? `, ${arrivedCount} arrived` : ''})
-          </h3>
-          {canOrganize && checkInMode && registeredSeats.some((p) => !p.checked_in) && (
-            <form action={markEveryoneArrived.bind(null, orgSlug, eventId)} className="mb-2">
-              <SubmitButton className={linkBtn} pendingLabel="Marking…">
-                Mark everyone arrived
-              </SubmitButton>
-            </form>
+          {checkInMode && (event.state === 'open' || event.state === 'closed' || event.state === 'running') && (
+            // Who is ready, at a glance. Ready is the PERSON'S own tick; an organizer can only take it away
+            // (someone who has plainly walked off), and nobody can tick for them. Hosts see the board but
+            // cannot change it (the database pins another person's row for them).
+            <div className="mb-4" data-testid="ready-board">
+              <h3 className="mb-1 text-xs uppercase tracking-wide text-gray-400">
+                Ready ({arrivedCount} of {registeredSeats.length})
+              </h3>
+              {registeredSeats.length === 0 ? (
+                <p className="text-sm text-gray-500">Nobody is registered yet.</p>
+              ) : (
+                <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
+                  {registeredSeats.map((p) => {
+                    const minutes = p.checked_in_at ? Math.max(0, Math.floor((now.getTime() - new Date(p.checked_in_at).getTime()) / 60000)) : null
+                    return (
+                      <li
+                        key={p.id}
+                        data-testid={p.checked_in ? 'ready-tile-ready' : 'ready-tile-waiting'}
+                        className={`rounded border px-3 py-2 text-sm ${p.checked_in ? 'border-green-300 bg-green-50 text-green-900' : 'border-amber-300 bg-amber-50 text-amber-900'}`}
+                      >
+                        <p className="truncate font-medium">{seatName(p.id)}</p>
+                        <p className="text-xs">
+                          {p.checked_in ? (minutes === null || minutes < 1 ? '✓ Ready just now' : `✓ Ready for ${minutes} min`) : 'Not ready yet'}
+                          {sides && p.pool_side ? ` · ${sides[p.pool_side as SideKey]?.label ?? p.pool_side}` : ''}
+                        </p>
+                        {canOrganize && p.checked_in && (
+                          <form action={undoCheckIn.bind(null, orgSlug, eventId, p.id)} className="mt-1">
+                            <button className={linkBtn}>Un-tick (not ready)</button>
+                          </form>
+                        )}
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </div>
           )}
+          <h3 className="mb-1 text-xs uppercase tracking-wide text-gray-400">
+            Roster ({(participants ?? []).filter((p) => p.status === 'registered').length} registered{checkInMode ? `, ${arrivedCount} ready` : ''})
+          </h3>
           <ul className="mb-4 space-y-0.5 text-sm text-gray-700">
             {(participants ?? []).map((p) => (
               <li key={p.id}>
@@ -481,18 +510,11 @@ export default async function EventPage(props: {
                   {sides && p.pool_side ? ` · ${sides[p.pool_side as SideKey]?.label ?? p.pool_side}` : ''}
                 </span>
                 {checkInMode && p.status === 'registered' && p.seat_type === 'participant' && (
-                  <>
-                    <span
-                      className={`ml-2 rounded px-1.5 py-0.5 text-xs font-medium ${p.checked_in ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}
-                    >
-                      {p.checked_in ? 'arrived' : 'not arrived'}
-                    </span>
-                    {canOrganize && (
-                      <form action={checkInParticipant.bind(null, orgSlug, eventId, p.id, !p.checked_in)} className="ml-2 inline">
-                        <button className={linkBtn}>{p.checked_in ? 'Undo arrival' : 'Mark arrived'}</button>
-                      </form>
-                    )}
-                  </>
+                  <span
+                    className={`ml-2 rounded px-1.5 py-0.5 text-xs font-medium ${p.checked_in ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}
+                  >
+                    {p.checked_in ? 'ready' : 'not ready'}
+                  </span>
                 )}
                 {/* Consent: an organizer never re-seats someone. A removal can be
                     CLEARED so the person may register again; they must do it. */}
@@ -623,22 +645,16 @@ export default async function EventPage(props: {
                   {event.state === 'running' ? 'O' : 'o'}nly people who are checked in are paired in the rounds. If you do not
                   check in, you will sit the event out{event.state === 'running' ? ' — right now you are not in any round' : ''}.
                 </p>
-                {checkInMode === 'self' ? (
-                  selfCheckInIsOpen ? (
-                    <form action={checkInSelf.bind(null, orgSlug, eventId, mySeat.id)} className="mt-3">
-                      <SubmitButton className={btnCls} pendingLabel="Checking in…">
-                        I&apos;m here — check me in
-                      </SubmitButton>
-                    </form>
-                  ) : (
-                    <p className="mt-2 text-sm font-medium text-amber-900">
-                      Check-in opens about 15 minutes before the event starts (or when the organizer starts it). When it opens,
-                      come back to this page and tap &quot;I&apos;m here&quot;.
-                    </p>
-                  )
+                {selfCheckInIsOpen ? (
+                  <form action={checkInSelf.bind(null, orgSlug, eventId, mySeat.id)} className="mt-3">
+                    <SubmitButton className={btnCls} pendingLabel="Checking in…">
+                      I&apos;m here — check me in
+                    </SubmitButton>
+                  </form>
                 ) : (
                   <p className="mt-2 text-sm font-medium text-amber-900">
-                    When you are ready, tell the organizer you are here so they can check you in.
+                    Check-in opens about 15 minutes before the event starts (or when the organizer starts it). When it opens,
+                    come back to this page and tap &quot;I&apos;m here&quot;.
                   </p>
                 )}
               </section>
@@ -707,7 +723,7 @@ export default async function EventPage(props: {
                   {checkInMode && !mySeat.checked_in ? (
                     <>
                       You&apos;re <span className="font-semibold">not checked in</span>, so you are not in any round.{' '}
-                      {checkInMode === 'self' ? 'Check in above' : 'Ask the organizer to check you in'} and you&apos;ll join the next round.
+                      Check in above and you&apos;ll join the next round.
                     </>
                   ) : (
                     <>You&apos;re not in this round. You&apos;ll join the next one.</>

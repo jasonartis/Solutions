@@ -1,5 +1,5 @@
-// PRODUCTION check (2026-10-28) of the round cap and staff check-in: alice creates an event with
-// check-in = staff and a cap of 1 round, charlie and dana register and are TOLD they are not checked in,
+// PRODUCTION check (2026-10-28) of the round cap and self check-in: alice creates an event with
+// check-in = self and a cap of 1 round, charlie and dana register and are TOLD they are not checked in,
 // the first round is refused until two people have arrived, then runs, shows "round 1 of 1 · about N min
 // left" to a dater, and a second press is refused by the cap. Creates and deletes its own event in
 // demo-dating (service-role DELETE for the cleanup, because an event with rounds cannot be deleted in the UI).
@@ -17,7 +17,7 @@ const alice=await ctx('alice@demo.local'), charlie=await ctx('charlie@demo.local
 let evId=null
 try {
   await alice.goto(MOD); await alice.locator('input[name="name"]').fill(NAME)
-  await alice.getByLabel('Check-in').selectOption('staff')
+  await alice.getByLabel('Check-in').selectOption('self')
   // re-fill until it sticks (a fill before hydration is reset by React's defaults)
   let capped=false
   for (let i=0;i<8&&!capped;i++){
@@ -31,14 +31,15 @@ try {
   await alice.getByRole('button',{name:'Open registration'}).click(); await alice.getByRole('button',{name:'Start event'}).waitFor({timeout:30000})
   for(const p of [charlie,dana]){await p.goto(evUrl);await p.getByRole('button',{name:'Register for this event'}).click();await p.getByText('You are registered').waitFor({timeout:30000})}
   check('charlie is told loudly he is NOT checked in', await ok(charlie.getByTestId('not-checked-in')) && /You are NOT checked in yet/.test(await charlie.getByTestId('not-checked-in').innerText()))
-  check('...and told to tell the organizer (staff mode)', /tell the organizer/.test(await charlie.getByTestId('not-checked-in').innerText()))
+  check('...and told check-in opens shortly before the start (self mode)', /Check-in opens about 15 minutes/.test(await charlie.getByTestId('not-checked-in').innerText()))
   await charlie.goto(MOD)
   check('the events list badge says he will not be paired', await ok(charlie.getByText('NOT checked in — you will not be paired').first()))
   await alice.goto(evUrl); await alice.getByRole('button',{name:'Start event'}).click(); await alice.getByText('running',{exact:true}).waitFor({timeout:30000})
   await alice.getByRole('button',{name:'Run next round (pair everyone)'}).click()
   check('the round is refused while nobody has arrived', await ok(alice.getByText('fewer than two people are checked in')))
-  await alice.locator('li',{hasText:'Charlie C'}).getByRole('button',{name:'Mark arrived'}).click(); await alice.getByText('Roster (2 registered, 1 arrived)').waitFor({timeout:30000})
-  await alice.locator('li',{hasText:'Dana D'}).getByRole('button',{name:'Mark arrived'}).click(); await alice.getByText('Roster (2 registered, 2 arrived)').waitFor({timeout:30000})
+  check('the organizer has no way to tick anyone in', (await alice.getByRole('button',{name:/Mark arrived|Mark everyone arrived/}).count())===0)
+  for(const p of [charlie,dana]){await p.goto(evUrl);await p.getByRole('button',{name:"I'm here — check me in"}).click();await p.getByTestId('checked-in').waitFor({timeout:30000})}
+  await alice.goto(evUrl); check('the ready board shows both ready', await ok(alice.getByText('Ready (2 of 2)')))
   await alice.getByRole('button',{name:'Run next round (pair everyone)'}).click()
   check('with two arrived the round starts', await ok(alice.getByText(/Rounds run: 1/)))
   await charlie.goto(evUrl)
