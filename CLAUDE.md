@@ -107,7 +107,8 @@ founder decision** — record it where it belongs, flag it, move on (2026-08-29)
   definer check (docs/24 §4b); a second superadmin's read scope (docs/12 item 9); whether view-as targets are notified;
   `view_as_sessions` hierarchy narrowing; per-position visibility map (docs/13); whether a removed person leaves pools at once
   (docs/21 §7.11); classroom GA `is_final`/`visible` on own grade; `sal_appointments.notes` client-writable.
-- `/privacy` + Terms are a DRAFT awaiting founder review of the wording (docs/18 item 3), incl. the 2026-11-05 feedback line.
+- `/privacy` + Terms are a DRAFT awaiting founder review of the wording (docs/18 item 3). The feedback line alone is
+  APPROVED (founder 2026-11-05, his wording "Only platform staff read it.", `f576095`).
 - The `corepack enable` as Administrator one-off (puts `pnpm` on PATH; workaround in the gotchas below).
 
 **Blocked / deferred by design (do not re-derive — read the doc):** killing the blanket member directory and entity-level
