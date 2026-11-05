@@ -77,6 +77,28 @@ export const speedDatingExport: ModuleExport = {
         ),
     },
     {
+      // What the reporter WROTE and what became of it. Not exported: who was
+      // reported (another person's seat) and who reviewed it (staff identity).
+      key: 'my-reports',
+      label: 'Safety reports I filed',
+      hats: ['participant'],
+      fetch: async (db, ctx) => {
+        const { data: seats } = await db
+          .from('sd_participants')
+          .select('id')
+          .eq('org_id', ctx.orgId)
+          .eq('user_id', ctx.userId)
+        const ids = (seats ?? []).map((s: { id: string }) => s.id)
+        if (ids.length === 0) return []
+        return rows(
+          db
+            .from('sd_reports')
+            .select('reason, detail, during_call, state, created_at, event:sd_events(name)')
+            .in('reporter_participant_id', ids),
+        )
+      },
+    },
+    {
       key: 'events',
       label: 'Events I run (config & schedule)',
       hats: ['organizer'],

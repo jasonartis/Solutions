@@ -79,20 +79,21 @@ export async function runOrchestratorTick(admin: SupabaseClient): Promise<void> 
     // personal blocks. This used to filter on checked_in ALWAYS, while the manual button did not and
     // nothing in the app set checked_in: a running worker would have paired nobody at any event.
     const usesCheckIn = ['staff', 'self'].includes(String((event.format as { checkIn?: unknown } | null)?.checkIn ?? ''))
-    let participantsQuery = admin
+    // Read every registered seat; the check-in filter is applied below, because the cap shrink further
+    // down counts ALL registered seats (a late arrival must still have a round to join).
+    const { data: registered, error: participantsErr } = await admin
       .from('sd_participants')
-      .select('id, user_id, pool_side')
+      .select('id, user_id, pool_side, checked_in')
       .eq('event_id', event.id)
       .eq('status', 'registered')
       .eq('seat_type', 'participant')
-    if (usesCheckIn) participantsQuery = participantsQuery.eq('checked_in', true)
-    const { data: participants, error: participantsErr } = await participantsQuery
     if (participantsErr) {
       console.error(
         `[orchestrator] could not read sd_participants for event ${event.id}: ${participantsErr.message}`,
       )
       continue
     }
+    const participants = usesCheckIn ? (registered ?? []).filter((p) => p.checked_in) : registered
     if (!participants || participants.length < 2) continue
 
     // `pairings` and `blocks` below are deliberately left tolerant of a null:
@@ -137,9 +138,11 @@ export async function runOrchestratorTick(admin: SupabaseClient): Promise<void> 
     const seats = participants.map((p) => ({ id: p.id, userId: p.user_id, poolSide: p.pool_side }))
     const blockedUserPairs = (blocks ?? []).map((b) => ({ a: b.blocker_user_id, b: b.blocked_user_id }))
 
-    // Same rule as runPairingRound: the cap cannot promise more rounds than the people can use.
+    // Same rule as runPairingRound: the cap cannot promise more rounds than the people can use —
+    // counted over everyone REGISTERED, not only the early arrivals, so a late check-in still has a
+    // round to join (2026-11-05).
     if ((rounds ?? []).length === 0 && event.rounds_planned !== null && !event.allow_repeat_pairings) {
-      const natural = naturalRoundsForSeats(seats)
+      const natural = naturalRoundsForSeats((registered ?? []).map((p) => ({ poolSide: p.pool_side })))
       if (natural > 0 && natural < event.rounds_planned) {
         const { error } = await admin.from('sd_events').update({ rounds_planned: natural }).eq('id', event.id)
         if (error) console.error(`[orchestrator] could not shrink rounds_planned for event ${event.id}: ${error.message}`)

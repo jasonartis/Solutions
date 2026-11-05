@@ -167,5 +167,42 @@ check('cap 8 with two people shrinks to 1 when the first round starts', (await c
 check('CONTROL: repeats allowed keeps the cap as typed (8)', (await capAfterFirstTick(8, true)) === 8)
 check('CONTROL: a cap already at the natural count (1) is left alone', (await capAfterFirstTick(1, false)) === 1)
 
+// ---- A late arrival still has a round to join (2026-11-05) --------------------------------------------
+// Check-in used; three registered, only Charlie and Dana arrived when round 1 starts. The shrink must count
+// all three (single pool, odd -> 3 rounds), not the two arrivals (-> 1 round, leaving Eve no round at all).
+const { data: eve } = await admin.from('profiles').select('user_id').eq('display_name', 'Eve E').single()
+if (!eve) throw new Error('Eve E not found — seed first')
+async function capWithLateArrival() {
+  const ev = must(
+    await admin
+      .from('sd_events')
+      .insert({ org_id: org!.id, name: `Late arrival cap check ${Date.now()}`, rounds_planned: 8, allow_repeat_pairings: false, round_duration_seconds: 60, break_duration_seconds: 0, format: { checkIn: 'self' } })
+      .select('id')
+      .single(),
+    'create event',
+  )
+  try {
+    for (const state of ['open', 'running']) {
+      const { error } = await admin.from('sd_events').update({ state }).eq('id', ev.id)
+      if (error) throw new Error(`-> ${state}: ${error.message}`)
+    }
+    for (const [user_id, checked_in] of [...people!.map((p) => [p.user_id, true] as const), [eve!.user_id, false] as const]) {
+      const { error } = await admin.from('sd_participants').insert({
+        org_id: org!.id, event_id: ev.id, user_id, status: 'registered', seat_type: 'participant', checked_in,
+      })
+      if (error) throw new Error(`seat: ${error.message}`)
+    }
+    await runOrchestratorTick(admin)
+    const rounds = must(await admin.from('sd_rounds').select('id').eq('event_id', ev.id), 'read rounds')
+    const row = must(await admin.from('sd_events').select('rounds_planned').eq('id', ev.id).single(), 'read cap')
+    return { rounds: rounds.length, cap: row.rounds_planned as number | null }
+  } finally {
+    await admin.from('sd_events').delete().eq('id', ev.id)
+  }
+}
+const late = await capWithLateArrival()
+check('CONTROL: with two of three arrived, round 1 is built', late.rounds === 1, JSON.stringify(late))
+check('the cap counts all three registered (3), leaving the late arrival rounds to join — not the two arrivals (1)', late.cap === 3, JSON.stringify(late))
+
 console.log(fails ? `\n${fails} FAILED` : '\nALL PASSED')
 process.exit(fails ? 1 : 0)

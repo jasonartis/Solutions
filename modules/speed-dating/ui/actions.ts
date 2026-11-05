@@ -460,8 +460,12 @@ export async function runPairingRound(orgSlug: string, eventId: string) {
   // organizer's cap to the number of rounds that gets everyone to meet everyone (the worker applies the same
   // rule) — so a dater's "round 7 of 8" is never shown for an event that will run out after 7. Repeat-meeting
   // events have no natural end and keep the cap as typed.
+  // Counted over everyone REGISTERED, not only those checked in (2026-11-05): someone still on their way
+  // checks in later and joins the next round, and a cap shrunk to the early arrivals would leave no round
+  // for them (2 of 3 arrived -> cap 1 -> the third is never paired). Registered is the upper bound on who
+  // can still arrive; the cost is that no-shows can leave "round 2 of 5" promising rounds that never run.
   if ((rounds ?? []).length === 0 && event.rounds_planned !== null && !event.allow_repeat_pairings) {
-    const natural = naturalRoundsForSeats(pairable.map((p) => ({ poolSide: p.pool_side })))
+    const natural = naturalRoundsForSeats((participants ?? []).map((p) => ({ poolSide: p.pool_side })))
     if (natural > 0 && natural < event.rounds_planned) {
       await supabase.from('sd_events').update({ rounds_planned: natural }).eq('id', eventId)
     }
