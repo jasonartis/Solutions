@@ -93,14 +93,18 @@ Audience and mentor seats exist in the schema but have no UI. **GAP.**
   "You're not checked in, so you are not in any round". Before the event starts the box says so calmly
   ("That is normal before the event starts — but only checked-in people are paired").
   **Organizers see a "Ready (9 of 12)" board** — one tile per registered person, green "✓ Ready for N min" or
-  amber "Not ready yet" — and "Check-in is ON: 9 of 12 registered are ready". An organizer can only
-  **Un-tick (not ready)** a tile (someone who has plainly walked off); nobody can tick for anyone, and there is
-  no "Mark everyone arrived". *Run next round* refuses (with a notice) until two people are checked in.
-  Someone who checks in mid-event joins at the next round; the round already running is not touched. A host
-  sees the board; **since `20261109010000` the database lets a host un-tick too** (and refuses ANY tick-in
-  of another person, organizers included — the rule is the database's, not just the screen's). The host's
-  Un-tick button and the camera / mic / connection status on each tile ("last seen …") are the next client
-  slice (module-6 spec, 2026-11-05 "HOST UN-TICK + DEVICE STATUS"); until it ships, a host still has no button.
+  amber "Not ready yet" — and "Check-in is ON: 9 of 12 registered are ready". **Staff (an organizer or a host)** can
+  only **Un-tick (not ready)** a tile (someone who has plainly walked off); nobody can tick for anyone, and there
+  is no "Mark everyone arrived". *Run next round* refuses (with a notice) until two people are checked in.
+  Someone who checks in mid-event joins at the next round; the round already running is not touched. The
+  database enforces this since `20261109010000` (it refuses ANY tick-in of another person, organizers included).
+  **Each tile also shows the person's camera, microphone and connection** (e.g. "📷 ok · 🎤 ok · not in call ·
+  last seen 12 s ago"), reported by the person's own browser on any change and every 30 s while their page is
+  open and visible. A problem (camera/mic not ok, reconnecting) is red; a report older than 75 s reads
+  "not seen for N min" in grey (page closed, asleep or offline); no report at all reads "no report yet". It only
+  says what the browser can tell: *ok* = permission granted and a device present (in a call: tracks live; a muted
+  mic is still ok), *blocked*, *none found*, *unknown* (not asked yet / cannot tell). No device names are ever
+  sent, and the status is deleted when the event ends. The board refreshes itself every 10 s.
 - A round that ran out is treated as ended by the page, but its stored state stays `active`
   until the worker (or the next manual round) closes it.
 
