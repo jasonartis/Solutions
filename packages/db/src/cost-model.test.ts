@@ -20,7 +20,7 @@ describe('cost model', () => {
 
   it('total cost never falls as users grow', () => {
     const totals = TIERS.map((n) => planFor(n, m, g).monthly)
-    for (let i = 1; i < totals.length; i++) expect(totals[i]).toBeGreaterThan(totals[i - 1])
+    for (let i = 1; i < totals.length; i++) expect(totals[i]!).toBeGreaterThan(totals[i - 1]!)
   })
 
   it('module allocation adds back up to the plan total (nothing lost or double-counted)', () => {
@@ -49,8 +49,8 @@ describe('cost model', () => {
 
   it('video is the cost driver for speed dating only (control: other modules have none)', () => {
     const f = computeFlows(100_000, m, g)
-    expect(f.byModule['speed-dating'].videoMin).toBeGreaterThan(0)
-    for (const mod of m.filter((x) => x.key !== 'speed-dating')) expect(f.byModule[mod.key].videoMin).toBe(0)
+    expect(f.byModule['speed-dating']!.videoMin).toBeGreaterThan(0)
+    for (const mod of m.filter((x) => x.key !== 'speed-dating')) expect(f.byModule[mod.key]!.videoMin).toBe(0)
   })
 
   it('priceForMargin: 50% margin doubles cost', () => {

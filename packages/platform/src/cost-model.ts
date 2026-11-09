@@ -470,11 +470,11 @@ export function allocate(users: number, modules: ModuleAssumption[], g: Globals,
     for (const l of plan.lines) {
       const total = f.total[l.basis]
       if (total <= 0) continue
-      const share = l.monthly * (f.byModule[m.key][l.basis] / total)
+      const share = l.monthly * ((f.byModule[m.key]?.[l.basis] ?? 0) / total)
       monthly += share
       if (!l.fixed) marginalMonthly += share
     }
-    const n = f.moduleUsers[m.key]
+    const n = f.moduleUsers[m.key] ?? 0
     return { key: m.key, name: m.name, monthly, marginalMonthly, users: n, perUserMonthly: n > 0 ? monthly / n : 0, perUserMarginalMonthly: n > 0 ? marginalMonthly / n : 0 }
   })
 }
