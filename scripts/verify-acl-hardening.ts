@@ -107,6 +107,14 @@ const TABLE_EXCEPTIONS: Record<string, string[]> = {
   // Speed-dating device status (20261109010000). SELECT only (event staff + the
   // person, by policy); the one writer is sd_report_device_status.
   sd_device_status: ['SELECT'],
+  // Vendor accounts (20261113010000, docs/28 Part A). Superadmin-only by policy.
+  // Accounts are never deleted (closed instead); the open log is append-only and
+  // its INSERT is a COLUMN grant on account_id only, which a table-level read
+  // does not show — hence SELECT alone here.
+  vendor_accounts: ['SELECT', 'INSERT', 'UPDATE'],
+  vendor_account_dates: ['SELECT', 'INSERT', 'UPDATE', 'DELETE'],
+  vendor_account_credentials: ['SELECT', 'INSERT', 'UPDATE', 'DELETE'],
+  vendor_account_opens: ['SELECT'],
 }
 
 // Functions whose intended EXECUTE differs from the blanket
@@ -208,6 +216,9 @@ const FUNCTION_EXCEPTIONS: Record<string, { auth: boolean; svc: boolean }> = {
   // 20261109010000: a person reports their own seat's camera/mic/connection.
   // Acts on auth.uid(); the worker has nothing to report.
   'sd_report_device_status(p_event_id uuid, p_camera text, p_mic text, p_connection text)': { auth: true, svc: false },
+  // 20261113010000: the vendor-accounts secret filter. Called only by its
+  // definer trigger; nobody may call it directly.
+  'vendor_secret_reason(t text)': { auth: false, svc: false },
 }
 const FULL_CRUD = ['SELECT', 'INSERT', 'UPDATE', 'DELETE']
 // `settings` moved to `public.user_private` with the email slice (2026-09-17,
@@ -586,6 +597,11 @@ async function main() {
     feedback_messages: [],
     // 20261109010000: browser-reported device status; nothing server-side writes it.
     sd_device_status: [],
+    // 20261113010000: the founder's vendor accounts; the worker has no business there.
+    vendor_accounts: [],
+    vendor_account_dates: [],
+    vendor_account_credentials: [],
+    vendor_account_opens: [],
   }
   const svcLost = tables.filter((t) => {
     const want = SVC_EXCEPTIONS[t.relname] ?? FULL_CRUD

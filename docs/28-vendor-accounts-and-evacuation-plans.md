@@ -1,6 +1,7 @@
 # 28 — Vendor accounts and evacuation plans
 
-> **STATUS: REQUIREMENTS ONLY (founder, 2026-11-09). Nothing designed or built.**
+> **STATUS (2026-11-09): Part A BUILT, LOCAL ONLY — read "Part A AS BUILT" below; not on
+> prod yet. Part B planned (see "Part B — THE PLAN").** Original requirements follow.
 > Two pieces of work. Part A is a superadmin page and is small. Part B is a planning
 > exercise and comes first in importance. The founder's own words are quoted where
 > they set the goal. [docs/14](14-external-accounts.md) is the current account map and
@@ -51,6 +52,80 @@ docs/03 #12 rhythm). Copy the shape of an existing superadmin-only table
 (`superadmin_lookup_log` / the feedback tables). Seed it from docs/14 and Part B's
 inventory. Keep docs/14 as the written map, or retire it to point at the page; don't keep
 two lists that can drift.
+
+### Part A AS BUILT (2026-11-09, Opus) — LOCAL ONLY, not on prod yet
+
+**Where:** `/console/vendors` (Owner Console nav → "Vendor accounts"). Migration
+`20261113010000_vendor_accounts.sql`; page `apps/web/app/(app)/console/vendors/`; shared
+logic `apps/web/lib/vendor-accounts.ts`; dashboard tile in `lib/console-dashboard.ts`.
+
+**Tables (all superadmin-only, one `is_superadmin()` policy each; revoke-before-grant):**
+- `vendor_accounts` — one row per account; every field in the list above. Never deleted
+  (no DELETE grant): mark it **closed**, so its open history survives. `part_b_ref` names
+  its Part B plan (e.g. `B.3-1`).
+- `vendor_account_dates` — dates not to miss (trial end, key expiry, renewal). A date with
+  no day recorded is itself flagged ("date not recorded"). "Mark done" closes one.
+- `vendor_account_credentials` — **where** a credential lives: a store (`.env.deploy`,
+  GitHub secret, Vercel variable, password manager, …) and a NAME. There is no value column.
+- `vendor_account_opens` — one row per **Open** click. Append-only by grants: the API may
+  insert only `account_id`; who and when are set by the database; nobody can update or
+  delete a row. `opened_by` is `on delete set null`, like `superadmin_lookup_log`.
+
+**Open:** a form posting to `/console/vendors/open` in a new tab. The route records the
+click, then 303-redirects to the sign-in address **stored in the database** (never one
+from the request, so it cannot redirect anywhere else), with `Referrer-Policy:
+no-referrer`. POST, so link prefetchers and other sites cannot fake a visit.
+
+**"Never a password or key" — what the database enforces:**
+1. No column holds a secret; credential NAMES must be `UPPER_SNAKE`, at most 64
+   characters, no unbroken run of 15+ (a key typed in capitals, a TOTP seed).
+2. A BEFORE INSERT/UPDATE trigger runs `vendor_secret_reason()` over **every** text value in
+   the row (read generically, so a column added later is covered). It refuses PEM blocks,
+   JWTs, known vendor key prefixes, `user:password@` and `?token=` in links, "password: x"
+   / "key = x" when x has a digit or symbol, long key-shaped runs, and short
+   password-shaped words (upper + lower + digit + a real symbol, e.g. `Summer2026!`).
+3. The sign-in address must be plain `https://` with no user:password, no `?query`, no
+   `#fragment`.
+- **Residual, stated on the page beside every free-text box:** a password that looks like
+  text ("the password is hunter2", an all-lowercase `summer2026!`, a short recovery code, a
+  key typed in spaced groups or split across two fields) passes. A 40-character commit id
+  is refused as key-shaped (rephrase it).
+- The filter's own cases (secrets refused, ordinary notes passed) are asserted inside the
+  migration, so it cannot apply to a database where the filter is broken.
+
+**Dashboard badges** (tile "Vendor accounts" + priority list), active accounts only: a
+date due within 30 days (urgent within 7 or past), an expiry with no date recorded,
+payment failing (urgent), two-step **off** (urgent; "not recorded" is shown on the page but
+not badged), not opened in 90 days or never (one combined line, so a fresh page does not
+bury the dated items).
+
+**Seed (in the migration, no secrets):** 9 active accounts (Supabase, Vercel, GitHub,
+Google account, JaaS, Backblaze B2, Sentry, UptimeRobot, myzmanim) and 7 planned
+(domain registrar, mail provider Resend + standby SES, password manager, second git host,
+VPS, AI provider), from docs/14 and Part B's B.1/B.2 findings; 29 credential names; 4
+dates (myzmanim trial ended 2026-10-24; SUPABASE_ACCESS_TOKEN, VERCEL_TOKEN and the JaaS
+key, expiries never recorded). Accounts only: hebcal (a library), npm, container images and
+Google Fonts have no account and no row. Costs, plans, two-step status and owners are
+left "not recorded" for the founder to fill. **The seed carries one open question for the
+founder: docs/14 says Supabase and Vercel sign in with GitHub, R2 says Google** — the
+rows say so in their notes.
+
+**docs/14 is retired** to a pointer at this page (its security rules stay). From now on
+the page is the list.
+
+**Review (docs/03 #12):** two independent adversarial reviewers, 2026-11-09. Access: no
+path for anyone but the superadmin, history unforgeable (one finding — `opened_by` was
+`on delete cascade`, now `set null`). Filter: ~75 inputs; long keys from every vendor
+tried were refused; the bypasses that mattered (`Summer2026!`, `P@ssw0rd`, quoted JSON,
+`pw:`/`key:`, `?access_token=`, AWS keys with `/`) and the false positives that mattered
+("Password: in 1Password", `S3-compatible`, `Pro-Plan2026`) are fixed and are now
+assertions in the migration. Tests: `packages/db/src/vendor-accounts.test.ts` (16, each
+refusal beside a superadmin control); e2e "owner console: vendor accounts"; local
+`verify-acl-hardening.ts` 17/17.
+
+**Still to do:** apply to prod (backup → dry run → founder go-ahead → apply → a
+`scripts/prod-verify-vendor-accounts.mts` before/after). `20261111010000_content_reports`
+(another session) sorts before it and must ship first or together.
 
 ## Known risks — must be protected against (recorded 2026-11-09, founder: "we need to protect against them")
 

@@ -13,6 +13,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getZmanimCoverage, getZmanimPrefetchSettings } from '@/lib/zmanim-console'
+import { getVendorData, vendorIssues, type VendorIssue } from '@/lib/vendor-accounts'
 
 export type Severity = 'urgent' | 'attention' | 'ok' | 'idle'
 
@@ -197,6 +198,47 @@ async function expiringSection(supabase: SupabaseClient, items: PriorityItem[]):
   }
 }
 
+// --- Vendor accounts (docs/28 Part A) -----------------------------------------
+async function vendorsSection(supabase: SupabaseClient, items: PriorityItem[]): Promise<DashboardTile> {
+  const href = '/console/vendors'
+  let issues: VendorIssue[]
+  try {
+    issues = vendorIssues(await getVendorData(supabase))
+  } catch {
+    return failedTile('vendors', 'Vendor accounts', href, 'vendor accounts')
+  }
+  // "Not opened in 90 days" is one line however many accounts it covers, so a
+  // fresh page (nothing opened yet) does not bury the dated items.
+  const stale = issues.filter((i) => /never opened|not opened/.test(i.text))
+  for (const i of issues) {
+    if (!stale.includes(i)) items.push({ severity: i.severity, text: i.text, href })
+  }
+  if (stale.length) {
+    items.push({
+      severity: 'attention',
+      text: `${stale.length} vendor account${stale.length === 1 ? '' : 's'} not opened in 90 days: ${stale.map((i) => i.service).join(', ')}`,
+      href,
+    })
+  }
+  const urgent = issues.filter((i) => i.severity === 'urgent').length
+  const dated = issues.filter((i) => / — /.test(i.text)).length
+  return {
+    key: 'vendors',
+    title: 'Vendor accounts',
+    href,
+    count: issues.length,
+    severity: urgent ? 'urgent' : issues.length ? 'attention' : 'ok',
+    detail: issues.length === 0 ? 'All accounts in order' : 'things to check',
+    lines: issues.length
+      ? [
+          `${dated} date${dated === 1 ? '' : 's'} due or unrecorded`,
+          `${stale.length} not opened in 90 days`,
+          ...(urgent ? [`${urgent} urgent`] : []),
+        ]
+      : [],
+  }
+}
+
 // --- Content reports (module 9 — not built) -----------------------------------
 // There is no report table yet. This tile exists so the 48-hour TAKE IT DOWN
 // obligation has a place to land; when the Report content page ships, replace
@@ -216,16 +258,17 @@ function reportsSection(): DashboardTile {
 
 export async function getDashboard(supabase: SupabaseClient): Promise<Dashboard> {
   const items: PriorityItem[] = []
-  const [reports, feedback, deletions, expiring] = [
+  const [reports, feedback, deletions, expiring, vendors] = [
     reportsSection(),
     ...(await Promise.all([
       feedbackSection(supabase, items).catch(() => failedTile('feedback', 'Feedback', '/console/feedback', 'feedback')),
       deletionsSection(supabase, items).catch(() => failedTile('deletions', 'Account deletions', '/console/accounts', 'account deletions')),
       expiringSection(supabase, items).catch(() => failedTile('expiring', 'Expiring soon', '/console', 'expiry data')),
+      vendorsSection(supabase, items).catch(() => failedTile('vendors', 'Vendor accounts', '/console/vendors', 'vendor accounts')),
     ])),
   ]
   // Urgent first; the sort is stable so sources keep their own order within a level.
   const rank = { urgent: 0, attention: 1 } as const
   items.sort((a, b) => rank[a.severity] - rank[b.severity])
-  return { tiles: [reports, feedback, deletions, expiring], priorities: items }
+  return { tiles: [reports, feedback, deletions, expiring, vendors], priorities: items }
 }

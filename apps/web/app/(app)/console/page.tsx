@@ -137,6 +137,13 @@ export default async function ConsolePage(props: {
         <span className="text-gray-400" title="Start a deletion someone asked for by email, and see pending, cancelled and failed ones">
           who is leaving
         </span>
+        <span className="text-gray-300">·</span>
+        <Link href="/console/vendors" className="text-blue-600 hover:underline">
+          Vendor accounts
+        </Link>
+        <span className="text-gray-400" title="Every outside account the platform depends on: sign-in, payment, dates not to miss, where credentials are kept">
+          what we depend on
+        </span>
       </nav>
 
       <section className="mb-8 rounded-lg border border-gray-200 bg-white p-5">

@@ -12,35 +12,20 @@ they live in the git-ignored `.env.accounts` file at the repo root (template:
 - **Adding a new service later:** add a row here, a block to `.env.accounts`
   **and** `.env.accounts.example`, and note it in [docs/07](07-account-setup.md) if it needs setup steps.
 
-> **2026-11-09:** this list is partly stale (no JaaS row; Backblaze B2 now exists, created
-> 2026-11-08, see docs/12). The founder asked for a superadmin accounts page and a
-> dependency/evacuation review of every service:
-> [docs/28](28-vendor-accounts-and-evacuation-plans.md). Update or retire this table there.
+## The list now lives on the vendor accounts page (2026-11-09)
 
-## Active accounts
+**This doc's two tables (active and planned accounts) are RETIRED.** The list is the
+superadmin page **`/console/vendors`** (Owner Console → "Vendor accounts"; docs/28 Part A).
+It holds, per account: sign-in page and method, owner, two-step status, plan and cost,
+payment, dates not to miss, where credentials are kept **by name**, what breaks if it is
+lost (linked to its docs/28 Part B plan), notes, and a "last opened" history. Its badges
+feed the Owner Console dashboard. It was seeded on 2026-11-09 from the tables that stood
+here (see this file's git history) and from docs/28 Part B's re-measured inventory.
 
-| Service | Sign in / console | What it's for here | Account / notes |
-|---|---|---|---|
-| **GitHub** | https://github.com | Source code + CI/CD. The repo is **github.com/jasonartis/Solutions** (**public**, not private — corrected 2026-09-23, staleness audit; verified live via the GitHub API, `"private": false`. CLAUDE.md already records this: flipped public 2026-09-02, deliberately, over Actions-minutes billing on private repos — see CLAUDE.md's incident log before "fixing" it back). GitHub Actions runs the tests and, on green, deploys to Vercel. Deploy secrets live in the repo's **Settings → Secrets and variables → Actions**. | User `jasonartis`. Pushes authenticate via Git Credential Manager. |
-| **Vercel** | https://vercel.com/dashboard | Hosts the Next.js web app at **https://solutions-platform.vercel.app**. Auto-deploys every push to `master`; each PR gets a preview URL. Root directory is `apps/web`. | Sign in **with GitHub**. Holds the app's public env vars (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`). |
-| **Supabase** | https://supabase.com/dashboard | Production **database (Postgres) + Auth + Storage**. Everything the app stores. Project `solutions-platform-prod`, ref **`jbjqrkxdoiolwlglvoki`**. | Sign in **with GitHub**. Holds the `anon` key (public) and `service_role` key (SECRET). DB password is in `.env.accounts` + `.env.deploy`. |
-| **Solutions Platform (the app itself)** | https://solutions-platform.vercel.app/login | Not an external vendor, but the login you use as the platform **superadmin** (create orgs, enable modules, manage everyone). | Superadmin = the platform Google email. Demo users (`*@demo.local`) use the prod demo password. Both in `.env.accounts`. |
-| **UptimeRobot** | https://uptimerobot.com | Uptime monitoring — pings the live site every few minutes, emails a weekly report, and keeps the Supabase database from going idle. Monitor: `https://solutions-platform.vercel.app/s/pozne`, 100% uptime last week (confirmed live 2026-08-31, checklist item 1 — see docs/18). **Note: real, and the login credentials ARE now recorded in `.env.accounts`** (both `UPTIMEROBOT_LOGIN_EMAIL`/`PASSWORD` filled — corrected 2026-09-23, staleness audit; this line previously said they were still blank placeholders). `.env.accounts.example`'s own fields stay blank, as a template should. **Also add a second monitor for `/healthz`** (docs/18 item 1's new JSON endpoint) once it's deployed — keep `/s/pozne` too, since it proves the real public page works, not just the probe. | Free account. |
-| **myzmanim.com** | https://myzmanim.com | External API for authoritative Jewish prayer times (zmanim) per synagogue address — feeds the **synagogue-schedules** module. | Founder has a free account. API key is currently **parked** (not yet wired into the app; hebcal is the working fallback). |
-| **Google** | https://myaccount.google.com | The platform's email identity (`jasonartisenergy@gmail.com`) — the superadmin app login and the likely single sign-on into GitHub/Vercel/Supabase. | Keep this account's own password + 2FA safe; it's the master key to most of the above. |
+**Keeping one list:** add, change or close an account on the page, not here. Before
+adopting a new outside service, give it a row on the page AND a docs/28 Part B plan, in the
+same session.
 
-## Planned — not created yet
-
-Sign these up only when the matching feature/phase arrives (details in
-[docs/05-operations.md](05-operations.md) and [docs/07 Part 4](07-account-setup.md)).
-When you do, move the block from the commented section of `.env.accounts` into
-the active section and add a row above.
-
-| Service | When needed | For |
-|---|---|---|
-| **Hetzner / DigitalOcean (VPS)** | When the background worker moves to the cloud (live synagogue exports, speed-dating orchestration) | Runs the pg-boss worker 24/7. ~$5–20/mo. Today the worker runs on your PC via `pnpm worker:prod`. |
-| **Backblaze B2** | Same time as the VPS | Off-site database/file backups (free tier). |
-| **Sentry** | **DONE 2026-09-06** (go-live checklist item 1, docs/18) | Error monitoring for the web app (free tier). Account created (project slug `solutions-platform`), DSN live in Vercel as `NEXT_PUBLIC_SENTRY_DSN`, delivery verified (real test event confirmed in the dashboard). |
-| **Resend** | When modules need to send real email (classroom/synagogue notifications) | Transactional email from our own domain (free 3k/month). |
-| **Domain registrar** | When branding is decided | A real domain for public pages + email sending (~$15/yr). |
-| **Twilio / Stripe** | Only if SMS / payments features get built | Documented future upgrades. |
+The page can never hold a password or key (docs/28 "Part A AS BUILT"); credentials stay in
+`.env.accounts` / `.env.deploy` / the service dashboards, as the rules above say. When you add
+a new credential, also add its name to the page and a block to `.env.accounts.example`.

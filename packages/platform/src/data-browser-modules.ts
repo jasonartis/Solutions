@@ -311,6 +311,14 @@ export const platformDataBrowser = declareDataBrowser({
         'cancel or expiry. Rendering it under the inviter would put a third party\'s address in a ' +
         'browsable surface. Org admins see open invitations on the org members page instead.',
     },
+    {
+      table: 'vendor_account_opens',
+      columns: ['opened_by'],
+      why:
+        'The click log of the superadmin opening a vendor\'s sign-in page from /console/vendors ' +
+        '(docs/28 Part A). It names only the staff member who clicked, about the platform\'s own ' +
+        'outside accounts — not a record ABOUT any user — and it is shown on that page.',
+    },
   ],
   neverReadable: [],
 })

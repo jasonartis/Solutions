@@ -3080,3 +3080,45 @@ test('speed-dating: device status board + host un-tick — a dater reports camer
       await browser.close()
     }
   })
+
+// Vendor accounts page (docs/28 Part A). The superadmin opens a vendor through the page (the click is
+// recorded, then the vendor opens in a new tab — the vendor's site is stubbed so CI never leaves the
+// runner), the database refuses a key typed into notes, the dashboard carries the tile, and an
+// ordinary member gets a 404.
+test('owner console: vendor accounts — Open records "last opened", a key in notes is refused, members get 404', async ({ page }) => {
+  await page.context().route('https://sentry.io/**', (r) => r.fulfill({ status: 200, body: 'vendor sign-in stub' }))
+  await signIn(page, 'owner@demo.local')
+
+  await page.goto('/console')
+  await expect(page.getByTestId('dash-tile-vendors')).toBeVisible()
+
+  await page.goto('/console/vendors')
+  const card = page.getByTestId('vendor-Sentry')
+  await expect(card).toBeVisible()
+  const before = await page.getByTestId('vendor-last-opened-Sentry').textContent()
+
+  const popupPromise = page.waitForEvent('popup')
+  await page.getByTestId('vendor-open-Sentry').click()
+  const popup = await popupPromise
+  await popup.waitForLoadState()
+  expect(popup.url()).toMatch(/^https:\/\/sentry\.io\/auth\/login\//)
+  await popup.close()
+
+  await page.reload()
+  const after = page.getByTestId('vendor-last-opened-Sentry')
+  await expect(after).toContainText('UTC')
+  if (before && before !== 'never') {
+    await expect(after).not.toHaveText(before)
+  }
+
+  // A key typed into notes is refused by the database, and the page says why.
+  await card.getByText('Edit Sentry').click()
+  await card.getByLabel('Notes').fill('backup key 9dd4e461268c8034f5c8564e155c67a6')
+  await card.getByRole('button', { name: 'Save changes' }).click()
+  await expect(page.getByTestId('vendors-error')).toContainText('never stores passwords or keys', { timeout: 15000 })
+
+  await page.context().clearCookies()
+  await signIn(page, 'dana@demo.local')
+  const resp = await page.goto('/console/vendors')
+  expect(resp?.status()).toBe(404)
+})
