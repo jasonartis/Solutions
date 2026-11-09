@@ -433,7 +433,7 @@ Answered by the founder 2026-11-09 (Q1–Q4 first, then Q5–Q7 for B.8), each t
   is now uploaded to a cloud location; NOT printed yet.** So: two copies (PC + cloud), the paper
   copy (Q6) still to do. He also plans a separate drive to hold a copy (not done yet), which fits
   B.8's USB stick at home. Caution recorded, not re-raised: if the B2 read key and this key sit
-  in the same cloud account, that one account's password opens every backup; keep them apart.
+  in the same cloud account, that one account's password opens every backup; keep them apart. **DONE 2026-11-09 (founder):** they had been together; now each is in a separate online account. When B.8 is built, the snapshots' cloud drive must not be the decryption key's account (Q6).
 - **GitHub sign-in: ANSWERED 2026-11-09, email and password** (no Google). **Two-step is OFF;
   founder defers it to the first customer** (2026-11-09). Accepted risk until then: GitHub is
   the single key (R2) to code AND database, guarded by one password.
