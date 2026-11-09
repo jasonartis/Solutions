@@ -367,6 +367,25 @@ with GitHub). Vercel signs in with a separate Google account, not the superadmin
 Steps 1, 2 and 12 matter most: without a proven backup, a way into the accounts and an off-SSD copy of the credentials, no other plan
 can run.
 
+#### B.4a NEXT UP: the ranked list a fresh chat picks from (2026-11-09)
+
+When the founder says "let's work on what's next" for resilience/backups, offer these **in this
+order**, one per session, and **wait for him to pick**: never start a build unprompted. Founder
+actions (docs/29 §3–4: print the key, drive copy) and the first-customer items (#11: domain,
+mail, GitHub two-step) are NOT on this list: they are his, or they wait for a customer.
+
+| Rank | Step (B.4 #) | Why it is next | Model | Ready? |
+|---|---|---|---|---|
+| 1 | **Finish the B2 nightly backup and prove a restore** (#1) | Every other plan restores from it. Blocked on the `B2_APP_KEY` GitHub secret being re-pasted (docs/12 "Backups" 2026-11-09) | Opus | needs the founder to fix the secret first |
+| 2 | **Nightly copy of uploaded files to B2** (#5) | Uploaded files have NO backup at all today (F1) | Opus (touches prod data and backup crypto) | after rank 1 |
+| 3 | **Offsite snapshots script** `pnpm backup:snapshot` + `RESTORE.txt` (#12, B.8) | The credential files exist only on the SSD. **Switch the "Offsite snapshots" row on the vendor accounts page to active in the same session** | Sonnet | yes |
+| 4 | **Supabase settings sheet** (#4, F6) | A restore today would bring the sign-up hook back OFF | Sonnet (read-only Management API) | yes |
+| 5 | **Fonts in-house + git mirror + deploy-from-PC recipe** (#6, #8) | Small; removes two dependencies | Sonnet | yes |
+| 6 | **Standby recipes: web host on our own server, Jitsi build script** (#9) | Turns B.3-3/B.3-5 from prose into something runnable | Sonnet | yes |
+| 7 | **First drills** (#10, B.6), starting with the database + sign-in restore | A plan does not count until practised | Opus for the first one | after ranks 1–2 |
+
+Update this table when a rank ships (strike it through, date it) so the next chat sees what is left.
+
 ### B.5 Protection levels and why not "instant failover everywhere"
 
 | Level | What it means | Database + sign-in | Website | Cost |
@@ -427,8 +446,8 @@ Answered by the founder 2026-11-09 (Q1–Q4 first, then Q5–Q7 for B.8), each t
   in a cloud doc" turned out to mean the **B2 read-only key** (keyID, keyName, applicationKey):
   he asked "you are referring to the read only keyID, keyName and applicationKey?". That key is
   replaceable from the B2 website. The **decryption key** is a different thing: ONE 77-character
-  line made by `scripts/backup-keygen.mts`, at
-  `C:\Users\yarmishj.AEI-LT-JYARMISH\platform-backup-key\platform-backup-key.txt` (the file
+  line made by `scripts/backup-keygen.mts`, in `platform-backup-key.txt` in the founder's Windows
+  user folder on `C:` (exact path in docs/12 "Backups"; the file
   exists, 383 bytes, checked 2026-11-09 without reading it). **UPDATE 2026-11-09 (founder): a copy
   is now uploaded to a cloud location; NOT printed yet.** So: two copies (PC + cloud), the paper
   copy (Q6) still to do. He also plans a separate drive to hold a copy (not done yet), which fits
