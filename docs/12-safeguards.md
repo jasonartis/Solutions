@@ -236,8 +236,13 @@ rot; pipelines don't.
   (git-ignored, 33 MB, local only), then deleted from GitHub (public list
   reads `total_count: 0`); `backup.yml` DISABLED (`disabled_manually`);
   every prod session revoked by `scripts/prod-sign-out-everyone.mts`
-  (sessions 144 → 0, refresh tokens 199 → 0, users 13 → 13). Founder to
-  change the superadmin password. **⚠ THERE ARE NO AUTOMATIC BACKUPS UNTIL
+  (sessions 144 → 0, refresh tokens 199 → 0, users 13 → 13). **The founder
+  changed the superadmin password (by 2026-11-08)**, and all three env lines
+  holding it (`.env.accounts` `SUPERADMIN_PASSWORD` + `VERIFY_SUPERADMIN_PASSWORD`,
+  `.env.deploy` `VERIFY_SUPERADMIN_PASSWORD`) were updated and checked against a real
+  prod sign-in on 2026-11-09. Every account's password hash was in the dumps. Only the
+  superadmin's password was changed. Nobody decided whether to change the demo accounts' shared
+  password, or to ask the few other real accounts to change theirs; that is still an open question. **⚠ THERE ARE NO AUTOMATIC BACKUPS UNTIL
   THE REPLACEMENT EXISTS** — run `pnpm backup:prod` by hand meanwhile.
   **Founder decision: backups never go to a public place again, encrypted
   or not** ("collect now, decrypt later"). Replacement: the job dumps,
@@ -252,9 +257,17 @@ rot; pipelines don't.
   "Write Only" key includes it — the first test upload will show; if not, mint a key with exactly
   `listBuckets, writeFiles, writeFileRetentions` via the b2 CLI. The founder put the write-only
   key into GitHub repo secrets (names as proposed: `B2_KEY_ID`, `B2_APP_KEY`, `B2_BUCKET` — confirm
-  in GitHub's secrets list, values are never read back) and has a read-only restore key. He has
+  in GitHub's secrets list, values are never read back) and has a read-only restore key, kept in a personal
+  file outside the repo (founder, 2026-11-09). He has
   no password manager; the read key is replaceable from the B2 website, but the backup
-  DECRYPTION key (not yet generated) is not — losing it makes every backup unreadable. Next:
+  DECRYPTION key (not yet generated) is not — losing it makes every backup unreadable; the
+  founder is to keep it in two places (PC plus USB stick or printout). **Proposed, not yet decided,
+  for the build session:** keep 7 daily, 4 weekly and 12 monthly copies (well under B2's always-free
+  10 GB; a dump is about 0.5 MB). **Why not a private GitHub repo instead (founder asked 2026-11-08):**
+  a private repo is one setting away from public (this repo already flipped once, which is how the
+  leak happened); anyone holding the GitHub login can delete every copy (B2's Object Lock stops
+  that for 30 days); a GitHub token can read, write and delete (B2's key is write-only); and
+  backups would sit with the same company as the code. Next:
   build the encrypt-and-upload workflow (Opus), with a real restore test.
   **2026-11-09 (Opus): BUILT AND PUSHED (`a070db8`, `ed60986`) — NOT YET PROVEN; blocked on the
   `B2_APP_KEY` secret.** How it works:

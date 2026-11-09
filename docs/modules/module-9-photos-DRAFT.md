@@ -94,7 +94,11 @@ The motivating example (founder, 2026-11-03):
     per-org cap, a per-user limit; the superadmin sees a tree — platform →
     per org → per org per module, and platform → per user → per user per
     module. **That module's plan should be written into a docs/modules draft
-    before it is lost; it is not in the repo.**
+    before it is lost; it is not in the repo.** The founder said he would resume
+    that chat himself (2026-11-03). His description of it, verbatim: "In the resume builder
+    app with the vault … Its a future module plan or musing notes … Its one of two things the
+    super admin does not get to see." So the résumé builder has a private vault the superadmin
+    cannot read. The other such thing was not named here.
 16. **Backups must include the files.** Supabase's backups and our `backups/`
     folder are database-only. Proposed: a nightly copy of every new file to a
     second company (Backblaze B2 or Cloudflare R2), versioned, deletes held
