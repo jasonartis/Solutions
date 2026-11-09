@@ -37,7 +37,7 @@ const ask = async (prompt: string) => {
   return String((await lines.next()).value ?? '').trim()
 }
 const masterId = await ask('Master keyID (12 characters): ')
-const masterKey = await ask('Master applicationKey (31 characters): ')
+const masterKey = await ask('Master applicationKey (the long one, ~42 characters): ')
 rl.close()
 
 const master = await authorize(masterId, masterKey)
