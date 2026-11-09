@@ -63,9 +63,11 @@ section, keep it a SUMMARY with pointers: add the dated story to the journal / t
   `scripts/print-cost-model.mts`). Headline: a ~$70–100/mo fixed floor plus cents per user; AI and live video are the only
   costs that scale with people; the setup changes at ~50–300k (files to R2) and ~5M (leave Supabase/Vercel). Several prices
   are labelled assumption/third-party (price-sheet "Conflicts and gaps") — re-fetch before budgeting at 10M+.
-- **2026-11-09 (Opus): vendor accounts page (docs/28 Part A) — BUILT, LOCAL ONLY, `20261113010000` NOT on prod**
-  (prod verifier `scripts/prod-verify-vendor-accounts.mts` 11/28 before, local 50/0). `/console/vendors` + a dashboard tile;
-  four superadmin-only tables; the database refuses secret-shaped text in every column. Ships AFTER (or with) another
+- **2026-11-09 (Opus): vendor accounts page (docs/28 Part A) — CODE PUSHED, migration `20261113010000` NOT on prod**
+  (so on prod the page and its dashboard tile read "could not read" until the apply; prod verifier
+  `scripts/prod-verify-vendor-accounts.mts` 11/28 before, local 50/0). `/console/vendors` + a dashboard tile; 18 seeded
+  accounts incl. the monthly offsite-snapshot chore (B.8); four superadmin-only tables; the database refuses
+  secret-shaped text in every column. Ships AFTER (or with) another
   session's `20261111010000_content_reports`, which sorts first. docs/28 "Part A AS BUILT"; docs/14's table retired to it.
 - **2026-11-05 (Opus): speed-dating host un-tick + camera/mic status table `20261109010000` — ON PROD, verified** (15/22 → 46/0):
   only the person ticks in (database rule now, organizers too); `sd_device_status` + `sd_report_device_status`. The CLIENT half
