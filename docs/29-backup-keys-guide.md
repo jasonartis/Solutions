@@ -28,15 +28,16 @@ opens every user's data.
 |---|---|---|
 | Cloud doc, account 1 | B2 read key | ✔ done |
 | Cloud, account 2 (not account 1) | decryption key | ✔ done |
-| This PC: a file named `platform-backup-key.txt` in your Windows user folder (find it: section 3, step 1) | decryption key | ✔ (original) |
+| This PC: `C:\Users\yarmishj.AEI-LT-JYARMISH\platform-backup-key\platform-backup-key.txt` | decryption key | ✔ (original) |
 | **Paper, at home** | decryption key | ☐ **to do: section 3** |
 | **Separate drive, at home** | decryption key | ☐ **to do: section 4** |
 
 ## 3. Print the decryption key (10 minutes)
 
-1. Find the file: open **File Explorer**, click **This PC → C:**, type `platform-backup-key.txt`
-   in the search box (top right) and wait for it to finish searching. It is inside your Windows
-   user folder. Right-click it → **Open with → Notepad**.
+1. Press **Windows key + R**, paste this, press Enter:
+   `notepad C:\Users\yarmishj.AEI-LT-JYARMISH\platform-backup-key\platform-backup-key.txt`
+   If Notepad says the file doesn't exist (it was moved): open **File Explorer → This PC → C:**,
+   search for `platform-backup-key.txt`, right-click it → **Open with → Notepad**.
    (On the separate drive the copy is in the `keys` folder, section 4.)
 2. In Notepad: **Format → Font → Consolas, size 14** (so `0`/`O` and `1`/`l` look different).
 3. **File → Print.** Close Notepad **without saving**.
