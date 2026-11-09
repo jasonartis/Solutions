@@ -29,9 +29,14 @@ One Owner Console page listing every account the platform depends on, so the fou
 - **dates the founder must not miss:** trial ends, token or key expiries, renewals
   (known examples: the myzmanim key was a trial that ended 2026-10-24; the
   `SUPABASE_ACCESS_TOKEN` expiry was never recorded; the JaaS key; the `VERCEL_TOKEN`)
-- **last logged in / last checked**, set by a "checked it today" button. Most vendors
-  give no API for this, so it is entered by hand; if one does, it can be filled
-  automatically later
+- **last opened, recorded by clicking through (founder, 2026-11-09).** Each account
+  has an **Open** link to its sign-in page. Clicking it records the date and time, then
+  opens the vendor's site in a new tab. The founder goes to the vendor through this page
+  every time, so the platform keeps the record. Show the last-opened date per account, and
+  keep the history so the page can show how often each one is visited. Label it
+  **"last opened"**, not "last logged in": the click proves he went there, not that he
+  signed in. Most vendors give no API for real login dates; if one does, it can be added
+  later beside this.
 - **where its credentials live, by NAME only** (".env.deploy → JAAS_PRIVATE_KEY", "GitHub
   secret B2_APP_KEY"). **Never the secret itself — the page must not be able to hold a
   password or key.**
@@ -46,6 +51,22 @@ docs/03 #12 rhythm). Copy the shape of an existing superadmin-only table
 (`superadmin_lookup_log` / the feedback tables). Seed it from docs/14 and Part B's
 inventory. Keep docs/14 as the written map, or retire it to point at the page; don't keep
 two lists that can drift.
+
+## Known risks — must be protected against (recorded 2026-11-09, founder: "we need to protect against them")
+
+Found while writing these requirements. **Each is open, with no fix chosen yet.** The
+Part B planning session decides the fix, its cost and its order. Nobody should mistake
+these for ideas.
+
+| # | Risk | What happens if it fires | Likely protection (to be decided) |
+|---|---|---|---|
+| R1 | **We own no web address.** The site is `solutions-platform.vercel.app`, a name that belongs to Vercel. | If Vercel drops or blocks us, the site is gone **and so is its address**. Even after the app is running elsewhere, every link, bookmark and invite email points at a dead name. | Buy a domain we own (about $15/yr) at a registrar that isn't our host. Point it at Vercel, and use it in every link and email from then on. Moving host then means changing one DNS record. |
+| R2 | **One Google login opens everything.** GitHub, Vercel and Supabase all sign in with `jasonartisenergy@gmail.com` (docs/14). | If Google locks, suspends or loses that account, the founder is locked out of code, hosting and the database **at the same moment**, with no way in to fix anything. | Give each of the three a second way in that doesn't depend on Google: its own password plus two-step verification, and recovery codes stored offline. Also consider a second trusted owner or admin on each. |
+| R3 | **Supabase holds three jobs.** The database, user sign-in and stored files all live with one company. | Losing Supabase stops everything at once. The data can be restored elsewhere from our own backups, but sign-in (accounts and passwords) and uploaded files have no second home today. | Backups now in progress (B2, docs/12) cover the database. Files and sign-in each need an evacuation plan: copy uploaded files off-site, and a tested way to bring user accounts and password hashes to another provider. |
+| R4 | **Sign-up and password-reset email depend on Supabase's built-in sender.** It was measured at 2 emails per hour (docs/18 item 7). | New users can't confirm their accounts, and nobody can reset a forgotten password. | A real mail provider on our own domain (needs R1), with a second provider ready to take over. |
+
+**Rule:** a risk is closed only when its protection is built **and** practised in a drill.
+Record the drill's date here.
 
 ## Part B — dependency review and evacuation plans
 
