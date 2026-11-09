@@ -362,7 +362,7 @@ with GitHub). Vercel signs in with a separate Google account, not the superadmin
 | 9 | Recipes for the standby web host and Jitsi (scripts, not running servers) | B.3-3, B.3-5 | $0 | session |
 | 10 | First drill of each plan (B.6) | the "unpractised" rule | < $1 each | per Q4 |
 | 11 | At the first paying client: **buy the domain (#3) and set up mail (#7)** (founder, Q3 changed 2026-11-09), then Supabase Pro + Vercel Pro (already in docs/18), plus the warm standby if Q1 = warm | F10 | see costs | founder |
-| 12 | Offsite snapshots (B.8): `pnpm backup:snapshot`, `RESTORE.txt`, stick + cloud copy, first restore drill; BitLocker To Go on `D:` (F13) | F5, F13, docs/12 "TO BE PLANNED" | $0 | session builds; founder copies monthly, turns on BitLocker |
+| 12 | Offsite snapshots (B.8): `pnpm backup:snapshot`, `RESTORE.txt`, stick + cloud copy, first restore drill (BitLocker on `D:` for F13 declined by the founder 2026-11-09) | F5, F13, docs/12 "TO BE PLANNED" | $0 | session builds; founder copies monthly |
 
 Steps 1, 2 and 12 matter most: without a proven backup, a way into the accounts and an off-SSD copy of the credentials, no other plan
 can run.
@@ -423,10 +423,15 @@ Answered by the founder 2026-11-09 (Q1–Q4 first, then Q5–Q7 for B.8), each t
   move to the first-customer step (#11).
 - **Q4 Drills: DECIDED, Claude runs them and the founder supplies the key; once a year the
   founder runs one himself** from a click-by-click script.
-- **Backup private key location: ANSWERED 2026-11-09, "it's saved in a cloud doc".** So it
-  is not lost with the PC (F5 half-closed). Remaining gap: that is ONE copy, inside an online
-  account whose two-step is deferred. Q6 below adds a paper copy at home; turning on two-step
-  for the account holding the doc closes the rest.
+- **Backup private key location: CORRECTED 2026-11-09, still OPEN.** The founder's "it's saved
+  in a cloud doc" turned out to mean the **B2 read-only key** (keyID, keyName, applicationKey):
+  he asked "you are referring to the read only keyID, keyName and applicationKey?". That key is
+  replaceable from the B2 website. The **decryption key** is a different thing: ONE 77-character
+  line made by `scripts/backup-keygen.mts`, at
+  `C:\Users\yarmishj.AEI-LT-JYARMISH\platform-backup-key\platform-backup-key.txt` (the file
+  exists, 383 bytes, checked 2026-11-09 without reading it). Whether it has been copied anywhere
+  is unknown. **If not, it exists only on this PC**, and losing the PC makes every B2 backup and
+  every snapshot unreadable. Q6's paper copy and cloud-doc copy apply to THIS key.
 - **GitHub sign-in: ANSWERED 2026-11-09, email and password** (no Google). Whether two-step
   is on is not recorded; since GitHub is the single key (R2), that is the first thing to check.
 - **Q5 Where the offsite snapshots go: DECIDED, USB stick kept at home (never in the laptop
@@ -450,9 +455,11 @@ incident archive); `client-materials/` 256 KB; six credential files; `E:` (Kings
 
 **F13 (new): the plaintext prod dumps on the SSD are the bigger exposure.** The 37 dumps include
 `auth.users` password hashes and personal data, unencrypted, on a drive that travels in a
-laptop bag. Recommended fix (B.4 #12): turn on BitLocker To Go for `D:` (Windows 10 Pro
-has it; it can auto-unlock on this PC), which also covers the `.env` files. Prune old dumps
-once B2 restores are proven.
+laptop bag. Recommended fix: turn on BitLocker To Go for `D:` (Windows 10 Pro
+has it; it can auto-unlock on this PC), which also covers the `.env` files. **DECLINED for now
+(founder, 2026-11-09):** "Even if someone finds the usb, which is very unlikely, they will have
+no idea what its for." Open, accepted risk; do not re-propose unprompted. Still worth doing at
+no cost to him: prune old plaintext dumps once B2 restores are proven (fewer copies exposed).
 
 **What goes in each file:**
 

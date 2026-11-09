@@ -116,8 +116,9 @@ founder decision** — record it where it belongs, flag it, move on (2026-08-29)
   (2026-11-09, "THE PLAN": build order B.4, drills B.6; costs docs/costs/resilience.md), nothing built, every plan
   UNPRACTISED. Founder decided (B.7): cold now / warm at first client, only he holds access, **no domain until the first
   customer**, Claude runs drills. **Risks R1–R4 are still open**, plus: **uploaded files have NO backup** (the dump has
-  `storage.objects` rows, not the files), and **37 plaintext prod dumps sit on the travelling SSD** (F13, BitLocker
-  recommended). The B2 backup key is in a cloud doc (a paper copy is decided, Q6).
+  `storage.objects` rows, not the files), and **37 plaintext prod dumps sit on the travelling SSD** (F13; BitLocker
+  DECLINED by the founder, don't re-propose). **The backup DECRYPTION key may exist only on this PC** (`C:\Users\
+  yarmishj.AEI-LT-JYARMISH\platform-backup-key\`); the "cloud doc" answer was the B2 read key (docs/28 B.7).
 - Two offsite-snapshot files (whole platform; credentials) — **PLANNED, docs/28 B.8** (`age`-encrypted to the B2 key,
   USB stick at home + cloud drive, auto-made, copied monthly, restore drilled quarterly). Not built.
 - The private B2 backup replacement (needs an account).
