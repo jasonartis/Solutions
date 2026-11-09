@@ -278,7 +278,9 @@ records (`auth.users`, including password hashes) live in the same database.
   the restore script `scripts/backup-restore-from-b2.mts`. Warm option (Q1): a self-hosted
   Supabase on our own server, restored from each night's dump.
 - *Switch:* (1) create the new home: a new Supabase project in another region, or the
-  self-hosted standby. (2) Restore the latest dump. (3) Apply the settings sheet, **sign-up
+  self-hosted standby. (2) Restore the latest dump. **For a self-hosted or local target, first pin
+  its storage and auth versions to prod's, or the load fails** (docs/12 "Backups" 2026-11-09,
+  "Restore gotcha"; a new cloud project needs nothing). (3) Apply the settings sheet, **sign-up
   hook first**. (4) Put the new URL and keys into Vercel's env vars and redeploy. (5) Run
   the prod verifiers against the new home. (6) Tell users: "please sign in again".
 - *What users notice:* everyone is signed out (the new home signs sessions with a new
@@ -376,7 +378,7 @@ mail, GitHub two-step) are NOT on this list: they are his, or they wait for a cu
 
 | Rank | Step (B.4 #) | Why it is next | Model | Ready? |
 |---|---|---|---|---|
-| 1 | **Finish the B2 nightly backup and prove a restore** (#1) | Every other plan restores from it. Blocked on the `B2_APP_KEY` GitHub secret being re-pasted (docs/12 "Backups" 2026-11-09) | Opus | needs the founder to fix the secret first |
+| 1 | **Finish the B2 nightly backup and prove a restore** (#1). **MOSTLY DONE 2026-11-09 (`28784f5`, another session):** first real backup in B2, and a restore matched prod on 87/87 tables and 1,236 rows. **Left:** the nightly job is RED on its key-capability check until a write key with the exact capabilities is minted (docs/12 "Backups") | Every other plan restores from it | Opus | the key-minting step only |
 | 2 | **Nightly copy of uploaded files to B2** (#5) | Uploaded files have NO backup at all today (F1) | Opus (touches prod data and backup crypto) | after rank 1 |
 | 3 | **Offsite snapshots script** `pnpm backup:snapshot` + `RESTORE.txt` (#12, B.8) | The credential files exist only on the SSD. **Switch the "Offsite snapshots" row on the vendor accounts page to active in the same session** | Sonnet | yes |
 | 4 | **Supabase settings sheet** (#4, F6) | A restore today would bring the sign-up hook back OFF | Sonnet (read-only Management API) | yes |
@@ -420,7 +422,8 @@ drill is overdue (a Part A field).
 
 | Date | Drill | Result | Time | Notes |
 |---|---|---|---|---|
-| — | none yet | — | — | every plan above is UNPRACTISED |
+| 2026-11-09 | Database + sign-in restore (first run, by the B2-backup session, `28784f5`) | **PARTIAL PASS.** Last night's B2 dump was downloaded, checksum-verified and decrypted, then loaded into a throwaway local stack with zero errors; row counts matched prod, 87/87 tables, 1,236 rows. **Not yet checked:** a demo user signing in with their real prod password, and the sign-up hook being on | — | Version-pin gotcha found and recorded (B.3-1 step 2). The next run adds the two missing checks |
+| — | every other drill | — | — | UNPRACTISED |
 
 ### B.7 Founder decisions (asked 2026-11-09 as scenarios; answers recorded here)
 
