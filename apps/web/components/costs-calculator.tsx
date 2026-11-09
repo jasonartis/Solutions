@@ -13,16 +13,33 @@ import {
   PRICES,
   TIERS,
   allocate,
+  evaluatePricing,
   personaCost,
   planFor,
   priceForMargin,
   type Confidence,
   type Globals,
   type ModuleAssumption,
+  type OwnCost,
+  type PriceKey,
+  type PriceOverrides,
+  type PricingInputs,
 } from '@platform/core'
+import type { RealNumbers } from '@/lib/costs-real'
 
 const inputCls = 'rounded border border-gray-300 px-2 py-1 text-sm'
-const STORE = 'costs-calculator.v1'
+const STORE = 'costs-calculator.v2'
+const STALE_DAYS = 90
+
+// The founder's own costs start at $0 on purpose (2026-11-09): he fills them in when he knows them.
+const DEFAULT_OWN_COSTS: OwnCost[] = [
+  { id: 1, name: 'Legal / terms and privacy review', monthly: 0 },
+  { id: 2, name: 'Accountant / bookkeeping', monthly: 0 },
+  { id: 3, name: 'Insurance', monthly: 0 },
+  { id: 4, name: 'My own time', monthly: 0 },
+]
+
+const DEFAULT_PRICING = { orgs: 1, baseFeePerOrg: 0, aiPricePerCall: 0, videoPricePerMinute: 0, paymentFeePct: 0 }
 
 interface UserType {
   id: number
@@ -47,13 +64,20 @@ const CONF: Record<Confidence, string> = {
   assumption: 'bg-gray-200 text-gray-700',
 }
 
-export default function CostsCalculator() {
+export default function CostsCalculator({ real }: { real: RealNumbers }) {
   const [users, setUsers] = useState(100_000)
   const [globals, setGlobals] = useState<Globals>(DEFAULT_GLOBALS)
   const [modules, setModules] = useState<ModuleAssumption[]>(DEFAULT_MODULES)
   const [types, setTypes] = useState<UserType[]>(DEFAULT_TYPES)
   const [margin, setMargin] = useState(60)
+  const [overrides, setOverrides] = useState<PriceOverrides>({})
+  const [ownCosts, setOwnCosts] = useState<OwnCost[]>(DEFAULT_OWN_COSTS)
+  const [pricing, setPricing] = useState(DEFAULT_PRICING)
+  const [realNote, setRealNote] = useState<string | null>(null)
   const [loaded, setLoaded] = useState(false)
+  // Set after mount so the server-rendered page and the first client render agree.
+  const [now, setNow] = useState<number | null>(null)
+  useEffect(() => setNow(Date.now()), [])
 
   useEffect(() => {
     try {
@@ -65,6 +89,9 @@ export default function CostsCalculator() {
         if (s.modules) setModules(DEFAULT_MODULES.map((d) => ({ ...d, adoption: s.modules[d.key] ?? d.adoption })))
         if (s.types) setTypes(s.types)
         if (typeof s.margin === 'number') setMargin(s.margin)
+        if (s.overrides) setOverrides(s.overrides)
+        if (s.ownCosts) setOwnCosts(s.ownCosts)
+        if (s.pricing) setPricing({ ...DEFAULT_PRICING, ...s.pricing })
       }
     } catch {
       /* storage blocked or corrupt: start from defaults */
@@ -77,16 +104,20 @@ export default function CostsCalculator() {
     try {
       localStorage.setItem(
         STORE,
-        JSON.stringify({ users, globals, margin, types, modules: Object.fromEntries(modules.map((m) => [m.key, m.adoption])) }),
+        JSON.stringify({ users, globals, margin, types, overrides, ownCosts, pricing, modules: Object.fromEntries(modules.map((m) => [m.key, m.adoption])) }),
       )
     } catch {
       /* ignore */
     }
-  }, [loaded, users, globals, modules, types, margin])
+  }, [loaded, users, globals, modules, types, margin, overrides, ownCosts, pricing])
 
-  const plan = useMemo(() => planFor(users, modules, globals), [users, modules, globals])
+  const plan = useMemo(() => planFor(users, modules, globals, overrides), [users, modules, globals, overrides])
   const costs = useMemo(() => allocate(users, modules, globals, plan), [users, modules, globals, plan])
-  const allTiers = useMemo(() => TIERS.map((n) => ({ n, plan: planFor(n, modules, globals) })), [modules, globals])
+  const allTiers = useMemo(() => TIERS.map((n) => ({ n, plan: planFor(n, modules, globals, overrides) })), [modules, globals, overrides])
+  const result = useMemo(
+    () => evaluatePricing(users, modules, globals, overrides, { ...pricing, orgs: Math.max(1, pricing.orgs), ownCosts } satisfies PricingInputs, margin),
+    [users, modules, globals, overrides, pricing, ownCosts, margin],
+  )
   const moduleName = (k: string) => modules.find((m) => m.key === k)?.name ?? k
 
   const typeRows = types.map((t) => {
@@ -121,6 +152,38 @@ export default function CostsCalculator() {
             />
           </label>
         </div>
+        <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
+          <button
+            onClick={() => {
+              const ratio = real.registered > 0 ? Math.min(1, Math.max(0.05, real.active30 / real.registered)) : globals.mauRatio
+              if (real.registered > 0) setUsers(real.registered)
+              setGlobals({ ...globals, mauRatio: ratio })
+              setModules(modules.map((m) => (m.key in real.moduleReach ? { ...m, adoption: Math.min(1, real.moduleReach[m.key] ?? m.adoption) } : m)))
+              setPricing({ ...pricing, orgs: Math.max(1, real.orgs) })
+              setRealNote(
+                `Filled from the database at ${new Date(real.measuredAt).toLocaleString()}: ${real.registered} registered, ${real.active30} signed in during the last 30 days (${Math.round(ratio * 100)}%), ${real.orgs} organisations. Module shares are the share of members whose organisation has the module switched on, an upper bound on real use. Modules no organisation has switched on, and the AI and photos assumptions, keep their defaults.`,
+              )
+            }}
+            className="rounded bg-blue-600 px-3 py-1 text-white hover:bg-blue-700"
+          >
+            Use my real numbers
+          </button>
+          <button
+            onClick={() => {
+              setUsers(100_000)
+              setGlobals(DEFAULT_GLOBALS)
+              setModules(DEFAULT_MODULES)
+              setRealNote(null)
+            }}
+            className="rounded border border-gray-300 px-3 py-1 hover:bg-gray-50"
+          >
+            Back to the default assumptions
+          </button>
+          <span className="text-gray-500">
+            Right now: {real.registered} registered, {real.active30} active in 30 days, {real.orgs} organisations.
+          </span>
+        </div>
+        {realNote && <p className="mt-2 rounded bg-blue-50 p-2 text-xs text-blue-900">{realNote}</p>}
         <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <label className="text-sm">
             <span className="block text-gray-600">Share of users active in a month: {Math.round(globals.mauRatio * 100)}%</span>
@@ -325,9 +388,144 @@ export default function CostsCalculator() {
         <p className="mt-1 text-xs text-gray-500">Modules used in type names: {types.flatMap((t) => t.modules).map(moduleName).filter((v, i, a) => a.indexOf(v) === i).join(', ') || 'none'}.</p>
       </section>
 
+      {/* Pricing: base fee per org + credits */}
+      <section className="rounded-lg border border-gray-200 bg-white p-5">
+        <h2 className="mb-1 text-lg font-semibold">5. What to charge: a base fee per organisation plus credits</h2>
+        <p className="mb-3 max-w-3xl text-sm text-gray-600">
+          The base fee covers the fixed platform cost spread across your clients. AI and live video are charged by use, because they are the only costs that grow with activity. This
+          uses the {short(users)} users above, spread over the number of organisations you enter. Your own costs and the payment fee start at $0 — fill them in when you know them.
+        </p>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          {(
+            [
+              ['orgs', 'Paying organisations', 1],
+              ['baseFeePerOrg', 'Base fee per org / month ($)', 0.01],
+              ['aiPricePerCall', 'Price per AI call ($)', 0.001],
+              ['videoPricePerMinute', 'Price per video minute ($)', 0.001],
+              ['paymentFeePct', 'Payment fee (% of revenue)', 0.1],
+            ] as const
+          ).map(([k, label, step]) => (
+            <label key={k} className="text-sm">
+              <span className="block text-gray-600">{label}</span>
+              <input
+                type="number"
+                min={0}
+                step={step}
+                value={pricing[k]}
+                onChange={(e) => setPricing({ ...pricing, [k]: Math.max(0, Number(e.target.value) || 0) })}
+                className={`${inputCls} w-full`}
+              />
+            </label>
+          ))}
+        </div>
+
+        <h3 className="mt-5 font-semibold">Your own costs (per month)</h3>
+        <div className="mt-1 space-y-1">
+          {ownCosts.map((c) => (
+            <div key={c.id} className="flex items-center gap-2">
+              <input value={c.name} onChange={(e) => setOwnCosts(ownCosts.map((x) => (x.id === c.id ? { ...x, name: e.target.value } : x)))} className={`${inputCls} w-72`} />
+              <span className="text-sm text-gray-500">$</span>
+              <input
+                type="number"
+                min={0}
+                value={c.monthly}
+                onChange={(e) => setOwnCosts(ownCosts.map((x) => (x.id === c.id ? { ...x, monthly: Math.max(0, Number(e.target.value) || 0) } : x)))}
+                className={`${inputCls} w-28`}
+              />
+              <button onClick={() => setOwnCosts(ownCosts.filter((x) => x.id !== c.id))} className="text-xs text-red-600 hover:underline">
+                remove
+              </button>
+            </div>
+          ))}
+          <button
+            onClick={() => setOwnCosts([...ownCosts, { id: Math.max(0, ...ownCosts.map((c) => c.id)) + 1, name: 'New cost', monthly: 0 }])}
+            className="rounded border border-gray-300 px-3 py-1 text-sm hover:bg-gray-50"
+          >
+            Add a cost
+          </button>
+        </div>
+
+        <div className="mt-5 grid gap-6 lg:grid-cols-2">
+          <div>
+            <h3 className="font-semibold">With the prices you entered</h3>
+            <table className="mt-1 w-full text-sm">
+              <tbody>
+                {(
+                  [
+                    ['Base fees', result.baseRevenue],
+                    ['AI credits', result.aiRevenue],
+                    ['Video credits', result.videoRevenue],
+                    ['Revenue per month', result.revenue],
+                    ['Platform cost (section 2)', -result.platformCost],
+                    ['Your own costs', -result.ownCostsTotal],
+                    ['Payment fees', -result.paymentFees],
+                    ['Profit per month', result.profit],
+                  ] as const
+                ).map(([label, v]) => (
+                  <tr key={label} className={`border-b border-gray-100 ${label.startsWith('Profit') || label.startsWith('Revenue') ? 'font-semibold' : ''}`}>
+                    <td className="py-1">{label}</td>
+                    <td className={`text-right tabular-nums ${label.startsWith('Profit') ? (v < 0 ? 'text-red-600' : 'text-green-700') : ''}`}>{v < 0 ? '−' + usd(-v) : usd(v)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="mt-2 text-sm text-gray-700">
+              Margin: <strong>{result.marginPct === null ? 'no revenue yet' : result.marginPct.toFixed(0) + '%'}</strong> · yearly profit <strong>{usd(result.profit * 12)}</strong>
+            </p>
+            <p className="mt-1 text-sm text-gray-700">
+              Break-even:{' '}
+              <strong>
+                {result.breakEvenOrgs === null
+                  ? 'never at these prices'
+                  : result.breakEvenOrgs === 1
+                    ? 'already covered by one organisation'
+                    : `${result.breakEvenOrgs.toLocaleString('en-US')} organisations`}
+              </strong>{' '}
+              (at {Math.round(users / Math.max(1, pricing.orgs)).toLocaleString('en-US')} registered users each).
+            </p>
+          </div>
+          <div>
+            <h3 className="font-semibold">Prices that earn your {margin}% target margin</h3>
+            <table className="mt-1 w-full text-sm">
+              <tbody>
+                <tr className="border-b border-gray-100">
+                  <td className="py-1">Base fee per organisation / month</td>
+                  <td className="text-right tabular-nums">{usd(result.suggestedBaseFeePerOrg)}</td>
+                </tr>
+                <tr className="border-b border-gray-100">
+                  <td className="py-1">Per AI call</td>
+                  <td className="text-right tabular-nums">{usd(result.suggestedAiPricePerCall)}</td>
+                </tr>
+                <tr className="border-b border-gray-100">
+                  <td className="py-1">Per video minute</td>
+                  <td className="text-right tabular-nums">{usd(result.suggestedVideoPricePerMinute)}</td>
+                </tr>
+              </tbody>
+            </table>
+            <button
+              onClick={() =>
+                setPricing({
+                  ...pricing,
+                  baseFeePerOrg: Math.ceil(result.suggestedBaseFeePerOrg * 100) / 100,
+                  aiPricePerCall: Math.ceil(result.suggestedAiPricePerCall * 10000) / 10000,
+                  videoPricePerMinute: Math.ceil(result.suggestedVideoPricePerMinute * 10000) / 10000,
+                })
+              }
+              className="mt-2 rounded border border-gray-300 px-3 py-1 text-sm hover:bg-gray-50"
+            >
+              Use these prices
+            </button>
+            <p className="mt-2 text-xs text-gray-500">
+              The suggested base fee is the whole non-AI, non-video platform cost plus your own costs, divided by organisations. It is a cost floor: what you charge is a market decision, and
+              clients will accept more than a floor of a few dollars.
+            </p>
+          </div>
+        </div>
+      </section>
+
       {/* All tiers */}
       <section className="rounded-lg border border-gray-200 bg-white p-5">
-        <h2 className="mb-1 text-lg font-semibold">5. All sizes side by side</h2>
+        <h2 className="mb-1 text-lg font-semibold">6. All sizes side by side</h2>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -356,7 +554,20 @@ export default function CostsCalculator() {
 
       {/* Price sheet */}
       <section className="rounded-lg border border-gray-200 bg-white p-5">
-        <h2 className="mb-1 text-lg font-semibold">6. Price sheet (every price used, with the date checked)</h2>
+        <h2 className="mb-1 text-lg font-semibold">7. Price sheet — every price used; edit one to test &quot;what if it rises?&quot;</h2>
+        <p className="mb-2 text-sm text-gray-600">
+          A changed price is a what-if kept in this browser only; it does not change the docs. A price not checked for {STALE_DAYS} days is marked stale: re-read the vendor&apos;s page, then
+          update the value and date in <code>packages/platform/src/cost-model.ts</code>.
+          {Object.keys(overrides).length > 0 && (
+            <>
+              {' '}
+              <strong>{Object.keys(overrides).length} price(s) changed.</strong>{' '}
+              <button onClick={() => setOverrides({})} className="text-blue-600 hover:underline">
+                Reset all prices
+              </button>
+            </>
+          )}
+        </p>
         <p className="mb-2 text-sm text-gray-600">
           <span className={`rounded px-1.5 py-0.5 text-xs ${CONF.verified}`}>verified</span> read from the vendor&apos;s own page on that date ·{' '}
           <span className={`rounded px-1.5 py-0.5 text-xs ${CONF['third-party']}`}>third-party</span> from a comparison site ·{' '}
@@ -374,8 +585,8 @@ export default function CostsCalculator() {
               </tr>
             </thead>
             <tbody>
-              {Object.values(PRICES).map((p) => (
-                <tr key={p.vendor + p.item} className="border-b border-gray-100 align-top">
+              {(Object.entries(PRICES) as [PriceKey, (typeof PRICES)[PriceKey]][]).map(([key, p]) => (
+                <tr key={key} className="border-b border-gray-100 align-top">
                   <td className="py-1 pr-3">{p.vendor}</td>
                   <td className="pr-3">
                     {p.item}
@@ -383,9 +594,27 @@ export default function CostsCalculator() {
                     <span className="block break-all text-gray-400">{p.source}</span>
                   </td>
                   <td className="pr-3 text-right tabular-nums">
-                    {p.value} <span className="text-gray-500">{p.unit}</span>
+                    <input
+                      type="number"
+                      step="any"
+                      value={overrides[key] ?? p.value}
+                      onChange={(e) => {
+                        const v = Number(e.target.value)
+                        if (e.target.value === '' || !Number.isFinite(v) || v === p.value) {
+                          const { [key]: _drop, ...rest } = overrides
+                          void _drop
+                          setOverrides(rest)
+                        } else setOverrides({ ...overrides, [key]: v })
+                      }}
+                      className={`${inputCls} w-24 text-right ${key in overrides ? 'border-blue-500 bg-blue-50' : ''}`}
+                    />{' '}
+                    <span className="text-gray-500">{p.unit}</span>
+                    {key in overrides && <span className="block text-gray-400">list: {p.value}</span>}
                   </td>
-                  <td className="pr-3">{p.checked}</td>
+                  <td className="pr-3">
+                    {p.checked}
+                    {now !== null && (now - new Date(p.checked).getTime()) / 86_400_000 > STALE_DAYS && <span className="ml-1 rounded bg-red-100 px-1 text-red-700">stale</span>}
+                  </td>
                   <td>
                     <span className={`rounded px-1.5 py-0.5 ${CONF[p.confidence]}`}>{p.confidence}</span>
                   </td>

@@ -65,6 +65,9 @@ section, keep it a SUMMARY with pointers: add the dated story to the journal / t
   `scripts/print-cost-model.mts`). Headline: a ~$70–100/mo fixed floor plus cents per user; AI and live video are the only
   costs that scale with people; the setup changes at ~50–300k (files to R2) and ~5M (leave Supabase/Vercel). Several prices
   are labelled assumption/third-party (price-sheet "Conflicts and gaps") — re-fetch before budgeting at 10M+.
+  **Second pass same day:** pricing = base fee per org + AI/video credits (founder chose it), break-even + margin, "Use my real
+  numbers" (read-only DB counts), editable price what-ifs, own-costs lines at $0 (founder fills in later). Browser-verified
+  locally (page loads, button fills, override persists). Not built: actuals ledger, saved scenarios, payments/lateness (docs/costs README).
 - **2026-11-09 (Opus): vendor accounts page (docs/28 Part A) — CODE PUSHED, migration `20261113010000` NOT on prod**
   (so on prod the page and its dashboard tile read "could not read" until the apply; prod verifier
   `scripts/prod-verify-vendor-accounts.mts` 11/28 before, local 50/0). `/console/vendors` + a dashboard tile; 18 seeded

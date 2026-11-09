@@ -88,7 +88,18 @@ export const PRICES = {
   sentryTeam: { vendor: 'Sentry', item: 'Team plan', value: 26, unit: '$/month', checked: CHECKED, source: 'from memory of sentry.io/pricing — NOT re-fetched', confidence: 'assumption' },
 } as const satisfies Record<string, PriceFact>
 
-const P = Object.fromEntries(Object.entries(PRICES).map(([k, v]) => [k, v.value])) as { [K in keyof typeof PRICES]: number }
+export type PriceKey = keyof typeof PRICES
+export type PriceOverrides = Partial<Record<PriceKey, number>>
+type PriceValues = { [K in PriceKey]: number }
+
+const DEFAULT_P = Object.fromEntries(Object.entries(PRICES).map(([k, v]) => [k, v.value])) as PriceValues
+
+/** Price list with the superadmin's what-if overrides applied (the page stores them in the browser). */
+export function resolvePrices(overrides?: PriceOverrides): PriceValues {
+  const out = { ...DEFAULT_P }
+  for (const [k, v] of Object.entries(overrides ?? {})) if (typeof v === 'number' && Number.isFinite(v) && k in out) out[k as PriceKey] = v
+  return out
+}
 
 // ---------------------------------------------------------------------------
 // Usage assumptions (docs/costs/assumptions.md says the same, in words)
@@ -257,7 +268,7 @@ function computeTier(mau: number): { name: string; price: number } {
   return { name: s[1], price: s[2] }
 }
 
-function jaasMonthly(videoMau: number): number {
+function jaasMonthly(videoMau: number, P: PriceValues): number {
   if (videoMau <= 25) return 0
   const plans: [number, number][] = [[300, P.jaasBasic], [1500, P.jaasStandard], [3000, P.jaasBusiness]]
   const options = plans.map(([incl, price]) => price + Math.max(0, videoMau - incl) * P.jaasOver)
@@ -265,7 +276,7 @@ function jaasMonthly(videoMau: number): number {
   return Math.min(...options)
 }
 
-function emailMonthly(n: number): { price: number; label: string } {
+function emailMonthly(n: number, P: PriceValues): { price: number; label: string } {
   if (n <= 3000) return { price: 0, label: 'Resend Free (3,000/month, 100/day — fine only before real use)' }
   if (n <= 50_000) return { price: P.resendPro, label: 'Resend Pro' }
   if (n <= 100_000) return { price: P.resendPro100k, label: 'Resend Pro 100k' }
@@ -273,13 +284,14 @@ function emailMonthly(n: number): { price: number; label: string } {
   return { price: (n / 1000) * P.sesPerK, label: 'AWS SES, our own sending domains' }
 }
 
-function aiPerCall(g: Globals): number {
+function aiPerCall(g: Globals, P: PriceValues): number {
   const inP = g.aiModel === 'sonnet' ? P.aiSonnetIn : P.aiHaikuIn
   const outP = g.aiModel === 'sonnet' ? P.aiSonnetOut : P.aiHaikuOut
   return (g.aiTokensIn * inP + g.aiTokensOut * outP) / 1e6
 }
 
-export function planFor(users: number, modules: ModuleAssumption[], g: Globals): TierPlan {
+export function planFor(users: number, modules: ModuleAssumption[], g: Globals, overrides?: PriceOverrides): TierPlan {
+  const P = resolvePrices(overrides)
   const f = computeFlows(users, modules, g)
   const arch = architectureFor(users)
   const lines: LineItem[] = []
@@ -295,11 +307,11 @@ export function planFor(users: number, modules: ModuleAssumption[], g: Globals):
   const videoEgressGb = f.total.videoMin * g.videoMbPerMin / 1000
 
   // --- AI: same at every size (priced per call; no scale discount assumed) ---
-  L('AI', `Claude API (${g.aiModel === 'sonnet' ? 'Sonnet 5.5' : 'Haiku 5.5'}), ${Math.round(f.total.aiCalls).toLocaleString('en-US')} calls`, f.total.aiCalls * aiPerCall(g), 'aiCalls', 'verified', 'Tokens per call are an assumption; batch (−50%) and caching not assumed.')
+  L('AI', `Claude API (${g.aiModel === 'sonnet' ? 'Sonnet 5.5' : 'Haiku 5.5'}), ${Math.round(f.total.aiCalls).toLocaleString('en-US')} calls`, f.total.aiCalls * aiPerCall(g, P), 'aiCalls', 'verified', 'Tokens per call are an assumption; batch (−50%) and caching not assumed.')
 
   // --- Video ---
   if (arch === 'managed') {
-    const jaas = jaasMonthly(videoMau)
+    const jaas = jaasMonthly(videoMau, P)
     const selfHost = bridges * P.hetznerEuBox * eur
     if (videoMau > 0) {
       if (jaas <= selfHost || bridges === 0) L('Video', `JaaS (${Math.round(videoMau).toLocaleString('en-US')} video MAU)`, jaas, 'videoMin', 'verified', 'Cheaper than self-hosting at this size.')
@@ -312,7 +324,7 @@ export function planFor(users: number, modules: ModuleAssumption[], g: Globals):
 
   // --- Email ---
   if (f.total.emails > 0) {
-    const e = emailMonthly(f.total.emails)
+    const e = emailMonthly(f.total.emails, P)
     L('Email', `${e.label}, ${Math.round(f.total.emails).toLocaleString('en-US')} emails`, e.price, 'emails', arch === 'managed' && f.total.emails <= 2_500_000 ? 'verified' : 'assumption')
   }
 
@@ -497,4 +509,110 @@ export function personaCost(costs: ModuleCost[], moduleKeys: string[]): PersonaC
 /** Price that earns `marginPct` margin on cost. 40 → price = cost / 0.6. */
 export function priceForMargin(cost: number, marginPct: number): number {
   return marginPct >= 100 ? Infinity : cost / (1 - marginPct / 100)
+}
+
+// ---------------------------------------------------------------------------
+// Pricing: base fee per organisation + credits for AI and live video (founder, 2026-11-09)
+// ---------------------------------------------------------------------------
+
+export interface OwnCost {
+  id: number
+  name: string
+  /** $ per month. The founder's own costs (legal, accountant, insurance, time) — 0 until he fills them in. */
+  monthly: number
+}
+
+export interface PricingInputs {
+  /** Client organisations paying a base fee. */
+  orgs: number
+  baseFeePerOrg: number
+  aiPricePerCall: number
+  videoPricePerMinute: number
+  /** Payment-processor fee as a percent of revenue (0 until set; cards are typically ~3%). */
+  paymentFeePct: number
+  ownCosts: OwnCost[]
+}
+
+export interface PricingResult {
+  baseRevenue: number
+  aiRevenue: number
+  videoRevenue: number
+  revenue: number
+  platformCost: number
+  aiCost: number
+  videoCost: number
+  ownCostsTotal: number
+  paymentFees: number
+  profit: number
+  /** profit ÷ revenue, or null with no revenue. */
+  marginPct: number | null
+  /** Smallest number of orgs (at this users-per-org) that covers all costs, or null if never within 16M orgs. */
+  breakEvenOrgs: number | null
+  /** What each price would have to be to hit the target margin, all else as entered. */
+  suggestedBaseFeePerOrg: number
+  suggestedAiPricePerCall: number
+  suggestedVideoPricePerMinute: number
+}
+
+function pricingAt(users: number, modules: ModuleAssumption[], g: Globals, overrides: PriceOverrides | undefined, pr: PricingInputs, orgs: number) {
+  const plan = planFor(users, modules, g, overrides)
+  const f = computeFlows(users, modules, g)
+  const sum = (grp: string) => plan.lines.filter((l) => l.group === grp).reduce((t, l) => t + l.monthly, 0)
+  const aiCost = sum('AI')
+  const videoCost = sum('Video')
+  const platformCost = plan.monthly
+  const ownCostsTotal = pr.ownCosts.reduce((t, c) => t + c.monthly, 0)
+  const baseRevenue = orgs * pr.baseFeePerOrg
+  const aiRevenue = f.total.aiCalls * pr.aiPricePerCall
+  const videoRevenue = f.total.videoMin * pr.videoPricePerMinute
+  const revenue = baseRevenue + aiRevenue + videoRevenue
+  const paymentFees = (revenue * pr.paymentFeePct) / 100
+  const profit = revenue - platformCost - ownCostsTotal - paymentFees
+  return { plan, f, aiCost, videoCost, platformCost, ownCostsTotal, baseRevenue, aiRevenue, videoRevenue, revenue, paymentFees, profit }
+}
+
+/** users = registered users across ALL client orgs; users per org = users / pr.orgs. */
+export function evaluatePricing(users: number, modules: ModuleAssumption[], g: Globals, overrides: PriceOverrides | undefined, pr: PricingInputs, targetMarginPct: number): PricingResult {
+  const orgs = Math.max(1, pr.orgs)
+  const a = pricingAt(users, modules, g, overrides, pr, orgs)
+  const usersPerOrg = users / orgs
+
+  // Break-even: grow the number of orgs at the same users-per-org until profit >= 0 (cost steps with architecture, so search, don't divide).
+  const profitAt = (k: number) => pricingAt(usersPerOrg * k, modules, g, overrides, pr, k).profit
+  let breakEvenOrgs: number | null = null
+  let hi = 1
+  while (hi <= 16_777_216 && profitAt(hi) < 0) hi *= 2
+  if (hi <= 16_777_216) {
+    let lo = Math.max(1, hi / 2)
+    if (profitAt(1) >= 0) breakEvenOrgs = 1
+    else {
+      while (hi - lo > 1) {
+        const mid = Math.floor((lo + hi) / 2)
+        if (profitAt(mid) >= 0) hi = mid
+        else lo = mid
+      }
+      breakEvenOrgs = hi
+    }
+  }
+
+  const keep = (1 - targetMarginPct / 100) * (1 - pr.paymentFeePct / 100)
+  const need = (cost: number) => (keep > 0 ? cost / keep : Infinity)
+  const usageCost = a.aiCost + a.videoCost
+  return {
+    baseRevenue: a.baseRevenue,
+    aiRevenue: a.aiRevenue,
+    videoRevenue: a.videoRevenue,
+    revenue: a.revenue,
+    platformCost: a.platformCost,
+    aiCost: a.aiCost,
+    videoCost: a.videoCost,
+    ownCostsTotal: a.ownCostsTotal,
+    paymentFees: a.paymentFees,
+    profit: a.profit,
+    marginPct: a.revenue > 0 ? (a.profit / a.revenue) * 100 : null,
+    breakEvenOrgs,
+    suggestedBaseFeePerOrg: need(a.platformCost - usageCost + a.ownCostsTotal) / orgs,
+    suggestedAiPricePerCall: a.f.total.aiCalls > 0 ? need(a.aiCost) / a.f.total.aiCalls : 0,
+    suggestedVideoPricePerMinute: a.f.total.videoMin > 0 ? need(a.videoCost) / a.f.total.videoMin : 0,
+  }
 }

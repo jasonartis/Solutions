@@ -61,17 +61,36 @@ count on the page and watch the plan change.
 - Volume discounts above the first tier of any vendor (assumed none, except the two CDN rates marked assumption).
 - Any module not yet built (7, 8) and module 9 (photos) is the planned design, not measured.
 
-## Pricing ideas this model supports (not decisions — the founder's call, 2026-11-09)
+## Pricing structure chosen 2026-11-09: base fee per organisation + credits for AI and video (founder: "go with your recommendation")
 
-- **Price the floor per organisation, usage on top.** Cost to carry one client's org is ~$70–100/mo of fixed plans spread over
-  every client; marginal cost per active user is cents. A per-org subscription covers the floor; per-use credits cover AI and
-  video.
+Cost to carry one client's org is ~$70–100/mo of fixed plans spread over every client; marginal cost per active user is cents.
+So: a **base fee per organisation** covers the floor, and **credits** (per AI call, per video minute) cover the only costs that
+grow with activity. Section 5 of the page (`/console/costs`) prices exactly this: orgs × base fee + AI calls × price + video
+minutes × price, minus platform cost, **your own costs** (legal, accountant, insurance, your time — all $0 until the founder
+fills them in, 2026-11-09), and the payment-processor fee (also 0% until set; cards are typically ~3%). It shows profit,
+margin, the **break-even number of organisations**, and the prices that would hit your target margin. The suggested base fee is
+a cost floor — what to charge is a market decision.
+
+Other points the model supports:
+
+- **Price the floor per organisation, usage on top** (above).
 - **Use the "Cost and price by type of user" table on the page** to test it: add a user type (modules ticked), set the margin
   slider, read the price/user/month that earns it at the size you expect.
 - **Per active vs per registered user**: costs follow active users (30% assumed). A price per registered user should be the
   per-active price × your real active ratio — measure it from the engagement console (docs/17).
 - **Re-run at the real numbers.** Every default usage figure is an assumption. When the first real client has run for a month, replace
   the module usage numbers with measured ones (Supabase usage dashboard, Vercel usage, Resend sent count, JaaS MAU).
+
+## Keeping it current (built 2026-11-09 unless marked planned)
+
+| What drifts | How the page handles it |
+|---|---|
+| Vendor prices | Every price has a checked date; the page marks any older than 90 days **stale**. Re-read the vendor page, edit value + date in `cost-model.ts`, regenerate this doc. Any price can be overridden on the page as a browser-only what-if (reset button). *Planned:* a quarterly scheduled agent that re-fetches the prices and lists what changed. |
+| Real usage | **"Use my real numbers"** (page, section 1) reads registered users, users who signed in during the last 30 days, organisations, and each module's reach from the database (`apps/web/lib/costs-real.ts`; read-only counts, nothing written). Module reach = members of orgs that switched the module on = an upper bound on use. AI and photos have no real source yet and keep their defaults. |
+| What you actually pay | *Planned (needs a migration):* an actuals ledger — each month's invoices typed in, compared with the model, reading plans/costs from the docs/28 vendor accounts page rather than a second list. |
+| A client onboards | Set the organisation count and users in section 5; after a month of real use press "Use my real numbers". |
+
+Scenario/price edits are kept **in the browser only** (localStorage). *Planned:* saved named scenarios in the database.
 
 ## Generated tables
 

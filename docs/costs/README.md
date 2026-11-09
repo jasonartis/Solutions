@@ -6,6 +6,10 @@
 > The model is code: `packages/platform/src/cost-model.ts` (prices carry source + date + confidence; sanity test
 > `packages/db/src/cost-model.test.ts`); the docs' tables are generated from it by `scripts/print-cost-model.mts`.
 > **Keep them in step:** change a price or assumption in the model file, regenerate, paste, update the `checked` date.
+> **Same day, second pass:** "Use my real numbers" button, editable prices (browser what-ifs), your-own-costs lines ($0 for now),
+> and a pricing section (base fee per org + AI/video credits, break-even, margin) — see cost-model.md "Pricing structure chosen"
+> and "Keeping it current". **Planned, not built:** actuals ledger (migration, reads docs/28's vendor accounts), saved scenarios in
+> the database, dashboard badges (stale prices, over-forecast), quarterly price re-fetch agent, payment/lateness tracking (below).
 > **Not yet done:** replace assumptions with measured numbers after a real client's first month; fold in docs/28 Part B's
 > standby/evacuation costs once planned; re-fetch the "assumption"-labelled prices (CloudFront, SES, RDS storage, Sentry).
 

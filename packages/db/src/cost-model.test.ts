@@ -2,7 +2,7 @@
 // properties a pricing decision leans on, each with a control so a silently-empty
 // model cannot pass (docs/03 "Test discipline").
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_GLOBALS, DEFAULT_MODULES, TIERS, allocate, computeFlows, personaCost, planFor, priceForMargin, PRICES } from '@platform/core'
+import { DEFAULT_GLOBALS, DEFAULT_MODULES, TIERS, allocate, computeFlows, evaluatePricing, personaCost, planFor, priceForMargin, resolvePrices, PRICES } from '@platform/core'
 
 const g = DEFAULT_GLOBALS
 const m = DEFAULT_MODULES
@@ -64,5 +64,43 @@ describe('cost model', () => {
       expect(p.source.length, key).toBeGreaterThan(5)
       expect(['verified', 'third-party', 'assumption']).toContain(p.confidence)
     }
+  })
+})
+
+describe('pricing (base fee per org + AI and video credits)', () => {
+  const none = { orgs: 5, baseFeePerOrg: 0, aiPricePerCall: 0, videoPricePerMinute: 0, paymentFeePct: 0, ownCosts: [] }
+
+  it('with no prices there is no revenue and profit equals minus cost (control: costs exist)', () => {
+    const r = evaluatePricing(1_000, m, g, undefined, none, 50)
+    expect(r.platformCost).toBeGreaterThan(0)
+    expect(r.revenue).toBe(0)
+    expect(r.profit).toBeCloseTo(-r.platformCost, 6)
+    expect(r.marginPct).toBeNull()
+  })
+
+  it('charging the suggested prices hits the target margin', () => {
+    const base = evaluatePricing(100_000, m, g, undefined, { ...none, orgs: 20 }, 40)
+    const priced = evaluatePricing(100_000, m, g, undefined, { ...none, orgs: 20, baseFeePerOrg: base.suggestedBaseFeePerOrg, aiPricePerCall: base.suggestedAiPricePerCall, videoPricePerMinute: base.suggestedVideoPricePerMinute }, 40)
+    expect(priced.marginPct!).toBeCloseTo(40, 3)
+  })
+
+  it('own costs and payment fees lower profit; break-even is found and really breaks even', () => {
+    const pr = { ...none, orgs: 5, baseFeePerOrg: 100, paymentFeePct: 3, ownCosts: [{ id: 1, name: 'legal', monthly: 200 }] }
+    const r = evaluatePricing(1_000, m, g, undefined, pr, 40)
+    expect(r.ownCostsTotal).toBe(200)
+    expect(r.paymentFees).toBeCloseTo(r.revenue * 0.03, 6)
+    expect(r.breakEvenOrgs).not.toBeNull()
+    const k = r.breakEvenOrgs!
+    const at = (n: number) => evaluatePricing((1_000 / 5) * n, m, g, undefined, { ...pr, orgs: n }, 40).profit
+    expect(at(k)).toBeGreaterThanOrEqual(0)
+    if (k > 1) expect(at(k - 1)).toBeLessThan(0)
+  })
+
+  it('a price override changes the bill; an unknown or non-finite override is ignored', () => {
+    const base = planFor(1_000, m, g).monthly
+    expect(planFor(1_000, m, g, { vercelProSeat: 120 }).monthly).toBeCloseTo(base + 100, 6)
+    expect(planFor(1_000, m, g, { vercelProSeat: NaN }).monthly).toBeCloseTo(base, 6)
+    expect(resolvePrices({ vercelProSeat: 5 }).vercelProSeat).toBe(5)
+    expect(resolvePrices().vercelProSeat).toBe(20)
   })
 })
