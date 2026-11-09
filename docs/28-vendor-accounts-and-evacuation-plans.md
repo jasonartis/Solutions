@@ -241,7 +241,7 @@ done and drilled.
 | **Email sender** (B.3-4) | **Partly platform down** (F2) | Not possible without a domain; about 1 h once one exists | About 10 min: swap the SMTP settings in Supabase | **Outside, two providers.** Running our own mail server is never worth it: big providers silently junk mail from small senders. |
 | **JaaS (8x8) video** (B.3-5) | **Feature down** (speed dating) | Half a day to build a Jitsi server (F3); an event in progress is lost either way | About 1 h from a tested script | Outside **for now**. Past ~32 monthly video users our own Jitsi becomes the MAIN home and JaaS becomes the standby (docs/02). |
 | **GitHub** (B.3-6) | Invisible to users; **stops shipping AND backups** (F7) | ~30 min to deploy from the PC with the Vercel CLI (never tried); backups by hand | Mirror ready; deploy-from-PC recipe drilled | Outside, mirrored to a second free git host. |
-| **Google account** (R2, B.3-7) | Invisible until it fires, then **locks the founder out of everything** | Unknown: has any account a non-Google way in? | Each account has a second way in plus offline recovery codes | n/a: this is about access, not a service to replace. |
+| **Sign-in accounts: GitHub, two Google accounts** (R2, B.3-7; corrected 2026-11-09, see R2) | Invisible until it fires. **Losing the GitHub login locks the founder out of the code AND Supabase together**; a locked Google account takes out Vercel (its own Google account) or the superadmin email | Unknown: how GitHub itself signs in is not recorded | Each account has a second way in plus offline recovery codes | n/a: this is about access, not a service to replace. |
 | **Founder's PC** (F5, B.3-7) | Worker stops; **keychain and backup key may be lost** | Unknown | Keychain in a password manager; backup key in 2 offline places; worker on a server | n/a |
 | **Backblaze B2** | Invisible; dangerous only if lost **at the same time** as Supabase | — | A second copy of each month's backup on the founder's disk (already happens with `pnpm backup:prod`) | Outside, different company from Supabase on purpose. |
 | **Sentry** | Invisible (we go blind to errors) | — | No standby. Vercel's live logs are the fallback | Outside, no plan needed. |
@@ -321,11 +321,16 @@ records (`auth.users`, including password hashes) live in the same database.
   `.env.deploy`); the backup runnable from the PC (`pnpm backup:prod` plus the B2 upload).
 - *Who / time:* a session, about 30 min.
 
-**B.3-7 Access: the Google account and the founder's PC (R2, F5).** These are not
-services to swap; they are single keys.
-- Each of GitHub, Vercel, Supabase, Sentry, B2 and the registrar gets **its own password +
-  two-step verification that does not depend on Google**, with recovery codes printed
-  and stored offline.
+**B.3-7 Access: the sign-in accounts and the founder's PC (R2, F5).** These are not
+services to swap; they are single keys. **Corrected 2026-11-09 (founder, see R2):** the
+single key is the **GitHub login**, which opens the code AND Supabase (Supabase signs in
+with GitHub). Vercel signs in with a separate Google account, not the superadmin one.
+- **GitHub first:** two-step verification plus printed recovery codes, and a sign-in that
+  does not depend on any one Google account (how it signs in today is not recorded).
+  Then give Supabase its own way in that does not go through GitHub, if Supabase allows it.
+- Each of Vercel, Sentry, B2 and the registrar, and **both** Google accounts, gets its own
+  password plus two-step verification, with recovery codes printed and stored offline.
+  (Two-step on the superadmin Google account: the founder deferred it, 2026-11-09, R2.)
 - **Every credential in a password manager**, not only on this PC.
 - **The backup private key in two offline places** (for example a USB stick in a safe
   and a printed copy), never only on the PC.
@@ -377,7 +382,7 @@ drill is overdue (a Part A field).
 | Email switch | every 6 months | A password reset arrives through the SECOND provider | scratch Supabase project |
 | Jitsi build | every 6 months, and before the first big paid event | The script builds a server; a real two-device call connects | throwaway server |
 | Deploy without GitHub | every 6 months | A preview deploy from the PC succeeds; the mirror has the latest commit | Vercel preview, not prod |
-| "Locked out of Google" (tabletop) | yearly | The founder signs into each account WITHOUT Google, from a different device | founder |
+| "Locked out of GitHub / Google" (tabletop) | yearly | From a different device, the founder signs into each account using only its backup way in (recovery codes, its own password), never the GitHub or Google login it normally uses | founder |
 | "PC is gone" (tabletop) | yearly | From another computer, using only the password manager and the offline key, a backup is decrypted and listed | founder + session |
 
 **Drill log** (date · drill · result · time taken · what broke and what was fixed):
@@ -396,7 +401,9 @@ All four answered by the founder 2026-11-09, each the recommended option:
   +~$23/mo (docs/costs/resilience.md). Add the warm line to `cost-model.ts` at that point.
 - **Q2 Who else can get in: DECIDED, only the founder, for now.** Hardware key and printed
   recovery codes at home. Accepted consequence: if Google locks him out while he is away,
-  nobody can act until he is home. Revisit when a client is paying or a developer joins.
+  nobody can act until he is home. (The question was asked as a Google lockout, before the
+  R2 correction. The same answer holds for the real single key, the GitHub login: a GitHub
+  lockout while away stops code AND database access until he is home.) Revisit when a client is paying or a developer joins.
 - **Q3 Domain: DECIDED, buy a neutral name now** (~$15/yr). A brand domain later just
   redirects to it. **The name itself is the founder's to pick** (B.4 #3 waits on it).
 - **Q4 Drills: DECIDED, Claude runs them and the founder supplies the key; once a year the
