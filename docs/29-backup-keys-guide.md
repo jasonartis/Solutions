@@ -3,6 +3,11 @@
 > **For Jason, written 2026-11-09.** Follow it top to bottom; every step is a click or a short action.
 > It holds **no secrets**, only where they are kept. Background and reasoning:
 > [docs/28](28-vendor-accounts-and-evacuation-plans.md) B.7 and B.8.
+>
+> **This file is committed, and the repo is PUBLIC: anyone can read it.** Keep it to
+> descriptions ("account 1", "paper at home"). **Never write a key, a password, or WHICH
+> account (email address or service name) into it.** The key file itself lives on `C:`,
+> outside the project folder on `D:`, so git never sees it and it is never committed.
 
 ## 1. The two keys, in one minute
 
@@ -98,7 +103,13 @@ decrypt command; the key never goes into the chat.
 
 ## 9. Never
 
-- Never paste the decryption key into a chat with Claude (or anyone), an email, a text message or the repo.
+- Never paste the decryption key into a chat with Claude (or anyone), a SENT email, a text message
+  or the repo. A sent message leaves copies on other people's servers that you can never delete,
+  and a Claude chat is kept in its history and in this project's session logs.
+- **An email DRAFT you never send** is allowed, but understand what it is: the email service
+  stores drafts on its servers, so it is a **cloud copy in that email account**. It counts as the
+  "account 2" copy, with the same rules: not in the account holding the B2 keys, not in the
+  account holding the snapshot files.
 - Never keep the decryption key in the same account as the B2 read key.
 - Never keep the decryption key in the same cloud account as the backup snapshot files.
 - Never throw away the paper without first checking the drive copy works.
