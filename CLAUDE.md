@@ -120,7 +120,7 @@ founder decision** — record it where it belongs, flag it, move on (2026-08-29)
   customer**, Claude runs drills. **Risks R1–R4 are still open**, plus: **uploaded files have NO backup** (the dump has
   `storage.objects` rows, not the files), and **37 plaintext prod dumps sit on the travelling SSD** (F13; BitLocker
   DECLINED by the founder, don't re-propose). Backup DECRYPTION key: PC + a cloud copy, paper copy not yet (docs/28
-  B.7). **GitHub two-step is OFF, deferred to the first customer** (with the domain and mail, B.4 #11).
+  B.7; his step-by-step: docs/29). **GitHub two-step is OFF, deferred to the first customer** (with the domain and mail, B.4 #11).
 - Two offsite-snapshot files (whole platform; credentials) — **PLANNED, docs/28 B.8** (`age`-encrypted to the B2 key,
   USB stick at home + cloud drive, auto-made, copied monthly, restore drilled quarterly). Not built.
 - The private B2 backup replacement (needs an account).
