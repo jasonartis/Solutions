@@ -438,7 +438,7 @@ begin
       raise exception 'anon or service_role holds a privilege on %', t;
     end if;
     if has_table_privilege('authenticated', 'public.' || t, 'truncate') then
-      raise exception 'authenticated can truncate %', t;
+      raise exception 'authenticated holds the empty-the-table privilege on %', t;
     end if;
   end loop;
   if has_table_privilege('authenticated', 'public.vendor_account_opens', 'update')
