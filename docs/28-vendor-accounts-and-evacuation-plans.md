@@ -482,6 +482,8 @@ before ending (this becomes a docs/03 rule when built). It writes to a git-ignor
 to the USB stick (kept at home) and the cloud drive, keeping 3 pairs in each. The reminder is a row
 on the vendor accounts page (Part A), "Offsite snapshots", with its "done today" button and
 a 30-day badge on the dashboard. Prod cannot see local files, so the date is entered by hand.
+**The row is seeded PLANNED (no badge) until `pnpm backup:snapshot` exists. The session that builds the script
+switches the row to active in the same session**, or the reminder never fires.
 
 **How a restore is tested:** two drills in B.6, "Offsite snapshot restore" every 3 months and
 "PC is gone" yearly on a different computer. The private key is never pasted into a Claude
