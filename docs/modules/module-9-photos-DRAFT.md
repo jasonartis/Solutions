@@ -379,6 +379,53 @@ contributors who do not log in on their own never come back.
    of them posted by adults). Parent-managed child accounts with verified
    consent (option B) can be ADDED later; nothing in A has to be undone.
 
+### H. Founder answers, 2026-11-08 — the platform legal slice's user-facing text
+
+Founder rule for ALL of this text: short and general, nothing that scares
+users, and nothing that teaches anyone how the platform works inside
+(no mechanisms, no timings). Wording v2 below has the founder's edits applied; his final OK on v2 is
+still owed before it ships.
+
+**(a) "Your content" — new section on the Privacy & Terms page:**
+> You keep ownership of what you upload. You give us permission to store,
+> copy, resize, back up, display and otherwise use it in the context of
+> running the service.
+>
+> Only upload things you have the right to share. Never upload anything
+> illegal, sexual content involving anyone under 18, intimate images shared
+> without consent, or content meant to harass someone.
+>
+> We may remove content and suspend accounts that break these rules. If the
+> law requires it, we may have to report illegal content to the authorities.
+
+Founder's reasons: "in the context of running the service" (was "only to
+run the service") leaves room to look at content to build better tools for
+it; "we may have to" (was "we report") says reporting happens because the
+law compels it, not because the platform watches its users.
+
+**(b) Age:** terms line "You must be 13 or older to create an account." plus
+a signup checkbox "I am 13 or older".
+
+**(c) Public "Report content" page** (no sign-in, footer link beside Privacy
+& Terms): a link or description of where it was seen; a reason (Shows me
+without permission · Intimate or sexual image · Involves a minor · Copyright ·
+Other); the reporter's email; "The information I've given is accurate".
+After sending: "Thank you. We review every report." **No time frame is
+shown to users (founder, 2026-11-08).**
+
+**(d) Internal only, no user-facing text:** the superadmin's review queue,
+quarantine/preservation, legal reporting steps.
+
+**The 48-hour TAKE IT DOWN obligation is the founder's, and he wants it
+surfaced, not remembered (2026-11-08).** Measured the same day: the Owner
+Console home (`apps/web/app/(app)/console/page.tsx`) is a plain list of links
+with no counts, badges or priorities. Founder ask, verbatim intent: one main
+superadmin dashboard that summarises everything going on and everything
+that needs doing — reports, feedback, things that are expiring, and so on —
+with number and colour badges and a priority list, so he never misses a
+report inside 48 hours. Build that dashboard before (or with) the Report
+content page.
+
 ## Out of scope for v1
 
 Face recognition (never), video, links outside the org, per-album audiences,

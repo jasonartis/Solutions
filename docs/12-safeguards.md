@@ -244,6 +244,18 @@ rot; pipelines don't.
   encrypts, and writes straight to a private Backblaze B2 bucket with a
   WRITE-ONLY key and object lock; the read key stays offline with the
   founder; GitHub keeps no copy. Plan with the offsite-snapshot item above.
+  **2026-11-08: THE B2 ACCOUNT EXISTS (founder, individual account).** Bucket private, default encryption
+  on, Object Lock ENABLED. **B2's bucket setting has NO default retention period** — the panel reads
+  "Compliance mode only. An Object Lock retention period may be applied per file." So the
+  upload step must set a 30-day compliance retention ON EACH FILE; the write-only key must hold
+  the capability to do that (`writeFileRetentions`). Not yet checked whether the web UI's
+  "Write Only" key includes it — the first test upload will show; if not, mint a key with exactly
+  `listBuckets, writeFiles, writeFileRetentions` via the b2 CLI. The founder put the write-only
+  key into GitHub repo secrets (names as proposed: `B2_KEY_ID`, `B2_APP_KEY`, `B2_BUCKET` — confirm
+  in GitHub's secrets list, values are never read back) and has a read-only restore key. He has
+  no password manager; the read key is replaceable from the B2 website, but the backup
+  DECRYPTION key (not yet generated) is not — losing it makes every backup unreadable. Next:
+  build the encrypt-and-upload workflow (Opus), with a real restore test.
   **Lesson:** flipping a repo public changes the exposure of EVERY workflow
   output (artifacts, logs), not just the code — re-audit workflows whenever
   visibility changes.
