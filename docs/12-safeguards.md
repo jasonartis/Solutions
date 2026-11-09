@@ -308,6 +308,19 @@ rot; pipelines don't.
     the `B2_*` ones above; `.env.deploy` holds `BACKBLAZE_READ_KEY_ID`, `BACKBLAZE_READ_APP_KEY`,
     `BACKBLAZE_BUCKET` (read-only key). KEY_ID = B2's "keyID" (25 chars); APP_KEY = its
     "applicationKey" (31 chars, shown once) — never the keyName.
+  - **Run 3 (2026-11-09, `b37c748`): the key signs in — and the web UI's "Write Only" key is NOT
+    write-only.** Measured capabilities: `writeFiles, writeFileRetentions, listBuckets, deleteFiles,
+    bypassGovernance, writeFileLegalHolds, writeBucketRetentions, writeBucketEncryption,
+    writeBucketLifecycleRules, writeBucketReplications, writeBucketNotifications, writeBucketLogging`.
+    The compliance lock stops `deleteFiles` for 30 days, but after that the key could delete, and
+    `writeBucketLifecycleRules` could add a rule that deletes old files automatically. The check
+    failed as designed. Two script fixes: the capability check is now an ALLOW-list
+    (`writeFiles, writeFileRetentions, listBuckets, listAllBucketNames`) — the old deny-list had
+    missed `writeBucketLifecycleRules`; and a capability failure no longer skips the upload (run 3
+    uploaded nothing). **The key must be made by `scripts/b2-create-backup-key.mts`**, which the
+    FOUNDER runs in his own terminal with a freshly generated master key (typed in, never saved):
+    it creates `writeFiles + writeFileRetentions` restricted to the bucket, signs in with the new
+    key to confirm, and prints it for the GitHub secrets.
   **Lesson:** flipping a repo public changes the exposure of EVERY workflow
   output (artifacts, logs), not just the code — re-audit workflows whenever
   visibility changes.

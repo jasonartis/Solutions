@@ -75,15 +75,13 @@ const auth = await authorize(keyId, appKey).catch((err) => {
 const caps = [...auth.capabilities].sort()
 console.log(`Key capabilities: ${caps.join(', ')}`)
 for (const need of ['writeFiles', 'writeFileRetentions']) check(caps.includes(need), `key HAS ${need}`)
-// Anything that could read, delete, share, unlock, or loosen the bucket.
-const forbidden = [
-  'readFiles', 'shareFiles', 'listFiles', 'deleteFiles',
-  'bypassGovernance', 'writeFileLegalHolds',
-  'writeBuckets', 'deleteBuckets', 'writeBucketRetentions', 'writeBucketEncryption',
-  'writeBucketReplications', 'writeBucketNotifications', 'writeBucketLogging',
-  'writeKeys', 'deleteKeys',
-]
-for (const bad of forbidden) check(!caps.includes(bad), `key LACKS ${bad}`)
+// ALLOW-list, not a deny-list: a deny-list missed writeBucketLifecycleRules
+// (a rule that deletes old files) on 2026-11-09. B2's web-UI "Write Only" key
+// carries deleteFiles, bypassGovernance and every writeBucket* setting, so
+// the key must be made by scripts/b2-create-backup-key.mts instead.
+const allowed = ['writeFiles', 'writeFileRetentions', 'listBuckets', 'listAllBucketNames']
+const extra = caps.filter((c) => !allowed.includes(c))
+check(extra.length === 0, `key has nothing beyond ${allowed.join(', ')}${extra.length ? ` — EXTRA: ${extra.join(', ')}` : ''}`)
 
 // --- upload, locked ------------------------------------------------------------
 const bucketId = await resolveBucketId(auth, bucket)
@@ -94,14 +92,17 @@ for (const f of files) {
   const cipher = await encrypter.encrypt(new Uint8Array(plain))
   // Belt and braces: an age file always starts with this header line. If it
   // didn't, we would be about to upload plaintext.
-  check(Buffer.from(cipher.subarray(0, 21)).toString() === 'age-encryption.org/v1', `${f} is age ciphertext`)
-  if (failures.length) break
+  // Only THIS check stops the upload; a capability failure above still lets
+  // the (encrypted, locked) backup through and turns the job red at the end.
+  const isCipher = Buffer.from(cipher.subarray(0, 21)).toString() === 'age-encryption.org/v1'
+  check(isCipher, `${f} is age ciphertext`)
+  if (!isCipher) break
   const fileName = `prod/${stamp}/${f}.age`
   const res = await uploadLocked(auth, bucketId, fileName, cipher, retainUntil)
   check(res.contentSha1 === sha1Hex(cipher), `${fileName} uploaded (${cipher.byteLength} bytes, sha1 matches)`)
   uploaded.push({ fileName, fileId: res.fileId })
 }
-console.log(`Locked (compliance) until ${new Date(retainUntil).toISOString()}`)
+if (uploaded.length) console.log(`Locked (compliance) until ${new Date(retainUntil).toISOString()}`)
 
 // --- prove the key can't read, delete, list, or loosen ------------------------
 // Each must be REFUSED. A 401 is B2's "this key lacks the capability".
