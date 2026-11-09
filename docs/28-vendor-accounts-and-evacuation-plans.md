@@ -481,8 +481,8 @@ no cost to him: prune old plaintext dumps once B2 restores are proven (fewer cop
 **How they are protected: both are encrypted** (the platform file holds client material and
 personal data too). Tool: **`age`**, already used by the B2 backup, encrypting to the SAME
 public key (`scripts/backup-recipient.txt`). Making a snapshot then needs no secret, so it can
-run automatically, and opening one needs the private key, which per Q6 lives on paper at home
-and in the cloud doc. **One key opens the B2 backups and both snapshots**, which is deliberate:
+run automatically, and opening one needs the private key, which per Q6 lives on paper at home,
+on the separate drive and in a cloud account apart from the B2 keys and the snapshots. **One key opens the B2 backups and both snapshots**, which is deliberate:
 one thing to keep safe, written down once. Not a password-protected `.zip`: Windows' built-in
 zip encryption is weak, and 7-Zip is not installed. Files are named
 `<date>-platform.tar.age` / `<date>-credentials.tar.age`.
