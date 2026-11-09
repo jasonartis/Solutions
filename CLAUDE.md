@@ -114,10 +114,12 @@ founder decision** — record it where it belongs, flag it, move on (2026-08-29)
   §H — not built). Founder also wants a superadmin home dashboard with badges/priority list (§H).
 - **Vendor accounts page + dependency/evacuation plans for every external service — docs/28.** Part B is PLANNED
   (2026-11-09, "THE PLAN": build order B.4, drills B.6; costs docs/costs/resilience.md), nothing built, every plan
-  UNPRACTISED. Founder decided (B.7): cold now / warm at first client, only he holds access, buy a neutral domain now
-  (name not picked), Claude runs drills. **Risks R1–R4 are still open**, plus two found by re-measuring: **uploaded files have NO
-  backup** (the dump has `storage.objects` rows, not the files), and the B2 backup key's offline location is unknown.
-- Two offsite-snapshot zips (whole platform; credential files) — docs/12 "TO BE PLANNED"; next step is a planning session.
+  UNPRACTISED. Founder decided (B.7): cold now / warm at first client, only he holds access, **no domain until the first
+  customer**, Claude runs drills. **Risks R1–R4 are still open**, plus: **uploaded files have NO backup** (the dump has
+  `storage.objects` rows, not the files), and **37 plaintext prod dumps sit on the travelling SSD** (F13, BitLocker
+  recommended). The B2 backup key is in a cloud doc (a paper copy is decided, Q6).
+- Two offsite-snapshot files (whole platform; credentials) — **PLANNED, docs/28 B.8** (`age`-encrypted to the B2 key,
+  USB stick at home + cloud drive, auto-made, copied monthly, restore drilled quarterly). Not built.
 - The private B2 backup replacement (needs an account).
 - Speed dating: organizer-invites-then-person-accepts (consent for organizer-created seats; build with docs/25), an always-on
   worker host so rounds advance by themselves (spec "OPERATIONAL RECIPES" #4), help room / live thumbnails (spec

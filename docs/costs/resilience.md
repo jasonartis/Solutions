@@ -10,10 +10,11 @@
 
 | Line | Cost | Source |
 |---|---|---|
-| Domain we own (R1) | ~$15/yr ≈ $1.25/mo | sheet ("Domain") |
+| Domain we own (R1); **deferred to the first customer** (founder, docs/28 B.7 Q3) | ~$15/yr ≈ $1.25/mo, from then | sheet ("Domain") |
 | Storage files copied nightly to B2 (F1) | cents at today's size; $6.95/TB-month | sheet (B2) |
 | Second email provider on standby (Amazon SES) | ~$0 at our volume; $0.10 per 1,000 emails if used | sheet (SES) |
 | Second git host mirror (GitLab / Codeberg free) | $0 | assumption |
+| Offsite snapshots (docs/28 B.8): existing USB stick + ~300 MB on a free cloud-drive tier | $0 | assumption (free tiers: Google 15 GB, OneDrive 5 GB) |
 | Password manager (B.3-7) | $0 (free tier) to ~$10–40/yr | assumption |
 | Drills on hourly-billed Hetzner servers (B.6): ~6 drills/yr × a few hours | under $5/yr | assumption (hourly billing; monthly prices in sheet: CPX22 €19.99, CPX42 €69.99) |
 | **Ongoing total** | **≈ $1.50–5/mo** | |

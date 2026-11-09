@@ -200,8 +200,8 @@ brought in-house; the founder left that call to the planning session.
 
 ## Part B — THE PLAN (planning session 2026-11-09, Opus; NOTHING BUILT)
 
-> **STATUS: PLANNED, not built.** Founder decisions B.7 Q1–Q4 were answered 2026-11-09
-> (all as recommended); the domain name and the backup key's location are still open. Costs are in
+> **STATUS: PLANNED, not built.** Founder decisions B.7 Q1–Q7 answered 2026-11-09 (Q3 later changed:
+> no domain until the first customer). Offsite snapshots: B.8. Costs are in
 > [docs/costs/resilience.md](costs/resilience.md). **Every plan below is UNPRACTISED.** By
 > the founder's rule it does not count until its first drill is logged in B.6.
 
@@ -343,17 +343,18 @@ with GitHub). Vercel signs in with a separate Google account, not the superadmin
 |---|---|---|---|---|
 | 1 | Fix the B2 key and **prove a restore** (in flight, docs/12) | B.3-1 prerequisite | $0 | session + founder |
 | 2 | Second way into every account, password manager, recovery codes and backup key stored offline | R2, F5 | $0–100 once | **founder** (~1–2 h) |
-| 3 | Buy the domain; point it at Vercel; use it in every link | R1 | ~$15/yr | founder buys, session wires |
+| 3 | **Deferred to #11 (Q3).** Buy the domain; point it at Vercel; use it in every link | R1 | ~$15/yr | founder buys, session wires |
 | 4 | Write the Supabase settings sheet (read-only through the Management API) | F6 | $0 | session |
 | 5 | Nightly copy of storage files to B2 | F1, R3 | cents | session |
 | 6 | Fonts in-house | F8 | $0 | session (15 min) |
-| 7 | Mail provider + a second provider on the domain | R4, F2 | ~$0 now | founder signs up, session wires |
+| 7 | **Deferred to #11 (Q3).** Mail provider + a second provider on the domain | R4, F2 | ~$0 now | founder signs up, session wires |
 | 8 | Git mirror + deploy-from-PC recipe | B.3-6 | $0 | session |
 | 9 | Recipes for the standby web host and Jitsi (scripts, not running servers) | B.3-3, B.3-5 | $0 | session |
 | 10 | First drill of each plan (B.6) | the "unpractised" rule | < $1 each | per Q4 |
-| 11 | At the first paying client: Supabase Pro + Vercel Pro (already in docs/18), plus the warm standby if Q1 = warm | F10 | see costs | founder |
+| 11 | At the first paying client: **buy the domain (#3) and set up mail (#7)** (founder, Q3 changed 2026-11-09), then Supabase Pro + Vercel Pro (already in docs/18), plus the warm standby if Q1 = warm | F10 | see costs | founder |
+| 12 | Offsite snapshots (B.8): `pnpm backup:snapshot`, `RESTORE.txt`, stick + cloud copy, first restore drill; BitLocker To Go on `D:` (F13) | F5, F13, docs/12 "TO BE PLANNED" | $0 | session builds; founder copies monthly, turns on BitLocker |
 
-Steps 1–2 matter most: without a proven backup and a way into the accounts, no other plan
+Steps 1, 2 and 12 matter most: without a proven backup, a way into the accounts and an off-SSD copy of the credentials, no other plan
 can run.
 
 ### B.5 Protection levels and why not "instant failover everywhere"
@@ -383,7 +384,8 @@ drill is overdue (a Part A field).
 | Jitsi build | every 6 months, and before the first big paid event | The script builds a server; a real two-device call connects | throwaway server |
 | Deploy without GitHub | every 6 months | A preview deploy from the PC succeeds; the mirror has the latest commit | Vercel preview, not prod |
 | "Locked out of GitHub / Google" (tabletop) | yearly | From a different device, the founder signs into each account using only its backup way in (recovery codes, its own password), never the GitHub or Google login it normally uses | founder |
-| "PC is gone" (tabletop) | yearly | From another computer, using only the password manager and the offline key, a backup is decrypted and listed | founder + session |
+| Offsite snapshot restore (B.8) | every 3 months, with the database drill | The newest pair, taken FROM THE USB STICK OR THE CLOUD DRIVE (not D:), decrypts into a scratch folder on C:; the code clones from the bundle at the expected commit and typechecks; two read-only probes with the restored keys succeed (Vercel deployments list; database `select 1`); both off-site copies are under 31 days old | founder decrypts, session checks |
+| "PC is gone" (real, not tabletop) | yearly | On a DIFFERENT computer, with only the USB stick (or the cloud drive), `age.exe` and the paper key, the founder restores both snapshots and runs `git log` plus one probe, following `RESTORE.txt` alone | founder (per Q4) |
 
 **Drill log** (date · drill · result · time taken · what broke and what was fixed):
 
@@ -393,7 +395,7 @@ drill is overdue (a Part A field).
 
 ### B.7 Founder decisions (asked 2026-11-09 as scenarios; answers recorded here)
 
-All four answered by the founder 2026-11-09, each the recommended option:
+Answered by the founder 2026-11-09 (Q1–Q4 first, then Q5–Q7 for B.8), each the recommended option; Q3 was later changed by him:
 
 - **Q1 Downtime: DECIDED, cold now, warm from the first paying client.** Scenario asked: a
   5-hour Supabase outage 20 minutes into a client's 40-person event. Today: rebuild from
@@ -404,12 +406,78 @@ All four answered by the founder 2026-11-09, each the recommended option:
   nobody can act until he is home. (The question was asked as a Google lockout, before the
   R2 correction. The same answer holds for the real single key, the GitHub login: a GitHub
   lockout while away stops code AND database access until he is home.) Revisit when a client is paying or a developer joins.
-- **Q3 Domain: DECIDED, buy a neutral name now** (~$15/yr). A brand domain later just
-  redirects to it. **The name itself is the founder's to pick** (B.4 #3 waits on it).
+- **Q3 Domain: CHANGED 2026-11-09 (later), founder: "hold this but we will do this with the
+  first customer".** No domain until the first customer. Accepted consequence until then:
+  a Vercel suspension or move breaks every link (B.3-3 can only run with a new address),
+  and email stays on Supabase's built-in sender (B.3-4 needs a domain). B.4 #3 and #7
+  move to the first-customer step (#11).
 - **Q4 Drills: DECIDED, Claude runs them and the founder supplies the key; once a year the
   founder runs one himself** from a click-by-click script.
-- **STILL OPEN (a fact, not a choice):** where does the backup private key live today, and
-  is there more than one copy? (F5) If it is only on this PC, that is B.4 #2's first job.
+- **Backup private key location: ANSWERED 2026-11-09, "it's saved in a cloud doc".** So it
+  is not lost with the PC (F5 half-closed). Remaining gap: that is ONE copy, inside an online
+  account whose two-step is deferred. Q6 below adds a paper copy at home; turning on two-step
+  for the account holding the doc closes the rest.
+- **GitHub sign-in: ANSWERED 2026-11-09, email and password** (no Google). Whether two-step
+  is on is not recorded; since GitHub is the single key (R2), that is the first thing to check.
+- **Q5 Where the offsite snapshots go: DECIDED, USB stick kept at home (never in the laptop
+  bag) AND a cloud drive.** Scenario asked: the bag stolen with the SSD and the stick inside.
+- **Q6 Where the decryption key lives: DECIDED, paper at home AND the cloud doc**, the doc
+  only once two-step is on for that account. Scenario asked: the doc's Google account phished.
+- **Q7 How often: DECIDED, made automatically, copied off-site monthly** with a 30-day
+  reminder badge. Scenario asked: a key rotated on Tuesday, the SSD dying on Friday.
+
+### B.8 Offsite snapshots: the two files on another drive (docs/12 "TO BE PLANNED", planned 2026-11-09)
+
+The SSD (`D:`, a Samsung T5 over USB) holds the working copy, every credential file, the local
+prod dumps and `env-backups/`, so `env-backups/` protects against a bad edit, not a lost drive.
+**PLANNED, NOT BUILT** (founder initiates the build). Decisions Q5–Q7 above.
+
+**Re-measured 2026-11-09:** git's real size is **58 MiB** (`git count-objects`; `du` says 885 MB
+only because exFAT stores 6,962 loose objects in large clusters); `backups/` holds **37
+plaintext prod dumps, 148 MB**, including `backups/github-artifacts/` (33 MB, the 2026-11-03
+incident archive); `client-materials/` 256 KB; six credential files; `E:` (Kingston USB,
+63 GB free).
+
+**F13 (new): the plaintext prod dumps on the SSD are the bigger exposure.** The 37 dumps include
+`auth.users` password hashes and personal data, unencrypted, on a drive that travels in a
+laptop bag. Recommended fix (B.4 #12): turn on BitLocker To Go for `D:` (Windows 10 Pro
+has it; it can auto-unlock on this PC), which also covers the `.env` files. Prune old dumps
+once B2 restores are proven.
+
+**What goes in each file:**
+
+| | 1. Platform snapshot | 2. Credentials snapshot |
+|---|---|---|
+| Contents | a `git bundle` of every branch and commit (catches UNPUSHED work, which GitHub lacks); every uncommitted or untracked non-ignored file (in-progress work from any session); `client-materials/`; `founder-todo.md`, `founder-feedback.md`; the newest 3 prod dumps from `backups/`; Claude's memory folder for this project (on `C:`) | the six files `scripts/backup-envs.ts` lists; `.claude/settings.local.json`; the Supabase settings sheet once written (F6) |
+| Left out | `node_modules`, `.next`, build output (rebuilt by `pnpm install`); the 33 MB incident archive (stays where it is, docs/12) | recovery codes (paper only) |
+| Size | ~60–100 MB | under 100 KB |
+
+**How they are protected: both are encrypted** (the platform file holds client material and
+personal data too). Tool: **`age`**, already used by the B2 backup, encrypting to the SAME
+public key (`scripts/backup-recipient.txt`). Making a snapshot then needs no secret, so it can
+run automatically, and opening one needs the private key, which per Q6 lives on paper at home
+and in the cloud doc. **One key opens the B2 backups and both snapshots**, which is deliberate:
+one thing to keep safe, written down once. Not a password-protected `.zip`: Windows' built-in
+zip encryption is weak, and 7-Zip is not installed. Files are named
+`<date>-platform.tar.age` / `<date>-credentials.tar.age`.
+
+**Stored next to them, unencrypted, on the stick and the cloud drive:** `age.exe` (the Windows
+build) and `RESTORE.txt` (the steps, no secrets). That way a restore on a new computer needs
+only the stick and the paper: no account, no Node, no repo.
+
+**How often (Q7):** a `pnpm backup:snapshot` script (to build) runs automatically at the end of
+`pnpm backup:envs` and `pnpm backup:prod`. A session that edits any credential file runs it
+before ending (this becomes a docs/03 rule when built). It writes to a git-ignored
+`snapshots/` folder and keeps the newest 3 pairs. **Monthly, the founder copies the newest pair**
+to the USB stick (kept at home) and the cloud drive, keeping 3 pairs in each. The reminder is a row
+on the vendor accounts page (Part A), "Offsite snapshots", with its "done today" button and
+a 30-day badge on the dashboard. Prod cannot see local files, so the date is entered by hand.
+
+**How a restore is tested:** two drills in B.6, "Offsite snapshot restore" every 3 months and
+"PC is gone" yearly on a different computer. The private key is never pasted into a Claude
+session: the founder runs the one decrypt command himself, and the session checks the result.
+
+**Cost:** $0 (an existing stick; ~300 MB in a free cloud-drive tier). docs/costs/resilience.md.
 
 ## Suggested order
 
