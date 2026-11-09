@@ -5,6 +5,8 @@ import { createClient } from '@/lib/supabase/server'
 import { getProfile } from '@/lib/platform'
 import OrgMembersPanel, { SUPERADMIN_RANK, type OrgMemberRow } from '@/components/org-members-panel'
 import SynagogueLocationFields, { type SynagogueSettings } from '@/components/synagogue-location-fields'
+import ConsoleDashboard from '@/components/console-dashboard'
+import { getDashboard } from '@/lib/console-dashboard'
 import {
   addMember,
   addModuleRole,
@@ -62,6 +64,8 @@ export default async function ConsolePage(props: {
   const capsValue = (capsRow?.value ?? {}) as { maxPerInviter?: number; maxPerAddress?: number }
   const inviteCaps = { maxPerInviter: capsValue.maxPerInviter ?? 100, maxPerAddress: capsValue.maxPerAddress ?? 20 }
 
+  const dashboard = await getDashboard(supabase)
+
   return (
     <div>
       <h1 className="mb-2 text-2xl font-semibold">Owner Console</h1>
@@ -71,6 +75,9 @@ export default async function ConsolePage(props: {
           {actionError}
         </p>
       )}
+
+      {/* What needs the founder, at a glance (module-9 spec §H). Read-only. */}
+      <ConsoleDashboard dashboard={dashboard} />
 
       {/* Superadmin-only tools that deliberately live OUTSIDE the module tab
           strips, so those stay strictly by-the-rules (docs/13, 2026-08-02). */}

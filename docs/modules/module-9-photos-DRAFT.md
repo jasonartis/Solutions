@@ -427,6 +427,10 @@ with number and colour badges and a priority list, so he never misses a
 report inside 48 hours. Build that dashboard before (or with) the Report
 content page.
 
+**Dashboard BUILT 2026-11-09** (no migration; journal 2026-11-09 Sonnet
+entry). The "Content reports" tile is a placeholder until the report table
+exists — wire it in `reportsSection()` of `apps/web/lib/console-dashboard.ts`.
+
 ## Out of scope for v1
 
 Face recognition (never), video, links outside the org, per-album audiences,
