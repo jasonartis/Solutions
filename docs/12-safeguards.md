@@ -297,7 +297,8 @@ rot; pipelines don't.
     them with the restore recipe below.
   - **Run 1 and 2 (2026-11-09): dump OK, B2 refused the key (`401 bad_auth_token`). Measured cause:
     the `B2_APP_KEY` secret is 21 characters; a B2 applicationKey is 31** (`B2_KEY_ID` is the right
-    25). Founder to re-enter it (or make a new key). **Still unknown:** whether the web UI's
+    25). The key's NAME, `nightly-backup-writer`, is exactly 21 characters — almost certainly
+    the name went into the secret instead of the applicationKey. Founder to re-enter it (or make a new key). **Still unknown:** whether the web UI's
     "Write Only" key type includes `writeFileRetentions` — the next run prints the real list. If it
     does not, a key with exactly `listBuckets, writeFiles, writeFileRetentions` must be minted via
     the API with the master key (plan B, not built). **Until a green run AND a restore drill pass,
