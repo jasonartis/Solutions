@@ -154,6 +154,11 @@ const COMMENT_MATCHES_ONLY = [
   // something vaguer to dodge a grep. The function reads no address and
   // touches no auth table; the control below proves the match is comment-only.
   'org_members_guard_last_admin',
+  // Added 2026-11-09 by 20261113010000 (docs/28 Part A). The vendor-accounts
+  // secret filter is a pure text check: its comment says "'@' counts unless the
+  // word is an email address", explaining why an address is not mistaken for a
+  // password. It takes one text argument and reads no table at all.
+  'vendor_secret_reason',
 ]
 
 describe('profiles is PUBLIC, and the email surface is enumerable (docs/22 §21.3, §11.6)', () => {
