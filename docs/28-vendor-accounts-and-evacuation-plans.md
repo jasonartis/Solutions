@@ -361,7 +361,7 @@ with GitHub). Vercel signs in with a separate Google account, not the superadmin
 | 8 | Git mirror + deploy-from-PC recipe | B.3-6 | $0 | session |
 | 9 | Recipes for the standby web host and Jitsi (scripts, not running servers) | B.3-3, B.3-5 | $0 | session |
 | 10 | First drill of each plan (B.6) | the "unpractised" rule | < $1 each | per Q4 |
-| 11 | At the first paying client: **buy the domain (#3) and set up mail (#7)** (founder, Q3 changed 2026-11-09), then Supabase Pro + Vercel Pro (already in docs/18), plus the warm standby if Q1 = warm | F10 | see costs | founder |
+| 11 | At the first paying client: **buy the domain (#3), set up mail (#7), turn on GitHub two-step + print its recovery codes** (founder, 2026-11-09), then Supabase Pro + Vercel Pro (already in docs/18), plus the warm standby if Q1 = warm | F10 | see costs | founder |
 | 12 | Offsite snapshots (B.8): `pnpm backup:snapshot`, `RESTORE.txt`, stick + cloud copy, first restore drill (BitLocker on `D:` for F13 declined by the founder 2026-11-09) | F5, F13, docs/12 "TO BE PLANNED" | $0 | session builds; founder copies monthly |
 
 Steps 1, 2 and 12 matter most: without a proven backup, a way into the accounts and an off-SSD copy of the credentials, no other plan
@@ -429,11 +429,14 @@ Answered by the founder 2026-11-09 (Q1–Q4 first, then Q5–Q7 for B.8), each t
   replaceable from the B2 website. The **decryption key** is a different thing: ONE 77-character
   line made by `scripts/backup-keygen.mts`, at
   `C:\Users\yarmishj.AEI-LT-JYARMISH\platform-backup-key\platform-backup-key.txt` (the file
-  exists, 383 bytes, checked 2026-11-09 without reading it). Whether it has been copied anywhere
-  is unknown. **If not, it exists only on this PC**, and losing the PC makes every B2 backup and
-  every snapshot unreadable. Q6's paper copy and cloud-doc copy apply to THIS key.
-- **GitHub sign-in: ANSWERED 2026-11-09, email and password** (no Google). Whether two-step
-  is on is not recorded; since GitHub is the single key (R2), that is the first thing to check.
+  exists, 383 bytes, checked 2026-11-09 without reading it). **UPDATE 2026-11-09 (founder): a copy
+  is now uploaded to a cloud location; NOT printed yet.** So: two copies (PC + cloud), the paper
+  copy (Q6) still to do. He also plans a separate drive to hold a copy (not done yet), which fits
+  B.8's USB stick at home. Caution recorded, not re-raised: if the B2 read key and this key sit
+  in the same cloud account, that one account's password opens every backup; keep them apart.
+- **GitHub sign-in: ANSWERED 2026-11-09, email and password** (no Google). **Two-step is OFF;
+  founder defers it to the first customer** (2026-11-09). Accepted risk until then: GitHub is
+  the single key (R2) to code AND database, guarded by one password.
 - **Q5 Where the offsite snapshots go: DECIDED, USB stick kept at home (never in the laptop
   bag) AND a cloud drive.** Scenario asked: the bag stolen with the SSD and the stick inside.
 - **Q6 Where the decryption key lives: DECIDED, paper at home AND the cloud doc**, the doc
