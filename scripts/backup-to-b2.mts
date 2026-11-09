@@ -25,9 +25,11 @@ import { authorize, call, downloadById, resolveBucketId, sha1Hex, uploadLocked }
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const RETENTION_DAYS = 30
 
-const keyId = process.env.B2_KEY_ID ?? ''
-const appKey = process.env.B2_APP_KEY ?? ''
-const bucket = process.env.B2_BUCKET ?? ''
+// trim(): a space or newline pasted into a GitHub secret is invisible there
+// and makes B2 answer 401 bad_auth_token.
+const keyId = (process.env.B2_KEY_ID ?? '').trim()
+const appKey = (process.env.B2_APP_KEY ?? '').trim()
+const bucket = (process.env.B2_BUCKET ?? '').trim()
 if (!keyId || !appKey || !bucket) {
   console.error('Missing B2_KEY_ID / B2_APP_KEY / B2_BUCKET')
   process.exit(1)
@@ -63,7 +65,13 @@ const check = (ok: boolean, label: string) => {
 }
 
 // --- authorize + capability check -------------------------------------------
-const auth = await authorize(keyId, appKey)
+const auth = await authorize(keyId, appKey).catch((err) => {
+  // Lengths only — this log is public. A B2 keyID is 25 characters and its
+  // applicationKey 31; anything else means the wrong value was pasted (the
+  // key's NAME, the two swapped, or the account's master key ID).
+  console.error(`${err.message}\nB2_KEY_ID is ${keyId.length} chars (expect 25), B2_APP_KEY is ${appKey.length} chars (expect 31).`)
+  process.exit(1)
+})
 const caps = [...auth.capabilities].sort()
 console.log(`Key capabilities: ${caps.join(', ')}`)
 for (const need of ['writeFiles', 'writeFileRetentions']) check(caps.includes(need), `key HAS ${need}`)
