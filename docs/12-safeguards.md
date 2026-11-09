@@ -256,6 +256,39 @@ rot; pipelines don't.
   no password manager; the read key is replaceable from the B2 website, but the backup
   DECRYPTION key (not yet generated) is not — losing it makes every backup unreadable. Next:
   build the encrypt-and-upload workflow (Opus), with a real restore test.
+  **2026-11-09 (Opus): BUILT AND PUSHED (`a070db8`, `ed60986`) — NOT YET PROVEN; blocked on the
+  `B2_APP_KEY` secret.** How it works:
+  - `.github/workflows/backup-b2.yml` (09:00 UTC + manual) replaces `backup.yml` (deleted, so the
+    artifact version cannot be re-enabled). It runs `pnpm backup:prod`, then
+    `scripts/backup-to-b2.mts`, then deletes the plaintext. **No artifact; nothing about the dump's
+    contents is printed** (the log is public — run 1's log was read: only table names and
+    pg_dump's circular-FK warnings, both already public in the migrations).
+  - **Encryption:** `age` via the `age-encryption` npm package (pinned 0.3.1, by age's author; on
+    `@noble` crypto), key type **post-quantum hybrid** (ML-KEM-768 + X25519) — chosen for the
+    founder's "collect now, decrypt later" concern. Public half committed at
+    `scripts/backup-recipient.txt` (it can only lock). **Private half: ONE 77-character line in
+    `C:\Users\yarmishj.AEI-LT-JYARMISH\platform-backup-key\platform-backup-key.txt`, made
+    2026-11-09 by `scripts/backup-keygen.mts`, never printed** — founder to copy it to paper + a
+    USB stick and delete it from the PC between restores. Interoperable with the `age` CLI
+    (v1.3+), so it never depends on this repo. Local round trip on a real 4 MB dump: byte-identical;
+    no readable text in the ciphertext; a wrong key and a one-bit tamper both refused.
+  - **Lock + key limits, checked EVERY run** (`backup-to-b2.mts`): each file uploaded with
+    `X-Bz-File-Retention-Mode: compliance`, retain-until +30 days; the key's capability list must
+    HAVE `writeFiles`, `writeFileRetentions` and LACK every read/list/delete/share/bypass/
+    bucket-or-key-changing capability; then real attempts to download, delete, list and shorten
+    the lock must all be refused. Any failure turns the job red (after the upload — a locked
+    encrypted backup beats none). Files land at `prod/<stamp>/{schema,data}.sql.age`.
+  - **Restore:** `scripts/backup-restore-from-b2.mts <key file> [stamp]` with the READ-ONLY key in
+    `.env.deploy` (`B2_READ_KEY_ID`, `B2_READ_APP_KEY`, `B2_BUCKET`) → decrypted files in
+    `backups/restored-from-b2/<stamp>/`, and it prints each file's lock as B2 reports it. Then load
+    them with the restore recipe below.
+  - **Run 1 and 2 (2026-11-09): dump OK, B2 refused the key (`401 bad_auth_token`). Measured cause:
+    the `B2_APP_KEY` secret is 21 characters; a B2 applicationKey is 31** (`B2_KEY_ID` is the right
+    25). Founder to re-enter it (or make a new key). **Still unknown:** whether the web UI's
+    "Write Only" key type includes `writeFileRetentions` — the next run prints the real list. If it
+    does not, a key with exactly `listBuckets, writeFiles, writeFileRetentions` must be minted via
+    the API with the master key (plan B, not built). **Until a green run AND a restore drill pass,
+    keep running `pnpm backup:prod` by hand before every `migrate:prod`.**
   **Lesson:** flipping a repo public changes the exposure of EVERY workflow
   output (artifacts, logs), not just the code — re-audit workflows whenever
   visibility changes.
