@@ -383,8 +383,9 @@ contributors who do not log in on their own never come back.
 
 Founder rule for ALL of this text: short and general, nothing that scares
 users, and nothing that teaches anyone how the platform works inside
-(no mechanisms, no timings). Wording v2 below has the founder's edits applied; his final OK on v2 is
-still owed before it ships.
+(no mechanisms, no timings). Wording v2 below has the founder's edits applied.
+**APPROVED by the founder 2026-11-09 ("The Legal text looks good").** Not yet
+built or on the site.
 
 **(a) "Your content" — new section on the Privacy & Terms page:**
 > You keep ownership of what you upload. You give us permission to store,

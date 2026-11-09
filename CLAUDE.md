@@ -101,7 +101,10 @@ runs the docs/03 #12 rhythm (draft → adversarial review → live verify as rea
 founder decision** — record it where it belongs, flag it, move on (2026-08-29).
 
 **Founder decisions pending / deferred — do NOT start these unprompted:**
-- Module 9 photos and its platform legal items (module-9 spec §B).
+- Module 9 photos and its platform legal items (module-9 spec §B; the user-facing legal text v2 is APPROVED 2026-11-09,
+  §H — not built). Founder also wants a superadmin home dashboard with badges/priority list (§H).
+- **Vendor accounts page + dependency/evacuation plans for every external service — docs/28 (requirements only,
+  2026-11-09).** Planning session first.
 - Two offsite-snapshot zips (whole platform; credential files) — docs/12 "TO BE PLANNED"; next step is a planning session.
 - The private B2 backup replacement (needs an account).
 - Speed dating: organizer-invites-then-person-accepts (consent for organizer-created seats; build with docs/25), an always-on

@@ -12,6 +12,11 @@ they live in the git-ignored `.env.accounts` file at the repo root (template:
 - **Adding a new service later:** add a row here, a block to `.env.accounts`
   **and** `.env.accounts.example`, and note it in [docs/07](07-account-setup.md) if it needs setup steps.
 
+> **2026-11-09:** this list is partly stale (no JaaS row; Backblaze B2 now exists, created
+> 2026-11-08, see docs/12). The founder asked for a superadmin accounts page and a
+> dependency/evacuation review of every service:
+> [docs/28](28-vendor-accounts-and-evacuation-plans.md). Update or retire this table there.
+
 ## Active accounts
 
 | Service | Sign in / console | What it's for here | Account / notes |
