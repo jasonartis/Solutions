@@ -137,7 +137,9 @@ created); principle 8 per-purpose relationship config (docs/00, described-not-bu
 entity-level joinPolicy; zmanim action buttons and every pg-boss cron job wait on an always-on worker (prod has none —
 `pnpm worker:prod` from the founder's PC is the stopgap; retention prunes do not run on prod meanwhile, docs/17).
 
-**Open, unranked, not founder-gated (small):** walk-in salon customers cannot be linked to an account (module-5 spec
+**Open, unranked, not founder-gated (small):** `/account`'s Change password form
+(`apps/web/app/(app)/account/password-form.tsx`) does not ask for the CURRENT password, so anyone at a signed-in browser
+can change it (found 2026-11-04; Supabase's "secure password change"/reauthentication setting is the likely fix); walk-in salon customers cannot be linked to an account (module-5 spec
 2026-08-03 finding — read before building); the residual census paths in module tables (docs/24 §6b.1, with docs/22 §20.2);
 `cls_set_preferred_name`'s unenrolled-student half and §5's `sd_in_event` status filter (docs/19 2026-09-15 "STILL OPEN");
 myzmanim is a TRIAL key (ended 2026-10-24) and prod serves zmanim from cache only — run `scripts/prod-verify-zmanim-schema.mts`
