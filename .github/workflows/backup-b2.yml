@@ -1,0 +1,59 @@
+name: Backup to B2
+
+# Nightly encrypted prod backup (docs/12 "Backups"). Replaces backup.yml,
+# which uploaded PLAINTEXT dumps as artifacts of this PUBLIC repo and was
+# shut down 2026-11-04 (docs/12 "FOUND 2026-11-03").
+#
+# Founder's rules: backups never go anywhere public — so this job keeps NO
+# artifact and prints nothing about the dump's contents (its log is public);
+# the dump is encrypted on the runner to scripts/backup-recipient.txt (the
+# private key is offline with the founder) and written only to the private
+# B2 bucket with a write-only key and a 30-day compliance lock per file.
+# scripts/backup-to-b2.mts checks all of that every run and fails loudly.
+on:
+  schedule:
+    - cron: '0 9 * * *' # 09:00 UTC daily — low-traffic window
+  workflow_dispatch: {} # manual "Run workflow" button, for testing
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backup-b2
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # scripts/prod-backup.ts reads .env.deploy, same as on the founder's PC.
+      - name: Write prod credentials
+        run: |
+          {
+            echo "SUPABASE_PROJECT_REF=${{ secrets.PROD_SUPABASE_PROJECT_REF }}"
+            echo "SUPABASE_DB_PASSWORD=${{ secrets.PROD_SUPABASE_DB_PASSWORD }}"
+          } > .env.deploy
+
+      - run: pnpm backup:prod
+
+      - name: Encrypt and upload to B2
+        env:
+          B2_KEY_ID: ${{ secrets.B2_KEY_ID }}
+          B2_APP_KEY: ${{ secrets.B2_APP_KEY }}
+          B2_BUCKET: ${{ secrets.B2_BUCKET }}
+        run: node node_modules/tsx/dist/cli.mjs scripts/backup-to-b2.mts
+
+      # The runner is thrown away after the job anyway; this just makes sure
+      # no later step added to this file could pick up the plaintext.
+      - name: Remove plaintext dump and credentials
+        if: always()
+        run: rm -rf backups .env.deploy

@@ -30,6 +30,7 @@
     "migrate:prod": "tsx scripts/prod-migrate.ts"
   },
   "devDependencies": {
+    "age-encryption": "0.3.1",
     "prettier": "^3.6.0",
     "supabase": "^2.34.0",
     "tsx": "^4.20.0",
