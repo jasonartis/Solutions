@@ -303,6 +303,11 @@ rot; pipelines don't.
     does not, a key with exactly `listBuckets, writeFiles, writeFileRetentions` must be minted via
     the API with the master key (plan B, not built). **Until a green run AND a restore drill pass,
     keep running `pnpm backup:prod` by hand before every `migrate:prod`.**
+  - **Names, renamed 2026-11-09 (founder: "B2" alone is unclear; one scheme everywhere):** GitHub
+    secrets `BACKBLAZE_KEY_ID`, `BACKBLAZE_APP_KEY`, `BACKBLAZE_BUCKET` (write-only key) replace
+    the `B2_*` ones above; `.env.deploy` holds `BACKBLAZE_READ_KEY_ID`, `BACKBLAZE_READ_APP_KEY`,
+    `BACKBLAZE_BUCKET` (read-only key). KEY_ID = B2's "keyID" (25 chars); APP_KEY = its
+    "applicationKey" (31 chars, shown once) — never the keyName.
   **Lesson:** flipping a repo public changes the exposure of EVERY workflow
   output (artifacts, logs), not just the code — re-audit workflows whenever
   visibility changes.
