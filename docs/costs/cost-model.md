@@ -55,8 +55,9 @@ count on the page and watch the plan change.
 - **People.** At 10M a platform needs an infrastructure team; at 1B, hundreds of engineers. Salaries dwarf every line here.
 - Payment-processor fees (typically ~3% of revenue), taxes, legal/compliance (the module-9 photo legal items are a real
   cost), customer support, marketing, or the founder's time.
-- Staging environments, load-test runs, disaster-recovery standby sites (docs/28 Part B will add these — "instant failover
-  for everything is expensive" and its cost belongs in this model once planned).
+- Staging environments, load-test runs, disaster-recovery standby sites. **Standby and drill costs are now PLANNED in
+  [resilience.md](resilience.md)** (docs/28 Part B, 2026-11-09): cold ≈ $1.50–5/mo now, warm ≈ $25–28/mo from the first
+  paying client (founder chose exactly that, docs/28 B.7 Q1). They join this model when they start costing money.
 - Volume discounts above the first tier of any vendor (assumed none, except the two CDN rates marked assumption).
 - Any module not yet built (7, 8) and module 9 (photos) is the planned design, not measured.
 

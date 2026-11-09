@@ -112,10 +112,11 @@ founder decision** — record it where it belongs, flag it, move on (2026-08-29)
 **Founder decisions pending / deferred — do NOT start these unprompted:**
 - Module 9 photos and its platform legal items (module-9 spec §B; the user-facing legal text v2 is APPROVED 2026-11-09,
   §H — not built). Founder also wants a superadmin home dashboard with badges/priority list (§H).
-- **Vendor accounts page + dependency/evacuation plans for every external service — docs/28 (requirements only,
-  2026-11-09).** Planning session first. **Its "Known risks" R1–R4 are open:** no owned domain (the site is a Vercel
-  subdomain), one Google login opens GitHub+Vercel+Supabase, Supabase holds database+sign-in+files, sign-up email depends
-  on Supabase's built-in sender.
+- **Vendor accounts page + dependency/evacuation plans for every external service — docs/28.** Part B is PLANNED
+  (2026-11-09, "THE PLAN": build order B.4, drills B.6; costs docs/costs/resilience.md), nothing built, every plan
+  UNPRACTISED. Founder decided (B.7): cold now / warm at first client, only he holds access, buy a neutral domain now
+  (name not picked), Claude runs drills. **Risks R1–R4 are still open**, plus two found by re-measuring: **uploaded files have NO
+  backup** (the dump has `storage.objects` rows, not the files), and the B2 backup key's offline location is unknown.
 - Two offsite-snapshot zips (whole platform; credential files) — docs/12 "TO BE PLANNED"; next step is a planning session.
 - The private B2 backup replacement (needs an account).
 - Speed dating: organizer-invites-then-person-accepts (consent for organizer-created seats; build with docs/25), an always-on
