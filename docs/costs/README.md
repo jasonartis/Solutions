@@ -1,9 +1,13 @@
 # Costs — what the platform costs to run, by module and by scale
 
-> **STATUS: STARTED 2026-11-04, model not built yet.** This folder exists so
-> every cost fact lands in ONE place instead of being scattered across module
-> specs. Next step: a session builds `cost-model.md` (below) from the facts
-> already measured in the repo, re-verifying every price on the web.
+> **STATUS: BUILT 2026-11-09 (Sonnet).** [cost-model.md](cost-model.md), [price-sheet.md](price-sheet.md) and
+> [assumptions.md](assumptions.md) exist, and the model is a superadmin page, **Owner Console → Costs (`/console/costs`)**,
+> where you can type any user count, edit module adoption, build user types and read the price that earns a target margin.
+> The model is code: `packages/platform/src/cost-model.ts` (prices carry source + date + confidence; sanity test
+> `packages/db/src/cost-model.test.ts`); the docs' tables are generated from it by `scripts/print-cost-model.mts`.
+> **Keep them in step:** change a price or assumption in the model file, regenerate, paste, update the `checked` date.
+> **Not yet done:** replace assumptions with measured numbers after a real client's first month; fold in docs/28 Part B's
+> standby/evacuation costs once planned; re-fetch the "assumption"-labelled prices (CloudFront, SES, RDS storage, Sentry).
 
 ## What the founder wants answered (2026-11-04)
 
@@ -16,7 +20,7 @@
   model must say where each tier's architecture changes, not just multiply.
 - Used to work out a **pricing model** (still undecided).
 
-## Planned files
+## Files
 
 | File | Holds |
 |---|---|

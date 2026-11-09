@@ -124,6 +124,13 @@ export default async function ConsolePage(props: {
           who can appoint whom
         </span>
         <span className="text-gray-300">·</span>
+        <Link href="/console/costs" className="text-blue-600 hover:underline">
+          Costs
+        </Link>
+        <span className="text-gray-400" title="What the platform costs by module and size, and what to charge">
+          what it costs to run
+        </span>
+        <span className="text-gray-300">·</span>
         <Link href="/console/accounts" className="text-blue-600 hover:underline">
           Account deletions
         </Link>
