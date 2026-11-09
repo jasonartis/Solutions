@@ -2,7 +2,7 @@
 // Backblaze B2 bucket with a 30-day compliance lock (docs/12 "Backups").
 // Runs in .github/workflows/backup-b2.yml right after `pnpm backup:prod`.
 //
-//   B2_KEY_ID=… B2_APP_KEY=… B2_BUCKET=… node node_modules/tsx/dist/cli.mjs scripts/backup-to-b2.mts
+//   BACKBLAZE_KEY_ID=… BACKBLAZE_APP_KEY=… BACKBLAZE_BUCKET=… node node_modules/tsx/dist/cli.mjs scripts/backup-to-b2.mts
 //
 // Founder's rules (2026-11-03/08), each enforced here:
 // 1. Backups never go anywhere public — this script writes ONLY to B2, and
@@ -27,11 +27,11 @@ const RETENTION_DAYS = 30
 
 // trim(): a space or newline pasted into a GitHub secret is invisible there
 // and makes B2 answer 401 bad_auth_token.
-const keyId = (process.env.B2_KEY_ID ?? '').trim()
-const appKey = (process.env.B2_APP_KEY ?? '').trim()
-const bucket = (process.env.B2_BUCKET ?? '').trim()
+const keyId = (process.env.BACKBLAZE_KEY_ID ?? '').trim()
+const appKey = (process.env.BACKBLAZE_APP_KEY ?? '').trim()
+const bucket = (process.env.BACKBLAZE_BUCKET ?? '').trim()
 if (!keyId || !appKey || !bucket) {
-  console.error('Missing B2_KEY_ID / B2_APP_KEY / B2_BUCKET')
+  console.error('Missing BACKBLAZE_KEY_ID / BACKBLAZE_APP_KEY / BACKBLAZE_BUCKET')
   process.exit(1)
 }
 
@@ -69,7 +69,7 @@ const auth = await authorize(keyId, appKey).catch((err) => {
   // Lengths only — this log is public. A B2 keyID is 25 characters and its
   // applicationKey 31; anything else means the wrong value was pasted (the
   // key's NAME, the two swapped, or the account's master key ID).
-  console.error(`${err.message}\nB2_KEY_ID is ${keyId.length} chars (expect 25), B2_APP_KEY is ${appKey.length} chars (expect 31).`)
+  console.error(`${err.message}\nBACKBLAZE_KEY_ID is ${keyId.length} chars (expect 25), BACKBLAZE_APP_KEY is ${appKey.length} chars (expect 31).`)
   process.exit(1)
 })
 const caps = [...auth.capabilities].sort()

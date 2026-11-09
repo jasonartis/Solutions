@@ -292,7 +292,7 @@ rot; pipelines don't.
     the lock must all be refused. Any failure turns the job red (after the upload — a locked
     encrypted backup beats none). Files land at `prod/<stamp>/{schema,data}.sql.age`.
   - **Restore:** `scripts/backup-restore-from-b2.mts <key file> [stamp]` with the READ-ONLY key in
-    `.env.deploy` (`B2_READ_KEY_ID`, `B2_READ_APP_KEY`, `B2_BUCKET`) → decrypted files in
+    `.env.deploy` (`BACKBLAZE_READ_KEY_ID`, `BACKBLAZE_READ_APP_KEY`, `BACKBLAZE_BUCKET`) → decrypted files in
     `backups/restored-from-b2/<stamp>/`, and it prints each file's lock as B2 reports it. Then load
     them with the restore recipe below.
   - **Run 1 and 2 (2026-11-09): dump OK, B2 refused the key (`401 bad_auth_token`). Measured cause:

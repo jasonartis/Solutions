@@ -2,8 +2,8 @@
 //
 //   node node_modules/tsx/dist/cli.mjs scripts/backup-restore-from-b2.mts <path to platform-backup-key.txt> [stamp]
 //
-// Needs in .env.deploy (git-ignored): B2_READ_KEY_ID, B2_READ_APP_KEY,
-// B2_BUCKET — the READ-ONLY key, never the nightly write-only one.
+// Needs in .env.deploy (git-ignored): BACKBLAZE_READ_KEY_ID, BACKBLAZE_READ_APP_KEY,
+// BACKBLAZE_BUCKET — the READ-ONLY key, never the nightly write-only one.
 // Without [stamp] it fetches the newest backup and lists the others.
 //
 // Writes backups/restored-from-b2/<stamp>/schema.sql + data.sql (git-ignored).
@@ -27,11 +27,11 @@ if (!keyPath) {
 
 const env = readFileSync(resolve(root, '.env.deploy'), 'utf8')
 const get = (k: string) => new RegExp(`^${k}=(.*)$`, 'm').exec(env)?.[1]?.trim() ?? ''
-const keyId = get('B2_READ_KEY_ID')
-const appKey = get('B2_READ_APP_KEY')
-const bucket = get('B2_BUCKET')
+const keyId = get('BACKBLAZE_READ_KEY_ID')
+const appKey = get('BACKBLAZE_READ_APP_KEY')
+const bucket = get('BACKBLAZE_BUCKET')
 if (!keyId || !appKey || !bucket) {
-  console.error('Missing B2_READ_KEY_ID / B2_READ_APP_KEY / B2_BUCKET in .env.deploy')
+  console.error('Missing BACKBLAZE_READ_KEY_ID / BACKBLAZE_READ_APP_KEY / BACKBLAZE_BUCKET in .env.deploy')
   process.exit(1)
 }
 

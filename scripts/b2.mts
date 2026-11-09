@@ -59,19 +59,19 @@ export async function callOrThrow(auth: B2Auth, op: string, payload: object): Pr
   return r.body
 }
 
-// B2_BUCKET may hold the bucket's NAME or its ID; accept either. A key that is
+// BACKBLAZE_BUCKET may hold the bucket's NAME or its ID; accept either. A key that is
 // restricted to one bucket says which in its authorize response; otherwise ask
 // b2_list_buckets (needs the listBuckets capability).
 export async function resolveBucketId(auth: B2Auth, bucket: string): Promise<string> {
   if (auth.restrictedBucketId) {
     if (bucket === auth.restrictedBucketId || bucket === auth.restrictedBucketName) return auth.restrictedBucketId
-    throw new Error('This B2 key is restricted to a different bucket than B2_BUCKET names.')
+    throw new Error('This B2 key is restricted to a different bucket than BACKBLAZE_BUCKET names.')
   }
   for (const filter of [{ bucketName: bucket }, { bucketId: bucket }]) {
     const r = await call(auth, 'b2_list_buckets', { accountId: auth.accountId, ...filter })
     if (r.ok && r.body.buckets?.length === 1) return r.body.buckets[0].bucketId
   }
-  throw new Error('Bucket named by B2_BUCKET was not found with this key.')
+  throw new Error('Bucket named by BACKBLAZE_BUCKET was not found with this key.')
 }
 
 export function sha1Hex(bytes: Uint8Array): string {

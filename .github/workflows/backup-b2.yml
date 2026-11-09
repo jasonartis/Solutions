@@ -45,11 +45,13 @@ jobs:
 
       - run: pnpm backup:prod
 
+      # The GitHub secrets are named B2_* (B2 = Backblaze's storage product);
+      # the script reads them as BACKBLAZE_*.
       - name: Encrypt and upload to B2
         env:
-          B2_KEY_ID: ${{ secrets.B2_KEY_ID }}
-          B2_APP_KEY: ${{ secrets.B2_APP_KEY }}
-          B2_BUCKET: ${{ secrets.B2_BUCKET }}
+          BACKBLAZE_KEY_ID: ${{ secrets.B2_KEY_ID }}
+          BACKBLAZE_APP_KEY: ${{ secrets.B2_APP_KEY }}
+          BACKBLAZE_BUCKET: ${{ secrets.B2_BUCKET }}
         run: node node_modules/tsx/dist/cli.mjs scripts/backup-to-b2.mts
 
       # The runner is thrown away after the job anyway; this just makes sure
