@@ -99,16 +99,19 @@ payment failing (urgent), two-step **off** (urgent; "not recorded" is shown on t
 not badged), not opened in 90 days or never (one combined line, so a fresh page does not
 bury the dated items).
 
-**Seed (in the migration, no secrets):** 9 active accounts (Supabase, Vercel, GitHub,
-Google account, JaaS, Backblaze B2, Sentry, UptimeRobot, myzmanim) and 7 planned
+**Seed (in the migration, no secrets):** 10 active accounts (Supabase, Vercel, GitHub,
+Google account, Google account (Vercel sign-in), JaaS, Backblaze B2, Sentry, UptimeRobot,
+myzmanim) and 7 planned
 (domain registrar, mail provider Resend + standby SES, password manager, second git host,
 VPS, AI provider), from docs/14 and Part B's B.1/B.2 findings; 29 credential names; 4
 dates (myzmanim trial ended 2026-10-24; SUPABASE_ACCESS_TOKEN, VERCEL_TOKEN and the JaaS
 key, expiries never recorded). Accounts only: hebcal (a library), npm, container images and
 Google Fonts have no account and no row. Costs, plans, two-step status and owners are
-left "not recorded" for the founder to fill. **The seed carries one open question for the
-founder: docs/14 says Supabase and Vercel sign in with GitHub, R2 says Google** — the
-rows say so in their notes.
+left "not recorded" for the founder to fill. **How each signs in (founder, 2026-11-09):**
+Supabase signs in with the platform's GitHub account (`jasonartis`); Vercel signs in with
+Google, using a DIFFERENT Google account from the superadmin one (which one is not yet
+recorded, so it has its own row with "Owned by" blank). This corrects both docs/14 (which
+said Vercel used GitHub) and R2 below.
 
 **docs/14 is retired** to a pointer at this page (its security rules stay). From now on
 the page is the list.
@@ -136,7 +139,7 @@ these for ideas.
 | # | Risk | What happens if it fires | Likely protection (to be decided) |
 |---|---|---|---|
 | R1 | **We own no web address.** The site is `solutions-platform.vercel.app`, a name that belongs to Vercel. | If Vercel drops or blocks us, the site is gone **and so is its address**. Even after the app is running elsewhere, every link, bookmark and invite email points at a dead name. | Buy a domain we own (about $15/yr) at a registrar that isn't our host. Point it at Vercel, and use it in every link and email from then on. Moving host then means changing one DNS record. |
-| R2 | **One Google login opens everything.** GitHub, Vercel and Supabase all sign in with `jasonartisenergy@gmail.com` (docs/14). | If Google locks, suspends or loses that account, the founder is locked out of code, hosting and the database **at the same moment**, with no way in to fix anything. | Give each of the three a second way in that doesn't depend on Google: its own password plus two-step verification, and recovery codes stored offline. Also consider a second trusted owner or admin on each. **Cheapest first step, two-step verification on the Google account itself: the founder deferred it on 2026-11-09 ("I will push that off for now").** |
+| R2 | **One Google login opens everything.** GitHub, Vercel and Supabase all sign in with `jasonartisenergy@gmail.com` (docs/14). **CORRECTED by the founder 2026-11-09: not so.** Supabase signs in with the platform's GitHub account, and Vercel with a *different* Google account from the superadmin one. The single key is now **GitHub**, which opens the code AND Supabase; how GitHub itself signs in is not recorded. The protection below still applies, aimed at GitHub and at the two Google accounts. | If Google locks, suspends or loses that account, the founder is locked out of code, hosting and the database **at the same moment**, with no way in to fix anything. | Give each of the three a second way in that doesn't depend on Google: its own password plus two-step verification, and recovery codes stored offline. Also consider a second trusted owner or admin on each. **Cheapest first step, two-step verification on the Google account itself: the founder deferred it on 2026-11-09 ("I will push that off for now").** |
 | R3 | **Supabase holds three jobs.** The database, user sign-in and stored files all live with one company. | Losing Supabase stops everything at once. The data can be restored elsewhere from our own backups, but sign-in (accounts and passwords) and uploaded files have no second home today. | Backups now in progress (B2, docs/12) cover the database. Files and sign-in each need an evacuation plan: copy uploaded files off-site, and a tested way to bring user accounts and password hashes to another provider. |
 | R4 | **Sign-up and password-reset email depend on Supabase's built-in sender.** It was measured at 2 emails per hour (docs/18 item 7). | New users can't confirm their accounts, and nobody can reset a forgotten password. | A real mail provider on our own domain (needs R1), with a second provider ready to take over. |
 

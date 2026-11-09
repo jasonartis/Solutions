@@ -13,7 +13,7 @@ decision log, docs/03 conventions, docs/12 safeguards) — this is the chronolog
   `opened_by` cascade → set null); the filter had real gaps (`Summer2026!`, `P@ssw0rd`, quoted JSON, `?access_token=`)
   and false positives ("Password: in 1Password", `S3-compatible`) — all fixed and now asserted inside the migration.
   A reviewer's probe briefly committed to the LOCAL database (a bad psql line ate its `begin`); it restored the rows, and
-  the migration was then dropped and re-applied clean. Seeded from docs/14 + Part B's findings (16 accounts, 29
+  the migration was then dropped and re-applied clean. Seeded from docs/14 + Part B's findings (17 accounts, 29
   credential names, 4 dates). docs/14's tables retired to point at the page. Tests: db 16, e2e 1, local ACL 17/17,
   prod verifier 11/28 before (controls pass). Not run: a local browser check (commit memory at 2 GB with 12 sessions
   open) — the e2e runs in CI. Next: prod apply after `20261111010000`, with the founder's go-ahead.
