@@ -52,6 +52,8 @@ section, keep it a SUMMARY with pointers: add the dated story to the journal / t
 - **`migrate:prod` is gated by Claude Code's auto-mode check ("Production Deploy")** even after the founder approved the
   work earlier in the chat (2026-11-05): it needs his explicit go-ahead for THAT apply in the current turn. Do the backup and
   dry run first, then ask with the dry-run list in hand; never reshape the command to slip past the check.
+  **`git push origin master` is gated the same way (2026-11-09), even for docs-only commits** (CI deploys master): list
+  `git log origin/master..HEAD` for the founder, ask, and push in the turn where he says "push".
 - **The prod Before-User-Created signup hook is ON, deliberately (2026-10-13). Do not switch it off** (docs/21 §7.12.1).
 - **Dead Windows profile:** per-user state under `C:\Users\yarmishj` (no suffix) is the OLD profile — stale copies answer
   confidently and wrongly. Use `C:\Users\yarmishj.AEI-LT-JYARMISH`. Its leftover permission entries are the founder's call
