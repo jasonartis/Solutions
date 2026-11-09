@@ -220,6 +220,12 @@ create table public.vendor_accounts (
   last_paid_on date,
   next_charge_on date,
   payment_status text not null default 'unknown' check (payment_status in ('ok', 'failing', 'free', 'unknown')),
+  -- A recurring chore that is not a website visit (the monthly offsite snapshot
+  -- copy, docs/28 B.8): "Done today" stamps last_done_on, and the dashboard flags
+  -- it once more than check_every_days have passed. Such a row is judged on this,
+  -- not on "last opened".
+  check_every_days integer check (check_every_days between 1 and 366),
+  last_done_on date,
   notes text check (char_length(notes) <= 4000),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -325,7 +331,7 @@ insert into public.vendor_accounts (service, status, used_for, if_lost, breaks_i
    'Signs in with Google, using a DIFFERENT Google account from the superadmin one (founder, 2026-11-09); see the row "Google account (Vercel sign-in)".'),
   ('GitHub', 'active', 'Source code, CI tests, deploys, deploy secrets and the nightly backup job (repo jasonartis/Solutions, public).',
    'invisible', 'Users notice nothing, but no fix can be tested or shipped, and the nightly backup stops. The code also lives on the founder''s PC.',
-   'B.3-6', 'https://github.com/login', 'unknown', 'jasonartis', 'free', null),
+   'B.3-6', 'https://github.com/login', 'email_password', 'jasonartis', 'free', null),
   ('Google account', 'active', 'The platform email identity and the superadmin login. NOT the sign-in for Supabase (GitHub) or Vercel (a different Google account).',
    'invisible', 'Users keep working, but the founder loses the superadmin login to the platform. Whether it also opens GitHub is not recorded.',
    'B.3-7', 'https://accounts.google.com', 'email_password', 'jasonartisenergy@gmail.com', 'free', null),
@@ -339,7 +345,7 @@ insert into public.vendor_accounts (service, status, used_for, if_lost, breaks_i
   ('Backblaze B2', 'active', 'Off-site encrypted backups of the production database (created 2026-11-08, docs/12).',
    'invisible', 'Backups stop. Must never be lost together with the database, which is why it is a different company.',
    null, 'https://secure.backblaze.com/user_signin.htm', 'unknown', null, 'unknown',
-   'The backups cannot be read without the offline private key. Where that key is kept is not yet recorded: ask the founder, then add it under credentials by name.'),
+   'The backups cannot be read without the offline private key. It is kept in a cloud document (which account is not recorded) and a paper copy at home is decided (docs/28 B.7 Q6, founder 2026-11-09). The same key opens the offsite snapshots (B.8).'),
   ('Sentry', 'active', 'Error reports from the web app.',
    'invisible', 'Errors stop being reported; users notice nothing.',
    null, 'https://sentry.io/auth/login/', 'unknown', null, 'free', null),
@@ -358,6 +364,16 @@ insert into public.vendor_accounts (service, status, used_for, if_lost, breaks_i
   ('Second git host (mirror)', 'planned', 'A copy of the code at a second company.', 'unclassified', null, 'B.3-6', null, 'unknown', null, 'unknown', null),
   ('VPS for the worker', 'planned', 'Runs the background worker all the time (today: the founder''s PC).', 'unclassified', null, null, null, 'unknown', null, 'unknown', null),
   ('AI provider', 'planned', 'The résumé builder.', 'unclassified', null, null, null, 'unknown', null, 'unknown', null);
+
+-- The monthly offsite-snapshot reminder (docs/28 B.8, founder 2026-11-09). Planned
+-- until the snapshot script exists; switch it to active then and the 30-day badge
+-- starts.
+insert into public.vendor_accounts (service, status, used_for, if_lost, breaks_if_lost, part_b_ref, sign_in_method, payment_status, check_every_days, notes) values
+  ('Offsite snapshots (USB stick at home + cloud drive)', 'planned',
+   'Monthly: copy the newest platform and credentials snapshot pair to the USB stick at home and to the cloud drive, keeping 3 pairs in each.',
+   'invisible', 'If the laptop or its SSD is lost, unpushed work, the credential files and local dumps exist nowhere else.',
+   'B.8', 'other', 'free', 30,
+   'Press "Done today" after copying. Switch this to active once pnpm backup:snapshot is built.');
 
 insert into public.vendor_account_credentials (account_id, store, name)
 select a.id, c.store, c.name
@@ -380,10 +396,10 @@ from (values
   ('JaaS (8x8)', 'env_deploy', 'JAAS_APP_ID'),
   ('JaaS (8x8)', 'env_deploy', 'JAAS_API_KEY_ID'),
   ('JaaS (8x8)', 'env_deploy', 'JAAS_PRIVATE_KEY'),
-  ('Backblaze B2', 'github_secret', 'B2_KEY_ID'),
-  ('Backblaze B2', 'github_secret', 'B2_APP_KEY'),
-  ('Backblaze B2', 'env_deploy', 'B2_READ_KEY_ID'),
-  ('Backblaze B2', 'env_deploy', 'B2_READ_APP_KEY'),
+  ('Backblaze B2', 'github_secret', 'BACKBLAZE_KEY_ID'),
+  ('Backblaze B2', 'github_secret', 'BACKBLAZE_APP_KEY'),
+  ('Backblaze B2', 'env_deploy', 'BACKBLAZE_READ_KEY_ID'),
+  ('Backblaze B2', 'env_deploy', 'BACKBLAZE_READ_APP_KEY'),
   ('Sentry', 'env_deploy', 'NEXT_PUBLIC_SENTRY_DSN'),
   ('UptimeRobot', 'env_accounts', 'UPTIMEROBOT_LOGIN_EMAIL'),
   ('UptimeRobot', 'env_accounts', 'UPTIMEROBOT_PASSWORD'),

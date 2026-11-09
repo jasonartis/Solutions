@@ -49,6 +49,8 @@ export async function saveVendorAccount(accountId: string | null, fd: FormData) 
   if (!service) fail('A service name is required.')
   const cost = text(fd, 'monthly_cost_usd')
   if (cost !== null && !/^\d+(\.\d{1,2})?$/.test(cost)) fail('Monthly cost must be a number like 20 or 19.99.')
+  const every = text(fd, 'check_every_days')
+  if (every !== null && !/^\d{1,3}$/.test(every)) fail('"Check every" must be a whole number of days, or blank.')
 
   const row = {
     service,
@@ -67,12 +69,25 @@ export async function saveVendorAccount(accountId: string | null, fd: FormData) 
     last_paid_on: text(fd, 'last_paid_on'),
     next_charge_on: text(fd, 'next_charge_on'),
     payment_status: oneOf({ ok: '', failing: '', free: '', unknown: '' }, text(fd, 'payment_status'), 'unknown'),
+    check_every_days: every === null ? null : Number(every),
     notes: text(fd, 'notes'),
     updated_at: new Date().toISOString(),
   }
   const { error } = accountId
     ? await supabase.from('vendor_accounts').update(row).eq('id', accountId)
     : await supabase.from('vendor_accounts').insert(row)
+  if (error) fail(explain(error))
+  revalidatePath(PAGE)
+  revalidatePath('/console')
+}
+
+/** "Done today" on a recurring chore (docs/28 B.8, the monthly offsite copy). */
+export async function markVendorDone(accountId: string) {
+  const supabase = await requireSuperadmin()
+  const { error } = await supabase
+    .from('vendor_accounts')
+    .update({ last_done_on: new Date().toISOString().slice(0, 10), updated_at: new Date().toISOString() })
+    .eq('id', accountId)
   if (error) fail(explain(error))
   revalidatePath(PAGE)
   revalidatePath('/console')

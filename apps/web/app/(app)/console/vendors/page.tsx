@@ -18,6 +18,7 @@ import {
   addVendorDate,
   deleteVendorCredential,
   deleteVendorDate,
+  markVendorDone,
   saveVendorAccount,
   setVendorDateDone,
 } from './actions'
@@ -103,6 +104,10 @@ function AccountForm({ account }: { account: VendorAccount | null }) {
           <option value="failing">failing</option>
           <option value="free">free (nothing to pay)</option>
         </select>,
+      )}
+      {field(
+        'Check every … days (a recurring chore, e.g. 30; blank if none)',
+        <input name="check_every_days" inputMode="numeric" defaultValue={a?.check_every_days ?? ''} className={`${inputCls} w-full`} />,
       )}
       {field('Last paid', <input name="last_paid_on" type="date" defaultValue={a?.last_paid_on ?? ''} className={`${inputCls} w-full`} />)}
       {field('Next charge', <input name="next_charge_on" type="date" defaultValue={a?.next_charge_on ?? ''} className={`${inputCls} w-full`} />)}
@@ -216,6 +221,16 @@ export default async function VendorAccountsPage(props: { searchParams?: Promise
                 </div>
                 <div className="flex items-center gap-3">
                   <span className={`rounded px-2 py-0.5 text-xs font-medium ${IF_LOST_STYLE[a.if_lost]}`}>{IF_LOST[a.if_lost]}</span>
+                  {a.check_every_days !== null && (
+                    <form action={markVendorDone.bind(null, a.id)}>
+                      <button
+                        data-testid={`vendor-done-${a.service}`}
+                        className="rounded bg-green-600 px-3 py-1 text-sm font-medium text-white hover:bg-green-700"
+                      >
+                        Done today
+                      </button>
+                    </form>
+                  )}
                   {a.sign_in_url && (
                     // A form, not a link: the click is recorded server-side, then
                     // the vendor opens in a new tab (open/route.ts).
@@ -250,6 +265,14 @@ export default async function VendorAccountsPage(props: { searchParams?: Promise
               )}
 
               <dl className="mt-3 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2 lg:grid-cols-3">
+                {a.check_every_days !== null && (
+                  <div>
+                    <dt className="inline text-gray-500">Done every {a.check_every_days} days · last done: </dt>
+                    <dd className="inline" data-testid={`vendor-last-done-${a.service}`}>
+                      {a.last_done_on ?? 'never'}
+                    </dd>
+                  </div>
+                )}
                 <div>
                   <dt className="inline text-gray-500">Last opened: </dt>
                   <dd className="inline" data-testid={`vendor-last-opened-${a.service}`}>

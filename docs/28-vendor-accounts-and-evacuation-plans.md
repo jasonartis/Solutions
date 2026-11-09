@@ -99,11 +99,19 @@ payment failing (urgent), two-step **off** (urgent; "not recorded" is shown on t
 not badged), not opened in 90 days or never (one combined line, so a fresh page does not
 bury the dated items).
 
+**Recurring chores (added 2026-11-09 for B.8):** a row with "check every N days" gets a
+**Done today** button; it is badged once more than N days pass since it was last done, and
+is judged on that instead of "last opened". The seeded "Offsite snapshots (USB stick at
+home + cloud drive)" row is every 30 days, **planned** until `pnpm backup:snapshot` exists:
+switch it to active then and the badge starts (a badge for something that cannot yet be
+done would only teach you to ignore it).
+
 **Seed (in the migration, no secrets):** 10 active accounts (Supabase, Vercel, GitHub,
 Google account, Google account (Vercel sign-in), JaaS, Backblaze B2, Sentry, UptimeRobot,
-myzmanim) and 7 planned
+myzmanim) and 8 planned
 (domain registrar, mail provider Resend + standby SES, password manager, second git host,
-VPS, AI provider), from docs/14 and Part B's B.1/B.2 findings; 29 credential names; 4
+VPS, AI provider, offsite snapshots), from docs/14 and Part B's B.1/B.2/B.7/B.8; 29 credential names
+(the Backblaze ones under their `BACKBLAZE_*` names); 4
 dates (myzmanim trial ended 2026-10-24; SUPABASE_ACCESS_TOKEN, VERCEL_TOKEN and the JaaS
 key, expiries never recorded). Accounts only: hebcal (a library), npm, container images and
 Google Fonts have no account and no row. Costs, plans, two-step status and owners are
@@ -111,7 +119,9 @@ left "not recorded" for the founder to fill. **How each signs in (founder, 2026-
 Supabase signs in with the platform's GitHub account (`jasonartis`); Vercel signs in with
 Google, using a DIFFERENT Google account from the superadmin one (which one is not yet
 recorded, so it has its own row with "Owned by" blank). This corrects both docs/14 (which
-said Vercel used GitHub) and R2 below.
+said Vercel used GitHub) and R2 below. GitHub itself signs in with email and password
+(two-step not recorded). The B2 row's notes say where the backup private key is kept
+(a cloud document; paper copy at home decided, B.7 Q6).
 
 **docs/14 is retired** to a pointer at this page (its security rules stay). From now on
 the page is the list.

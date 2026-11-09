@@ -3111,6 +3111,13 @@ test('owner console: vendor accounts — Open records "last opened", a key in no
     await expect(after).not.toHaveText(before)
   }
 
+  // The monthly offsite-snapshot chore (docs/28 B.8): "Done today" stamps today's date.
+  const snapshots = 'Offsite snapshots (USB stick at home + cloud drive)'
+  await page.getByTestId(`vendor-done-${snapshots}`).click()
+  await expect(page.getByTestId(`vendor-last-done-${snapshots}`)).toHaveText(new Date().toISOString().slice(0, 10), {
+    timeout: 15000,
+  })
+
   // A key typed into notes is refused by the database, and the page says why.
   await card.getByText('Edit Sentry').click()
   await card.getByLabel('Notes').fill('backup key 9dd4e461268c8034f5c8564e155c67a6')

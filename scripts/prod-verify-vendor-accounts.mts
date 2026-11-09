@@ -126,7 +126,7 @@ try {
     ? await sql<{ n: number; creds: number }[]>`
         select (select count(*)::int from vendor_accounts) n, (select count(*)::int from vendor_account_credentials) creds`
     : [undefined]
-  check('the seed is present (17 accounts, 29 credential names)', seed?.n === 17 && seed?.creds === 29, JSON.stringify(seed))
+  check('the seed is present (18 accounts, 29 credential names)', seed?.n === 18 && seed?.creds === 29, JSON.stringify(seed))
 
   console.log('[2] behaviour (one transaction, always rolled back)')
   const [alice] = await sql<{ id: string }[]>`select id::text from auth.users where email = 'alice@demo.local'`

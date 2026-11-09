@@ -28,6 +28,9 @@ export type VendorAccount = {
   last_paid_on: string | null
   next_charge_on: string | null
   payment_status: 'ok' | 'failing' | 'free' | 'unknown'
+  /** A recurring chore (docs/28 B.8): flagged once more than this many days pass since last_done_on. */
+  check_every_days: number | null
+  last_done_on: string | null
   notes: string | null
   updated_at: string
 }
@@ -127,7 +130,8 @@ export type VendorIssue = {
 /** The four badges docs/28 asks for, for ACTIVE accounts only:
  *   - a date due within 30 days (urgent within 7 days or already passed),
  *     and an expiry nobody recorded;
- *   - not opened in 90 days (or never);
+ *   - not opened in 90 days (or never) — or, for a recurring chore with
+ *     check_every_days (docs/28 B.8), not done within that many days;
  *   - payment failing;
  *   - two-step verification off.
  *  "unknown" two-step is not flagged: the seed starts every account unknown,
@@ -157,6 +161,19 @@ export function vendorIssues(data: VendorData, now = Date.now()): VendorIssue[] 
     }
     if (a.two_step === 'off') {
       issues.push({ severity: 'urgent', accountId: a.id, service: a.service, text: `${a.service}: two-step verification is off` })
+    }
+    // A recurring chore is judged on "done", not on "last opened".
+    if (a.check_every_days !== null) {
+      const since = a.last_done_on === null ? null : -daysUntil(a.last_done_on, now)
+      if (since === null || since > a.check_every_days) {
+        issues.push({
+          severity: 'attention',
+          accountId: a.id,
+          service: a.service,
+          text: `${a.service}: ${since === null ? 'never done' : `not done in ${since} days`} (every ${a.check_every_days})`,
+        })
+      }
+      continue
     }
     const last = lastOpen.get(a.id)
     if (last === undefined || now - last > 90 * DAY) {
