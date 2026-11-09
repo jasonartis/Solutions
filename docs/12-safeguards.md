@@ -321,6 +321,23 @@ rot; pipelines don't.
     FOUNDER runs in his own terminal with a freshly generated master key (typed in, never saved):
     it creates `writeFiles + writeFileRetentions` restricted to the bucket, signs in with the new
     key to confirm, and prints it for the GitHub secrets.
+  - **Scheduled run 2026-11-09 09:04 UTC (`feddc1e`): FIRST REAL BACKUP IN B2, RESTORE PROVEN.**
+    Uploaded `prod/2026-11-09T09-04-46/{schema,data}.sql.age` (540 KB + 4.2 MB), compliance-locked
+    until 2026-12-09. Probes with the write key: download 401, list 401, shorten-lock 403, and
+    **delete 401 `access_denied` although the key HOLDS `deleteFiles`** — the lock itself refused
+    it, which proves the lock rather than the capability. Job red only on the allow-list (the extra
+    capabilities above). **Restore drill (same day):** `backup-restore-from-b2.mts` with the read key
+    downloaded, sha1-checked and decrypted both files (lock read back: compliance until
+    2026-12-09); loaded into a throwaway local stack (`project_id = "restore_drill"`, ports 553xx,
+    torn down after, decrypted copy deleted) — schema then data in ONE transaction with
+    `session_replication_role = replica`, zero errors. **Per-table row counts vs live prod, read-only:
+    87/87 tables identical, 1,236 = 1,236 rows** (auth.users 13, orgs 9, org_members 30, profiles 13).
+    **Restore gotcha:** the data dump includes `storage.*` rows, so the target's STORAGE (and auth)
+    service must be as new as prod's — the CLI's bundled storage v1.65.1 lacks
+    `storage.buckets.versioning_status` and the load fails. Pin the drill stack to prod's versions by
+    writing `supabase/.temp/storage-version` (prod: `curl https://<ref>.supabase.co/storage/v1/version`
+    → v1.89.13) and `gotrue-version` (`/auth/v1/health` with the anon key → v2.197.0) before
+    `supabase start`. A fresh cloud Supabase project needs none of this.
   **Lesson:** flipping a repo public changes the exposure of EVERY workflow
   output (artifacts, logs), not just the code — re-audit workflows whenever
   visibility changes.

@@ -21,11 +21,11 @@ before re-deriving anything below; dated detail newer than that lives in
 section, keep it a SUMMARY with pointers: add the dated story to the journal / the topic doc, and only the one-line state here.
 
 ### ⚠ Live warnings (read first)
-- **NO AUTOMATIC PROD BACKUPS (2026-11-04).** `backup.yml` is DISABLED: its unencrypted dumps (incl. `auth.users` hashes and
-  sessions) were downloadable from the PUBLIC repo since 2026-09-02; artifacts deleted, every session revoked (docs/12 "FOUND
-  2026-11-03"). **Run `pnpm backup:prod` by hand before every `migrate:prod`** until the private B2 replacement exists (founder:
-  never public again, even encrypted). **2026-11-09: the replacement `backup-b2.yml` is BUILT, not yet proven**
-  (B2 rejected the `B2_APP_KEY` secret; docs/12 "Backups" 2026-11-09) — keep backing up by hand until it is green AND restored.
+- **NIGHTLY ENCRYPTED PROD BACKUP TO PRIVATE B2 — WORKING, RESTORE PROVEN (2026-11-09)** (`backup-b2.yml`; replaced the
+  public-artifact `backup.yml`, docs/12 "FOUND 2026-11-03"). age-encrypted (private key offline with the founder), 30-day
+  compliance lock per file; a restore drill matched prod on all 87 tables / 1,236 rows. **⚠ The job is RED every night until
+  the founder swaps in an exact key** (the web UI "Write Only" key can delete after the lock ends) — backups still upload;
+  `scripts/b2-create-backup-key.mts`, docs/12 "Backups" 2026-11-09. Still run `pnpm backup:prod` before every `migrate:prod`.
 - **`pnpm migrate:prod` applies EVERY pending file in `supabase/migrations/`** and has no flag to stop at one. To ship one
   migration while another is in progress, move the other file OUT of the folder, `--dry-run` until only yours is listed, apply,
   move it back. A later version reaching prod first strands earlier ones. A `Failed to read certificate …pgdelta…` trace or
