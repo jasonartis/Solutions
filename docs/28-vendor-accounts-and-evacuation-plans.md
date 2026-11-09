@@ -439,8 +439,14 @@ Answered by the founder 2026-11-09 (Q1–Q4 first, then Q5–Q7 for B.8), each t
   the single key (R2) to code AND database, guarded by one password.
 - **Q5 Where the offsite snapshots go: DECIDED, USB stick kept at home (never in the laptop
   bag) AND a cloud drive.** Scenario asked: the bag stolen with the SSD and the stick inside.
-- **Q6 Where the decryption key lives: DECIDED, paper at home AND the cloud doc**, the doc
-  only once two-step is on for that account. Scenario asked: the doc's Google account phished.
+- **Q6 Where the decryption key lives: DECIDED, paper at home AND a cloud copy.** Scenario asked:
+  the doc's Google account phished. **CLARIFIED 2026-11-09 (the earlier wording said "the cloud
+  doc", next to the B2 keys, which was wrong):** two different keys. The **B2 read key**
+  downloads the encrypted files and is replaceable, so it stays in the cloud doc. The
+  **decryption key** opens them and is irreplaceable, so it goes on paper at home, on the
+  founder's planned separate drive at home, and in a cloud copy held in a **different account**:
+  never the account holding the B2 keys, nor the cloud drive holding the snapshots (B.8).
+  Either key alone exposes nothing; both in one account exposes every backup.
 - **Q7 How often: DECIDED, made automatically, copied off-site monthly** with a 30-day
   reminder badge. Scenario asked: a key rotated on Tuesday, the SSD dying on Friday.
 
