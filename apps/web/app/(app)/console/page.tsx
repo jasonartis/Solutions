@@ -24,12 +24,15 @@ import {
 const inputCls = 'rounded border border-gray-300 px-2 py-1 text-sm'
 
 export default async function ConsolePage(props: {
-  searchParams?: Promise<{ error?: string }>
+  searchParams?: Promise<{ error?: string; expand?: string }>
 }) {
   // Expected refusals (a duplicate address, say) arrive here as a query param
   // rather than a thrown error: docs/03 #22 — a server action that THROWS for
   // an expected refusal has its message redacted, so the user sees nothing.
-  const { error: actionError } = (await props.searchParams) ?? {}
+  const { error: actionError, expand } = (await props.searchParams) ?? {}
+  // "Expand all" is a link (?expand=all), not client state: the org cards are
+  // native <details>, closed by default, and clicking one opens just that one.
+  const expandAll = expand === 'all'
   const profile = await getProfile()
   if (!profile?.is_superadmin) notFound()
   // The superadmin's saved default for "add member": immediately-active vs a
@@ -206,7 +209,18 @@ export default async function ConsolePage(props: {
         </form>
       </section>
 
-      <div className="space-y-6">
+      <div className="mb-3 flex flex-wrap items-baseline gap-3 text-sm">
+        <h2 className="text-lg font-medium">Organizations</h2>
+        <span className="text-gray-500">{(orgs ?? []).length} · click one to open it</span>
+        <Link href="/console?expand=all" className="text-blue-600 hover:underline">
+          Expand all
+        </Link>
+        <Link href="/console" className="text-blue-600 hover:underline">
+          Collapse all
+        </Link>
+      </div>
+
+      <div className="space-y-3">
         {(orgs ?? []).map((org) => {
           const orgMembers = (members ?? []).filter((m) => m.org_id === org.id)
           const orgEntitlements = new Map(
@@ -221,11 +235,19 @@ export default async function ConsolePage(props: {
             (e) => e.org_id === org.id && e.module_key === 'synagogue-schedules',
           )?.settings as SynagogueSettings | undefined
           return (
-            <section key={org.id} className="rounded-lg border border-gray-200 bg-white p-5">
-              <div className="mb-4 flex items-baseline justify-between">
-                <h2 className="text-lg font-medium">{org.name}</h2>
-                <code className="text-xs text-gray-400">/{org.slug}</code>
-              </div>
+            <section key={org.id} className="rounded-lg border border-gray-200 bg-white" data-testid="console-org">
+              <details open={expandAll} className="group">
+                <summary className="flex cursor-pointer list-none flex-wrap items-baseline justify-between gap-2 p-5 hover:bg-gray-50 [&::-webkit-details-marker]:hidden">
+                  <span className="flex items-baseline gap-2">
+                    <span aria-hidden className="inline-block text-gray-400 transition-transform group-open:rotate-90">▸</span>
+                    <h2 className="text-lg font-medium">{org.name}</h2>
+                  </span>
+                  <span className="text-xs text-gray-500">
+                    {orgMembers.filter((m) => (m.status ?? 'active') === 'active').length} members · {enabledMods.length}{' '}
+                    {enabledMods.length === 1 ? 'module' : 'modules'} on · <code className="text-gray-400">/{org.slug}</code>
+                  </span>
+                </summary>
+              <div className="px-5 pb-5">
               <form action={renameOrg.bind(null, org.id)} className="mb-4 flex flex-wrap items-center gap-2">
                 <label className="text-xs text-gray-500">
                   Rename
@@ -266,7 +288,10 @@ export default async function ConsolePage(props: {
                 <span className="text-xs text-gray-400">(slug /{org.slug} stays fixed — it's used in existing links)</span>
               </form>
 
-              <h3 className="mb-2 text-sm font-medium text-gray-600">Modules</h3>
+              <h3 className="mb-1 text-sm font-medium text-gray-600">Modules</h3>
+              <p className="mb-2 text-xs text-gray-400">
+                Click a module to switch it on or off for this organization. Green is on, grey is off.
+              </p>
               <ul className="mb-4 flex flex-wrap gap-2">
                 {moduleRegistry.map((mod) => {
                   const enabled = orgEntitlements.get(mod.key) === true
@@ -351,6 +376,8 @@ export default async function ConsolePage(props: {
                   />
                 }
               />
+              </div>
+              </details>
             </section>
           )
         })}

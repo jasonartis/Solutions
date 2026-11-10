@@ -726,3 +726,39 @@ already generic — `renderSurface` in `apps/web/lib/view-as.ts` takes a surface
 and a subject). Writing surfaces for the remaining modules is the substantial
 part — **as of 2026-08-04 that is speed-dating only**, and its are the delicate ones
 (interest marks, safety reports; a host deliberately cannot read what an organizer can).
+
+## "REAL" VIEW-AS: SEE THE CLIENT'S ACTUAL SCREEN (founder decision, 2026-11-10 — NOT BUILT)
+
+**The ask.** Today "View as anything" (`/console/view-as`) shows the rows a position or named person can read, as labelled
+tables (`SectionTable`), not the screen. The founder wants the REAL thing: to see exactly what a client's user sees, the way
+they see it, for three reasons — (1) **diagnosis**: see when something is wrong for a client; (2) **demonstration**: show the
+platform with real shapes of data; (3) **product ideas**: design better enhancements from the client's view and data.
+**Hard requirement: the SAME components that render the screen for the user must render it here, so there is no drift** — no
+second, view-as-only layout (a cheaper "make the tables look like the page" copy was offered and declined).
+
+**Tier: Opus to design and build, with a Fable adversarial review (a novel mechanism; tenancy isolation is existential). It
+was deliberately NOT started in the Sonnet session that recorded it.**
+
+**What it collides with, so the design session must decide it on purpose:** (a) the 2026-08-02 ruling "viewing, not
+impersonating" (docs/15 §8.1: read-only, cannot act on anyone's behalf, no row may name anyone but the true actor). Real
+view-as stays read-only, but the pages would execute with the target's identity, so the ruling needs a dated
+re-statement, not silence. (b) `docs/15` point that mode 2 is read-only "until a dated decision" says otherwise.
+
+**Draft questions for that session (a starting list, NOT decisions):**
+1. *How to run a page as the target.* Every module page queries through the caller's RLS client. Options: a read-only
+   database transaction with `set local role authenticated` + the target's `request.jwt.claims` (the pattern the prod
+   verifiers already use, kept per request); a server-minted short-lived token for the target (needs signing material we may
+   not hold on hosted Supabase); or per-surface definers (the current approach, which is what the tables are). The first
+   needs a client factory the pages can be handed instead of `createClient()`.
+2. *Writes must be impossible, not merely hidden:* read-only transaction, server actions refused while viewing, and
+   `recordActivity`, login capture, "last read", feedback "staff_read_at" and every other side-effect write suppressed — a
+   superadmin looking must not change what the client's own screen or the engagement numbers say.
+3. *Things nobody may read stay unreadable even here* (`neverReadable` in the data-browser declarations, e.g. `sd_notes`;
+   speed-dating safety reports; the 2026-08-02 rule that a host cannot read what an organizer can). The real view must not be
+   a back door past a rule the tables view already honours.
+4. *Logging:* reuse `view_as_sessions` / `superadmin_lookup_log`; a real view is at least as loggable as the tables view.
+5. *Visible banner on every screen* saying whose screen it is and that it is read-only, so a screenshot cannot be mistaken.
+6. *Who may be viewed:* any member of any org (the console's current reach) — confirm, and whether the person is told
+   (docs/13 "whether view-as targets are notified" is already an open founder item).
+7. *Scope of v1:* pick one module's screens first, prove the no-drift property with a test that renders the same page both
+   ways, then widen.

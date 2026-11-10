@@ -41,6 +41,9 @@ test('owner has the console; regular users do not', async ({ page }) => {
   await page.getByRole('link', { name: 'Owner Console' }).click()
   await expect(page.getByRole('heading', { name: 'Owner Console' })).toBeVisible()
   await expect(page.getByText('Create organization')).toBeVisible()
+  // The org cards start closed; this test edits inside one, so open them all
+  // (and every reload below keeps that URL).
+  await page.getByRole('link', { name: 'Expand all' }).click()
 
   // Founder feedback (2026-07-12): synagogue location settings were
   // seed-only, no UI. The superadmin console now edits them directly (no
@@ -215,7 +218,7 @@ test('invite section is shared: an address with no account invited from the cons
 }) => {
   const email = `e2e-console-invitee-${Date.now()}@demo.local`
   await signIn(page, 'owner@demo.local')
-  await page.goto('/console')
+  await page.goto('/console?expand=all')
   const consoleCard = page.locator('section', { has: page.getByRole('heading', { name: 'Platform Self-Test' }) })
 
   // Control for the superadmin-only box: "active immediately" needs an account,
@@ -245,8 +248,37 @@ test('invite section is shared: an address with no account invited from the cons
   await expect(page.getByText(email)).not.toBeVisible()
 
   // …and it is gone from the console too.
-  await page.goto('/console')
+  await page.goto('/console?expand=all')
   await expect(consoleCard.getByText(email)).not.toBeVisible()
+})
+
+// ORG CARDS START CLOSED (founder, 2026-11-10): the console lists the orgs by name,
+// clicking one opens ONLY that one, and "Expand all" restores the full view.
+test('owner console: org cards start closed, one click opens just that org, Expand all opens them all', async ({ page }) => {
+  await signIn(page, 'owner@demo.local')
+  await page.goto('/console')
+  const card = (name: string) => page.locator('section[data-testid="console-org"]', { has: page.getByRole('heading', { name, exact: true }) })
+  const total = await page.locator('section[data-testid="console-org"]').count()
+  expect(total).toBeGreaterThan(2)
+
+  // Closed: the name is there, the contents are not.
+  await expect(card('Demo Match')).toBeVisible()
+  await expect(card('Demo Match').getByRole('heading', { name: 'Modules' })).not.toBeVisible()
+  await expect(page.locator('details[open]')).toHaveCount(0)
+
+  // One click opens just Demo Match — and shows its module hint and members.
+  await card('Demo Match').getByRole('heading', { name: 'Demo Match', exact: true }).click()
+  await expect(card('Demo Match').getByRole('heading', { name: 'Modules' })).toBeVisible()
+  await expect(card('Demo Match').getByText('Click a module to switch it on or off')).toBeVisible()
+  await expect(card('Demo Dating').getByRole('heading', { name: 'Modules' })).not.toBeVisible()
+  await expect(page.locator('section[data-testid="console-org"] details[open]')).toHaveCount(1)
+
+  // Expand all opens every card; Collapse all closes them again.
+  await page.getByRole('link', { name: 'Expand all' }).click()
+  await expect(page.locator('section[data-testid="console-org"] details[open]')).toHaveCount(total)
+  await expect(card('Demo Dating').getByRole('heading', { name: 'Modules' })).toBeVisible()
+  await page.getByRole('link', { name: 'Collapse all' }).click()
+  await expect(page.locator('section[data-testid="console-org"] details[open]')).toHaveCount(0)
 })
 
 test('org invite-accept: an invitee accepts a pending invite from their dashboard', async ({ page }) => {
@@ -2375,7 +2407,7 @@ test('owner console engagement: a pending invite is excluded from the org rollup
     await sql.end()
   }
   await signIn(page, 'owner@demo.local')
-  await page.goto('/console')
+  await page.goto('/console?expand=all')
   const addSection = page.locator('section', { has: page.getByRole('heading', { name: 'Platform Self-Test' }) })
   await expect(
     addSection.locator('li', { has: page.getByText('grace@demo.local') }).getByText('invited · pending'),
@@ -2400,7 +2432,7 @@ test('owner console engagement: a pending invite is excluded from the org rollup
   // Cleanup: remove the invite via the superadmin console (already signed in
   // as owner), restoring Platform Self-Test to its seeded membership so no
   // later test inherits it.
-  await page.goto('/console')
+  await page.goto('/console?expand=all')
   const cleanupSection = page.locator('section', { has: page.getByRole('heading', { name: 'Platform Self-Test' }) })
   await cleanupSection.locator('li', { has: page.getByText('grace@demo.local') }).getByRole('button', { name: 'Remove' }).click()
   await expect(cleanupSection.getByText('grace@demo.local')).not.toBeVisible()
