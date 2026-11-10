@@ -130,7 +130,6 @@ founder decision** — record it where it belongs, flag it, move on (2026-08-29)
   B.7; his step-by-step: docs/29). **GitHub two-step is OFF, deferred to the first customer** (with the domain and mail, B.4 #11).
 - Two offsite-snapshot files (whole platform; credentials) — **PLANNED, docs/28 B.8** (`age`-encrypted to the B2 key,
   USB stick at home + cloud drive, auto-made, copied monthly, restore drilled quarterly). Not built.
-- The private B2 backup replacement (needs an account).
 - Speed dating: organizer-invites-then-person-accepts (consent for organizer-created seats; build with docs/25), an always-on
   worker host so rounds advance by themselves (spec "OPERATIONAL RECIPES" #4), help room / live thumbnails (spec
   2026-11-05), names in the organizer roster export. (Host un-tick + camera/mic status: database DONE `20261109010000`;

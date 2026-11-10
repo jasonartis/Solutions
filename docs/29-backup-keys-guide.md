@@ -19,6 +19,26 @@
 | If you lose it | no harm: make a new one on backblaze.com (section 5) | **every backup is unreadable forever.** It cannot be remade. |
 | Where it lives | your cloud doc (account 1) | paper at home + a drive at home + a cloud copy (account 2) |
 
+**Two more Backblaze keys you will see (added 2026-11-10, after they caused confusion):**
+
+| | **Write key** (`github-backup-writer-exact`) | **Master application key** |
+|---|---|---|
+| What it does | lets the nightly job **upload and lock** files. Cannot download, list or delete. | full control of the whole Backblaze account, including **making new keys** |
+| Where it lives | **only in GitHub** (secrets `BACKBLAZE_KEY_ID` + `BACKBLAZE_APP_KEY`). GitHub never shows a secret again; you can only overwrite it. | **nowhere, on purpose.** Nothing uses it day to day. |
+| Has nothing to do with | decrypting backups (only the decryption key does that) | decrypting backups, downloading backups |
+| If you need it | lost? it isn't lost; GitHub still has it. Leaked? make a new one (section 5b) | click **Generate New Master Application Key** on backblaze.com, use it once, close the page. Generating a new one cancels the old master key only; every other key keeps working. |
+
+Why Backblaze shows a key only once: it keeps a scrambled fingerprint, not a readable copy, so
+it cannot show it again. That is normal, not something you did wrong.
+
+**Telling the values apart by length** (Backblaze's labels are confusing): a normal key's
+**keyID is 25 characters** and its **applicationKey is 31, starting with `K`**. The master key's
+keyID is **12** and its applicationKey about **42, starting `00`**. The **keyName** (e.g.
+`restore-reader`) is just a label; it never goes into a secret or a file.
+
+Keys that should exist on backblaze.com → Application Keys: `github-backup-writer-exact` and
+`restore-reader`. Anything else can be deleted.
+
 **The one rule:** never keep the two together. Either one alone is harmless. Both in one place
 opens every user's data.
 
@@ -27,6 +47,8 @@ opens every user's data.
 | Copy | Key | Status 2026-11-09 |
 |---|---|---|
 | Cloud doc, account 1 | B2 read key | ✔ done |
+| This PC: `.env.deploy` (`BACKBLAZE_READ_*`) | B2 read key | ✔ done (the restore script reads it here) |
+| GitHub secrets only (`BACKBLAZE_KEY_ID`/`_APP_KEY`) | write key | ✔ done 2026-11-10 |
 | Cloud, account 2 (not account 1) | decryption key | ✔ done |
 | This PC: `C:\Users\yarmishj.AEI-LT-JYARMISH\platform-backup-key\platform-backup-key.txt` | decryption key | ✔ (original) |
 | **Paper, at home** | decryption key | ☐ **to do: section 3** |
@@ -69,8 +91,26 @@ so a stolen laptop carries no key. A restore then needs the paper or the drive.
    Type of access: **Read Only.** → **Create New Key**.
 4. **Copy keyID and applicationKey right away: Backblaze shows the applicationKey only once.**
    Paste both, plus the key name, into the cloud doc in account 1, replacing the old ones.
+   Also put them in `.env.deploy` on the PC (`BACKBLAZE_READ_KEY_ID` = keyID,
+   `BACKBLAZE_READ_APP_KEY` = applicationKey) — the restore script reads them from there.
 5. In the same Application Keys list, **delete the old read key.**
-6. Don't touch the "write-only" key that GitHub uses for the nightly backup.
+6. Don't touch `github-backup-writer-exact` (the key GitHub uses for the nightly backup).
+
+## 5b. If the write key must be replaced (rare; ask a Claude session to walk you through it)
+
+**Do NOT make it on the website**: the website's "Write Only" key can also delete files and change
+bucket rules (measured 2026-11-09), and the nightly job will go red. It has to be made by
+`scripts/b2-create-backup-key.mts`:
+1. backblaze.com → Application Keys → **Generate New Master Application Key**. Leave the page open.
+2. In a terminal in the project folder: `node node_modules/tsx/dist/cli.mjs scripts/b2-create-backup-key.mts`.
+   It asks for the master keyID (12 characters) and applicationKey (~42). **Type them into the
+   terminal, never into a chat.**
+3. It prints `OK` and two lines, `BACKBLAZE_KEY_ID = …` and `BACKBLAZE_APP_KEY = …`.
+4. github.com → the repo → **Settings → Secrets and variables → Actions** → pencil next to each of
+   those two names → paste → **Update secret**.
+5. Back on backblaze.com: **Generate New Master Application Key** again (this cancels the one you
+   just typed), and delete the old write key from the list.
+6. Tell the Claude session; it runs the backup once to confirm it is green.
 
 ## 6. If the decryption key is lost (paper, drive and cloud all gone)
 

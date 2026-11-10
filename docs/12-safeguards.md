@@ -338,6 +338,19 @@ rot; pipelines don't.
     writing `supabase/.temp/storage-version` (prod: `curl https://<ref>.supabase.co/storage/v1/version`
     → v1.89.13) and `gotrue-version` (`/auth/v1/health` with the anon key → v2.197.0) before
     `supabase start`. A fresh cloud Supabase project needs none of this.
+    **The drill recipe as run (so the next drill need not rediscover it):** (1) a scratch folder
+    OUTSIDE the repo, `supabase init` there, then in its `config.toml` set `project_id =
+    "restore_drill"` and move every port to 553xx (api 55321, db 55322, shadow 55320, pooler 55329,
+    studio 55323, smtp 55324 …) so it cannot collide with the dev stack; (2) write the two
+    `.temp/*-version` files above; (3) `supabase start --workdir <folder> -x studio`; (4)
+    `backup-restore-from-b2.mts <key file>` (the founder's key path, read by path, never pasted);
+    (5) pipe `schema.sql` into the drill db with `cat … | docker exec -i <db container> psql -U
+    postgres` (stdin, not `\i` — the file is on the host), then `data.sql` wrapped as `begin; set
+    session_replication_role = replica; … commit;`; (6) count rows with exact `count(*)` per table
+    on both sides (prod read-only via the pooler) — not `n_live_tup`; (7) teardown with **`supabase
+    stop --no-backup --project-id restore_drill`** (a plain `supabase stop --workdir` LEFT the
+    containers and volumes running — confirm 0 `restore_drill` containers after) and delete
+    `backups/restored-from-b2/`.
   - **2026-11-10: EXACT KEY IN, JOB GREEN.** `b2-create-backup-key.mts` (run with the master key,
     which was then regenerated — the old one now answers 401) made `github-backup-writer-exact`:
     `writeFileRetentions, writeFiles`, restricted to the bucket. The founder put it in GitHub's
