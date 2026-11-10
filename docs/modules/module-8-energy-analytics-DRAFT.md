@@ -7,6 +7,36 @@
 > file-level investigation of the legacy app is still needed before this can
 > be scoped into a build plan. Nothing here is a decision.
 
+## What kind of module this is (founder, 2026-11-10)
+
+**An interactive data-analysis, statistics and visualization tool** — not static
+reports. The founder's definition of "interactive":
+
+> Choosing data parameters via drop downs and sliders and various other pickers to
+> see statistical and visual results, and seeing that data across time or across
+> the changes in another variable, and/or in comparison to another set of
+> different chosen parameters.
+
+So every view has three parts:
+1. **Parameter pickers** — dropdowns, sliders, date/range and other pickers.
+2. **Results** — statistics and charts recomputed from the chosen parameters.
+3. **Comparison axes** — the result shown over **time**, across the **changes in
+   another variable** (e.g. usage vs. temperature), and/or **side by side with a
+   second set of chosen parameters** (A vs. B).
+
+This is a new kind of module for the platform (every other one is forms, schedules
+and lists), and it sharpens three planning questions:
+- **Charting library** — the platform has none today; it must support
+  time-series, x-vs-y against another variable, and overlaid/side-by-side
+  comparisons.
+- **Where the math runs** (open question 2 below) — if each slider move
+  recomputes, a Python service means a network round trip per change; math
+  ported to TypeScript can run in the browser. Responsiveness is now a
+  requirement, not a nice-to-have.
+- **Data volume** — a year of 15-minute readings is ~35,000 points per location,
+  doubled when two parameter sets are compared; pickers and charts must stay
+  smooth at that size.
+
 ## Problem & context (as described)
 
 Port a slice of an existing internal C# energy-monitoring platform (NEAT,
