@@ -34,7 +34,7 @@ function PairNode({ p, label }: { p: ModuleInOrg; label: string }) {
       <summary className={summaryCls}>
         <span className="mr-2 text-sm font-medium text-gray-800">{label}</span>
         <Count n={p.people.length} label={p.people.length === 1 ? 'person' : 'people'} />{' '}
-        <Count n={p.roleHolders} label="with a role" />
+        <Count n={p.roleHolders} label="with a role" /> <Count n={p.records} label="records" />
       </summary>
       <People people={p.people} />
     </details>
@@ -66,7 +66,8 @@ export default async function OverviewPage() {
             <summary className={summaryCls}>
               <span className="mr-2 font-medium text-gray-900">{org.name}</span>
               <Count n={org.people.length} label={org.people.length === 1 ? 'person' : 'people'} />{' '}
-              <Count n={org.modules.length} label={org.modules.length === 1 ? 'module' : 'modules'} />
+              <Count n={org.modules.length} label={org.modules.length === 1 ? 'module' : 'modules'} />{' '}
+              <Count n={org.records} label="records" />
               {org.pending > 0 && <> <Count n={org.pending} label="pending" /></>}
             </summary>
             <div className="ml-4 border-l border-gray-200 pl-3">
@@ -104,7 +105,8 @@ export default async function OverviewPage() {
             <summary className={summaryCls}>
               <span className="mr-2 font-medium text-gray-900">{mod.name}</span>
               <Count n={mod.distinctPeople} label={mod.distinctPeople === 1 ? 'person' : 'people'} />{' '}
-              <Count n={mod.orgs.length} label={mod.orgs.length === 1 ? 'org' : 'orgs'} />
+              <Count n={mod.orgs.length} label={mod.orgs.length === 1 ? 'org' : 'orgs'} />{' '}
+              <Count n={mod.records} label="records" />
             </summary>
             {mod.orgs.length === 0 ? (
               <p className="ml-4 px-2 py-1 text-xs text-gray-500">No organization has this module on.</p>
@@ -120,6 +122,26 @@ export default async function OverviewPage() {
         A person is counted in a module for an organization when that organization has the module on and they are an
         active member of it. &ldquo;With a role&rdquo; is the smaller number who hold an explicit role in that module.
         Names are display names; people who never set one show as &ldquo;Unnamed member&rdquo;.
+      </p>
+      <p data-testid="overview-records-note" className="mt-3 rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-gray-600">
+        <strong>&ldquo;Records&rdquo;</strong> is a count of rows, not storage size: the rows an organization holds in
+        the tables each module declares for people (grades, bookings, messages and so on). It is a floor, not the
+        full total, because tables that name nobody are not counted, and it counts only what you can read. Real
+        storage per organization (bytes) is not built yet.
+        {o.recordsScan.cappedTables.length > 0 && (
+          <>
+            {' '}
+            <strong>These tables were large enough to hit the scan limit, so their counts are too low:</strong>{' '}
+            {o.recordsScan.cappedTables.join(', ')}.
+          </>
+        )}
+        {o.recordsScan.unreadableTables.length > 0 && (
+          <>
+            {' '}
+            <strong>These tables could not be read and are counted as 0:</strong>{' '}
+            {o.recordsScan.unreadableTables.join(', ')}.
+          </>
+        )}
       </p>
     </div>
   )

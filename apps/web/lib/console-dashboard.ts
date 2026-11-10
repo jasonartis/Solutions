@@ -14,11 +14,14 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getZmanimCoverage, getZmanimPrefetchSettings } from '@/lib/zmanim-console'
 import { getVendorData, vendorIssues, type VendorIssue } from '@/lib/vendor-accounts'
+import { getOverview } from '@/lib/console-overview'
 
-export type Severity = 'urgent' | 'attention' | 'ok' | 'idle'
+// 'info' is a neutral count tile (the Platform tile): it never claims things are
+// fine or wrong, so it must not borrow the green "All clear" word.
+export type Severity = 'urgent' | 'attention' | 'ok' | 'idle' | 'info'
 
 /** One line of the priority list. */
-export type PriorityItem = { severity: Exclude<Severity, 'ok' | 'idle'>; text: string; href: string }
+export type PriorityItem = { severity: Exclude<Severity, 'ok' | 'idle' | 'info'>; text: string; href: string }
 
 export type DashboardTile = {
   key: string
@@ -307,19 +310,41 @@ async function reportsSection(supabase: SupabaseClient, items: PriorityItem[]): 
   }
 }
 
+// --- Platform at a glance (links to /console/overview) -------------------------
+// Counts only: orgs, people (each once), pending invitations. The row-count scan
+// the overview page does is skipped here — the home page should stay quick.
+async function platformSection(supabase: SupabaseClient): Promise<DashboardTile> {
+  const o = await getOverview(supabase, { records: false })
+  const modulesOn = o.byOrg.reduce((n, org) => n + org.modules.length, 0)
+  return {
+    key: 'platform',
+    title: 'Platform',
+    href: '/console/overview',
+    count: o.orgCount,
+    severity: 'info',
+    detail: o.orgCount === 1 ? 'organization' : 'organizations',
+    lines: [
+      `${o.distinctPeople} ${o.distinctPeople === 1 ? 'person' : 'people'}`,
+      `${modulesOn} module${modulesOn === 1 ? '' : 's'} switched on`,
+      `${o.pendingInvites} pending invitation${o.pendingInvites === 1 ? '' : 's'}`,
+    ],
+  }
+}
+
 export async function getDashboard(supabase: SupabaseClient): Promise<Dashboard> {
   const items: PriorityItem[] = []
-  const [reports, feedback, deletions, expiring, vendors] = [
+  const [reports, feedback, deletions, expiring, vendors, platform] = [
     ...(await Promise.all([
       reportsSection(supabase, items).catch(() => failedTile('reports', 'Content reports', '/console/reports', 'content reports')),
       feedbackSection(supabase, items).catch(() => failedTile('feedback', 'Feedback', '/console/feedback', 'feedback')),
       deletionsSection(supabase, items).catch(() => failedTile('deletions', 'Account deletions', '/console/accounts', 'account deletions')),
       expiringSection(supabase, items).catch(() => failedTile('expiring', 'Expiring soon', '/console', 'expiry data')),
       vendorsSection(supabase, items).catch(() => failedTile('vendors', 'Vendor accounts', '/console/vendors', 'vendor accounts')),
+      platformSection(supabase).catch(() => failedTile('platform', 'Platform', '/console/overview', 'the platform overview')),
     ])),
   ]
   // Urgent first; the sort is stable so sources keep their own order within a level.
   const rank = { urgent: 0, attention: 1 } as const
   items.sort((a, b) => rank[a.severity] - rank[b.severity])
-  return { tiles: [reports, feedback, deletions, expiring, vendors], priorities: items }
+  return { tiles: [reports, feedback, deletions, expiring, vendors, platform], priorities: items }
 }

@@ -10,6 +10,7 @@ const TILE: Record<Severity, { box: string; badge: string; word: string }> = {
   attention: { box: 'border-amber-300 bg-amber-50', badge: 'bg-amber-500 text-white', word: 'Needs you' },
   ok: { box: 'border-green-200 bg-green-50', badge: 'bg-green-600 text-white', word: 'All clear' },
   idle: { box: 'border-gray-200 bg-gray-50', badge: 'bg-gray-400 text-white', word: 'Not live' },
+  info: { box: 'border-blue-200 bg-blue-50', badge: 'bg-blue-600 text-white', word: 'Info' },
 }
 
 export default function ConsoleDashboard({ dashboard }: { dashboard: Dashboard }) {
