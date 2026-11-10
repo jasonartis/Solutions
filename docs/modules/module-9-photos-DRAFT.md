@@ -507,8 +507,10 @@ one failure being the token, below).
   `apps/web/lib/console-dashboard.ts`): any open report = attention; oldest open
   report over 24 h = urgent; intake not configured, ≥80% of the 500/day cap, or
   contact email unset = urgent. `/console/reports` colours the age red from
-  24 h, bold red from 36 h. **The founder's own threshold choice is pending in
-  the dashboard session (1c), which writes it into §H** — then change the code.
+  24 h, bold red from 36 h. **Founder chose (2026-11-10, recorded in §H by the
+  dashboard session): thresholds KEPT AS BUILT, plus a red banner on every
+  console page once an open report is over 24 h old** (`app/(app)/console/layout.tsx`
+  + `lib/console-report-banner.ts`).
 - **Token plumbing:** prod `CONTENT_REPORT_TOKEN` is set for Vercel
   **production only** — preview deployments refuse every report (deliberate;
   previews share the prod database). Local dev uses the fixed token
