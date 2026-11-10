@@ -69,12 +69,10 @@ section, keep it a SUMMARY with pointers: add the dated story to the journal / t
   **Second pass same day:** pricing = base fee per org + AI/video credits (founder chose it), break-even + margin, "Use my real
   numbers" (read-only DB counts), editable price what-ifs, own-costs lines at $0 (founder fills in later). Browser-verified
   locally (page loads, button fills, override persists). Not built: actuals ledger, saved scenarios, payments/lateness (docs/costs README).
-- **2026-11-09 (Opus): vendor accounts page (docs/28 Part A) — CODE PUSHED, migration `20261113010000` NOT on prod**
-  (so on prod the page and its dashboard tile read "could not read" until the apply; prod verifier
-  `scripts/prod-verify-vendor-accounts.mts` 11/28 before, local 50/0). `/console/vendors` + a dashboard tile; 18 seeded
-  accounts incl. the monthly offsite-snapshot chore (B.8); four superadmin-only tables; the database refuses
-  secret-shaped text in every column. Ships AFTER (or with) another
-  session's `20261111010000_content_reports`, which sorts first. docs/28 "Part A AS BUILT"; docs/14's table retired to it.
+- **2026-11-09/10 (Opus): vendor accounts page (docs/28 Part A) — `20261113010000` ON PROD, verified 11/28 → 50/0.**
+  `/console/vendors` + a dashboard tile; 18 seeded accounts incl. the monthly offsite-snapshot chore (B.8); four
+  superadmin-only tables; the database refuses secret-shaped text in every column. Another session's content-reports
+  migration (renumbered `20261114010000`, uncommitted) is NOT on prod. docs/28 "Part A AS BUILT"; docs/14's table retired to it.
 - **2026-11-05 (Opus): speed-dating host un-tick + camera/mic status table `20261109010000` — ON PROD, verified** (15/22 → 46/0):
   only the person ticks in (database rule now, organizers too); `sd_device_status` + `sd_report_device_status`. The CLIENT half
   is BUILT (Sonnet, `1941f0d`, no migration): the dater's browser reports camera/mic/connection, Ready-board tiles show it

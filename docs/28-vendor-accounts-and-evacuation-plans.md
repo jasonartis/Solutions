@@ -1,7 +1,7 @@
 # 28 — Vendor accounts and evacuation plans
 
-> **STATUS (2026-11-09): Part A BUILT, LOCAL ONLY — read "Part A AS BUILT" below; not on
-> prod yet. Part B planned (see "Part B — THE PLAN").** Original requirements follow.
+> **STATUS (2026-11-10): Part A SHIPPED — `20261113010000` ON PROD, verified 11/28 → 50/0; read
+> "Part A AS BUILT" below. Part B planned (see "Part B — THE PLAN").** Original requirements follow.
 > Two pieces of work. Part A is a superadmin page and is small. Part B is a planning
 > exercise and comes first in importance. The founder's own words are quoted where
 > they set the goal. [docs/14](14-external-accounts.md) is the current account map and
@@ -53,7 +53,7 @@ docs/03 #12 rhythm). Copy the shape of an existing superadmin-only table
 inventory. Keep docs/14 as the written map, or retire it to point at the page; don't keep
 two lists that can drift.
 
-### Part A AS BUILT (2026-11-09, Opus) — LOCAL ONLY, not on prod yet
+### Part A AS BUILT (2026-11-09, Opus) — ON PROD 2026-11-10
 
 **Where:** `/console/vendors` (Owner Console nav → "Vendor accounts"). Migration
 `20261113010000_vendor_accounts.sql`; page `apps/web/app/(app)/console/vendors/`; shared
@@ -136,9 +136,11 @@ assertions in the migration. Tests: `packages/db/src/vendor-accounts.test.ts` (1
 refusal beside a superadmin control); e2e "owner console: vendor accounts"; local
 `verify-acl-hardening.ts` 17/17.
 
-**Still to do:** apply to prod (backup → dry run → founder go-ahead → apply → a
-`scripts/prod-verify-vendor-accounts.mts` before/after). `20261111010000_content_reports`
-(another session) sorts before it and must ship first or together.
+**Applied to prod 2026-11-10** (backup `2026-11-10T06-36-51` → dry run listing only this file →
+founder go-ahead → apply → `scripts/prod-verify-vendor-accounts.mts` 11/28 before, 50/0 after).
+Another session's content-reports migration was renumbered to `20261114010000` so this one could
+ship alone; it was held outside the folder during the apply. **Founder to fill on the page:** which
+Google account signs into Vercel, and whether GitHub two-step is on.
 
 ## Known risks — must be protected against (recorded 2026-11-09, founder: "we need to protect against them")
 

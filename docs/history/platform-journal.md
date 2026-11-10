@@ -22,7 +22,10 @@ decision log, docs/03 conventions, docs/12 safeguards) — this is the chronolog
   the migration was then dropped and re-applied clean. Seeded from docs/14 + Part B's findings (17 accounts, 29
   credential names, 4 dates). docs/14's tables retired to point at the page. Tests: db 16, e2e 1, local ACL 17/17,
   prod verifier 11/28 before (controls pass). Not run: a local browser check (commit memory at 2 GB with 12 sessions
-  open) — the e2e runs in CI. Next: prod apply after `20261111010000`, with the founder's go-ahead.
+  open) — the e2e runs in CI (green on `23a6359`: db 552 incl. these 16, e2e 90/90). **Applied to prod 2026-11-10**
+  with the founder's go-ahead: backup `2026-11-10T06-36-51`; the other session renumbered content-reports to
+  `20261114010000` and held the file outside the folder so the dry run listed only this one; the pgdelta certificate
+  warning appeared (preview step, harmless — follow-up dry run "up to date"); prod verifier 11/28 → 50/0.
 - **2026-11-09 (Opus) — DOCS/28 PART B PLANNED (dependency review + evacuation plans + drills), no code.** The inventory was
   re-measured from the code (package.json, env key names, workflows, outbound URLs, login page, backup scripts). Twelve
   findings, F1–F12, in docs/28 B.1. The two that matter: **uploaded files have no backup** (F1), and **email carries link
