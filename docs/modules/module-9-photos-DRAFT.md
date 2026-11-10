@@ -488,6 +488,31 @@ one failure being the token, below).
   (privacy page, report page, dashboard check); to change it, edit the Vercel
   variable and redeploy.
 
+- **Also verified after the apply:** `scripts/verify-acl-hardening.ts` on prod
+  17/17; a real report sent through the LIVE `/report` page while signed out
+  landed with its signature (test row deleted afterwards); founder tested A–G
+  on prod ("it looks good").
+- **Dashboard thresholds as built** (`reportsSection()` in
+  `apps/web/lib/console-dashboard.ts`): any open report = attention; oldest open
+  report over 24 h = urgent; intake not configured, ≥80% of the 500/day cap, or
+  contact email unset = urgent. `/console/reports` colours the age red from
+  24 h, bold red from 36 h. **The founder's own threshold choice is pending in
+  the dashboard session (1c), which writes it into §H** — then change the code.
+- **Token plumbing:** prod `CONTENT_REPORT_TOKEN` is set for Vercel
+  **production only** — preview deployments refuse every report (deliberate;
+  previews share the prod database). Local dev uses the fixed token
+  `local-dev-content-report-token` (`scripts/dev.ts` writes it to
+  `apps/web/.env.local`; `set-content-report-token.mts --local` installs its
+  hash after a `db reset`); CI does the same after `pnpm seed`.
+- **Copy-review findings NOT adopted** (2026-11-10 adversarial review of the
+  text, recorded so they are not re-found): an example hint under the optional
+  field; naming the platform instead of "this platform" (no brand yet); and
+  **"Involves a minor" is broader than the terms' "sexual content involving
+  anyone under 18"** — ordinary photos of children will land in that bucket
+  next to CSAM (the §B2 over-reporting trap). Handle by triage/moderation
+  policy, not by the label. The honeypot shows "Thank you" to bots and stores
+  nothing; every other refusal shows the failure message.
+
 **FOUNDER DECISIONS, 2026-11-10 ("I will go with all of your recommendations"):**
 - **A. Quarantine/preservation (§B2):** build WITH module 9 photos — no module
   stores user images yet.
