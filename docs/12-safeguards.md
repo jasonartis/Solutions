@@ -338,6 +338,14 @@ rot; pipelines don't.
     writing `supabase/.temp/storage-version` (prod: `curl https://<ref>.supabase.co/storage/v1/version`
     → v1.89.13) and `gotrue-version` (`/auth/v1/health` with the anon key → v2.197.0) before
     `supabase start`. A fresh cloud Supabase project needs none of this.
+  - **2026-11-10: EXACT KEY IN, JOB GREEN.** `b2-create-backup-key.mts` (run with the master key,
+    which was then regenerated — the old one now answers 401) made `github-backup-writer-exact`:
+    `writeFileRetentions, writeFiles`, restricted to the bucket. The founder put it in GitHub's
+    `BACKBLAZE_KEY_ID`/`BACKBLAZE_APP_KEY` and deleted the web-UI `github-backup-writer` key.
+    Manual run `42768540691`: **all 11 checks PASS** — `prod/2026-11-10T06-26-56/` uploaded,
+    locked until 2026-12-10; download 401, delete 401, list 401, shorten-lock 403. Keys in B2 now:
+    `github-backup-writer-exact` (GitHub) and `restore-reader` (founder's `.env.deploy`). The
+    master key is not kept anywhere — regenerate it on the B2 website only to mint a new key.
   **Lesson:** flipping a repo public changes the exposure of EVERY workflow
   output (artifacts, logs), not just the code — re-audit workflows whenever
   visibility changes.

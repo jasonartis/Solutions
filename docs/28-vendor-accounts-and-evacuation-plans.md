@@ -378,7 +378,7 @@ mail, GitHub two-step) are NOT on this list: they are his, or they wait for a cu
 
 | Rank | Step (B.4 #) | Why it is next | Model | Ready? |
 |---|---|---|---|---|
-| 1 | **Finish the B2 nightly backup and prove a restore** (#1). **MOSTLY DONE 2026-11-09 (`28784f5`, another session):** first real backup in B2, and a restore matched prod on 87/87 tables and 1,236 rows. **Left:** the nightly job is RED on its key-capability check until a write key with the exact capabilities is minted (docs/12 "Backups") | Every other plan restores from it | Opus | the key-minting step only |
+| 1 | **Finish the B2 nightly backup and prove a restore** (#1). **MOSTLY DONE 2026-11-09 (`28784f5`, another session):** first real backup in B2, and a restore matched prod on 87/87 tables and 1,236 rows. **DONE 2026-11-10:** exact write key minted and in GitHub; the nightly job is GREEN (all 11 checks, docs/12 "Backups") | Every other plan restores from it | Opus | the key-minting step only |
 | 2 | **Nightly copy of uploaded files to B2** (#5) | Uploaded files have NO backup at all today (F1) | Opus (touches prod data and backup crypto) | after rank 1 |
 | 3 | **Offsite snapshots script** `pnpm backup:snapshot` + `RESTORE.txt` (#12, B.8) | The credential files exist only on the SSD. **Switch the "Offsite snapshots" row on the vendor accounts page to active in the same session** | Sonnet | yes |
 | 4 | **Supabase settings sheet** (#4, F6) | A restore today would bring the sign-up hook back OFF | Sonnet (read-only Management API) | yes |

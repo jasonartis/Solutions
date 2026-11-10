@@ -4,6 +4,12 @@ The running, dated build journal that used to live in `CLAUDE.md`'s "## Current 
 section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every session)
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
+- **2026-11-10 (Opus) — B2 BACKUP GREEN ON AN EXACT KEY.** The web-UI "Write Only" key carried deleteFiles and writeBucket*,
+  so `b2-create-backup-key.mts` minted `github-backup-writer-exact` (writeFiles + writeFileRetentions, bucket-only) with the
+  master key, which was then regenerated (the founder had pasted it into chat; old one verified 401). The founder swapped the
+  GitHub secrets and deleted the old key; manual run `42768540691` passed all 11 checks (`prod/2026-11-10T06-26-56/`, locked
+  to 2026-12-10). Lessons: the master key is shown once because B2 stores only a hash — nothing needs it day to day; a helper
+  file holding a fresh key is deleted once GitHub has it. docs/12 "Backups" 2026-11-10; docs/28 B.4a rank 1 done.
 - **2026-11-09 (Opus) — DOCS/28 PART A, THE VENDOR ACCOUNTS PAGE, BUILT (local only; `20261113010000` not on prod).**
   `/console/vendors`: every outside account with sign-in, owner, two-step, plan/cost/payment, dates not to miss, where
   credentials live BY NAME, what breaks if lost (linked to Part B), notes, and an Open button that records "last opened"

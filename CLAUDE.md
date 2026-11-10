@@ -23,9 +23,10 @@ section, keep it a SUMMARY with pointers: add the dated story to the journal / t
 ### ⚠ Live warnings (read first)
 - **NIGHTLY ENCRYPTED PROD BACKUP TO PRIVATE B2 — WORKING, RESTORE PROVEN (2026-11-09)** (`backup-b2.yml`; replaced the
   public-artifact `backup.yml`, docs/12 "FOUND 2026-11-03"). age-encrypted (private key offline with the founder), 30-day
-  compliance lock per file; a restore drill matched prod on all 87 tables / 1,236 rows. **⚠ The job is RED every night until
-  the founder swaps in an exact key** (the web UI "Write Only" key can delete after the lock ends) — backups still upload;
-  `scripts/b2-create-backup-key.mts`, docs/12 "Backups" 2026-11-09. Still run `pnpm backup:prod` before every `migrate:prod`.
+  compliance lock per file; a restore drill matched prod on all 87 tables / 1,236 rows. **GREEN since 2026-11-10** on an
+  exact write key (`github-backup-writer-exact`: writeFiles + writeFileRetentions, bucket-only — B2's web UI cannot make one;
+  `scripts/b2-create-backup-key.mts`). A red run = a real failed check; docs/12 "Backups". Still run `pnpm backup:prod`
+  before every `migrate:prod`.
 - **`pnpm migrate:prod` applies EVERY pending file in `supabase/migrations/`** and has no flag to stop at one. To ship one
   migration while another is in progress, move the other file OUT of the folder, `--dry-run` until only yours is listed, apply,
   move it back. A later version reaching prod first strands earlier ones. A `Failed to read certificate …pgdelta…` trace or
