@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getProfile } from '@/lib/platform'
 import OrgMembersPanel, { SUPERADMIN_RANK, type OrgMemberRow } from '@/components/org-members-panel'
 import OrgInviteSection from '@/components/org-invite-section'
+import OrgModuleToggles from '@/components/org-module-toggles'
 import SynagogueLocationFields, { type SynagogueSettings } from '@/components/synagogue-location-fields'
 import ConsoleDashboard from '@/components/console-dashboard'
 import { getDashboard } from '@/lib/console-dashboard'
@@ -17,7 +18,7 @@ import {
   renameOrg,
   setAddMemberDefault,
   setInviteCaps,
-  toggleModule,
+  applyModuleChanges,
   updateSynagogueSettings,
 } from './actions'
 
@@ -82,16 +83,11 @@ export default async function ConsolePage(props: {
       {/* What needs the founder, at a glance (module-9 spec §H). Read-only. */}
       <ConsoleDashboard dashboard={dashboard} />
 
-      {/* Superadmin-only tools that deliberately live OUTSIDE the module tab
-          strips, so those stay strictly by-the-rules (docs/13, 2026-08-02). */}
-      <nav className="mb-6 flex flex-wrap gap-3 text-sm">
-        <Link href="/console/overview" className="text-blue-600 hover:underline">
-          Overview
-        </Link>
-        <span className="text-gray-400" title="Orgs, people and modules as expandable counts">
-          orgs, people and modules
-        </span>
-        <span className="text-gray-300">·</span>
+      {/* Tools that have no tile above. Pages that DO have a tile (Platform overview,
+          Content reports, Feedback, Account deletions, Vendor accounts) are opened from
+          their tile, which links to the same address, so they are not repeated here. */}
+      <nav aria-label="Tools" className="mb-6 flex flex-wrap items-baseline gap-3 text-sm">
+        <span className="font-medium text-gray-700">Tools:</span>
         <Link href="/console/data-browser" className="text-blue-600 hover:underline">
           Data browser
         </Link>
@@ -120,20 +116,6 @@ export default async function ConsolePage(props: {
           zmanim prefetch coverage
         </span>
         <span className="text-gray-300">·</span>
-        <Link href="/console/reports" className="text-blue-600 hover:underline">
-          Content reports
-        </Link>
-        <span className="text-gray-400" title="Reports sent from the public Report content page, with each one's age against the 48-hour limit">
-          what people asked us to take down
-        </span>
-        <span className="text-gray-300">·</span>
-        <Link href="/console/feedback" className="text-blue-600 hover:underline">
-          Feedback
-        </Link>
-        <span className="text-gray-400" title="Bug reports, suggestions and questions people sent from inside the product">
-          what people are telling us
-        </span>
-        <span className="text-gray-300">·</span>
         <Link href="/console/positions" className="text-blue-600 hover:underline">
           Positions
         </Link>
@@ -146,20 +128,6 @@ export default async function ConsolePage(props: {
         </Link>
         <span className="text-gray-400" title="What the platform costs by module and size, and what to charge">
           what it costs to run
-        </span>
-        <span className="text-gray-300">·</span>
-        <Link href="/console/accounts" className="text-blue-600 hover:underline">
-          Account deletions
-        </Link>
-        <span className="text-gray-400" title="Start a deletion someone asked for by email, and see pending, cancelled and failed ones">
-          who is leaving
-        </span>
-        <span className="text-gray-300">·</span>
-        <Link href="/console/vendors" className="text-blue-600 hover:underline">
-          Vendor accounts
-        </Link>
-        <span className="text-gray-400" title="Every outside account the platform depends on: sign-in, payment, dates not to miss, where credentials are kept">
-          what we depend on
         </span>
       </nav>
 
@@ -290,34 +258,20 @@ export default async function ConsolePage(props: {
 
               <h3 className="mb-1 text-sm font-medium text-gray-600">Modules</h3>
               <p className="mb-2 text-xs text-gray-400">
-                Click a module to switch it on or off for this organization. Green is on, grey is off.
+                Click a module to stage turning it on or off (it turns amber and nothing happens yet), then press
+                Update modules. Green is on, grey is off.
               </p>
-              <ul className="mb-4 flex flex-wrap gap-2">
-                {moduleRegistry.map((mod) => {
-                  const enabled = orgEntitlements.get(mod.key) === true
-                  return (
-                    <li key={mod.key}>
-                      <form
-                        action={async () => {
-                          'use server'
-                          await toggleModule(org.id, mod.key, !enabled)
-                        }}
-                      >
-                        <button
-                          className={`rounded border px-3 py-1 text-sm ${
-                            enabled
-                              ? 'border-green-300 bg-green-50 text-green-700'
-                              : 'border-gray-300 bg-gray-50 text-gray-500'
-                          }`}
-                          title={enabled ? 'Click to disable' : 'Click to enable'}
-                        >
-                          {mod.name}: {enabled ? 'on' : 'off'}
-                        </button>
-                      </form>
-                    </li>
-                  )
-                })}
-              </ul>
+              <div className="mb-4">
+                <OrgModuleToggles
+                  orgName={org.name}
+                  modules={moduleRegistry.map((mod) => ({
+                    key: mod.key,
+                    name: mod.name,
+                    enabled: orgEntitlements.get(mod.key) === true,
+                  }))}
+                  action={applyModuleChanges.bind(null, org.id)}
+                />
+              </div>
 
               {orgEntitlements.get('synagogue-schedules') === true && (
                 <>
@@ -355,6 +309,7 @@ export default async function ConsolePage(props: {
                       })),
                   } satisfies OrgMemberRow
                 })}
+                orgName={org.name}
                 enabledModules={enabledMods}
                 changeRoleAction={changeRole.bind(null, org.id)}
                 removeMemberAction={removeMember.bind(null, org.id)}

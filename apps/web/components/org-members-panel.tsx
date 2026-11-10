@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react'
+import type { ActionResult } from '@/lib/org-members'
 import ModuleRoleForm from './module-role-form'
+import { RemoveMemberButton, RoleChangeForm } from './org-member-controls'
 
-const inputCls = 'rounded border border-gray-300 px-2 py-1 text-sm'
 
 // Org role ranks mirror org_role_rank() in the DB (migration 20260717010000).
 // superadmin = 4 is the caller-rank the console passes; it isn't an org role.
@@ -31,8 +32,10 @@ export type OrgMemberRow = {
 export default function OrgMembersPanel(props: {
   members: OrgMemberRow[]
   enabledModules: { key: string; name: string; roles: readonly string[] }[]
-  changeRoleAction: (formData: FormData) => Promise<void>
-  removeMemberAction: (userId: string) => Promise<void>
+  /** Used in the Remove confirmation: "Remove Alice from <orgName>?" */
+  orgName: string
+  changeRoleAction: (formData: FormData) => Promise<ActionResult>
+  removeMemberAction: (userId: string) => Promise<ActionResult>
   addModuleRoleAction: (formData: FormData) => Promise<void>
   removeModuleRoleAction: (userId: string, moduleKey: string, role: string) => Promise<void>
   // The caller's own rank in this org (owner=3, admin=2; the superadmin
@@ -87,18 +90,19 @@ export default function OrgMembersPanel(props: {
               <span className="flex items-center gap-2">
                 {canManage ? (
                   <>
-                    <form action={props.changeRoleAction} className="flex items-center gap-1">
-                      <input type="hidden" name="userId" value={m.userId} />
-                      <select name="role" defaultValue={m.orgRole} className={`${inputCls} text-xs`}>
-                        {assignableRoles.map((r) => (
-                          <option key={r} value={r}>{r}</option>
-                        ))}
-                      </select>
-                      <button className="text-xs text-blue-600 hover:underline">Update</button>
-                    </form>
-                    <form action={props.removeMemberAction.bind(null, m.userId)}>
-                      <button className="px-1 py-1.5 text-xs text-red-600 hover:underline">Remove</button>
-                    </form>
+                    <RoleChangeForm
+                      userId={m.userId}
+                      savedRole={m.orgRole}
+                      roles={assignableRoles}
+                      action={props.changeRoleAction}
+                    />
+                    <RemoveMemberButton
+                      userId={m.userId}
+                      personName={nameOf(m)}
+                      orgName={props.orgName}
+                      isPending={m.status === 'pending'}
+                      action={props.removeMemberAction}
+                    />
                   </>
                 ) : (
                   <span className="text-xs uppercase text-gray-400">{m.orgRole}</span>

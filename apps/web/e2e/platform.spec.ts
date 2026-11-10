@@ -200,8 +200,9 @@ test('pending invites: an address with NO account is invited, signs up, and acce
   await expect(row.getByText('invited · pending')).not.toBeVisible()
 
   // Cleanup: remove the new member so Platform Self-Test keeps its seeded roster.
-  const removed = page.waitForResponse((r) => r.request().method() === 'POST')
   await row.getByRole('button', { name: 'Remove', exact: true }).click()
+  const removed = page.waitForResponse((r) => r.request().method() === 'POST')
+  await row.getByRole('button', { name: /Yes, (remove|withdraw)/ }).click() // the confirmation popup
   await removed
   await page.reload()
   await expect(page.getByText(email, { exact: true })).not.toBeVisible()
@@ -269,7 +270,7 @@ test('owner console: org cards start closed, one click opens just that org, Expa
   // One click opens just Demo Match — and shows its module hint and members.
   await card('Demo Match').getByRole('heading', { name: 'Demo Match', exact: true }).click()
   await expect(card('Demo Match').getByRole('heading', { name: 'Modules' })).toBeVisible()
-  await expect(card('Demo Match').getByText('Click a module to switch it on or off')).toBeVisible()
+  await expect(card('Demo Match').getByText(/Click a module to stage turning it on or off/)).toBeVisible()
   await expect(card('Demo Dating').getByRole('heading', { name: 'Modules' })).not.toBeVisible()
   await expect(page.locator('section[data-testid="console-org"] details[open]')).toHaveCount(1)
 
@@ -508,8 +509,9 @@ test('classroom module: professor enrolls a member into a class roster', async (
   await removed
   await page.goto('/o/demo-a/members')
   const bobRow = page.locator('li').filter({ hasText: 'bob@demo.local' })
-  const bobRemoved = page.waitForResponse((r) => r.request().method() === 'POST')
   await bobRow.getByRole('button', { name: 'Remove' }).click()
+  const bobRemoved = page.waitForResponse((r) => r.request().method() === 'POST')
+  await bobRow.getByRole('button', { name: /Yes, (remove|withdraw)/ }).click() // the confirmation popup
   await bobRemoved
   // Confirm the removal actually landed before the test ends — other tests
   // (the RLS tenancy-isolation suite in particular) depend on bob having no
@@ -2434,8 +2436,141 @@ test('owner console engagement: a pending invite is excluded from the org rollup
   // later test inherits it.
   await page.goto('/console?expand=all')
   const cleanupSection = page.locator('section', { has: page.getByRole('heading', { name: 'Platform Self-Test' }) })
-  await cleanupSection.locator('li', { has: page.getByText('grace@demo.local') }).getByRole('button', { name: 'Remove' }).click()
+  const graceRow = cleanupSection.locator('li', { has: page.getByText('grace@demo.local') })
+  await graceRow.getByRole('button', { name: 'Remove' }).click()
+  await graceRow.getByRole('button', { name: /Yes, (remove|withdraw)/ }).click() // the confirmation popup
   await expect(cleanupSection.getByText('grace@demo.local')).not.toBeVisible()
+})
+
+// ---------------------------------------------------------------------------
+// MEMBER CONTROLS THAT SHOW WHAT IS SAVED (founder, 2026-11-10).
+//   - a role dropdown turns AMBER until Update is pressed, and picking a value
+//     alone changes nothing in the database;
+//   - Remove asks first, and a refused removal says WHY inside the popup instead
+//     of landing on the generic error page;
+//   - module on/off is STAGED (amber) and applied by one Update;
+//   - a content report open past 24 h puts a red banner on every console page.
+// ---------------------------------------------------------------------------
+test('role dropdown: amber until Update, picking alone changes nothing, Undo restores it', async ({ page }) => {
+  await signIn(page, 'alice@demo.local')
+  await page.goto('/o/platform-self-test/members')
+  const seat = page.locator('li', { has: page.getByText('orgtest@demo.local') })
+  const role = () => seat.getByRole('combobox', { name: 'Organization role' })
+  await expect(role()).toHaveAttribute('data-state', 'saved')
+  await expect(role()).toHaveValue('member')
+
+  await role().selectOption('admin')
+  await expect(role()).toHaveAttribute('data-state', 'unsaved')
+  await expect(seat.getByText(/Not saved yet — they are still member/)).toBeVisible()
+
+  // Nothing was written: a reload shows the saved role.
+  await page.reload()
+  await expect(role()).toHaveValue('member')
+  await expect(role()).toHaveAttribute('data-state', 'saved')
+
+  // Undo puts it back without saving anything.
+  await role().selectOption('admin')
+  await seat.getByRole('button', { name: 'Undo' }).click()
+  await expect(role()).toHaveValue('member')
+  await expect(role()).toHaveAttribute('data-state', 'saved')
+
+  // Update saves it and the colour returns to "saved"; then put the seed back.
+  const saveAs = async (to: string) => {
+    await role().selectOption(to)
+    const posted = page.waitForResponse((r) => r.request().method() === 'POST')
+    await seat.getByRole('button', { name: 'Update' }).click()
+    await posted
+    await expect(role()).toHaveAttribute('data-state', 'saved')
+    await page.reload()
+    await expect(role()).toHaveValue(to)
+  }
+  await saveAs('admin')
+  await saveAs('member')
+})
+
+test('remove: asks first; cancelling removes no one; a refused removal explains why in the popup', async ({ page }) => {
+  await signIn(page, 'owner@demo.local')
+
+  // The org's own page: the popup names the person and the org, and Cancel keeps them.
+  await page.goto('/o/platform-self-test/members')
+  const seat = page.locator('li', { has: page.getByText('orgtest@demo.local') })
+  await seat.getByRole('button', { name: 'Remove', exact: true }).click()
+  const popup = seat.getByRole('dialog')
+  await expect(popup.getByRole('heading')).toContainText('Remove Org Test Member from Platform Self-Test?')
+  await popup.getByRole('button', { name: 'Cancel' }).click()
+  await expect(popup).not.toBeVisible()
+  await expect(seat).toBeVisible()
+
+  // The console: Demo Org B has exactly one admin. Removing them is refused by the
+  // database ("an org must keep at least one owner or admin"); the popup says so
+  // and nobody is removed — NOT the generic "Something went wrong" page.
+  await page.goto('/console?expand=all')
+  const orgB = page.locator('section[data-testid="console-org"]', { has: page.getByRole('heading', { name: 'Demo Org B', exact: true }) })
+  const sole = orgB.locator('li', { has: page.getByText('bob@demo.local') }).first()
+  await sole.getByRole('button', { name: 'Remove', exact: true }).click()
+  await sole.getByRole('button', { name: 'Yes, remove' }).click()
+  await expect(sole.getByRole('alert')).toContainText('must keep at least one owner or admin')
+  await expect(page.getByText('Something went wrong')).not.toBeVisible()
+  await sole.getByRole('button', { name: 'Cancel' }).click()
+  await page.reload()
+  await expect(orgB.getByText('bob@demo.local')).toBeVisible()
+})
+
+test('modules: a click only stages the change (amber); Update applies it; Undo discards it', async ({ page }) => {
+  await signIn(page, 'owner@demo.local')
+  await page.goto('/console?expand=all')
+  const card = () =>
+    page.locator('section[data-testid="console-org"]', { has: page.getByRole('heading', { name: 'Platform Self-Test', exact: true }) })
+  const mod = () => card().getByRole('button', { name: /^Nail Salon:/ })
+  await expect(mod()).toHaveAttribute('data-state', 'off')
+
+  // Click stages it: amber, a summary appears, and nothing is saved (a reload shows "off").
+  await mod().click()
+  await expect(mod()).toHaveAttribute('data-state', 'unsaved')
+  await expect(card().getByText(/1 change not applied yet/)).toBeVisible()
+  await page.reload()
+  await expect(mod()).toHaveAttribute('data-state', 'off')
+
+  // Undo discards the staged change.
+  await mod().click()
+  await card().getByRole('button', { name: 'Undo', exact: true }).click()
+  await expect(mod()).toHaveAttribute('data-state', 'off')
+  await expect(card().getByText(/not applied yet/)).not.toBeVisible()
+
+  // Update applies it (saved colour), then put the seed back the same way.
+  const apply = async (state: 'on' | 'off') => {
+    await mod().click()
+    const posted = page.waitForResponse((r) => r.request().method() === 'POST')
+    await card().getByRole('button', { name: 'Update modules' }).click()
+    await posted
+    await page.reload()
+    await expect(mod()).toHaveAttribute('data-state', state)
+  }
+  await apply('on')
+  await apply('off')
+})
+
+test('console banner: a content report open for 24+ hours shows a red bar on console pages, and clears when closed', async ({ page }) => {
+  const { default: postgres } = await import('postgres')
+  const sql = postgres(process.env.DATABASE_URL ?? 'postgresql://postgres:postgres@127.0.0.1:54322/postgres', { prepare: false, max: 1 })
+  const marker = `e2e-banner-${Date.now()}`
+  try {
+    await sql`
+      insert into content_reports (where_seen, reason, reporter_email, attested_accurate, status, created_at)
+      values (${marker}, 'other', 'e2e-reporter@example.com', true, 'new', now() - interval '30 hours')`
+    await signIn(page, 'owner@demo.local')
+    await page.goto('/console/engagement')
+    await expect(page.getByTestId('report-banner')).toContainText(/open for 30 hours/)
+    await expect(page.getByTestId('report-banner').getByRole('link', { name: 'Open the reports' })).toBeVisible()
+
+    // Control: once the report is closed, no banner (so the bar is tied to the report, not always on).
+    await sql`update content_reports set status = 'dismissed', closed_at = now(), first_closed_at = now() where where_seen = ${marker}`
+    await page.reload()
+    await expect(page.getByTestId('report-banner')).not.toBeVisible()
+  } finally {
+    await sql`delete from content_reports where where_seen = ${marker}`
+    await sql.end()
+  }
 })
 
 // ---------------------------------------------------------------------------

@@ -7,9 +7,11 @@ import { createClient } from '@/lib/supabase/server'
 import { blockingRows, type OrgDeleteImpactRow } from '@/lib/org-delete'
 import {
   changeMemberRole,
+  memberActionFailure,
   removeModuleRole,
   removeOrgMember,
   upsertModuleRole,
+  type ActionResult,
 } from '@/lib/org-members'
 import { parseSynagogueSettingsForm } from '@/lib/synagogue-settings'
 
@@ -164,20 +166,57 @@ export async function setAddMemberDefault(formData: FormData) {
   revalidatePath('/console')
 }
 
-export async function changeRole(orgId: string, formData: FormData) {
-  const supabase = await requireSuperadmin()
-  const userId = String(formData.get('userId') ?? '')
-  const role = String(formData.get('role') ?? '')
-  if (!orgId || !userId || !role) throw new Error('Org, member, and role are required')
-
-  await changeMemberRole(supabase, orgId, userId, role)
-  revalidatePath('/console')
+// Staged module changes (the console's org card): the person flips modules on
+// the page, sees them marked as UNSAVED, and presses one Update to apply them
+// all. Returned, not thrown, like the member actions below.
+export async function applyModuleChanges(
+  orgId: string,
+  changes: { moduleKey: string; enable: boolean }[],
+): Promise<ActionResult> {
+  try {
+    const supabase = await requireSuperadmin()
+    if (!orgId || changes.length === 0) return { ok: false, reason: 'There is nothing to update.' }
+    if (changes.some((c) => !moduleRegistry.some((m) => m.key === c.moduleKey))) {
+      return { ok: false, reason: 'One of those modules is not known.' }
+    }
+    const { error } = await supabase
+      .from('org_modules')
+      .upsert(changes.map((c) => ({ org_id: orgId, module_key: c.moduleKey, enabled: c.enable })))
+    if (error) throw new Error(error.message)
+    revalidatePath('/console')
+    return { ok: true }
+  } catch (e) {
+    return memberActionFailure(e)
+  }
 }
 
-export async function removeMember(orgId: string, userId: string) {
-  const supabase = await requireSuperadmin()
-  await removeOrgMember(supabase, orgId, userId)
-  revalidatePath('/console')
+// Change a member's role / remove a member: refusals are RETURNED so the card can
+// say why (an org must keep one owner or admin), not thrown into the generic
+// error page (docs/03 #22).
+export async function changeRole(orgId: string, formData: FormData): Promise<ActionResult> {
+  try {
+    const supabase = await requireSuperadmin()
+    const userId = String(formData.get('userId') ?? '')
+    const role = String(formData.get('role') ?? '')
+    if (!orgId || !userId || !role) return { ok: false, reason: 'Choose a member and a role.' }
+
+    await changeMemberRole(supabase, orgId, userId, role)
+    revalidatePath('/console')
+    return { ok: true }
+  } catch (e) {
+    return memberActionFailure(e)
+  }
+}
+
+export async function removeMember(orgId: string, userId: string): Promise<ActionResult> {
+  try {
+    const supabase = await requireSuperadmin()
+    await removeOrgMember(supabase, orgId, userId)
+    revalidatePath('/console')
+    return { ok: true }
+  } catch (e) {
+    return memberActionFailure(e)
+  }
 }
 
 export async function addModuleRole(orgId: string, formData: FormData) {

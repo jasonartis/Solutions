@@ -81,6 +81,7 @@ export default async function MembersPage(props: { params: Promise<{ orgSlug: st
 
       <OrgMembersPanel
         members={rows}
+        orgName={org.name}
         enabledModules={enabledModules}
         changeRoleAction={changeRole.bind(null, orgSlug)}
         removeMemberAction={removeMember.bind(null, orgSlug)}

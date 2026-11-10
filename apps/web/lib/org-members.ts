@@ -61,6 +61,34 @@ export async function inviteOrgMember(
 // sign in with that exact, confirmed address.
 export type IssueInviteResult = 'invited' | 'exists' | 'already_member'
 
+// The result of a member action that can be REFUSED (remove, change role, apply
+// module changes). Returned, never thrown: in production a thrown Server Action
+// message is replaced by the generic "Something went wrong" page (docs/03 #22),
+// which is what an owner saw on removing an org's only admin.
+export type ActionResult = { ok: true } | { ok: false; reason: string }
+
+// The database's own refusals that are safe, and useful, to show as written. The
+// hierarchy guard (20260717010000) and the keep-one-admin rule. Anything else is
+// an unexpected error and is NOT echoed (it can name tables or addresses).
+const SHOWN_REFUSALS: [prefix: string, say: string][] = [
+  [
+    'An org must keep at least one owner or admin',
+    'This organization must keep at least one owner or admin. Make someone else an owner or admin first, then try again.',
+  ],
+  ['You cannot remove a member whose role is at or above your own', 'You cannot remove someone whose role is at or above your own.'],
+  ['You cannot manage a member whose role is at or above your own', 'You cannot change someone whose role is at or above your own.'],
+  ['You cannot promote someone to a role at or above your own', 'You cannot give anyone a role at or above your own.'],
+  ['You can only add someone at a role below your own', 'You can only give a role below your own.'],
+]
+
+export function memberActionFailure(e: unknown): ActionResult {
+  const msg = e instanceof Error ? e.message : ''
+  const known = SHOWN_REFUSALS.find(([prefix]) => msg.startsWith(prefix))
+  if (known) return { ok: false, reason: known[1] }
+  if (msg === 'Not authorized' || msg === 'Not signed in') return { ok: false, reason: 'You are not allowed to do that.' }
+  return { ok: false, reason: 'Something went wrong, so nothing was changed. Please try again.' }
+}
+
 // What the shared invite form shows after a submit (components/org-invite-form.tsx,
 // returned by the members `addMember` action). {ok, reason} rather than a throw:
 // docs/03 #22 — a thrown Server Action message is redacted in production.

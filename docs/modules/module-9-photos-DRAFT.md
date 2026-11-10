@@ -434,6 +434,17 @@ content page.
 **Dashboard BUILT 2026-11-09** (no migration; journal 2026-11-09 Sonnet
 entry). ~~The "Content reports" tile is a placeholder~~ — wired 2026-11-10 (below).
 
+**Founder answers, 2026-11-10 (dashboard questions):**
+1. **Report thresholds: KEEP AS BUILT** (§I): any open report is "needs you", the oldest open report past 24 h is "urgent". The
+   12/36/48 alternative was offered and not chosen.
+2. **Banner: YES, BUILT.** Every Owner Console page shows a red bar once any open report is over 24 h old (bold white-on-red
+   from 36 h), linking to the queue — `app/(app)/console/layout.tsx`, rule in `lib/console-report-banner.ts`. It reflects the
+   moment the console was opened or reloaded. Still no email or push: nothing alerts him outside the console.
+3. **Limits watch list: AGREED, NOT BUILT.** Start with (a) active people per month, (b) database size and storage, (c) the
+   25-active-people-a-month video cap (docs/02 "Video"). (a) and (c) are roughly measurable from existing tables; (b) waits for
+   the real-bytes job (journal 2026-11-10). The vendors' exact free-tier numbers must be confirmed with the vendors before any
+   are hard-coded. A "Limits" tile does not exist yet.
+
 ### I. 2026-11-10 — THE PLATFORM LEGAL SLICE, AS BUILT (Opus)
 
 **Migration `20261114010000_content_reports` — committed, NOT on prod yet.**

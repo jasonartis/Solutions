@@ -8,6 +8,8 @@ import {
   changeMemberRole,
   inviteOrgMember,
   issuePendingOrgInvite,
+  memberActionFailure,
+  type ActionResult,
   removeModuleRole,
   removeOrgMember,
   resendPendingInvite,
@@ -123,20 +125,33 @@ export async function resendInvite(orgSlug: string, inviteId: string) {
   refreshMemberViews(orgSlug)
 }
 
-export async function changeRole(orgSlug: string, formData: FormData) {
-  const { supabase, orgId } = await requireOrgAdminBySlug(orgSlug)
-  const userId = String(formData.get('userId') ?? '')
-  const role = String(formData.get('role') ?? '')
-  if (!userId || !role) throw new Error('Member and role are required')
+// Change a member's role and remove a member RETURN a refusal rather than throw
+// it, so the page can show the reason ("an org must keep one owner or admin")
+// instead of the generic error page (docs/03 #22; see memberActionFailure).
+export async function changeRole(orgSlug: string, formData: FormData): Promise<ActionResult> {
+  try {
+    const { supabase, orgId } = await requireOrgAdminBySlug(orgSlug)
+    const userId = String(formData.get('userId') ?? '')
+    const role = String(formData.get('role') ?? '')
+    if (!userId || !role) return { ok: false, reason: 'Choose a member and a role.' }
 
-  await changeMemberRole(supabase, orgId, userId, role)
-  revalidatePath(`/o/${orgSlug}/members`)
+    await changeMemberRole(supabase, orgId, userId, role)
+    refreshMemberViews(orgSlug)
+    return { ok: true }
+  } catch (e) {
+    return memberActionFailure(e)
+  }
 }
 
-export async function removeMember(orgSlug: string, userId: string) {
-  const { supabase, orgId } = await requireOrgAdminBySlug(orgSlug)
-  await removeOrgMember(supabase, orgId, userId)
-  revalidatePath(`/o/${orgSlug}/members`)
+export async function removeMember(orgSlug: string, userId: string): Promise<ActionResult> {
+  try {
+    const { supabase, orgId } = await requireOrgAdminBySlug(orgSlug)
+    await removeOrgMember(supabase, orgId, userId)
+    refreshMemberViews(orgSlug)
+    return { ok: true }
+  } catch (e) {
+    return memberActionFailure(e)
+  }
 }
 
 export async function addModuleRole(orgSlug: string, formData: FormData) {
