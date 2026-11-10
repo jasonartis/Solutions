@@ -27,7 +27,8 @@ section, keep it a SUMMARY with pointers: add the dated story to the journal / t
   exact write key (`github-backup-writer-exact`: writeFiles + writeFileRetentions, bucket-only — B2's web UI cannot make one;
   `scripts/b2-create-backup-key.mts`). A red run = a real failed check; docs/12 "Backups". Still run `pnpm backup:prod`
   before every `migrate:prod`.
-- **`pnpm migrate:prod` applies EVERY pending file in `supabase/migrations/`** and has no flag to stop at one. To ship one
+- **`pnpm migrate:prod` applies EVERY pending file in `supabase/migrations/`, UNTRACKED ones too** (another session's
+  uncommitted draft counts — measured 2026-11-10), and has no flag to stop at one. To ship one
   migration while another is in progress, move the other file OUT of the folder, `--dry-run` until only yours is listed, apply,
   move it back. A later version reaching prod first strands earlier ones. A `Failed to read certificate …pgdelta…` trace or
   "failed to cache migrations catalog" warning is the PREVIEW step — the push succeeded if a follow-up `--dry-run` says "Remote

@@ -289,6 +289,9 @@ edit anywhere else, that's a missing platform primitive — extract it, don't fo
       `20260802010000`. State every role the migration means to govern.
     - **Don't write `revoke truncate`** — CI's destructive-migration guard matches
       `truncate[[:space:]]`. Use `revoke all privileges` then re-grant the intended DML.
+      It greps the WHOLE file, so a comment or an assertion's `raise` text saying
+      "truncate " trips it too (2026-11-09, `20261113010000`: "…can truncate %" went red,
+      reworded to "empty-the-table privilege").
     - **Verify against PROD, not local** (convention #1's rule, mechanized):
       `pnpm exec tsx scripts/verify-acl-hardening.ts [--probe]` asserts the intended end
       state and exits non-zero; `scripts/acl-audit.ts [--json]` reports the full privilege

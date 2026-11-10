@@ -19,13 +19,22 @@ decision log, docs/03 conventions, docs/12 safeguards) — this is the chronolog
   `opened_by` cascade → set null); the filter had real gaps (`Summer2026!`, `P@ssw0rd`, quoted JSON, `?access_token=`)
   and false positives ("Password: in 1Password", `S3-compatible`) — all fixed and now asserted inside the migration.
   A reviewer's probe briefly committed to the LOCAL database (a bad psql line ate its `begin`); it restored the rows, and
-  the migration was then dropped and re-applied clean. Seeded from docs/14 + Part B's findings (17 accounts, 29
-  credential names, 4 dates). docs/14's tables retired to point at the page. Tests: db 16, e2e 1, local ACL 17/17,
+  the migration was then dropped and re-applied clean. Seeded from docs/14 + Part B's findings (18 accounts incl. the
+  B.8 offsite-snapshot chore, 29 credential names, 4 dates). docs/14's tables retired to point at the page. Tests: db 16, e2e 1, local ACL 17/17,
   prod verifier 11/28 before (controls pass). Not run: a local browser check (commit memory at 2 GB with 12 sessions
   open) — the e2e runs in CI (green on `23a6359`: db 552 incl. these 16, e2e 90/90). **Applied to prod 2026-11-10**
   with the founder's go-ahead: backup `2026-11-10T06-36-51`; the other session renumbered content-reports to
   `20261114010000` and held the file outside the folder so the dry run listed only this one; the pgdelta certificate
   warning appeared (preview step, harmless — follow-up dry run "up to date"); prod verifier 11/28 → 50/0.
+  **Lessons from the apply:** the dry run listed the other session's UNTRACKED file too (migrate:prod takes the whole
+  folder; CLAUDE.md warning sharpened); that session moved it out to its scratchpad and back. Two CI guards tripped
+  during the build and are worth knowing: the destructive-SQL grep matched the word "truncate" in an assertion's
+  raise text (docs/03 bullet extended), and the email-surface ratchet (`profiles-public-columns.test.ts`) flagged
+  `vendor_secret_reason` because a COMMENT mentions "email address" (now in `COMMENT_MATCHES_ONLY`). After the apply:
+  committed `verify-acl-hardening.ts` 17/17 on prod; the founder's answers (Vercel's Google account, GitHub two-step
+  OFF) entered on prod; browser look done (prod refusals as a member and signed out; full superadmin view on local
+  only). One small wording fix left open, in docs/28 "Part A AS BUILT". Founder 2026-11-10: do all of B.4a, one rank per
+  chat; a brief per rank is in docs/28 B.4b.
 - **2026-11-09 (Opus) — DOCS/28 PART B PLANNED (dependency review + evacuation plans + drills), no code.** The inventory was
   re-measured from the code (package.json, env key names, workflows, outbound URLs, login page, backup scripts). Twelve
   findings, F1–F12, in docs/28 B.1. The two that matter: **uploaded files have no backup** (F1), and **email carries link

@@ -142,6 +142,16 @@ Another session's content-reports migration was renumbered to `20261114010000` s
 ship alone; it was held outside the folder during the apply. The founder's two answers (the Vercel
 sign-in Google account; GitHub two-step is OFF) were entered on prod the same day, so the GitHub row
 now shows its "two-step off" badge, which is intended until the first customer (B.4 #11).
+After the apply: `verify-acl-hardening.ts` (the committed version) **17/17 on prod**. While another
+session's uncommitted content-reports edits sit in that script, the working-tree copy shows 2 failures on
+prod (its functions are not deployed yet). Those are not this page's, and they clear when `20261114010000` ships.
+**Browser look, 2026-11-10:** on prod, signed out → `/login` and a demo member → 404 with no data.
+The superadmin view was checked on a LOCAL copy only (prod's superadmin is the founder's real
+account): it loads, has no error banner, 14 to check, no sideways scroll at phone width, and the tile and
+priority lines are on `/console`. **Open, small (not founder-gated):** the tile line and the combined priority line say "N not
+opened in 90 days" even for accounts NEVER opened (each card correctly says "never opened from
+this page"). Reword to "never opened or not in 90 days" in `vendorsSection`
+(`apps/web/lib/console-dashboard.ts`).
 
 ## Known risks — must be protected against (recorded 2026-11-09, founder: "we need to protect against them")
 
