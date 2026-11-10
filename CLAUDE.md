@@ -121,8 +121,10 @@ runs the docs/03 #12 rhythm (draft → adversarial review → live verify as rea
 founder decision** — record it where it belongs, flag it, move on (2026-08-29).
 
 **Founder decisions pending / deferred — do NOT start these unprompted:**
-- Module 9 photos (module-9 spec). Its platform legal slice (report route, terms, 13+) is ON PROD 2026-11-10 —
-  open: §B2 quarantine, closed-report retention, reporters' email (§I). The superadmin dashboard is built.
+- Module 9 photos (module-9 spec). Its platform legal slice (report route, terms, 13+) is ON PROD 2026-11-10.
+  **Founder DECIDED 2026-11-10 (§I A–E):** next small slice = 1-year retention of closed reports with a legal-evidence
+  hold + erasing a reporter's email on request (one migration; privacy sentence shown to him first); quarantine waits
+  for module 9; DMCA waits for a real notice; off-dashboard alerts wait for SMTP.
 - **"What's next" → docs/28 B.4a (ranked list) + B.4b (a brief per rank).** Founder 2026-11-10: "do them all", so
   "work on what's next" = start the lowest unfinished rank, one per chat; check its model first. Rank 1 done.
 - **Vendor accounts page + dependency/evacuation plans for every external service — docs/28.** Part B is PLANNED

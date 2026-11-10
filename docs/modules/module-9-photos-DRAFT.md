@@ -488,6 +488,22 @@ one failure being the token, below).
   (privacy page, report page, dashboard check); to change it, edit the Vercel
   variable and redeploy.
 
+**FOUNDER DECISIONS, 2026-11-10 ("I will go with all of your recommendations"):**
+- **A. Quarantine/preservation (§B2):** build WITH module 9 photos — no module
+  stores user images yet.
+- **B. Retention:** a closed report is deleted 1 year after it closed, UNLESS it
+  is marked as legal evidence (a hold the superadmin sets). **NOT BUILT** —
+  needs a migration (hold flag + a pg_cron prune, same pattern as docs/21's
+  runner) and a privacy-page sentence (show the founder the text first).
+- **C. A reporter asks to delete their email:** delete the email, keep the rest
+  of the report. **NOT BUILT** — needs `reporter_email` nullable (CHECK keeps it
+  required at intake) and a superadmin-only definer to erase it.
+- **D. Copyright (DMCA) signature + sworn statement:** wait until a real
+  copyright notice arrives.
+- **E. Alerts outside the dashboard (the real 48-hour risk):** revisit when
+  custom SMTP exists (docs/18 item 7).
+B + C together are the next small slice (one migration, docs/03 #12 rhythm).
+
 **NOT built / open (founder items):**
 - §B2 quarantine/preservation — hooks into every module that stores files.
 - Retention for closed reports (kept indefinitely for now).
