@@ -1,25 +1,44 @@
 'use client'
 
-import { useActionState } from 'react'
-import type { InviteState } from './actions'
+import { useActionState, useEffect, useRef } from 'react'
+import type { InviteState } from '@/lib/org-members'
 
 const inputCls = 'rounded border border-gray-300 px-2 py-1 text-sm'
 
+// THE ONE INVITE FORM — used by the org's Members page AND the Owner Console's
+// org cards (via components/org-invite-section.tsx). Change it here and both
+// change; do not fork a copy (founder, 2026-11-10).
+//
 // Invite by address (docs/25). A client component so the result can be shown
 // inline; the action returns {ok, reason} rather than throwing (docs/03 #22).
 // The wording is the same whether or not the address has an account.
-export default function InviteForm(props: {
+export default function OrgInviteForm(props: {
   action: (formData: FormData) => Promise<InviteState>
   roles: readonly string[]
   // Modules switched on for this org, with their role vocabulary. An invitation
   // may carry ONE module role (docs/25 §12): it is granted only after the
   // person accepts the organization invitation.
   modules: { key: string; name: string; roles: readonly string[] }[]
+  // Platform superadmin only (the Owner Console passes it). Adds the choice to
+  // make an EXISTING account an active member at once, skipping the invitation.
+  // The action re-checks the caller is the superadmin; the form just offers it.
+  allowImmediate?: boolean
+  immediateDefault?: boolean
 }) {
-  const [state, formAction, pending] = useActionState<InviteState, FormData>(
-    async (_prev, formData) => props.action(formData),
-    null,
-  )
+  // React clears a form's fields after its action runs. That is right after a
+  // success, wrong after a refusal: the person would retype the address to
+  // try again (e.g. after "that address has no account — untick active
+  // immediately"). So remember what was sent and put the address back when the
+  // result is a refusal.
+  const emailRef = useRef<HTMLInputElement>(null)
+  const sentEmail = useRef('')
+  const [state, formAction, pending] = useActionState<InviteState, FormData>(async (_prev, formData) => {
+    sentEmail.current = String(formData.get('email') ?? '')
+    return props.action(formData)
+  }, null)
+  useEffect(() => {
+    if (state?.ok === false && emailRef.current) emailRef.current.value = sentEmail.current
+  }, [state])
 
   return (
     <div className="mb-6">
@@ -31,7 +50,7 @@ export default function InviteForm(props: {
         accept.
       </p>
       <form action={formAction} className="flex flex-wrap items-center gap-2">
-        <input name="email" type="email" required placeholder="email@example.com" className={`${inputCls} w-56`} />
+        <input ref={emailRef} name="email" type="email" required placeholder="email@example.com" className={`${inputCls} w-56`} />
         <select name="role" className={inputCls} defaultValue="member">
           {props.roles.map((r) => (
             <option key={r} value={r}>
@@ -52,6 +71,12 @@ export default function InviteForm(props: {
               </optgroup>
             ))}
           </select>
+        )}
+        {props.allowImmediate && (
+          <label className="flex items-center gap-1 text-xs text-gray-600">
+            <input type="checkbox" name="immediate" defaultChecked={props.immediateDefault} />
+            add active immediately (they must already have an account)
+          </label>
         )}
         <button
           disabled={pending}

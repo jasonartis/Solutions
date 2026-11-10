@@ -6,11 +6,14 @@ import { createClient } from '@/lib/supabase/server'
 import {
   cancelPendingInvite,
   changeMemberRole,
+  inviteOrgMember,
   issuePendingOrgInvite,
   removeModuleRole,
   removeOrgMember,
   resendPendingInvite,
+  resolveEmailToUserId,
   upsertModuleRole,
+  type InviteState,
 } from '@/lib/org-members'
 
 // Org self-management actions (docs/03 "Control hierarchy" level 2). Each
@@ -29,16 +32,28 @@ async function requireOrgAdminBySlug(orgSlug: string) {
   return { supabase, orgId: org.id as string }
 }
 
-export type InviteState = { ok: true; message: string } | { ok: false; reason: string } | null
+// These actions serve the org's Members page AND the Owner Console's org cards
+// (both render components/org-invite-section.tsx), so every one that changes
+// what an invitation list shows refreshes BOTH pages.
+function refreshMemberViews(orgSlug: string) {
+  revalidatePath(`/o/${orgSlug}/members`)
+  revalidatePath('/console')
+}
 
 // Invite by ADDRESS (docs/25, 20261016010000). The answer is the same whether
 // or not anyone has an account with that address — the person sees the
 // invite once they sign in with it. Returns {ok, reason} instead of throwing
 // (docs/03 #22: a thrown Server Action message is redacted in production),
 // and never puts the address into a thrown error, which would reach the logs.
+//
+// ONE exception, platform superadmin only: the form's "add active immediately"
+// box makes an EXISTING account a member at once. That answer necessarily says
+// whether the address has an account, which the invite path never does — which
+// is why it is refused to everyone but the superadmin.
 export async function addMember(orgSlug: string, formData: FormData): Promise<InviteState> {
   const email = String(formData.get('email') ?? '').trim()
   const role = String(formData.get('role') ?? 'member')
+  const immediate = formData.get('immediate') != null
   if (!email) return { ok: false, reason: 'Enter an email address.' }
 
   // Optional module role, "<moduleKey>:<role>" (docs/25 §12). SQL has no role
@@ -55,8 +70,25 @@ export async function addMember(orgSlug: string, formData: FormData): Promise<In
 
   try {
     const { supabase, orgId } = await requireOrgAdminBySlug(orgSlug)
+
+    if (immediate) {
+      const { data: isSuperadmin } = await supabase.rpc('is_superadmin')
+      if (!isSuperadmin) return { ok: false, reason: 'Not authorized' }
+      const found = await resolveEmailToUserId(supabase, orgId, email)
+      if (!found) {
+        return {
+          ok: false,
+          reason: 'That address has no account yet, so it cannot be added as active. Untick “add active immediately” to send an invitation instead.',
+        }
+      }
+      await inviteOrgMember(supabase, orgId, found.userId, role, 'active')
+      if (withModule) await upsertModuleRole(supabase, orgId, found.userId, withModule.key, withModule.role)
+      refreshMemberViews(orgSlug)
+      return { ok: true, message: 'Added as an active member.' }
+    }
+
     const result = await issuePendingOrgInvite(supabase, orgId, email, role, withModule)
-    revalidatePath(`/o/${orgSlug}/members`)
+    refreshMemberViews(orgSlug)
     if (result === 'already_member') {
       return { ok: true, message: 'That person is already a member, or already has an invitation to accept.' }
     }
@@ -70,6 +102,9 @@ export async function addMember(orgSlug: string, formData: FormData): Promise<In
     }
   } catch (e) {
     const msg = (e as Error).message
+    // Only reachable from the superadmin's "active immediately" path (a plain
+    // invite answers 'already_member' instead of raising).
+    if (immediate && /duplicate key|already/i.test(msg)) return { ok: false, reason: 'That person is already a member of this organization.' }
     const known = ['Enter a valid email address', 'Not authorized', 'Unknown role', 'Unknown module role']
     const shown = known.includes(msg) || msg.startsWith('You have reached your limit of ')
     return { ok: false, reason: shown ? msg : 'Something went wrong. Please try again.' }
@@ -79,13 +114,13 @@ export async function addMember(orgSlug: string, formData: FormData): Promise<In
 export async function cancelInvite(orgSlug: string, inviteId: string) {
   const { supabase } = await requireOrgAdminBySlug(orgSlug)
   await cancelPendingInvite(supabase, inviteId)
-  revalidatePath(`/o/${orgSlug}/members`)
+  refreshMemberViews(orgSlug)
 }
 
 export async function resendInvite(orgSlug: string, inviteId: string) {
   const { supabase } = await requireOrgAdminBySlug(orgSlug)
   await resendPendingInvite(supabase, inviteId)
-  revalidatePath(`/o/${orgSlug}/members`)
+  refreshMemberViews(orgSlug)
 }
 
 export async function changeRole(orgSlug: string, formData: FormData) {

@@ -562,3 +562,34 @@ was approved.
     - The email must not become an oracle: send the same email whether or not the address has an account.
     - The §6 answer 2 caps already bound how often one address can be emailed; revisit them with it.
     - The /privacy line may need a sentence (founder reviews the wording).
+
+## 13. ONE INVITE SECTION FOR THE ORG PAGE AND THE OWNER CONSOLE (2026-11-10, Sonnet — no migration)
+
+Founder: an address with no account must be invitable from the Owner Console too, and the console and the org page
+must use the SAME component so a change to one changes both. Until now the console's org cards had an older form
+("Add a member": existing account only, refused with "they must sign up first") while the org's Members page had the
+address-invite form from §11.
+
+**As built:** `components/org-invite-section.tsx` (server; loads the waiting list, the pruner time and inviter names,
+binds the org's actions) renders `components/org-invite-form.tsx` (client) and the "Invitations waiting to be used" list.
+BOTH `/o/<org>/members` and each `/console` org card render it; the actions are `o/[orgSlug]/members/actions.ts`
+(`addMember`, `cancelInvite`, `resendInvite`), which refresh both pages. The panel's old built-in add form, its
+`addMemberAction`/`showActiveToggle` props and the console-only `addMember` action are DELETED, so there is no second copy to
+drift: `OrgMembersPanel.addMemberSlot` is now required.
+
+**The one superadmin difference:** the console passes `allowImmediate`, which adds the box "add active immediately (they
+must already have an account)" (pre-ticked from the superadmin's saved default). Ticked, the action first checks
+`is_superadmin()` (an org admin is refused), then resolves the address to an account and makes it an ACTIVE seat at once
+(optionally with the chosen module role). For an address with NO account it refuses and says why — which is a statement
+about whether an account exists, the oracle the invite path never gives, so it is superadmin-only. Unticked, it is the
+ordinary held invitation (30 days, no email sent).
+
+**Changed behaviour to know:** the console's old unticked add created a pending SEAT at once; it now creates the same
+held invitation an org admin gets, which becomes a seat when the person next signs in. The engagement e2e test that
+needed a pending seat now creates it with an owner database connection. **A refusal keeps the typed address** (React
+otherwise clears the field after any submit; the form puts it back on `ok:false`).
+
+**Verified:** typecheck; the 19 console/superadmin e2e tests and the invite tests pass against a prebuilt local server,
+including `invite section is shared…` (invite an account-less address from the console with "active immediately" ticked →
+refused with the reason and the address kept; unticked → saved; the SAME invitation shows on the org page; cancelling it
+THERE removes it from the console).

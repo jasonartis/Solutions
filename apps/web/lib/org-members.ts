@@ -61,6 +61,11 @@ export async function inviteOrgMember(
 // sign in with that exact, confirmed address.
 export type IssueInviteResult = 'invited' | 'exists' | 'already_member'
 
+// What the shared invite form shows after a submit (components/org-invite-form.tsx,
+// returned by the members `addMember` action). {ok, reason} rather than a throw:
+// docs/03 #22 — a thrown Server Action message is redacted in production.
+export type InviteState = { ok: true; message: string } | { ok: false; reason: string } | null
+
 export async function issuePendingOrgInvite(
   supabase: SupabaseClient,
   orgId: string,

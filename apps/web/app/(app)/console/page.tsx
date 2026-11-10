@@ -4,11 +4,11 @@ import { moduleRegistry } from '@platform/core'
 import { createClient } from '@/lib/supabase/server'
 import { getProfile } from '@/lib/platform'
 import OrgMembersPanel, { SUPERADMIN_RANK, type OrgMemberRow } from '@/components/org-members-panel'
+import OrgInviteSection from '@/components/org-invite-section'
 import SynagogueLocationFields, { type SynagogueSettings } from '@/components/synagogue-location-fields'
 import ConsoleDashboard from '@/components/console-dashboard'
 import { getDashboard } from '@/lib/console-dashboard'
 import {
-  addMember,
   addModuleRole,
   changeRole,
   createOrg,
@@ -176,11 +176,11 @@ export default async function ConsolePage(props: {
           </button>
         </form>
 
-        {/* Superadmin preference: what "Add a member" defaults to (slice 3). */}
+        {/* Superadmin preference: whether "add active immediately" starts ticked on the invite form (slice 3). */}
         <form action={setAddMemberDefault} className="mt-4 flex flex-wrap items-center gap-2 border-t border-gray-100 pt-4">
           <label className="flex items-center gap-1.5 text-xs text-gray-600">
             <input type="checkbox" name="defaultActive" defaultChecked={addActiveDefault} />
-            Default my “Add a member” to <span className="font-medium">active immediately</span> (unchecked = send a pending invite)
+            Start “Invite someone” with <span className="font-medium">add active immediately</span> ticked (unticked = send an invitation)
           </label>
           <button className="rounded border border-gray-300 px-3 py-1 text-xs text-gray-700 hover:bg-gray-50">
             Save default
@@ -214,6 +214,9 @@ export default async function ConsolePage(props: {
               .filter((e) => e.org_id === org.id)
               .map((e) => [e.module_key, e.enabled]),
           )
+          const enabledMods = moduleRegistry
+            .filter((mod) => orgEntitlements.get(mod.key) === true)
+            .map((mod) => ({ key: mod.key, name: mod.name, roles: mod.roles }))
           const synSettings = (entitlements ?? []).find(
             (e) => e.org_id === org.id && e.module_key === 'synagogue-schedules',
           )?.settings as SynagogueSettings | undefined
@@ -327,17 +330,26 @@ export default async function ConsolePage(props: {
                       })),
                   } satisfies OrgMemberRow
                 })}
-                enabledModules={moduleRegistry
-                  .filter((mod) => orgEntitlements.get(mod.key) === true)
-                  .map((mod) => ({ key: mod.key, name: mod.name, roles: mod.roles }))}
-                addMemberAction={addMember.bind(null, org.id)}
+                enabledModules={enabledMods}
                 changeRoleAction={changeRole.bind(null, org.id)}
                 removeMemberAction={removeMember.bind(null, org.id)}
                 addModuleRoleAction={addModuleRole.bind(null, org.id)}
                 removeModuleRoleAction={removeModuleRoleAction.bind(null, org.id)}
                 callerRank={SUPERADMIN_RANK}
-                showActiveToggle
-                activeToggleDefault={addActiveDefault}
+                // The SAME invite section the org's Members page renders
+                // (components/org-invite-section.tsx) — change it there and both
+                // change. The superadmin also gets "add active immediately".
+                addMemberSlot={
+                  <OrgInviteSection
+                    supabase={supabase}
+                    orgId={org.id}
+                    orgSlug={org.slug}
+                    callerRank={SUPERADMIN_RANK}
+                    enabledModules={enabledMods}
+                    allowImmediate
+                    immediateDefault={addActiveDefault}
+                  />
+                }
               />
             </section>
           )

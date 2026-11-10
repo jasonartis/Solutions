@@ -7,10 +7,8 @@ import { createClient } from '@/lib/supabase/server'
 import { blockingRows, type OrgDeleteImpactRow } from '@/lib/org-delete'
 import {
   changeMemberRole,
-  inviteOrgMember,
   removeModuleRole,
   removeOrgMember,
-  resolveEmailToUserId,
   upsertModuleRole,
 } from '@/lib/org-members'
 import { parseSynagogueSettingsForm } from '@/lib/synagogue-settings'
@@ -145,23 +143,12 @@ export async function toggleModule(orgId: string, moduleKey: string, enable: boo
   revalidatePath('/console')
 }
 
-export async function addMember(orgId: string, formData: FormData) {
-  const supabase = await requireSuperadmin()
-  const email = String(formData.get('email') ?? '').trim()
-  const role = String(formData.get('role') ?? 'member')
-  // Superadmin-only choice (guard-enforced): add immediately-active vs a pending
-  // invite. The checkbox posts 'immediate' only when ticked.
-  const immediate = formData.get('immediate') != null
-  if (!orgId || !email) throw new Error('Org and email are required')
+// (Adding people is NOT here any more: the console renders the same invite
+// section as the org's Members page — components/org-invite-section.tsx, backed
+// by o/[orgSlug]/members/actions.ts `addMember` — so there is one invite path.)
 
-  const found = await resolveEmailToUserId(supabase, orgId, email)
-  if (!found) throw new Error(`No user found with email ${email} — they must sign up first`)
-
-  await inviteOrgMember(supabase, orgId, found.userId, role, immediate ? 'active' : 'pending')
-  revalidatePath('/console')
-}
-
-// Persist the superadmin's default for "add member" (immediately-active vs
+// Persist the superadmin's default for the invite form's "add active immediately"
+// box (immediately-active vs
 // pending invite). Stored on their own private row; only their own is writable.
 export async function setAddMemberDefault(formData: FormData) {
   const supabase = await requireSuperadmin()

@@ -204,6 +204,51 @@ test('pending invites: an address with NO account is invited, signs up, and acce
   await expect(page.getByText(email, { exact: true })).not.toBeVisible()
 })
 
+// ONE INVITE SECTION (founder, 2026-11-10): the Owner Console's org cards and the
+// org's Members page render the SAME component (components/org-invite-section).
+// This proves it end to end rather than by reading the code: an address with NO
+// account, invited from the console, is on the org page's list too, and
+// cancelling it THERE removes it from the console. A page with its own copy of
+// the list could not pass the middle step.
+test('invite section is shared: an address with no account invited from the console shows on the org page, cancels from there', async ({
+  page,
+}) => {
+  const email = `e2e-console-invitee-${Date.now()}@demo.local`
+  await signIn(page, 'owner@demo.local')
+  await page.goto('/console')
+  const consoleCard = page.locator('section', { has: page.getByRole('heading', { name: 'Platform Self-Test' }) })
+
+  // Control for the superadmin-only box: "active immediately" needs an account,
+  // so for this address it must REFUSE and say why — and create nothing.
+  await consoleCard.getByPlaceholder('email@example.com').fill(email)
+  await consoleCard.getByRole('checkbox', { name: /add active immediately/ }).check()
+  await consoleCard.getByRole('button', { name: 'Invite', exact: true }).click()
+  await expect(consoleCard.getByRole('alert')).toContainText('no account yet')
+  await expect(consoleCard.getByText(email)).not.toBeVisible()
+  // The refusal keeps what was typed, so the next try needs no retyping.
+  await expect(consoleCard.getByPlaceholder('email@example.com')).toHaveValue(email)
+
+  // Untick it: now it is an ordinary invitation, held for the address.
+  await consoleCard.getByRole('checkbox', { name: /add active immediately/ }).uncheck()
+  await consoleCard.getByRole('button', { name: 'Invite', exact: true }).click()
+  await expect(consoleCard.getByRole('status')).toContainText('Invitation saved')
+  await expect(consoleCard.locator('li', { has: page.getByText(email) }).getByText('invited · pending')).toBeVisible()
+
+  // The same invitation, on the org's own page.
+  await page.goto('/o/platform-self-test/members')
+  const orgRow = page.locator('li', { has: page.getByText(email) })
+  await expect(orgRow.getByText('invited · pending')).toBeVisible()
+  const cancelled = page.waitForResponse((r) => r.request().method() === 'POST')
+  await orgRow.getByRole('button', { name: 'Cancel' }).click()
+  await cancelled
+  await page.reload()
+  await expect(page.getByText(email)).not.toBeVisible()
+
+  // …and it is gone from the console too.
+  await page.goto('/console')
+  await expect(consoleCard.getByText(email)).not.toBeVisible()
+})
+
 test('org invite-accept: an invitee accepts a pending invite from their dashboard', async ({ page }) => {
   // Slice 3 (2026-07-27): being added to an org is an INVITE. Alice invites bob;
   // he sees a greyed-out pending card on his dashboard, accepts, and the org
@@ -2312,17 +2357,26 @@ test('owner console engagement: a pending invite is excluded from the org rollup
 }) => {
   // Platform Self-Test is the seed's dedicated scratch org for exactly this
   // kind of mutation (packages/db/src/seed.ts) — safe to add/remove a member
-  // here without disturbing any other test's assumptions. Added through the
-  // SUPERADMIN CONSOLE with "add active immediately" UNTICKED, which creates a
-  // pending seat at once. (Since 20261016010000 the org members page invites
-  // by ADDRESS, and a seat appears only when the person next opens their
-  // dashboard — and grace must never sign in during e2e.)
+  // here without disturbing any other test's assumptions. The PENDING SEAT is
+  // created straight in the database: every invite form (the console's and the
+  // org page's are now the same component) invites by ADDRESS, and a seat only
+  // appears when the person next opens their dashboard — and grace must never
+  // sign in during e2e. What this test is about is the engagement rollup, not
+  // the invite form, so the fixture is the seat itself.
+  const { default: postgres } = await import('postgres')
+  const sql = postgres(process.env.DATABASE_URL ?? 'postgresql://postgres:postgres@127.0.0.1:54322/postgres', { prepare: false, max: 1 })
+  try {
+    await sql`
+      insert into org_members (org_id, user_id, role, status)
+      select o.id, u.id, 'member', 'pending' from orgs o, auth.users u
+      where o.slug = 'platform-self-test' and u.email = 'grace@demo.local'
+      on conflict do nothing`
+  } finally {
+    await sql.end()
+  }
   await signIn(page, 'owner@demo.local')
   await page.goto('/console')
   const addSection = page.locator('section', { has: page.getByRole('heading', { name: 'Platform Self-Test' }) })
-  await addSection.getByPlaceholder('email@example.com').fill('grace@demo.local')
-  await addSection.getByRole('checkbox', { name: /add active immediately/ }).uncheck()
-  await addSection.getByRole('button', { name: 'Add', exact: true }).click()
   await expect(
     addSection.locator('li', { has: page.getByText('grace@demo.local') }).getByText('invited · pending'),
   ).toBeVisible()

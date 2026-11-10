@@ -2,7 +2,6 @@ import type { ReactNode } from 'react'
 import ModuleRoleForm from './module-role-form'
 
 const inputCls = 'rounded border border-gray-300 px-2 py-1 text-sm'
-const btnCls = 'rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700'
 
 // Org role ranks mirror org_role_rank() in the DB (migration 20260717010000).
 // superadmin = 4 is the caller-rank the console passes; it isn't an org role.
@@ -32,8 +31,6 @@ export type OrgMemberRow = {
 export default function OrgMembersPanel(props: {
   members: OrgMemberRow[]
   enabledModules: { key: string; name: string; roles: readonly string[] }[]
-  // Required unless addMemberSlot replaces the default add form.
-  addMemberAction?: (formData: FormData) => Promise<void>
   changeRoleAction: (formData: FormData) => Promise<void>
   removeMemberAction: (userId: string) => Promise<void>
   addModuleRoleAction: (formData: FormData) => Promise<void>
@@ -45,15 +42,10 @@ export default function OrgMembersPanel(props: {
   // org_members_guard_hierarchy trigger (20260717010000) so the UI never
   // shows a control that would only error.
   callerRank: number
-  // Superadmin-only (console): show the "add immediately-active vs invite"
-  // toggle on the add form, pre-checked from the superadmin's saved default.
-  // Org admins never see it — they can only ever send a pending invite.
-  showActiveToggle?: boolean
-  activeToggleDefault?: boolean
-  // Org admin page (docs/25): invites by ADDRESS, whether or not the person has
-  // an account yet. When given, it replaces the add-existing-account form
-  // below; the Owner Console passes nothing and keeps its direct add.
-  addMemberSlot?: ReactNode
+  // The "invite someone" area (docs/25: invites by ADDRESS, whether or not the
+  // person has an account yet). Both callers pass components/org-invite-section
+  // — there is deliberately no second, built-in add form here to drift from it.
+  addMemberSlot: ReactNode
 }) {
   const nameOf = (m: OrgMemberRow) => m.displayName || m.email || m.userId
   // Roles the caller may assign: strictly below their own rank.
@@ -136,31 +128,7 @@ export default function OrgMembersPanel(props: {
         {props.members.length === 0 && <li className="text-sm text-gray-400">No members yet.</li>}
       </ul>
 
-      {props.addMemberSlot ?? (
-      <>
-      <h3 className="mb-2 text-sm font-medium text-gray-600">{props.showActiveToggle ? 'Add a member' : 'Invite a member'}</h3>
-      <p className="mb-2 max-w-xl text-xs text-gray-400">
-        {props.showActiveToggle
-          ? 'By default the person is sent a pending invite (they accept from their own dashboard). As platform owner you can instead add them as an active member immediately. They must already have an account.'
-          : 'The person is added as a pending invite and becomes a member only once they accept it from their own dashboard. They must already have an account.'}
-      </p>
-      <form action={props.addMemberAction} className="mb-6 flex flex-wrap items-center gap-2">
-        <input name="email" type="email" required placeholder="email@example.com" className={`${inputCls} w-56`} />
-        <select name="role" className={inputCls} defaultValue="member">
-          {assignableRoles.map((r) => (
-            <option key={r} value={r}>{r}</option>
-          ))}
-        </select>
-        {props.showActiveToggle && (
-          <label className="flex items-center gap-1 text-xs text-gray-600">
-            <input type="checkbox" name="immediate" defaultChecked={props.activeToggleDefault} />
-            add active immediately (skip invite)
-          </label>
-        )}
-        <button className={btnCls}>{props.showActiveToggle ? 'Add' : 'Invite'}</button>
-      </form>
-      </>
-      )}
+      {props.addMemberSlot}
 
       {props.enabledModules.length > 0 && (
         <>
