@@ -135,6 +135,11 @@ const EMAIL_READERS: Record<string, string> = {
   account_silhouette:
     'The irreversible step. WRITES the address to NULL (the scrub) and reads nothing out. Internal: no API ' +
     'role holds EXECUTE.',
+  // CONTENT REPORTS (20261114010000, module-9 spec §B1).
+  content_report_submit:
+    'The public /report intake. WRITES the address the reporter TYPED into content_reports.reporter_email ' +
+    '(superadmin-only by RLS) and returns nothing. Reads no account address and no auth table; gated by a ' +
+    'server-only token.',
   // NOT LISTED, and worth a line because it is the interesting absence:
   // `handle_new_user` WAS one of the four pre-slice matches and is no longer a
   // match at all. It used to copy `new.email` into `profiles` at signup — the

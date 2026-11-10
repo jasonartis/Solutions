@@ -174,6 +174,7 @@ test('pending invites: an address with NO account is invited, signs up, and acce
   await page.getByLabel('Email').fill(email)
   await page.getByLabel('Display name').fill(name)
   await page.getByLabel('Password').fill('password123')
+  await page.getByLabel('I am 13 or older').check()
   await page.getByRole('button', { name: 'Sign up' }).click()
   await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible({ timeout: 15_000 })
 
@@ -2424,6 +2425,7 @@ test('delete my account: scheduled, signed out, and signing back in cancels it',
   await page.getByLabel('Email').fill(email)
   await page.getByLabel('Display name').fill('E2E Leaver')
   await page.getByLabel('Password').fill('password123')
+  await page.getByLabel('I am 13 or older').check()
   await page.getByRole('button', { name: 'Sign up' }).click()
   await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible({ timeout: 15_000 })
 
@@ -2482,6 +2484,7 @@ test('forgot password: reset link signs you in, the new password works and the o
   await page.getByLabel('Email').fill(email)
   await page.getByLabel('Display name').fill('E2E Reset')
   await page.getByLabel('Password').fill('old-password-1')
+  await page.getByLabel('I am 13 or older').check()
   await page.getByRole('button', { name: 'Sign up' }).click()
   await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible({ timeout: 15_000 })
   // A brand-new account belongs to nothing: the dashboard names the exact

@@ -432,8 +432,65 @@ report inside 48 hours. Build that dashboard before (or with) the Report
 content page.
 
 **Dashboard BUILT 2026-11-09** (no migration; journal 2026-11-09 Sonnet
-entry). The "Content reports" tile is a placeholder until the report table
-exists — wire it in `reportsSection()` of `apps/web/lib/console-dashboard.ts`.
+entry). ~~The "Content reports" tile is a placeholder~~ — wired 2026-11-10 (below).
+
+### I. 2026-11-10 — THE PLATFORM LEGAL SLICE, AS BUILT (Opus)
+
+**Migration `20261114010000_content_reports` — committed, NOT on prod yet.**
+(Renumbered from `20261111010000` the same day so another session's
+`20261113010000_vendor_accounts` could ship alone.) Prod verifier:
+`scripts/prod-verify-content-reports.mts` (prod BEFORE 3/32; local 42/1, the
+one failure being the token, below).
+
+- **Tables:** `content_reports` (superadmin-only SELECT by policy; writes only
+  through definers; no DELETE grant to anyone); `content_report_intake_config`
+  (the SHA-256 of the server's token) and `content_report_intake` (salted
+  address hashes, kept 24 h) — no grants, no policy.
+- **Abuse design (two adversarial reviews, 2026-11-09):** the anon key is
+  public, so a direct RPC caller could otherwise flood the route. The submit
+  function demands a server-only token (`CONTENT_REPORT_TOKEN`, not the
+  service-role key); the server passes the visitor's address (Vercel
+  `x-real-ip`), stored only salted+hashed. 5 reports per address per 24 h,
+  500 platform-wide; refusals are counted (`content_report_note_refusal`) and
+  the dashboard turns urgent near the cap. A hidden honeypot field drops bots.
+- **TAKE IT DOWN Act notice (founder 2026-11-10, "check the Act and add it if
+  warranted"):** the enrolled text §3(a)(1)(B) requires (i) a physical or
+  electronic signature of the person shown or someone authorised for them,
+  (ii) information to locate the image, (iii) a good-faith statement it is not
+  consensual, (iv) contact information. Platforms had one year from enactment
+  (May 2025), so it applies now. For reason "Intimate or sexual image" the form
+  therefore requires a typed-name signature (drawn in a handwriting font, like a
+  PDF e-signature; the typed name is what is stored) and the statement; a
+  database CHECK enforces both for that reason and neither for others.
+- **Pages:** public `/report` (footer link on every page), `/console/reports`
+  (open oldest first, age against 48 h, red from 24 h; New → Reviewing →
+  Action taken / Dismissed; private note; `first_closed_at` keeps the 48-hour
+  measurement across a reopen), dashboard tile + priority items (open reports,
+  intake not configured, near the daily cap, **contact email not set**).
+- **Text** — §H wording v2 plus lines approved 2026-11-10 after an adversarial
+  copy review: privacy paragraph on reports (who reads it, kept after account
+  deletion, short-lived technical details); "try again later" failure message;
+  "Please check the highlighted fields."; the field hint; "If someone is in
+  immediate danger, contact the police."; signature box wording. Terms gain
+  "Your content" and the 13+ line; signup AND email-link sign-in show a
+  required "I am 13 or older" box (its time is kept in user metadata as
+  `age_13_plus_at`).
+- **Before reports can be received on prod:** apply the migration, then
+  `scripts/set-content-report-token.mts` (sets the Vercel env var and the hash),
+  then a deploy. **And set `NEXT_PUBLIC_PLATFORM_CONTACT_EMAIL` on Vercel** —
+  measured 2026-11-10: it is NOT set, so the live privacy page shows
+  "[CONTACT EMAIL NOT SET]" and the report page has no email fallback.
+
+**NOT built / open (founder items):**
+- §B2 quarantine/preservation — hooks into every module that stores files.
+- Retention for closed reports (kept indefinitely for now).
+- The reporter's email survives their own account deletion (it is not linked
+  to an account) — now said on the privacy page; a subject-access answer for
+  a reporter's email is undecided (docs/21).
+- A copyright (DMCA) notice also needs a signature and a perjury statement;
+  not added (copyright reports use the general form).
+- Emails sent to the contact address bypass the console queue and its 48-hour
+  badge — that inbox is part of the 48-hour clock.
 
 ## Out of scope for v1
 

@@ -9,6 +9,12 @@ export function SiteFooter() {
       <Link href="/privacy" className="hover:underline">
         Privacy &amp; Terms
       </Link>
+      <span className="mx-2" aria-hidden="true">
+        ·
+      </span>
+      <Link href="/report" className="hover:underline">
+        Report content
+      </Link>
     </footer>
   )
 }

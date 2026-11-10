@@ -94,6 +94,8 @@ if (status) {
     writeEnvFile(resolve(repoRoot, 'apps/web/.env.local'), {
       NEXT_PUBLIC_SUPABASE_URL: apiUrl,
       NEXT_PUBLIC_SUPABASE_ANON_KEY: anonKey,
+      // The Report content page's server-only token (scripts/set-content-report-token.mts --local).
+      CONTENT_REPORT_TOKEN: 'local-dev-content-report-token',
       ...myzmanim,
       ...platformIdentityEnv(),
       ...sentryEnv(),

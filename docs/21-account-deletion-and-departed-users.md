@@ -926,6 +926,11 @@ address, compared byte for byte — and clean both up.
   `succeeded` run of `account-deletions-complete-due` under 2 days old, so the cron job is
   proven RUNNING on prod, not merely scheduled. Behaviour (the silhouette itself) is proven locally
   only, deliberately: proving it on prod means deleting a real account.
+- **Content reports are NOT touched by account deletion (2026-11-10, `20261114010000`).** A report
+  holds no account link, only the email the reporter typed (and, for intimate-image reports, a typed
+  signature), so deleting the reporter's account leaves it in place. The privacy page says so. Open
+  founder items: a retention period for closed reports, and how to answer a subject-access or
+  deletion request for a reporter's email (module-9 spec §I).
 - Telling the person (by email) that a deletion was started on their behalf — there is no SMTP
   yet (docs/18), so the founder replies to the emailed request by hand.
 - Matchmaking has the "Former member" label but no archive section like speed dating's; the

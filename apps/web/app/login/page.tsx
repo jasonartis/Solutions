@@ -19,6 +19,9 @@ export default function LoginPage() {
   // no second write. Everyone on the platform is rendered by this name once
   // `profiles.email` is gone; it is the only identity a co-member ever sees.
   const [displayName, setDisplayName] = useState('')
+  // The "I am 13 or older" box (signup and email-link modes). Its tick is kept in
+  // the new user's metadata as the record (age_13_plus_at); handle_new_user ignores it.
+  const [is13Plus, setIs13Plus] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   // A neutral "go and check your email" line, shown in place of an error.
   const [notice, setNotice] = useState<string | null>(null)
@@ -74,7 +77,10 @@ export default function LoginPage() {
         email,
         options: {
           emailRedirectTo: `${location.origin}/auth/confirm`,
-          ...(displayName.trim() ? { data: { display_name: displayName.trim() } } : {}),
+          data: {
+            ...(displayName.trim() ? { display_name: displayName.trim() } : {}),
+            age_13_plus_at: new Date().toISOString(),
+          },
         },
       })
       // A magic link for a NEW address creates the account, so the re-signup
@@ -92,7 +98,7 @@ export default function LoginPage() {
         password,
         options: {
           emailRedirectTo: `${location.origin}/auth/confirm`,
-          data: { display_name: displayName.trim() },
+          data: { display_name: displayName.trim(), age_13_plus_at: new Date().toISOString() },
         },
       })
       // With confirm-email ON (production), a new address gets no session until
@@ -189,6 +195,15 @@ export default function LoginPage() {
                   placeholder="Your display name"
                   className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
                 />
+              </label>
+            )}
+
+            {(mode === 'signup' || mode === 'magic') && (
+              // Terms: "You must be 13 or older to create an account" (module-9 spec §H(b)).
+              // Shown in email-link mode too, because a link for a new address creates an account.
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" required checked={is13Plus} onChange={(e) => setIs13Plus(e.target.checked)} />
+                I am 13 or older
               </label>
             )}
 

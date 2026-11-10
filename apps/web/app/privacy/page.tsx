@@ -12,7 +12,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getProfile } from '@/lib/platform'
 import { AppHeader } from '@/components/app-header'
 
-const LAST_UPDATED = 'November 5, 2026'
+const LAST_UPDATED = 'November 10, 2026'
 
 export default async function PrivacyPage() {
   // Public page, but signed-in people reach it from the footer too: give them
@@ -65,6 +65,12 @@ export default async function PrivacyPage() {
           page you were on and your browser. Only platform staff read it.
         </p>
         <p>
+          If you report content, we keep your report and the email address you give, so we can look into
+          it and may contact you about it. Only platform staff read it, unless the law requires us to share
+          it. It stays with the report even if you later delete your account. We also keep some technical
+          details about the request for a short time, to prevent misuse.
+        </p>
+        <p>
           If anyone on our staff ever needs to look at your account (for example, to help with a
           support question), that's tracked too — so there's always a record of who looked, and
           when.
@@ -105,6 +111,23 @@ export default async function PrivacyPage() {
           (shown on your dashboard). Your organizations' administrators manage your membership and
           access; we provide the underlying technology and are responsible for keeping it running
           and your data secure.
+        </p>
+        <p>You must be 13 or older to create an account.</p>
+      </Section>
+
+      <Section title="Your content">
+        <p>
+          You keep ownership of what you upload. You give us permission to store, copy, resize, back up,
+          display and otherwise use it in the context of running the service.
+        </p>
+        <p>
+          Only upload things you have the right to share. Never upload anything illegal, sexual content
+          involving anyone under 18, intimate images shared without consent, or content meant to harass
+          someone.
+        </p>
+        <p>
+          We may remove content and suspend accounts that break these rules. If the law requires it, we may
+          have to report illegal content to the authorities.
         </p>
       </Section>
 

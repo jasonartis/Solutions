@@ -239,28 +239,79 @@ async function vendorsSection(supabase: SupabaseClient, items: PriorityItem[]): 
   }
 }
 
-// --- Content reports (module 9 — not built) -----------------------------------
-// There is no report table yet. This tile exists so the 48-hour TAKE IT DOWN
-// obligation has a place to land; when the Report content page ships, replace
-// this with a count of open reports and an "oldest waiting" age, red past 24 h
-// and urgent as the 48 h deadline nears (module-9 spec §H).
-function reportsSection(): DashboardTile {
+// --- Content reports (module-9 spec §B1/§H) ----------------------------------
+// Open reports and the oldest one's age against the 48-hour TAKE IT DOWN limit:
+// any open report is attention, urgent once the oldest passes 24 h. Intake that
+// is not configured (every public report refused) or near its daily cap is
+// urgent too — a silent refusal would otherwise look like "no reports".
+type IntakeStatus = { configured: boolean; accepted_24h: number; refused_24h: number; daily_cap: number }
+
+async function reportsSection(supabase: SupabaseClient, items: PriorityItem[]): Promise<DashboardTile> {
+  const href = '/console/reports'
+  const [{ data, error }, { data: intake, error: intakeError }] = await Promise.all([
+    supabase.from('content_reports').select('created_at').in('status', ['new', 'reviewing']).limit(1000),
+    supabase.rpc('content_report_intake_status'),
+  ])
+  if (error) return failedTile('reports', 'Content reports', href, 'content reports')
+
+  const rows = data ?? []
+  const now = Date.now()
+  const oldest = rows.length ? Math.max(...rows.map((r) => now - new Date(r.created_at).getTime())) : 0
+  const lines: string[] = []
+  let severity: Severity = rows.length === 0 ? 'ok' : oldest > DAY ? 'urgent' : 'attention'
+
+  if (rows.length) {
+    const hours = Math.floor(oldest / 3600000)
+    items.push({
+      severity: oldest > DAY ? 'urgent' : 'attention',
+      text: `${rows.length} open content report${rows.length === 1 ? '' : 's'} — oldest ${hours} h of 48`,
+      href,
+    })
+    lines.push(`oldest waiting ${hours} h of 48`)
+  }
+
+  // The report page's fallback ("or email …") when a report cannot be sent.
+  if (!process.env.NEXT_PUBLIC_PLATFORM_CONTACT_EMAIL) {
+    severity = 'urgent'
+    lines.push('contact email NOT set — no fallback on the report page')
+    items.push({
+      severity: 'urgent',
+      text: 'Platform contact email is not set: the Report content page has no email fallback',
+      href,
+    })
+  }
+
+  const s = (intake as IntakeStatus[] | null)?.[0]
+  if (intakeError || !s) {
+    lines.push('intake: could not read')
+  } else if (!s.configured) {
+    severity = 'urgent'
+    lines.push('intake NOT configured — every report is refused')
+    items.push({ severity: 'urgent', text: 'Report intake is not configured: the public page refuses every report', href })
+  } else {
+    lines.push(`last 24 h: ${s.accepted_24h} received, ${s.refused_24h} refused`)
+    if (s.accepted_24h >= s.daily_cap * 0.8) {
+      severity = 'urgent'
+      items.push({ severity: 'urgent', text: `Content reports near the daily limit (${s.accepted_24h} of ${s.daily_cap})`, href })
+    }
+  }
+
   return {
     key: 'reports',
     title: 'Content reports',
-    href: '/console',
-    count: null,
-    severity: 'idle',
-    detail: 'Not built yet',
-    lines: ['Will show open reports and the oldest one’s age against the 48-hour limit'],
+    href,
+    count: rows.length,
+    severity,
+    detail: rows.length === 0 ? 'No open reports' : 'open reports',
+    lines,
   }
 }
 
 export async function getDashboard(supabase: SupabaseClient): Promise<Dashboard> {
   const items: PriorityItem[] = []
   const [reports, feedback, deletions, expiring, vendors] = [
-    reportsSection(),
     ...(await Promise.all([
+      reportsSection(supabase, items).catch(() => failedTile('reports', 'Content reports', '/console/reports', 'content reports')),
       feedbackSection(supabase, items).catch(() => failedTile('feedback', 'Feedback', '/console/feedback', 'feedback')),
       deletionsSection(supabase, items).catch(() => failedTile('deletions', 'Account deletions', '/console/accounts', 'account deletions')),
       expiringSection(supabase, items).catch(() => failedTile('expiring', 'Expiring soon', '/console', 'expiry data')),

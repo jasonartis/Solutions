@@ -126,11 +126,15 @@ jobs:
             echo "DATABASE_URL=$DB_URL"
             echo "NEXT_PUBLIC_SUPABASE_URL=$API_URL"
             echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$ANON_KEY"
+            echo "CONTENT_REPORT_TOKEN=local-dev-content-report-token"
           } >> "$GITHUB_ENV"
 
       - run: pnpm build
 
       - run: pnpm seed
+
+      # The Report content page refuses every report until its token is installed.
+      - run: pnpm exec tsx scripts/set-content-report-token.mts --local
 
       - run: pnpm --filter @platform/db test
 

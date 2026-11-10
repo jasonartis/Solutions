@@ -204,6 +204,7 @@ test('pending invites, chat (docs/25 scenario 1): org invite with the Visual Mes
   await page.getByLabel('Email').fill(email)
   await page.getByLabel('Display name').fill(`E2E Family ${stamp}`)
   await page.getByLabel('Password').fill('password123')
+  await page.getByLabel('I am 13 or older').check()
   await page.getByRole('button', { name: 'Sign up' }).click()
   await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible({ timeout: 15_000 })
   await expect(page.getByText(/been invited to join/)).toContainText('Demo Visual')

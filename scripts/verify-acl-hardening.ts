@@ -41,6 +41,12 @@ const MIGRATION_PATH = resolve(
 // Allowlists are FULL SIGNATURES, not bare names: a future overload of
 // syn_public_week granted to anon must not slip through on a name match.
 const ANON_SIGNATURES = new Set([
+  // Content reports (20261114010000, module-9 spec §B1): the public /report
+  // page's server action calls these as the visitor, who may be signed out.
+  // The gate is a server-only token checked inside each definer, not the role;
+  // service_role is deliberately NOT granted (see ANON_WITHOUT_SVC).
+  'content_report_submit(p_token text, p_client_hint text, p_where_seen text, p_reason text, p_details text, p_email text, p_accurate boolean, p_signature text, p_nonconsent boolean)',
+  'content_report_note_refusal(p_token text, p_client_hint text)',
   'syn_public_weeks(p_org_slug text)',
   'syn_public_week(p_org_slug text, p_week_start date)',
   // The zmanim read path (20260923010000, docs/23 §4). anon is deliberate and
@@ -107,6 +113,11 @@ const TABLE_EXCEPTIONS: Record<string, string[]> = {
   // Speed-dating device status (20261109010000). SELECT only (event staff + the
   // person, by policy); the one writer is sd_report_device_status.
   sd_device_status: ['SELECT'],
+  // Content reports (20261114010000). SELECT only (superadmin, by policy);
+  // the intake tables grant nothing at all — definers only.
+  content_reports: ['SELECT'],
+  content_report_intake_config: [],
+  content_report_intake: [],
   // Vendor accounts (20261113010000, docs/28 Part A). Superadmin-only by policy.
   // Accounts are never deleted (closed instead); the open log is append-only and
   // its INSERT is a COLUMN grant on account_id only, which a table-level read
@@ -216,10 +227,19 @@ const FUNCTION_EXCEPTIONS: Record<string, { auth: boolean; svc: boolean }> = {
   // 20261109010000: a person reports their own seat's camera/mic/connection.
   // Acts on auth.uid(); the worker has nothing to report.
   'sd_report_device_status(p_event_id uuid, p_camera text, p_mic text, p_connection text)': { auth: true, svc: false },
+  // 20261114010000: the superadmin's report review and intake status. Each
+  // re-checks is_superadmin(); the worker has no business with reports.
+  'content_report_set_status(p_id uuid, p_status text, p_note text)': { auth: true, svc: false },
+  'content_report_intake_status()': { auth: true, svc: false },
   // 20261113010000: the vendor-accounts secret filter. Called only by its
   // definer trigger; nobody may call it directly.
   'vendor_secret_reason(t text)': { auth: false, svc: false },
 }
+// Anon-executable functions that deliberately do NOT grant service_role.
+const ANON_WITHOUT_SVC = new Set([
+  'content_report_submit(p_token text, p_client_hint text, p_where_seen text, p_reason text, p_details text, p_email text, p_accurate boolean, p_signature text, p_nonconsent boolean)',
+  'content_report_note_refusal(p_token text, p_client_hint text)',
+])
 const FULL_CRUD = ['SELECT', 'INSERT', 'UPDATE', 'DELETE']
 // `settings` moved to `public.user_private` with the email slice (2026-09-17,
 // docs/22) -- `profiles` no longer has that column at all, so checking it here
@@ -431,7 +451,7 @@ async function main() {
   const anonExec = fns.filter((f) => f.anon).map(sigOf).sort()
   expect(
     anonExec.length === ANON_SIGNATURES.size && anonExec.every((s) => ANON_SIGNATURES.has(s)),
-    `exactly the 2 allowlisted signatures are anon-executable (found: ${anonExec.join(', ') || 'none'})`,
+    `exactly the ${ANON_SIGNATURES.size} allowlisted signatures are anon-executable (found: ${anonExec.join(', ') || 'none'})`,
   )
   const pubExec = fns.filter((f) => f.pub).map(sigOf)
   expect(
@@ -494,8 +514,8 @@ async function main() {
   // their service_role grant separately or its loss would be invisible forever.
   const anonFns = fns.filter((f) => ANON_SIGNATURES.has(sigOf(f)))
   expect(
-    anonFns.every((f) => f.auth && f.svc),
-    `the 2 public functions also keep authenticated+service_role (no silent narrowing)`,
+    anonFns.every((f) => f.auth && (f.svc || ANON_WITHOUT_SVC.has(sigOf(f))) && !(f.svc && ANON_WITHOUT_SVC.has(sigOf(f)))),
+    `the public functions also keep authenticated, and service_role exactly where intended (no silent narrowing or widening)`,
   )
 
   const unpinned = fns.filter((f) => f.prosecdef && !f.has_path)
@@ -597,6 +617,10 @@ async function main() {
     feedback_messages: [],
     // 20261109010000: browser-reported device status; nothing server-side writes it.
     sd_device_status: [],
+    // 20261114010000: reports and their intake are superadmin/definer only.
+    content_reports: [],
+    content_report_intake_config: [],
+    content_report_intake: [],
     // 20261113010000: the founder's vendor accounts; the worker has no business there.
     vendor_accounts: [],
     vendor_account_dates: [],

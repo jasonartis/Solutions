@@ -4,6 +4,18 @@ The running, dated build journal that used to live in `CLAUDE.md`'s "## Current 
 section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every session)
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
+- **2026-11-10 (Opus) — PLATFORM LEGAL SLICE BUILT (local; `20261114010000_content_reports` NOT on prod).** Public
+  `/report` (no sign-in), `/console/reports`, the dashboard's reports tile wired, terms "Your content" + 13+ line,
+  "I am 13 or older" at signup and email-link sign-in, footer link, privacy paragraph. Full docs/03 #12 rhythm: draft →
+  two adversarial security reviews (2026-11-09; the anon key is public, so a database-only cap could be flooded → a
+  server-only token + salted per-address limit) → RLS suite (9 tests) → prod verifier (prod before 3/32, local 42/1)
+  → e2e (report → console close, plus the four sign-up tests). User-facing copy got its own adversarial review: four
+  must-fixes (the privacy page claimed account deletion removes your email — untrue for reporters; "try again" at a
+  daily cap; a placeholder fallback email; no field-error text), all applied with founder approval. Founder asked to
+  check the TAKE IT DOWN Act: §3(a)(1)(B) does require a signature + good-faith statement, so intimate-image reports now
+  carry a typed signature drawn in a script font, enforced by a CHECK. Renumbered from `20261111010000` (and held out of
+  the folder during the apply) so 1f's `20261113010000` shipped alone. Found: `NEXT_PUBLIC_PLATFORM_CONTACT_EMAIL` is not
+  set on Vercel (live privacy page shows the placeholder). Module-9 spec §I has the as-built and open items.
 - **2026-11-10 (Opus) — B2 BACKUP GREEN ON AN EXACT KEY.** The web-UI "Write Only" key carried deleteFiles and writeBucket*,
   so `b2-create-backup-key.mts` minted `github-backup-writer-exact` (writeFiles + writeFileRetentions, bucket-only) with the
   master key, which was then regenerated (the founder had pasted it into chat; old one verified 401). The founder swapped the

@@ -312,6 +312,18 @@ export const platformDataBrowser = declareDataBrowser({
         'browsable surface. Org admins see open invitations on the org members page instead.',
     },
     {
+      table: 'content_reports',
+      columns: ['reviewed_by'],
+      why:
+        'Reports of content made through the public /report page (module-9 spec §B1). ' +
+        '`reviewed_by` is a staff stamp naming only the superadmin who last changed a ' +
+        'report\'s status, overwritten each time, so it is not a record ABOUT anyone. The ' +
+        'reporter is identified only by what they typed (an email address, and a signature name on ' +
+        'intimate-image reports), which is linked to no ' +
+        'account; a subject-access question about a reporter\'s address is answered from ' +
+        '/console/reports, not here.',
+    },
+    {
       table: 'vendor_account_opens',
       columns: ['opened_by'],
       why:
