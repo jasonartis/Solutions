@@ -383,7 +383,7 @@ mail, GitHub two-step) are NOT on this list: they are his, or they wait for a cu
 | Rank | Step (B.4 #) | Why it is next | Model | Ready? |
 |---|---|---|---|---|
 | 1 | **Finish the B2 nightly backup and prove a restore** (#1). **MOSTLY DONE 2026-11-09 (`28784f5`, another session):** first real backup in B2, and a restore matched prod on 87/87 tables and 1,236 rows. **DONE 2026-11-10:** exact write key minted and in GitHub; the nightly job is GREEN (all 11 checks, docs/12 "Backups") | Every other plan restores from it | Opus | the key-minting step only |
-| 2 | **Nightly copy of uploaded files to B2** (#5) | Uploaded files have NO backup at all today (F1) | Opus (touches prod data and backup crypto) | after rank 1 |
+| 2 | **Nightly copy of uploaded files to B2** (#5) — **NEXT** | Uploaded files have NO backup at all today (F1) | Opus (touches prod data and backup crypto) | yes (rank 1 done 2026-11-10) |
 | 3 | **Offsite snapshots script** `pnpm backup:snapshot` + `RESTORE.txt` (#12, B.8) | The credential files exist only on the SSD. **Switch the "Offsite snapshots" row on the vendor accounts page to active in the same session** | Sonnet | yes |
 | 4 | **Supabase settings sheet** (#4, F6) | A restore today would bring the sign-up hook back OFF | Sonnet (read-only Management API) | yes |
 | 5 | **Fonts in-house + git mirror + deploy-from-PC recipe** (#6, #8) | Small; removes two dependencies | Sonnet | yes |
@@ -421,8 +421,14 @@ CLAUDE.md's one-line state, commit only your files (`git commit -- <paths>`).
   restore").
 - *Done when:* one workflow run is green on prod data, and a restore of it passes those checks.
   Record the before/after in docs/12 "Backups" and add the bucket prefix there.
-- *Founder:* probably nothing. If the existing write key cannot write the new prefix, he may need to
-  run `scripts/b2-create-backup-key.mts` again (docs/29 has his steps).
+- *Founder:* at most one GitHub secret (below). The write key (`github-backup-writer-exact`, 2026-11-10) is restricted to the
+  BUCKET with no name prefix, so it can already write a new prefix such as `storage/` — and its
+  nightly checks (no read/list/delete) apply unchanged. The prod service key for listing/downloading
+  Storage is NOT a GitHub secret yet (only `PROD_SUPABASE_DB_PASSWORD`/`_PROJECT_REF` are): either
+  add one (founder pastes it, Settings → Secrets → Actions) or read files via the DB connection +
+  the Storage API — decide by measuring, and if a secret is needed give him exact clicks.
+  The restore half needs the private key: it is the file on his PC (docs/12 "Backups" path), which
+  `backup-restore-from-b2.mts` reads by path — never pasted into chat.
 
 **Rank 3 — offsite snapshots script (Sonnet).**
 - *Read:* B.8 above (the whole design is there: contents, `age`, naming, keep 3 pairs, `RESTORE.txt`);
