@@ -118,7 +118,8 @@ founder decision** — record it where it belongs, flag it, move on (2026-08-29)
 **Founder decisions pending / deferred — do NOT start these unprompted:**
 - Module 9 photos and its platform legal items (module-9 spec §B; the user-facing legal text v2 is APPROVED 2026-11-09,
   §H — not built). Founder also wants a superadmin home dashboard with badges/priority list (§H).
-- **"What's next" for resilience/backups → the RANKED list in docs/28 B.4a.** Offer it in order, let the founder pick.
+- **"What's next" → docs/28 B.4a (ranked list) + B.4b (a brief per rank).** Founder 2026-11-10: "do them all", so
+  "work on what's next" = start the lowest unfinished rank, one per chat; check its model first. Rank 1 done.
 - **Vendor accounts page + dependency/evacuation plans for every external service — docs/28.** Part B is PLANNED
   (2026-11-09, "THE PLAN": build order B.4, drills B.6; costs docs/costs/resilience.md), nothing built, every plan
   UNPRACTISED. Founder decided (B.7): cold now / warm at first client, only he holds access, **no domain until the first

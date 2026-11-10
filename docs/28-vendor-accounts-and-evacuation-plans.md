@@ -139,8 +139,9 @@ refusal beside a superadmin control); e2e "owner console: vendor accounts"; loca
 **Applied to prod 2026-11-10** (backup `2026-11-10T06-36-51` → dry run listing only this file →
 founder go-ahead → apply → `scripts/prod-verify-vendor-accounts.mts` 11/28 before, 50/0 after).
 Another session's content-reports migration was renumbered to `20261114010000` so this one could
-ship alone; it was held outside the folder during the apply. **Founder to fill on the page:** which
-Google account signs into Vercel, and whether GitHub two-step is on.
+ship alone; it was held outside the folder during the apply. The founder's two answers (the Vercel
+sign-in Google account; GitHub two-step is OFF) were entered on prod the same day, so the GitHub row
+now shows its "two-step off" badge, which is intended until the first customer (B.4 #11).
 
 ## Known risks — must be protected against (recorded 2026-11-09, founder: "we need to protect against them")
 
@@ -374,7 +375,8 @@ can run.
 #### B.4a NEXT UP: the ranked list a fresh chat picks from (2026-11-09)
 
 When the founder says "let's work on what's next" for resilience/backups, offer these **in this
-order**, one per session, and **wait for him to pick**: never start a build unprompted. Founder
+order**, one per session (**superseded 2026-11-10: he chose to do them all in order, see below the
+table, so no need to wait for him to pick**). Founder
 actions (docs/29 §3–4: print the key, drive copy) and the first-customer items (#11: domain,
 mail, GitHub two-step) are NOT on this list: they are his, or they wait for a customer.
 
@@ -389,6 +391,94 @@ mail, GitHub two-step) are NOT on this list: they are his, or they wait for a cu
 | 7 | **First drills** (#10, B.6), starting with the database + sign-in restore | A plan does not count until practised | Opus for the first one | after ranks 1–2 |
 
 Update this table when a rank ships (strike it through, date it) so the next chat sees what is left.
+
+**Founder, 2026-11-10: "We should do them all."** So when he opens a fresh chat and says "work on
+what's next" (or similar), that IS the go-ahead: take the **lowest unfinished rank** in the table
+above, read its brief in B.4b, and start it without asking which. One rank per chat. First check
+the model: if the rank says Opus and you are Sonnet (or the reverse), say so at the start and
+suggest switching (CLAUDE.md "Model choice"). Founder-gated beats inside a rank still need him
+in that chat: every `migrate:prod`, every `git push` (CLAUDE.md "Live warnings"), and anything
+he must do by hand (named in the brief).
+
+#### B.4b Hand-off briefs, one per rank (written 2026-11-10 for a fresh chat)
+
+Each brief says what to read, what to build, what "done" means, and what is the founder's.
+At the end of every rank: tick it in B.4a (strike through + date), add a journal entry, update
+CLAUDE.md's one-line state, commit only your files (`git commit -- <paths>`).
+
+**Rank 2 — nightly copy of uploaded files to B2 (Opus).**
+- *Read:* F1 above; docs/12 "Backups"; `.github/workflows/backup-b2.yml`; `scripts/backup-to-b2.mts`,
+  `scripts/b2.mts`, `scripts/backup-restore-from-b2.mts`, `scripts/b2-create-backup-key.mts`; the
+  bucket-creating migrations named in F1.
+- *Build:* a step (same workflow, or a sibling one) that lists every prod Storage bucket and object
+  with the service key, downloads each file, packs them (tar), encrypts with `age` to
+  `scripts/backup-recipient.txt`, and uploads to the private B2 bucket under its own prefix with the
+  same 30-day lock. Same rules as the database backup: no artifact, nothing about contents in the
+  public log, fail loudly. Start with a full copy each night (prod's storage is small; measure the
+  size first and record it); only add "changed files only" if the size says so.
+- *Restore half:* extend the restore script so a drill can decrypt the files into a scratch folder
+  and check every `storage.objects` row has its file and 3 random checksums match (B.6 "Storage
+  restore").
+- *Done when:* one workflow run is green on prod data, and a restore of it passes those checks.
+  Record the before/after in docs/12 "Backups" and add the bucket prefix there.
+- *Founder:* probably nothing. If the existing write key cannot write the new prefix, he may need to
+  run `scripts/b2-create-backup-key.mts` again (docs/29 has his steps).
+
+**Rank 3 — offsite snapshots script (Sonnet).**
+- *Read:* B.8 above (the whole design is there: contents, `age`, naming, keep 3 pairs, `RESTORE.txt`);
+  `scripts/backup-envs.ts` (its six files); `scripts/prod-backup.ts`.
+- *Build:* `pnpm backup:snapshot` writing `snapshots/<date>-platform.tar.age` and
+  `<date>-credentials.tar.age` (add `snapshots/` to `.gitignore`), run automatically at the end of
+  `backup:envs` and `backup:prod`; `RESTORE.txt` (steps only, no secrets); fetch the Windows `age.exe`
+  to sit next to them. Add the docs/03 rule "a session that edits a credential file runs
+  `pnpm backup:snapshot` before ending".
+- *In the same chat:* switch the vendor accounts row **"Offsite snapshots (USB stick at home + cloud
+  drive)"** from planned to active on prod (`/console/vendors`, Edit), so its 30-day badge fires.
+- *Done when:* the script produces both files; the founder decrypts one himself (the private key is
+  never pasted into a chat) and the session checks the result.
+- *Founder:* the monthly copy to the stick and cloud drive, then "Done today" on that row.
+
+**Rank 4 — Supabase settings sheet (Sonnet).**
+- *Read:* F6 above; docs/21 §7.12.1 (why the sign-up hook is ON); `supabase/config.toml` (LOCAL only).
+- *Build:* a read-only script (Management API with `SUPABASE_ACCESS_TOKEN` from `.env.deploy`; GET
+  only) that prints prod's auth config: hooks, site URL, redirect list, email templates, SMTP, rate
+  limits, token lifetimes. It writes a git-ignored file that goes into the credentials snapshot
+  (B.8). Commit only a docs page that says WHICH settings matter and why, never the values if any
+  are secret.
+- *Done when:* the sheet exists and a "restore into a new project" checklist in docs/12 points at it,
+  with the sign-up hook named first.
+- *Founder:* nothing.
+
+**Rank 5 — fonts in-house + git mirror + deploy-from-PC recipe (Sonnet).**
+- *Fonts (F8):* `apps/web/app/layout.tsx` uses `next/font/google` (Geist, Geist_Mono). Switch to
+  `next/font/local` with the font files in the repo (the `geist` npm package ships them). Done when
+  the build works with no network call to Google; check the pages look the same.
+- *Mirror (B.3-6):* a second free git host. **Founder makes the account** (and records it on
+  `/console/vendors`, row "Second git host (mirror)", then switches it to active); the session adds a
+  push-mirror step (a CI job, or a documented `git push --mirror` remote). Done when the mirror
+  shows the latest commit.
+- *Deploy from PC (B.3-6):* write the recipe (`vercel deploy` with `VERCEL_TOKEN`) in docs/12, and
+  try it as a **preview** deploy only, never `--prod`. Done when a preview URL serves the app.
+
+**Rank 6 — standby recipes: web host + Jitsi (Sonnet).**
+- *Read:* B.3-3 and B.3-5 above; docs/02 "Video"; `modules/speed-dating/src/video/config.ts` (F3).
+- *Build:* scripts and written steps, NOT running servers: (a) a Dockerfile/`next start` recipe for
+  the app on a Hetzner server, with the env var list and the `/healthz` + sign-in check; (b) a Jitsi
+  server build script and the `SPEED_DATING_VIDEO_PROVIDER=jitsi` / `JITSI_*` switch steps.
+- *Done when:* both are in the repo and docs; actually running them is a drill (rank 7 / B.6), which
+  needs a throwaway server the founder pays for by the hour. **Note:** B.3-3 needs the domain (R1),
+  which waits for the first customer; the recipe can still be written and drilled under a test name.
+- *Founder:* nothing until the drill.
+
+**Rank 7 — first drills, starting with database + sign-in restore (Opus for the first).**
+- *Read:* B.6 (pass conditions per drill); docs/12 "Backups"; the 2026-11-09 restore story in the
+  journal (87/87 tables matched).
+- *Do:* restore last night's B2 dump (and, once rank 2 is done, the files) into a **scratch Supabase
+  project, never prod**; prove row counts match; **a demo user signs in with their real prod
+  password**; the sign-up hook is on (needs rank 4's sheet). Delete the scratch project after.
+  Write the result as the first row in B.6 and on the vendor page.
+- *Founder:* decrypting the dump (the private key stays with him; he runs the decrypt), and creating
+  the scratch project if it needs his account.
 
 ### B.5 Protection levels and why not "instant failover everywhere"
 
