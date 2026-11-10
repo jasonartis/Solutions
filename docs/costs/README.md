@@ -31,6 +31,7 @@
 | `cost-model.md` | the tables: fixed platform costs, per-module unit costs, totals per scale tier (10 / 1k / 100k / 10M / 1B users), monthly and yearly |
 | `price-sheet.md` | every vendor price used, with source URL and the date it was checked — prices drift, so each figure carries its date |
 | `resilience.md` | standby, backup and drill costs per protection level (docs/28 Part B) — PLANNED 2026-11-09, not yet in the model |
+| `ideas.md` | every not-yet-built idea (actuals ledger, saved scenarios, badges, price re-fetch, receivables by hand) and the open questions — 2026-11-10 |
 | `assumptions.md` | usage per user per module (photos uploaded, AI calls, video minutes …), stated once so every table uses the same numbers |
 
 ## Cost facts already in the repo (re-verify before reuse)
