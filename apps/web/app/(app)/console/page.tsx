@@ -82,6 +82,13 @@ export default async function ConsolePage(props: {
       {/* Superadmin-only tools that deliberately live OUTSIDE the module tab
           strips, so those stay strictly by-the-rules (docs/13, 2026-08-02). */}
       <nav className="mb-6 flex flex-wrap gap-3 text-sm">
+        <Link href="/console/overview" className="text-blue-600 hover:underline">
+          Overview
+        </Link>
+        <span className="text-gray-400" title="Orgs, people and modules as expandable counts">
+          orgs, people and modules
+        </span>
+        <span className="text-gray-300">·</span>
         <Link href="/console/data-browser" className="text-blue-600 hover:underline">
           Data browser
         </Link>
