@@ -11,6 +11,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { getProfile } from '@/lib/platform'
 import { AppHeader } from '@/components/app-header'
+import { PLATFORM_COMPANY_NAME, PLATFORM_CONTACT_EMAIL } from '@/lib/platform-identity'
 
 const LAST_UPDATED = 'November 10, 2026'
 
@@ -23,12 +24,11 @@ export default async function PrivacyPage() {
   } = await supabase.auth.getUser()
   const profile = user ? await getProfile() : null
 
-  // Platform identity — filled in via .env.deploy (see scripts/dev.ts
-  // platformIdentityEnv()) rather than hardcoded, since these aren't
-  // finalized yet. Falls back to a visible placeholder so an unset value
-  // is obvious on the page rather than silently blank.
-  const companyName = process.env.NEXT_PUBLIC_PLATFORM_COMPANY_NAME || '[COMPANY NAME NOT SET]'
-  const contactEmail = process.env.NEXT_PUBLIC_PLATFORM_CONTACT_EMAIL || '[CONTACT EMAIL NOT SET]'
+  // Platform identity — one place, lib/platform-identity.ts (how to change it is
+  // written there). Falls back to a visible placeholder so an unset value is
+  // obvious on the page rather than silently blank.
+  const companyName = PLATFORM_COMPANY_NAME || '[COMPANY NAME NOT SET]'
+  const contactEmail = PLATFORM_CONTACT_EMAIL || '[CONTACT EMAIL NOT SET]'
 
   return (
     <>

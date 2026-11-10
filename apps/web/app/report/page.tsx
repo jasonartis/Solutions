@@ -4,6 +4,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { getProfile } from '@/lib/platform'
 import { AppHeader } from '@/components/app-header'
+import { PLATFORM_CONTACT_EMAIL } from '@/lib/platform-identity'
 import { ReportForm } from './report-form'
 
 export const metadata = { title: 'Report content' }
@@ -16,7 +17,7 @@ export default async function ReportPage() {
   const profile = user ? await getProfile() : null
   // The fallback route when a report cannot be sent. Unset, the failure message
   // simply leaves it out (never a placeholder); the console dashboard flags it.
-  const contactEmail = process.env.NEXT_PUBLIC_PLATFORM_CONTACT_EMAIL || null
+  const contactEmail = PLATFORM_CONTACT_EMAIL
 
   return (
     <>

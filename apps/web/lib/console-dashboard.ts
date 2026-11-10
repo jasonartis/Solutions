@@ -14,6 +14,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getZmanimCoverage, getZmanimPrefetchSettings } from '@/lib/zmanim-console'
 import { getVendorData, vendorIssues, type VendorIssue } from '@/lib/vendor-accounts'
+import { PLATFORM_CONTACT_EMAIL } from '@/lib/platform-identity'
 import { getOverview } from '@/lib/console-overview'
 
 // 'info' is a neutral count tile (the Platform tile): it never claims things are
@@ -274,7 +275,7 @@ async function reportsSection(supabase: SupabaseClient, items: PriorityItem[]): 
   }
 
   // The report page's fallback ("or email …") when a report cannot be sent.
-  if (!process.env.NEXT_PUBLIC_PLATFORM_CONTACT_EMAIL) {
+  if (!PLATFORM_CONTACT_EMAIL) {
     severity = 'urgent'
     lines.push('contact email NOT set — no fallback on the report page')
     items.push({

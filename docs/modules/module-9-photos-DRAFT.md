@@ -475,11 +475,18 @@ one failure being the token, below).
   "Your content" and the 13+ line; signup AND email-link sign-in show a
   required "I am 13 or older" box (its time is kept in user metadata as
   `age_13_plus_at`).
-- **Before reports can be received on prod:** apply the migration, then
-  `scripts/set-content-report-token.mts` (sets the Vercel env var and the hash),
-  then a deploy. **And set `NEXT_PUBLIC_PLATFORM_CONTACT_EMAIL` on Vercel** —
-  measured 2026-11-10: it is NOT set, so the live privacy page shows
-  "[CONTACT EMAIL NOT SET]" and the report page has no email fallback.
+- **ON PROD 2026-11-10 (founder: "Apply / Token / Push").** Backup
+  `backups/2026-11-10T07-39-54`; `migrate:prod` applied this one file (dry run
+  after: "Remote database is up to date"); prod verifier 3/32 → 42/1 → **43/0**
+  once `scripts/set-content-report-token.mts` installed the token (Vercel env
+  `CONTENT_REPORT_TOKEN` + its hash). Re-running that script rotates the token;
+  reports are refused until the next deploy picks it up.
+- **Contact email (founder 2026-11-10):** set on Vercel as
+  `NEXT_PUBLIC_PLATFORM_CONTACT_EMAIL` (production + preview) and locally as
+  `.env.deploy` `PLATFORM_CONTACT_EMAIL`. The value is deliberately NOT in the
+  repo (public). The app reads it in ONE place, `apps/web/lib/platform-identity.ts`
+  (privacy page, report page, dashboard check); to change it, edit the Vercel
+  variable and redeploy.
 
 **NOT built / open (founder items):**
 - §B2 quarantine/preservation — hooks into every module that stores files.
