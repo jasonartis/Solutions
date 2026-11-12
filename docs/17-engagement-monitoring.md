@@ -454,6 +454,11 @@ the test suite fails.
 ## 10. Verification plan (docs/03 #12 — this ships a migration, so the full rhythm applies)
 
 > **Model, decided 2026-08-09: build on Opus; run the adversarial review step on Fable.**
+> **2026-11-12, confirmed-Fable re-review of phases 1 and 2** ([docs/history/fable-review-2026-11-12.md](history/fable-review-2026-11-12.md)):
+> phase 1 (`20260809010000`) holds with zero defects; phase 2 (`20260810010000`) holds on every tenancy claim but the
+> 2026-08-11 "rollup amplification" fix is NOT closed — the action-shape CHECK still admits ~36^58 values and
+> `activity_rollup` is never pruned, so one member can mint thousands of permanent rollup rows in one request (own org
+> only). Open MEDIUM; recommended close is a per-(user, org, module) distinct-action bound inside `activity_event_guard`.
 > The build is ordinary Opus-tier migration/RLS work. The REVIEW earns the top tier under the
 > "novel mechanism, not a copy of an audited pattern" test for one specific reason: **the prune
 > function is a `SECURITY DEFINER` that can DELETE from an otherwise append-only table**, and

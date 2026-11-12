@@ -62,6 +62,13 @@ section, keep it a SUMMARY with pointers: add the dated story to the journal / t
   (archive file, "Host state").
 
 ### Shipped most recently (newest first; full stories in the linked docs)
+- **2026-11-12 (Fable, review-only, nothing applied): the eleven "Fable-requested but unverified" reviews re-run on a
+  confirmed Fable session** — [docs/history/fable-review-2026-11-12.md](docs/history/fable-review-2026-11-12.md). Six
+  done: slice-5 view-as, data browser, console view-as, lookup log, login capture all HOLD (LOW nits only);
+  **`activity_events` has one MEDIUM — the rollup amplification "fix" of 2026-08-11 is not closed (27 → 527 rows from one
+  INSERT as a member; own org only)**, close = bounded distinct actions per person in the guard (migration, Opus). Five
+  PAUSED on the Fable 5-hour limit (email definers, rank map, pending invites ×2, real view-as) — resume after 17:00 ET
+  or re-run from the file's "Pending questions".
 - **2026-11-12 (Opus): size per org and module — `20261115010000` ON PROD, verified 9/5 → 18/0** (code NOT pushed: it sits
   above b3's held `09c8cc0`). Superadmin-only `platform_storage_usage()`; `/console/overview` shows an ESTIMATED size beside
   every "records" count (a table's size split by each org's share of its rows; files exact by org folder); the Limits tile's
