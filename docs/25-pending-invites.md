@@ -593,3 +593,25 @@ otherwise clears the field after any submit; the form puts it back on `ok:false`
 including `invite section is shared…` (invite an account-less address from the console with "active immediately" ticked →
 refused with the reason and the address kept; unticked → saved; the SAME invitation shows on the org page; cancelling it
 THERE removes it from the console).
+
+## 14. HOW A PERSON JOINS THE PLATFORM TODAY, END TO END (as read from the code, 2026-11-12)
+
+Written because the founder asked "explain the flow for users joining" and the answer took several searches to assemble.
+
+1. **Sign up.** `/login` → "Create account": display name, email, password, the "I am 13 or older" box. On PROD, confirm-email is ON, so
+   they must click a link in an email before they have a session; the screen shows one identical notice whether or not the address
+   can be used (docs/21 §7.12.1). Locally sign-up is auto-confirmed. **The built-in sender allows about 2 emails per hour for the
+   whole project (docs/18 item 7), so a client's whole team cannot be onboarded in one sitting until custom SMTP exists.**
+2. **A new account belongs to no org.** The dashboard (`app/(app)/dashboard/join-help.tsx`) shows their email and a "copy message" button
+   to send their admin. There is deliberately NO "find your organization" search (it would reveal which clients use the platform,
+   docs/18 item 8).
+3. **An org admin (or the superadmin) enters that exact address** — on `/o/<org>/members`, or on the Owner Console's org card (the SAME
+   `components/org-invite-section.tsx`, §13). It works whether or not the address has an account yet; the admin never learns which.
+4. **The invitation is held for 30 days** (`pending_invites`). When the person signs in with that exact, confirmed address the
+   invitation appears on their dashboard; **accepting it makes them a member**. A module role can ride on the invitation and is
+   granted only on accept.
+5. **No email is sent about the invitation** (the sender cannot carry it). The admin must tell the person. An opt-in "also send an
+   email" is a recorded future improvement (§12.5), blocked on custom SMTP.
+6. **Superadmin only:** "add active immediately" skips the accept step for an EXISTING account.
+7. **Leaving:** account deletion and remove-from-platform are docs/21; a removed address cannot sign up again until a superadmin
+   lifts the block.

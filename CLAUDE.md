@@ -128,6 +128,11 @@ section, keep it a SUMMARY with pointers: add the dated story to the journal / t
 runs the docs/03 #12 rhythm (draft → adversarial review → live verify as real users → RLS tests → docs); **do not block on a
 founder decision** — record it where it belongs, flag it, move on (2026-08-29).
 
+**Owner Console follow-ups (founder: "one by one", a fresh chat each — prompts, local-verify recipe and known small issues:
+[docs/history/handoff-2026-11-12-console-session.md](docs/history/handoff-2026-11-12-console-session.md)):** module-role
+confirmation + refusal messages (Sonnet) → Limits tile (Sonnet) → real bytes per org (Opus, migration) → REAL view-as (Opus + Fable
+review, docs/13).
+
 **Founder decisions pending / deferred — do NOT start these unprompted:**
 - Module 9 photos (module-9 spec). Its platform legal slice (report route, terms, 13+) is ON PROD 2026-11-10.
   **Founder DECIDED 2026-11-10 (§I A–E):** next small slice = 1-year retention of closed reports with a legal-evidence
