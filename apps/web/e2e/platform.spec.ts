@@ -3341,6 +3341,22 @@ test('speed-dating: device status board + host un-tick — a dater reports camer
     }
   })
 
+// Limits tile (2026-11-12): measured figures against the vendor's confirmed free limits; database
+// size and storage say "not measurable yet", and the tile is never the green "All clear" while they do.
+test('owner console: Limits tile shows active people and video people against their caps, and says what it cannot measure', async ({ page }) => {
+  await signIn(page, 'owner@demo.local')
+  await page.goto('/console')
+  const tile = page.getByTestId('dash-tile-limits')
+  await expect(tile).toBeVisible()
+  // The owner has just signed in, so at least one person is active: a real count, not a vacuous 0.
+  await expect(tile).toContainText(/[1-9][\d,]* of 50,000 active people/)
+  await expect(tile).toContainText(/\d+ of 25 video people this month/)
+  await expect(tile).toContainText('database size: not measurable yet')
+  await expect(tile).toContainText('storage: not measurable yet')
+  await expect(tile).not.toContainText('All clear')
+  await expect(tile).not.toContainText('Could not read')
+})
+
 // Vendor accounts page (docs/28 Part A). The superadmin opens a vendor through the page (the click is
 // recorded, then the vendor opens in a new tab — the vendor's site is stubbed so CI never leaves the
 // runner), the database refuses a key typed into notes, the dashboard carries the tile, and an

@@ -16,6 +16,7 @@ import { getZmanimCoverage, getZmanimPrefetchSettings } from '@/lib/zmanim-conso
 import { getVendorData, vendorIssues, type VendorIssue } from '@/lib/vendor-accounts'
 import { PLATFORM_CONTACT_EMAIL } from '@/lib/platform-identity'
 import { getOverview } from '@/lib/console-overview'
+import { VENDOR_LIMITS, limitLevel, type LimitLevel } from '@/lib/vendor-limits'
 
 // 'info' is a neutral count tile (the Platform tile): it never claims things are
 // fine or wrong, so it must not borrow the green "All clear" word.
@@ -332,9 +333,95 @@ async function platformSection(supabase: SupabaseClient): Promise<DashboardTile>
   }
 }
 
+// --- Limits (founder's watch list, 2026-11-10; numbers in lib/vendor-limits.ts) --
+// What is measurable from our own tables, set against the vendor's confirmed free
+// limit. Database size and storage are NOT measurable yet (a database function over
+// pg_total_relation_size is needed — a migration, planned in the bytes-per-org job), so
+// they are listed as exactly that and the tile never turns green: a green "All clear"
+// with two of four limits unmeasured would claim what it did not check.
+const PAGE = 1000
+
+async function limitsSection(supabase: SupabaseClient, items: PriorityItem[]): Promise<DashboardTile> {
+  const href = '/console/overview'
+  const lines: string[] = []
+  let worst = 'ok' as LimitLevel // assigned inside note(); the cast stops TS narrowing it to 'ok'
+  let watched = 0
+  const note = (level: LimitLevel, text: string) => {
+    if (level === 'ok') return
+    watched++
+    if (level === 'over' || worst === 'ok') worst = level
+    items.push({ severity: level === 'over' ? 'urgent' : 'attention', text, href })
+  }
+
+  // 1. Active people, last 30 days. login_rollup holds ONE row per person who has ever
+  // signed in, with their last sign-in, so a count of recent rows is an exact head count
+  // of sign-ins (Supabase's own "monthly active users" also counts token refreshes, so
+  // this is a floor).
+  const mauCap = VENDOR_LIMITS.supabaseMau.value
+  const since30 = new Date(Date.now() - 30 * DAY).toISOString()
+  const { count: active, error: activeErr } = await supabase
+    .from('login_rollup')
+    .select('user_id', { count: 'exact', head: true })
+    .gte('last_login_at', since30)
+  if (activeErr || active === null) {
+    lines.push('active people: could not read')
+  } else {
+    lines.push(`${active.toLocaleString('en-US')} of ${mauCap.toLocaleString('en-US')} active people (last 30 days, sign-ins)`)
+    note(
+      limitLevel(active, mauCap),
+      `${active.toLocaleString('en-US')} active people in 30 days — Supabase free plan allows ${mauCap.toLocaleString('en-US')}`,
+    )
+  }
+
+  // 2. Video people this calendar month: distinct people who checked in at a speed-dating
+  // event (check-in is when the video room opens for them). Counted across orgs.
+  const videoCap = VENDOR_LIMITS.jaasFreeMau.value
+  const now = new Date()
+  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString()
+  const people = new Set<string>()
+  let videoErr = false
+  for (let page = 0; page < 10; page++) {
+    const { data, error } = await supabase
+      .from('sd_participants')
+      .select('user_id')
+      .gte('checked_in_at', monthStart)
+      .order('id')
+      .range(page * PAGE, page * PAGE + PAGE - 1)
+    if (error) {
+      videoErr = true
+      break
+    }
+    for (const r of data ?? []) people.add(r.user_id as string)
+    if ((data ?? []).length < PAGE) break
+  }
+  if (videoErr) {
+    lines.push('video people: could not read')
+  } else {
+    lines.push(`${people.size} of ${videoCap} video people this month (free plan)`)
+    note(limitLevel(people.size, videoCap), `${people.size} video people this month — the free video plan covers ${videoCap}`)
+  }
+
+  // 3. Not measurable yet — said plainly, with the limit to be measured against.
+  // TODO (bytes-per-org job): wire these two rows to getStorageUsage() in
+  // lib/console-overview.ts (summary.databaseBytes / summary.fileBytes) once migration
+  // 20261115010000 is on prod; on error show "unavailable", never 0.
+  lines.push(`database size: not measurable yet (limit ${VENDOR_LIMITS.supabaseDbMb.value} MB)`)
+  lines.push(`storage: not measurable yet (limit ${VENDOR_LIMITS.supabaseStorageGb.value} GB)`)
+
+  return {
+    key: 'limits',
+    title: 'Limits',
+    href,
+    count: watched,
+    severity: worst === 'over' ? 'urgent' : worst === 'near' ? 'attention' : 'info',
+    detail: watched === 0 ? 'limits near their cap' : watched === 1 ? 'limit near its cap' : 'limits near their cap',
+    lines,
+  }
+}
+
 export async function getDashboard(supabase: SupabaseClient): Promise<Dashboard> {
   const items: PriorityItem[] = []
-  const [reports, feedback, deletions, expiring, vendors, platform] = [
+  const [reports, feedback, deletions, expiring, vendors, platform, limits] = [
     ...(await Promise.all([
       reportsSection(supabase, items).catch(() => failedTile('reports', 'Content reports', '/console/reports', 'content reports')),
       feedbackSection(supabase, items).catch(() => failedTile('feedback', 'Feedback', '/console/feedback', 'feedback')),
@@ -342,10 +429,11 @@ export async function getDashboard(supabase: SupabaseClient): Promise<Dashboard>
       expiringSection(supabase, items).catch(() => failedTile('expiring', 'Expiring soon', '/console', 'expiry data')),
       vendorsSection(supabase, items).catch(() => failedTile('vendors', 'Vendor accounts', '/console/vendors', 'vendor accounts')),
       platformSection(supabase).catch(() => failedTile('platform', 'Platform', '/console/overview', 'the platform overview')),
+      limitsSection(supabase, items).catch(() => failedTile('limits', 'Limits', '/console/overview', 'usage limits')),
     ])),
   ]
   // Urgent first; the sort is stable so sources keep their own order within a level.
   const rank = { urgent: 0, attention: 1 } as const
   items.sort((a, b) => rank[a.severity] - rank[b.severity])
-  return { tiles: [reports, feedback, deletions, expiring, vendors, platform], priorities: items }
+  return { tiles: [reports, feedback, deletions, expiring, vendors, platform, limits], priorities: items }
 }

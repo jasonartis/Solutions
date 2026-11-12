@@ -62,6 +62,10 @@ section, keep it a SUMMARY with pointers: add the dated story to the journal / t
   (archive file, "Host state").
 
 ### Shipped most recently (newest first; full stories in the linked docs)
+- **2026-11-12 (Sonnet): module-role popups + Limits tile — committed/local, NOT pushed, no migration.** Grant role and the chip ×
+  ask first and show refusals in the popup (`09c8cc0`); dashboard "Limits" tile = active people + video people vs vendor free
+  limits (`lib/vendor-limits.ts`, read from the vendors' pages 2026-11-12); database size/storage "not measurable yet" until the
+  bytes-per-org job wires `getStorageUsage()`. One unrelated speed-dating e2e failure undiagnosed — journal 2026-11-12.
 - **2026-11-12 (Sonnet): Owner Console home rebuilt — ON PROD, no migration** (CI green, Vercel READY `558ba39`). Dashboard
   tiles + priority list + a red 48-hour report banner on every console page; orgs start closed (Expand/Collapse all work in
   place); staged module toggles, an amber unsaved role dropdown, a Remove confirmation popup that shows the database's refusal

@@ -440,10 +440,14 @@ entry). ~~The "Content reports" tile is a placeholder~~ — wired 2026-11-10 (be
 2. **Banner: YES, BUILT.** Every Owner Console page shows a red bar once any open report is over 24 h old (bold white-on-red
    from 36 h), linking to the queue — `app/(app)/console/layout.tsx`, rule in `lib/console-report-banner.ts`. It reflects the
    moment the console was opened or reloaded. Still no email or push: nothing alerts him outside the console.
-3. **Limits watch list: AGREED, NOT BUILT.** Start with (a) active people per month, (b) database size and storage, (c) the
+3. **Limits watch list: AGREED; (a) and (c) BUILT 2026-11-12, (b) still waiting.** (Dashboard "Limits" tile, `lib/console-dashboard.ts`
+   `limitsSection`; limits + sources in `lib/vendor-limits.ts`. Active people = people whose last sign-in is in the last 30 days
+   (`login_rollup`, a floor of Supabase's MAU: it ignores token refreshes) against Supabase Free's 50,000 MAU; video people =
+   distinct people checked in at a speed-dating event this calendar month against the 25 free JaaS people. Database size and
+   storage print "not measurable yet", and the tile is never green "All clear" while they do.) Original text follows. Start with (a) active people per month, (b) database size and storage, (c) the
    25-active-people-a-month video cap (docs/02 "Video"). (a) and (c) are roughly measurable from existing tables; (b) waits for
    the real-bytes job (journal 2026-11-10). The vendors' exact free-tier numbers must be confirmed with the vendors before any
-   are hard-coded. A "Limits" tile does not exist yet.
+   are hard-coded.
 
 ### I. 2026-11-10 — THE PLATFORM LEGAL SLICE, AS BUILT (Opus)
 
