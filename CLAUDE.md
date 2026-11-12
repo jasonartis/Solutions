@@ -131,7 +131,8 @@ founder decision** — record it where it belongs, flag it, move on (2026-08-29)
 **Owner Console follow-ups (founder: "one by one", a fresh chat each — prompts, local-verify recipe and known small issues:
 [docs/history/handoff-2026-11-12-console-session.md](docs/history/handoff-2026-11-12-console-session.md)):** module-role
 confirmation + refusal messages (Sonnet) → Limits tile (Sonnet) → real bytes per org (Opus, migration) → REAL view-as (Opus + Fable
-review, docs/13).
+review, docs/13). **Also unscheduled:** charts / other visualizations of platform statistics and threshold-triggered "at N users, do
+this" actions — the founder's wider original ask (see the handoff file); needs a founder conversation first.
 
 **Founder decisions pending / deferred — do NOT start these unprompted:**
 - Module 9 photos (module-9 spec). Its platform legal slice (report route, terms, 13+) is ON PROD 2026-11-10.

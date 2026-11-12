@@ -50,6 +50,10 @@ Order: chat 1, then 2, then 3. Chats 2 and 3 are different heavy jobs and must n
 > every viewed screen. Get a Fable adversarial review of the design. Build one module and add a test that renders the same page
 > both ways, proving no drift.
 
+### Not yet scheduled (needs a founder conversation, not a chat)
+
+- the founder's ORIGINAL, wider ask (gitignored `founder-feedback.md` ~line 119: "analyse what statistics should be monitored, create charts, visualizations and metrics … the expandable table-tree would be one way to visualise what is happening but let's analyse and think of others … actions listed based on critical points like when reaching 100 users we need to migrate from xyz") is only PARTLY done — the headcount trees and the agreed Limits tile are the first slices; charts, other visualizations, and threshold-triggered "do this next" actions are NOT scheduled and need a founder conversation first.
+
 ## 2. How the work was verified on this host (pnpm is NOT on PATH — this worked, with no shim)
 
 Run from `apps/web` unless stated. Each is a single plain command.
