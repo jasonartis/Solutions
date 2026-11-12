@@ -248,6 +248,9 @@ the login page, the backup scripts and `supabase/config.toml`. Corrections:
 | F10 | **Both prod platforms are on FREE plans whose terms are themselves a risk:** Vercel Hobby forbids commercial use, and Supabase Free pauses after a week idle with no automated backups (docs/12). | docs/05, docs/12 | "Lost" can mean **suspended for breaking the plan's terms**, not only an outage. The fix is the paid plans already in docs/18, at the first paying client. |
 | F11 | **Once plans are paid, one bank card pays every vendor.** An expired card stops them all in the same week. | — (nothing paid yet) | Part A's "payment failing" badge, plus a second card on file wherever the vendor allows one. |
 | F12 | **Supabase management token and CLI** run `migrate:prod` and the backups. The token's expiry was never recorded. | `.env.deploy` key names | Part A date to track. Without the token, nothing can be deployed to or backed up from the database. |
+| F14 (2026-11-12) | **Claude / Anthropic is the development team and was on no list.** Nearly all building, reviewing, migrating and every drill (B.7 Q4) is done by Claude sessions. | CLAUDE.md; B.7 Q4 | Users never touch it, so the platform keeps running; **building, fixing and drilling stop or slow to a crawl.** The exit plan already mostly exists: the docs are the source of truth in plain language, and the code is standard TypeScript/Next.js/Postgres with nothing tied to Claude, so another AI coding tool or a hired developer can pick it up. Needs a page row with its billing. |
+| F15 (2026-11-12) | **The standby providers are vendors too and have no rows.** Hetzner is named as the home of the standby website (B.3-3), the Jitsi server (B.3-5), the warm database copy (B.7 Q1) and likely the worker VPS. DNS may sit at Cloudflare rather than the registrar (B.3-3). | B.3-3, B.3-5, B.5 | An exit plan whose target has no account, no sign-in and no payment card cannot run in an emergency. Each needs a row (planned) **before** the drill that first uses it. Hetzner holding several standbys is acceptable while they are cold: it backs up different primaries, never itself. |
+| F16 (2026-11-12) | **The accounts that hold the backup keys have no rows.** B.7 Q6: the decryption key's cloud copy and the B2 read key each sit in a separate online account; B.8 adds the cloud drive for snapshots (which must be a third account). | B.7 Q6, B.8 | Losing one of them removes a copy of a key nobody can regenerate (the decryption key) or locks the restore path. Give each a row described generically (which service holds what is recorded on the superadmin-only page, never in this public repo), with two-step and recovery tracked like the others. |
 
 ### B.2 Every service: how bad is losing it, and outside vs. our own
 
@@ -273,6 +276,11 @@ done and drilled.
 | **Google Fonts** (F8) | Blocks shipping only | — | — | **Bring in-house:** ship the two font files with the app (`next/font/local`). About 15 min, $0, one less dependency. |
 | **npm, container images, GitHub Actions add-ons** | Blocks shipping only | Wait or rerun (CI has hit image rate limits) | The lockfile pins versions; nothing more | Outside, no plan beyond waiting. |
 | **Planned:** AI provider (résumé builder), worker server, payments | Each **feature down** | — | — | Each gets its row **here, before adoption** (the rule above). The worker server doubles as the warm standby host if Q1 = warm. |
+| **Claude / Anthropic** (F14) | Invisible to users; **stops building, fixing and drills** | Another AI coding tool or a developer reads the docs and continues; slower at first | Same; the docs are the standby | Outside. No standby to keep running: keeping the docs current IS the plan (CLAUDE.md's first rule). |
+| **Hetzner** (F15, standby host) | None while cold; **becomes the target of B.3-1 warm, B.3-3 and B.3-5** | n/a (no account yet) | Account open, card on file, two-step on, before the first drill that needs a server | Outside; if it is ever unavailable, any VPS provider runs the same Docker/Jitsi scripts. |
+| **DNS host** (F15, if not the registrar) | Platform down once the domain exists | n/a | Same rules as the registrar | Decide at the first customer (B.4 #11). |
+| **Accounts holding key copies + the snapshots' cloud drive** (F16) | Invisible until a restore; losing the decryption key's copies makes **every backup unreadable** | Paper copy not made yet (B.7 Q6) | Paper + separate drive + one cloud copy, each account with two-step | n/a: these are access, like B.3-7. |
+| **Build tools** (Docker Hub images, npm, GitHub Actions steps, Google Fonts) | Blocks shipping only | Wait or rerun | Fonts in-house (rank 5); the lockfile pins the rest | No accounts, so no page rows (Part A "Seed"); listed here so they are not forgotten. Open-source libraries running inside the app (Next.js, Drizzle, pg-boss, hebcal, …) cannot be cut off and need nothing. |
 
 **Decided here, not founder calls** (technical judgments; the founder can overrule):
 stay on managed services and keep our own copies as the **evacuation targets**; no
@@ -378,6 +386,7 @@ with GitHub). Vercel signs in with a separate Google account, not the superadmin
 | 10 | First drill of each plan (B.6) | the "unpractised" rule | < $1 each | per Q4 |
 | 11 | At the first paying client: **buy the domain (#3), set up mail (#7), turn on GitHub two-step + print its recovery codes** (founder, 2026-11-09), then Supabase Pro + Vercel Pro (already in docs/18), plus the warm standby if Q1 = warm | F10 | see costs | founder |
 | 12 | Offsite snapshots (B.8): `pnpm backup:snapshot`, `RESTORE.txt`, stick + cloud copy, first restore drill (BitLocker on `D:` for F13 declined by the founder 2026-11-09) | F5, F13, docs/12 "TO BE PLANNED" | $0 | session builds; founder copies monthly |
+| 13 | **Exit plans + drill tracking on the vendor accounts page**, plus the missing rows (F14–F16). Decided 2026-11-12 (founder "yes please"): on the page, not a separate page; switch steps stay HERE (B.4b rank 7) | F14–F16; "nothing reminds us a drill is due" | $0 | session (Opus, migration) |
 
 Steps 1, 2 and 12 matter most: without a proven backup, a way into the accounts and an off-SSD copy of the credentials, no other plan
 can run.
@@ -398,7 +407,8 @@ mail, GitHub two-step) are NOT on this list: they are his, or they wait for a cu
 | 4 | **Supabase settings sheet** (#4, F6) | A restore today would bring the sign-up hook back OFF | Sonnet (read-only Management API) | yes |
 | 5 | **Fonts in-house + git mirror + deploy-from-PC recipe** (#6, #8) | Small; removes two dependencies | Sonnet | yes |
 | 6 | **Standby recipes: web host on our own server, Jitsi build script** (#9) | Turns B.3-3/B.3-5 from prose into something runnable | Sonnet | yes |
-| 7 | **First drills** (#10, B.6), starting with the database + sign-in restore | A plan does not count until practised | Opus for the first one | after ranks 1–2 |
+| 7 | **Exit plans + drill tracking on the vendor page, and the missing rows** (#13, added 2026-11-12) | Without it nothing reminds anyone a drill is due, and the standby providers have no account rows; it must exist before the first drill so that drill's date starts the clock | Opus (migration on the superadmin tables) | yes |
+| 8 | **First drills** (#10, B.6), starting with the database + sign-in restore | A plan does not count until practised | Opus for the first one | after ranks 1–2 and 7 |
 
 Update this table when a rank ships (strike it through, date it) so the next chat sees what is left.
 
@@ -481,12 +491,44 @@ CLAUDE.md's one-line state, commit only your files (`git commit -- <paths>`).
 - *Build:* scripts and written steps, NOT running servers: (a) a Dockerfile/`next start` recipe for
   the app on a Hetzner server, with the env var list and the `/healthz` + sign-in check; (b) a Jitsi
   server build script and the `SPEED_DATING_VIDEO_PROVIDER=jitsi` / `JITSI_*` switch steps.
-- *Done when:* both are in the repo and docs; actually running them is a drill (rank 7 / B.6), which
+- *Done when:* both are in the repo and docs; actually running them is a drill (rank 8 / B.6), which
   needs a throwaway server the founder pays for by the hour. **Note:** B.3-3 needs the domain (R1),
   which waits for the first customer; the recipe can still be written and drilled under a test name.
 - *Founder:* nothing until the drill.
 
-**Rank 7 — first drills, starting with database + sign-in restore (Opus for the first).**
+**Rank 7 — exit plans + drill tracking on the vendor page, and the missing rows (Opus, migration).**
+- *Why this shape (founder, 2026-11-12):* the founder asked for the standby, the plan, the switch
+  steps, the drill, and the last and next drill dates on each vendor. **Decided: on the existing vendor
+  page, not a separate page; the switch steps themselves stay in this doc.** Scenario that decided it:
+  Supabase is down at 9 pm. The vendor page lives in Supabase, so any steps stored only on a platform
+  page are unreadable exactly when needed; this doc is in the repo, on the PC, on GitHub and in the
+  offsite snapshots. The page links to the plan (`part_b_ref`) and holds the short facts and dates.
+- *Read:* Part A AS BUILT above (tables, the secret filter, badges, "check every N days"); B.3, B.5,
+  B.6; `20261113010000_vendor_accounts.sql`; `apps/web/lib/vendor-accounts.ts`; `lib/console-dashboard.ts`;
+  `scripts/prod-verify-vendor-accounts.mts` (copy it for this migration).
+- *Build:* (a) on `vendor_accounts`: the standby / exit target (short text) and its level (cold / warm /
+  hot, B.5). (b) a drills list (name, how often, one-line pass condition, plan ref, planned or active)
+  **linked to the accounts it covers** (one drill can cover several: "locked out of GitHub/Google" covers
+  three), shown on each covered account's card. (c) a drill-run log (date, pass / partial / fail, time
+  taken, short note), append-only by grants like `vendor_account_opens`; last run and next due are
+  computed from it. (d) dashboard badge when an ACTIVE drill is overdue or never run; a PLANNED drill
+  (its plan not built yet) is not badged, same reasoning as the offsite-snapshots row. (e) seed the nine
+  B.6 drills, with the 2026-11-09 partial pass on the database drill; active only where the plan is
+  built today (database restore). (f) the missing rows: Claude / Anthropic (active), Hetzner and a DNS
+  host (planned), the accounts holding key copies and the snapshots' cloud drive (F16, described
+  generically; the founder fills in which service on prod, never in the repo).
+- *Rules to keep:* every new table and text column under the secret-refusing trigger (Part A, "read
+  generically" covers new columns on `vendor_accounts`; new tables need the trigger bound); revoke
+  before grant; superadmin only; classify in `verify-acl-hardening.ts` and the data browser; claim the
+  migration version with other sessions first.
+- *After a drill:* the session records the run on the page (dates and badge) AND in B.6's drill log
+  here (the story of what broke), because this doc must be readable when the platform is down.
+- *Done when:* the migration is on prod with its verifier before/after, the page shows each account's
+  standby and drills, and the dashboard badges an overdue active drill (prove it with a back-dated
+  local run).
+- *Founder:* the `migrate:prod` go-ahead and push; filling in which services hold the key copies.
+
+**Rank 8 — first drills, starting with database + sign-in restore (Opus for the first).**
 - *Read:* B.6 (pass conditions per drill); docs/12 "Backups"; the 2026-11-09 restore story in the
   journal (87/87 tables matched).
 - *Do:* restore last night's B2 dump (and, once rank 2 is done, the files) into a **scratch Supabase
