@@ -727,7 +727,7 @@ and a subject). Writing surfaces for the remaining modules is the substantial
 part — **as of 2026-08-04 that is speed-dating only**, and its are the delicate ones
 (interest marks, safety reports; a host deliberately cannot read what an organizer can).
 
-## "REAL" VIEW-AS: SEE THE CLIENT'S ACTUAL SCREEN (founder decision, 2026-11-10 — NOT BUILT)
+## REAL VIEW-AS: SEE THE CLIENT'S ACTUAL SCREEN (founder decision, 2026-11-10 — NOT BUILT)
 
 **The ask.** Today "View as anything" (`/console/view-as`) shows the rows a position or named person can read, as labelled
 tables (`SectionTable`), not the screen. The founder wants the REAL thing: to see exactly what a client's user sees, the way
