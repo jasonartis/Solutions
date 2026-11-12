@@ -223,8 +223,9 @@ test('pending invites, chat (docs/25 scenario 1): org invite with the Visual Mes
   await signIn(page, 'alice@demo.local')
   await page.goto('/o/demo-visual/members')
   const row = page.locator('li', { has: page.getByText(email, { exact: true }) })
-  const removed = page.waitForResponse((r) => r.request().method() === 'POST')
   await row.getByRole('button', { name: 'Remove', exact: true }).click()
+  const removed = page.waitForResponse((r) => r.request().method() === 'POST')
+  await row.getByRole('button', { name: /Yes, (remove|withdraw)/ }).click() // the confirmation popup
   await removed
 })
 
