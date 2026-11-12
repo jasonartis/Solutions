@@ -231,6 +231,9 @@ const FUNCTION_EXCEPTIONS: Record<string, { auth: boolean; svc: boolean }> = {
   // re-checks is_superadmin(); the worker has no business with reports.
   'content_report_set_status(p_id uuid, p_status text, p_note text)': { auth: true, svc: false },
   'content_report_intake_status()': { auth: true, svc: false },
+  // 20261115010000: the Owner Console's size per org/module. Re-checks
+  // is_superadmin(); the worker has no use for it.
+  'platform_storage_usage()': { auth: true, svc: false },
   // 20261113010000: the vendor-accounts secret filter. Called only by its
   // definer trigger; nobody may call it directly.
   'vendor_secret_reason(t text)': { auth: false, svc: false },

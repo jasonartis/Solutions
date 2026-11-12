@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { buildOverview } from '../lib/console-overview'
+import { buildOverview, formatBytes, summarizeStorage } from '../lib/console-overview'
 
 // The Owner Console Overview's COUNTING RULES (`lib/console-overview.ts`, founder 2026-11-10),
 // checked on a tiny made-up platform with no database or browser. Kept as a test because the
@@ -73,4 +73,49 @@ test('overview counting: records are summed per org and per module, and are 0 wh
   })
   expect(unscanned.recordsScan.included).toBe(false)
   expect(unscanned.byOrg[0]!.records).toBe(0)
+})
+
+// SIZES (20261115010000): summarizeStorage attributes each table/bucket row to a module by prefix,
+// to its org when it has one, and nothing is counted twice or dropped.
+test('overview sizes: bytes land on the right org, module and pair, and add up', () => {
+  const s = summarizeStorage([
+    { kind: 'database', name: 'postgres', org_id: null, item_count: null, bytes: 10_000 },
+    { kind: 'table', name: 'cls_grades', org_id: 'o1', item_count: 3, bytes: 300 },
+    { kind: 'table', name: 'cls_grades', org_id: 'o2', item_count: 1, bytes: 100 },
+    { kind: 'table', name: 'org_members', org_id: 'o1', item_count: 2, bytes: 50 }, // platform table, o1
+    { kind: 'table', name: 'profiles', org_id: null, item_count: 9, bytes: 500 }, // platform, nobody's
+    { kind: 'bucket', name: 'vm-images', org_id: 'o1', item_count: 2, bytes: 2_000 },
+    { kind: 'bucket', name: 'vm-images', org_id: null, item_count: 1, bytes: 7 }, // outside an org folder
+    { kind: 'bucket', name: 'new-bucket', org_id: 'o2', item_count: 1, bytes: 5 }, // not mapped yet
+  ])
+  expect(s.databaseBytes).toBe(10_000)
+  expect(s.tableBytes).toBe(950)
+  expect(s.systemBytes).toBe(9_050)
+  expect(s.fileBytes).toBe(2_012)
+  expect(s.byPair.get('o1|classroom')).toEqual({ db: 300, files: 0 })
+  expect(s.byPair.get('o1|visual-messaging')).toEqual({ db: 0, files: 2_000 })
+  expect(s.byOrg.get('o1')).toEqual({ db: 350, files: 2_000 }) // includes its share of org_members
+  expect(s.byOrg.get('o2')).toEqual({ db: 100, files: 5 })
+  expect(s.byModule.get('classroom')).toEqual({ db: 400, files: 0 })
+  expect(s.platformOrgBytes).toBe(50)
+  expect(s.unattributed).toEqual({ db: 500, files: 7 })
+  expect(s.unmappedBuckets).toEqual(['new-bucket'])
+  // Conservation: every table byte is in exactly one of org / unattributed.
+  const orgDb = [...s.byOrg.values()].reduce((n, b) => n + b.db, 0)
+  expect(orgDb + s.unattributed.db).toBe(s.tableBytes)
+
+  const sized = buildOverview({
+    orgs: [{ id: 'o1', name: 'Alpha', slug: 'a' }],
+    members: [],
+    entitlements: [{ org_id: 'o1', module_key: 'classroom', enabled: true }],
+    moduleRoles: [],
+    names: new Map(),
+    modules: [{ key: 'classroom', name: 'Classroom' }, { key: 'visual-messaging', name: 'VM' }],
+    storage: s,
+  })
+  // The org's own size counts visual-messaging even though that module is OFF for it.
+  expect(sized.byOrg[0]!.bytes).toEqual({ db: 350, files: 2_000 })
+  expect(sized.byOrg[0]!.modules.map((m) => m.bytes)).toEqual([{ db: 300, files: 0 }])
+  expect(formatBytes(1536)).toBe('1.5 KB')
+  expect(formatBytes(512)).toBe('512 bytes')
 })
