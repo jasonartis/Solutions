@@ -62,6 +62,14 @@ section, keep it a SUMMARY with pointers: add the dated story to the journal / t
   (archive file, "Host state").
 
 ### Shipped most recently (newest first; full stories in the linked docs)
+- **2026-11-12 (Sonnet): Owner Console home rebuilt — ON PROD, no migration** (CI green, Vercel READY `558ba39`). Dashboard
+  tiles + priority list + a red 48-hour report banner on every console page; orgs start closed (Expand/Collapse all work in
+  place); staged module toggles, an amber unsaved role dropdown, a Remove confirmation popup that shows the database's refusal
+  (an org's last owner/admin) instead of the generic error page; ONE invite section shared by the org Members page and the
+  console (an address with no account can be invited); `/console/overview` expandable headcount trees with row counts; Tools
+  as cards. Journal 2026-11-10/12, docs/25 §13, module-9 spec §H. **Decided, NOT built:** real bytes per org (needs a
+  migration — Opus), a Limits tile, and a REAL view-as (the client's actual screen, same components — docs/13 "REAL VIEW-AS";
+  Opus + Fable review). **Test lesson: when a shared control changes, grep EVERY file in `apps/web/e2e`.**
 - **2026-11-10 (Opus): platform legal slice — migration `20261114010000_content_reports` ON PROD, verified** (prod verifier
   `scripts/prod-verify-content-reports.mts` 3/32 → 43/0). Public `/report`, `/console/reports`, dashboard tile,
   terms/privacy text, 13+ box. Token installed; contact email set on Vercel, read only via
