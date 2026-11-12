@@ -181,3 +181,8 @@ and an empty result does **not** mean the single has answered nothing. Any tool 
 `mm_interests`, which *does* have an `mm_can_manage` arm (admin oversight) while excluding
 plain matchmakers — the two tables differ deliberately, so neither can be inferred from the
 other.
+
+## 2026-11-12 — OPEN: no adults-only gate
+
+Only the platform-wide 13+ signup line exists; this module does not ask for or enforce 18+. Recorded in full
+in the module-6 spec, "Safety (first-class)" (same gap, both dating modules). Not built, not scheduled.

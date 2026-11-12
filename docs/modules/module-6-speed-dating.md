@@ -50,6 +50,11 @@ Grid of all rooms with **connection status only (never video feeds)**; who dropp
 
 Report button on every encounter (during call + end-of-event form); personal block list ("never pair me with them again", enforced in rotation across all future events); organizer report review; admin platform ban list; **no recording, ever** — an explicit product promise.
 
+**OPEN (found 2026-11-12, platform assessment review): no adults-only gate.** The platform's only age check is the 13+
+signup line (module-9 spec §B/§I). Neither this module nor Make-a-Match (module 1) asks for or enforces 18+, so a
+13-year-old who passes signup could register for a dating event. Needs a decision before any real event: at minimum an
+18+ attestation per dating module (shown at registration, recorded), possibly an org setting. Not built, not scheduled.
+
 ## Waitlist & balance
 
 Capacity per side; waitlist auto-promotes only when it preserves the event's configured balance.
