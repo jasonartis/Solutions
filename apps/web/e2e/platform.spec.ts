@@ -2962,9 +2962,16 @@ test('speed-dating module: organizer console counts pairings skipped by personal
   // Charlie blocks Dana.
   await signIn(page, 'charlie@demo.local')
   await page.goto(poolUrl)
-  const blocked = page.waitForResponse((r) => r.request().method() === 'POST')
   await page.getByRole('button', { name: 'Never pair me with them again' }).click()
-  await blocked
+  // Wait for the block to EXIST, not for "some POST": the page shows nothing after the click, and a
+  // POST that is not the block action resolved waitForResponse early — the next signIn then cut the
+  // block off, and the alice step below failed intermittently (2026-11-12). Charlie's own block
+  // list on the speed-dating home page is the proof.
+  const blockRoot = '/o/demo-dating/m/speed-dating'
+  await expect(async () => {
+    await page.goto(blockRoot)
+    await expect(page.getByRole('button', { name: 'Unblock' })).toBeVisible({ timeout: 2000 })
+  }).toPass({ timeout: 20000 })
 
   try {
     await signIn(page, 'alice@demo.local')
@@ -2999,9 +3006,14 @@ test('speed-dating module: organizer console counts pairings skipped by personal
     // The block is org-wide and would leak into later tests: always remove it.
     await signIn(page, 'charlie@demo.local')
     await page.goto('/o/demo-dating/m/speed-dating')
-    const unblocked = page.waitForResponse((r) => r.request().method() === 'POST')
-    await page.getByRole('button', { name: 'Unblock' }).click()
-    await unblocked
+    // Only unblock if a block exists. A cleanup that throws REPLACES the error the test body
+    // raised (a throw in `finally` wins), which once hid the real failure behind "no Unblock button".
+    const unblock = page.getByRole('button', { name: 'Unblock' })
+    if (await unblock.count()) {
+      const unblocked = page.waitForResponse((r) => r.request().method() === 'POST')
+      await unblock.first().click()
+      await unblocked
+    }
     await expect(page.getByText('No one blocked.', { exact: false })).toBeVisible()
   }
 })
