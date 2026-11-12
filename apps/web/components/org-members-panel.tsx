@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import type { ActionResult } from '@/lib/org-members'
 import ModuleRoleForm from './module-role-form'
-import { RemoveMemberButton, RoleChangeForm } from './org-member-controls'
+import { RemoveMemberButton, RemoveModuleRoleButton, RoleChangeForm } from './org-member-controls'
 
 
 // Org role ranks mirror org_role_rank() in the DB (migration 20260717010000).
@@ -36,8 +36,8 @@ export default function OrgMembersPanel(props: {
   orgName: string
   changeRoleAction: (formData: FormData) => Promise<ActionResult>
   removeMemberAction: (userId: string) => Promise<ActionResult>
-  addModuleRoleAction: (formData: FormData) => Promise<void>
-  removeModuleRoleAction: (userId: string, moduleKey: string, role: string) => Promise<void>
+  addModuleRoleAction: (formData: FormData) => Promise<ActionResult>
+  removeModuleRoleAction: (userId: string, moduleKey: string, role: string) => Promise<ActionResult>
   // The caller's own rank in this org (owner=3, admin=2; the superadmin
   // console passes SUPERADMIN_RANK=4). Drives which rows are manageable and
   // which target roles are offerable — you can only manage a seat you
@@ -117,11 +117,12 @@ export default function OrgMembersPanel(props: {
                     className="flex items-center gap-1 rounded bg-blue-50 px-2 py-0.5 text-xs text-blue-700"
                   >
                     {mr.moduleName}: {mr.role}
-                    <form action={props.removeModuleRoleAction.bind(null, m.userId, mr.moduleKey, mr.role)}>
-                      <button className="text-blue-400 hover:text-red-600" title="Remove this role" aria-label="Remove this role">
-                        ×
-                      </button>
-                    </form>
+                    <RemoveModuleRoleButton
+                      personName={nameOf(m)}
+                      moduleName={mr.moduleName}
+                      role={mr.role}
+                      action={props.removeModuleRoleAction.bind(null, m.userId, mr.moduleKey, mr.role)}
+                    />
                   </li>
                 ))}
               </ul>

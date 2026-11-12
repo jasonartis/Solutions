@@ -154,22 +154,39 @@ export async function removeMember(orgSlug: string, userId: string): Promise<Act
   }
 }
 
-export async function addModuleRole(orgSlug: string, formData: FormData) {
-  const { supabase, orgId } = await requireOrgAdminBySlug(orgSlug)
-  const userId = String(formData.get('userId') ?? '')
-  const moduleKey = String(formData.get('moduleKey') ?? '')
-  const role = String(formData.get('role') ?? '')
-  if (!userId || !moduleKey || !role) throw new Error('Member, module, and role are required')
+// Grant / remove a module role RETURN a refusal rather than throw it (docs/03 #22),
+// so the popup can show the reason. Same shape as changeRole / removeMember above.
+export async function addModuleRole(orgSlug: string, formData: FormData): Promise<ActionResult> {
+  try {
+    const { supabase, orgId } = await requireOrgAdminBySlug(orgSlug)
+    const userId = String(formData.get('userId') ?? '')
+    const moduleKey = String(formData.get('moduleKey') ?? '')
+    const role = String(formData.get('role') ?? '')
+    if (!userId || !moduleKey || !role) return { ok: false, reason: 'Choose a member, a module and a role.' }
 
-  const manifest = getModule(moduleKey)
-  if (!manifest || !manifest.roles.includes(role)) throw new Error('Unknown module role')
+    const manifest = getModule(moduleKey)
+    if (!manifest || !manifest.roles.includes(role)) return { ok: false, reason: 'That module does not have that role.' }
 
-  await upsertModuleRole(supabase, orgId, userId, moduleKey, role)
-  revalidatePath(`/o/${orgSlug}/members`)
+    await upsertModuleRole(supabase, orgId, userId, moduleKey, role)
+    revalidatePath(`/o/${orgSlug}/members`)
+    return { ok: true }
+  } catch (e) {
+    return memberActionFailure(e)
+  }
 }
 
-export async function removeModuleRoleAction(orgSlug: string, userId: string, moduleKey: string, role: string) {
-  const { supabase, orgId } = await requireOrgAdminBySlug(orgSlug)
-  await removeModuleRole(supabase, orgId, userId, moduleKey, role)
-  revalidatePath(`/o/${orgSlug}/members`)
+export async function removeModuleRoleAction(
+  orgSlug: string,
+  userId: string,
+  moduleKey: string,
+  role: string,
+): Promise<ActionResult> {
+  try {
+    const { supabase, orgId } = await requireOrgAdminBySlug(orgSlug)
+    await removeModuleRole(supabase, orgId, userId, moduleKey, role)
+    revalidatePath(`/o/${orgSlug}/members`)
+    return { ok: true }
+  } catch (e) {
+    return memberActionFailure(e)
+  }
 }

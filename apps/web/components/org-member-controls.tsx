@@ -116,6 +116,76 @@ export function RoleChangeForm(props: {
   )
 }
 
+// The × on a module-role chip, behind a confirmation popup (founder, 2026-11-12:
+// same treatment as Remove). A refusal is shown inside the popup, never thrown.
+export function RemoveModuleRoleButton(props: {
+  personName: string
+  moduleName: string
+  role: string
+  action: () => Promise<ActionResult>
+}) {
+  const dialog = useRef<HTMLDialogElement>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [pending, start] = useTransition()
+
+  function confirmRemove() {
+    start(async () => {
+      const result = await props.action()
+      if (result.ok) dialog.current?.close()
+      else setError(result.reason)
+    })
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => {
+          setError(null)
+          dialog.current?.showModal()
+        }}
+        className="text-blue-400 hover:text-red-600"
+        title="Remove this role"
+        aria-label="Remove this role"
+      >
+        ×
+      </button>
+      <dialog ref={dialog} className="m-auto w-full max-w-md rounded-lg p-0 shadow-xl backdrop:bg-black/40">
+        <div className="p-5 text-left">
+          <h4 className="text-base font-semibold text-gray-900">
+            Take the {props.moduleName} role “{props.role}” away from {props.personName}?
+          </h4>
+          <p className="mt-2 text-sm text-gray-600">
+            They stay in the organization but lose what that role allowed in {props.moduleName}. You can give it back later.
+          </p>
+          {error && (
+            <p role="alert" className="mt-3 rounded border border-red-200 bg-red-50 p-2 text-sm text-red-700">
+              {error}
+            </p>
+          )}
+          <div className="mt-5 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => dialog.current?.close()}
+              className="rounded border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={pending}
+              onClick={confirmRemove}
+              className="rounded bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-60"
+            >
+              {pending ? 'Removing…' : 'Yes, take it away'}
+            </button>
+          </div>
+        </div>
+      </dialog>
+    </>
+  )
+}
+
 // Remove, behind a confirmation popup. The refusal reason (e.g. "an organization
 // must keep at least one owner or admin") is shown IN the popup, so a refused
 // removal never lands on the generic error page.

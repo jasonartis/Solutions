@@ -219,24 +219,40 @@ export async function removeMember(orgId: string, userId: string): Promise<Actio
   }
 }
 
-export async function addModuleRole(orgId: string, formData: FormData) {
-  const supabase = await requireSuperadmin()
-  const userId = String(formData.get('userId') ?? '')
-  const moduleKey = String(formData.get('moduleKey') ?? '')
-  const role = String(formData.get('role') ?? '')
-  if (!userId || !moduleKey || !role) throw new Error('Member, module, and role are required')
+// Grant / remove a module role RETURN a refusal rather than throw it (docs/03 #22).
+export async function addModuleRole(orgId: string, formData: FormData): Promise<ActionResult> {
+  try {
+    const supabase = await requireSuperadmin()
+    const userId = String(formData.get('userId') ?? '')
+    const moduleKey = String(formData.get('moduleKey') ?? '')
+    const role = String(formData.get('role') ?? '')
+    if (!userId || !moduleKey || !role) return { ok: false, reason: 'Choose a member, a module and a role.' }
 
-  const manifest = getModule(moduleKey)
-  if (!manifest || !manifest.roles.includes(role)) throw new Error('Unknown module role')
+    const manifest = getModule(moduleKey)
+    if (!manifest || !manifest.roles.includes(role)) return { ok: false, reason: 'That module does not have that role.' }
 
-  await upsertModuleRole(supabase, orgId, userId, moduleKey, role)
-  revalidatePath('/console')
+    await upsertModuleRole(supabase, orgId, userId, moduleKey, role)
+    revalidatePath('/console')
+    return { ok: true }
+  } catch (e) {
+    return memberActionFailure(e)
+  }
 }
 
-export async function removeModuleRoleAction(orgId: string, userId: string, moduleKey: string, role: string) {
-  const supabase = await requireSuperadmin()
-  await removeModuleRole(supabase, orgId, userId, moduleKey, role)
-  revalidatePath('/console')
+export async function removeModuleRoleAction(
+  orgId: string,
+  userId: string,
+  moduleKey: string,
+  role: string,
+): Promise<ActionResult> {
+  try {
+    const supabase = await requireSuperadmin()
+    await removeModuleRole(supabase, orgId, userId, moduleKey, role)
+    revalidatePath('/console')
+    return { ok: true }
+  } catch (e) {
+    return memberActionFailure(e)
+  }
 }
 
 // Founder feedback (2026-07-12): synagogue-schedules' location settings

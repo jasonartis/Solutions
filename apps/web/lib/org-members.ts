@@ -79,6 +79,12 @@ const SHOWN_REFUSALS: [prefix: string, say: string][] = [
   ['You cannot manage a member whose role is at or above your own', 'You cannot change someone whose role is at or above your own.'],
   ['You cannot promote someone to a role at or above your own', 'You cannot give anyone a role at or above your own.'],
   ['You can only add someone at a role below your own', 'You can only give a role below your own.'],
+  // Module-role seats (the module_roles guard triggers).
+  ['You cannot change your own module seat', 'You cannot change your own module role.'],
+  ['You cannot remove your own module seat', 'You cannot remove your own module role.'],
+  ['You cannot grant a module position to yourself', 'You cannot give yourself a module role.'],
+  ['You do not have authority', 'You do not have the authority to change that module role.'],
+  ['Unknown module role', 'That module does not have that role.'],
 ]
 
 export function memberActionFailure(e: unknown): ActionResult {

@@ -144,10 +144,21 @@ test('org self-management: admin adds/removes members, changes roles, grants/rev
   await grantForm.locator('select[name="moduleKey"]').selectOption({ label: 'Demo Module' })
   await grantForm.locator('select[name="role"]').selectOption('user')
   await grantForm.getByRole('button', { name: 'Grant role' }).click()
+  // Grant asks first (2026-11-12): nothing is written until the popup is confirmed.
+  const grantDialog = page.getByRole('dialog').filter({ hasText: 'Give Org Test Member the Demo Module role' })
+  await expect(grantDialog).toBeVisible()
+  await expect(orgtestRow.getByText('Demo Module: user')).not.toBeVisible()
+  await grantDialog.getByRole('button', { name: 'Yes, grant it' }).click()
   await expect(orgtestRow.getByText('Demo Module: user')).toBeVisible()
 
-  // Revoke that module role.
+  // Revoke that module role: the × opens a popup; Cancel changes nothing, confirm removes it.
   await orgtestRow.getByRole('button', { name: 'Remove this role' }).click()
+  const revokeDialog = page.getByRole('dialog').filter({ hasText: 'Take the Demo Module role' })
+  await expect(revokeDialog).toBeVisible()
+  await revokeDialog.getByRole('button', { name: 'Cancel' }).click()
+  await expect(orgtestRow.getByText('Demo Module: user')).toBeVisible()
+  await orgtestRow.getByRole('button', { name: 'Remove this role' }).click()
+  await revokeDialog.getByRole('button', { name: 'Yes, take it away' }).click()
   await expect(orgtestRow.getByText('Demo Module: user')).not.toBeVisible()
 
   // Cancel bob's invitation (cleanup — and it deletes the stored address).
