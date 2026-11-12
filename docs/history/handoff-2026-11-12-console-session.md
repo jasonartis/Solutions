@@ -110,6 +110,15 @@ Run from `apps/web` unless stated. Each is a single plain command.
 
 ## 5. State at the end of the session
 
+**PENDING PUSH — handed over by the founder (2026-11-12): whichever session finishes first and pushes master should carry these.**
+The console session could not push: the pre-push typecheck died twice with exit 134 because free virtual memory was 0–1.7 GB with
+many sessions open (CLAUDE.md "memory allocation … failed" gotcha; the hook was NOT skipped). These local commits are mine, docs plus
+one pure test, no migration, and were cleared by the founder ("push") in the console session: `58a24f1` (CLAUDE.md shipped line),
+`e3ea447` (this handoff, docs/25 §14, `e2e/console-overview-rules.spec.ts`), `7808459` (wider-ask note), `387ee94` (docs/13 heading).
+A plain `git push origin master` also sends every other session's commits — run `git log --oneline origin/master..HEAD` first and ask
+the owner of any that is not yours (notably `09c8cc0`, the module-roles popups, which is NOT the console session's). The founder's own
+"push" in YOUR session is what authorises it. Delete this paragraph once pushed.
+
 **CHECK FIRST — chat 1's job 1 may already be under way.** While this file was being written (2026-11-12) another session had UNCOMMITTED
 edits in `apps/web/lib/org-members.ts` adding module-role refusal messages to `SHOWN_REFUSALS`. Run `git status` and `git log` before
 starting job 1, and ask whoever owns those edits; do not duplicate or overwrite them.
