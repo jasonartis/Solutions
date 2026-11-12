@@ -15,7 +15,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { getZmanimCoverage, getZmanimPrefetchSettings } from '@/lib/zmanim-console'
 import { getVendorData, vendorIssues, type VendorIssue } from '@/lib/vendor-accounts'
 import { PLATFORM_CONTACT_EMAIL } from '@/lib/platform-identity'
-import { getOverview } from '@/lib/console-overview'
+import { formatBytes, getOverview, getStorageUsage } from '@/lib/console-overview'
 import { VENDOR_LIMITS, limitLevel, type LimitLevel } from '@/lib/vendor-limits'
 
 // 'info' is a neutral count tile (the Platform tile): it never claims things are
@@ -335,10 +335,9 @@ async function platformSection(supabase: SupabaseClient): Promise<DashboardTile>
 
 // --- Limits (founder's watch list, 2026-11-10; numbers in lib/vendor-limits.ts) --
 // What is measurable from our own tables, set against the vendor's confirmed free
-// limit. Database size and storage are NOT measurable yet (a database function over
-// pg_total_relation_size is needed — a migration, planned in the bytes-per-org job), so
-// they are listed as exactly that and the tile never turns green: a green "All clear"
-// with two of four limits unmeasured would claim what it did not check.
+// limit. Database size and storage come from platform_storage_usage() (migration
+// 20261115010000, 2026-11-12). The tile stays the neutral "info" colour when nothing is
+// near a cap, never the green "All clear": active people is a floor (sign-ins only).
 const PAGE = 1000
 
 async function limitsSection(supabase: SupabaseClient, items: PriorityItem[]): Promise<DashboardTile> {
@@ -401,12 +400,23 @@ async function limitsSection(supabase: SupabaseClient, items: PriorityItem[]): P
     note(limitLevel(people.size, videoCap), `${people.size} video people this month — the free video plan covers ${videoCap}`)
   }
 
-  // 3. Not measurable yet — said plainly, with the limit to be measured against.
-  // TODO (bytes-per-org job): wire these two rows to getStorageUsage() in
-  // lib/console-overview.ts (summary.databaseBytes / summary.fileBytes) once migration
-  // 20261115010000 is on prod; on error show "unavailable", never 0.
-  lines.push(`database size: not measurable yet (limit ${VENDOR_LIMITS.supabaseDbMb.value} MB)`)
-  lines.push(`storage: not measurable yet (limit ${VENDOR_LIMITS.supabaseStorageGb.value} GB)`)
+  // 3. Database size and file storage (migration 20261115010000, platform_storage_usage()).
+  // Whole-platform totals, which is what the plan limits count: pg_database_size, and the
+  // summed size of every uploaded file. A failed reading says "unavailable", never 0.
+  // MB/GB are binary (1 MB = 1024 × 1024 bytes), as Supabase's usage page counts them.
+  const dbCapBytes = VENDOR_LIMITS.supabaseDbMb.value * 1024 * 1024
+  const fileCapBytes = VENDOR_LIMITS.supabaseStorageGb.value * 1024 * 1024 * 1024
+  const sized = await getStorageUsage(supabase)
+  if (!sized.summary) {
+    lines.push(`database size: unavailable (limit ${VENDOR_LIMITS.supabaseDbMb.value} MB)`)
+    lines.push(`storage: unavailable (limit ${VENDOR_LIMITS.supabaseStorageGb.value} GB)`)
+  } else {
+    const { databaseBytes, fileBytes } = sized.summary
+    lines.push(`database size: ${formatBytes(databaseBytes)} of ${VENDOR_LIMITS.supabaseDbMb.value} MB`)
+    note(limitLevel(databaseBytes, dbCapBytes), `Database is ${formatBytes(databaseBytes)} — the free plan allows ${VENDOR_LIMITS.supabaseDbMb.value} MB`)
+    lines.push(`storage: ${formatBytes(fileBytes)} of ${VENDOR_LIMITS.supabaseStorageGb.value} GB`)
+    note(limitLevel(fileBytes, fileCapBytes), `Uploaded files total ${formatBytes(fileBytes)} — the free plan allows ${VENDOR_LIMITS.supabaseStorageGb.value} GB`)
+  }
 
   return {
     key: 'limits',

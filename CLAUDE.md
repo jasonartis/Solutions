@@ -62,17 +62,21 @@ section, keep it a SUMMARY with pointers: add the dated story to the journal / t
   (archive file, "Host state").
 
 ### Shipped most recently (newest first; full stories in the linked docs)
+- **2026-11-12 (Opus): size per org and module — `20261115010000` ON PROD, verified 9/5 → 18/0** (code NOT pushed: it sits
+  above b3's held `09c8cc0`). Superadmin-only `platform_storage_usage()`; `/console/overview` shows an ESTIMATED size beside
+  every "records" count (a table's size split by each org's share of its rows; files exact by org folder); the Limits tile's
+  database/storage rows are real. Open finding: two upload policies don't pin folder [1] to the uploader's org. Journal 2026-11-12.
 - **2026-11-12 (Sonnet): module-role popups + Limits tile — committed/local, NOT pushed, no migration.** Grant role and the chip ×
   ask first and show refusals in the popup (`09c8cc0`); dashboard "Limits" tile = active people + video people vs vendor free
-  limits (`lib/vendor-limits.ts`, read from the vendors' pages 2026-11-12); database size/storage "not measurable yet" until the
-  bytes-per-org job wires `getStorageUsage()`. One unrelated speed-dating e2e failure undiagnosed — journal 2026-11-12.
+  limits (`lib/vendor-limits.ts`, read from the vendors' pages 2026-11-12); database size/storage wired to
+  `getStorageUsage()` by the Opus session above. One unrelated speed-dating e2e failure undiagnosed — journal 2026-11-12.
 - **2026-11-12 (Sonnet): Owner Console home rebuilt — ON PROD, no migration** (CI green, Vercel READY `558ba39`). Dashboard
   tiles + priority list + a red 48-hour report banner on every console page; orgs start closed (Expand/Collapse all work in
   place); staged module toggles, an amber unsaved role dropdown, a Remove confirmation popup that shows the database's refusal
   (an org's last owner/admin) instead of the generic error page; ONE invite section shared by the org Members page and the
   console (an address with no account can be invited); `/console/overview` expandable headcount trees with row counts; Tools
-  as cards. Journal 2026-11-10/12, docs/25 §13, module-9 spec §H. **Decided, NOT built:** real bytes per org (needs a
-  migration — Opus), a Limits tile, and a REAL view-as (the client's actual screen, same components — docs/13 "REAL VIEW-AS";
+  as cards. Journal 2026-11-10/12, docs/25 §13, module-9 spec §H. **Decided, then built 2026-11-12:** real bytes per org and the
+  Limits tile (entries above); **in progress 2026-11-12:** a REAL view-as (the client's actual screen, same components — docs/13 "REAL VIEW-AS";
   Opus + Fable review). **Test lesson: when a shared control changes, grep EVERY file in `apps/web/e2e`.**
 - **2026-11-10 (Opus): platform legal slice — migration `20261114010000_content_reports` ON PROD, verified** (prod verifier
   `scripts/prod-verify-content-reports.mts` 3/32 → 43/0). Public `/report`, `/console/reports`, dashboard tile,
@@ -134,8 +138,8 @@ founder decision** — record it where it belongs, flag it, move on (2026-08-29)
 
 **Owner Console follow-ups (founder: "one by one", a fresh chat each — prompts, local-verify recipe and known small issues:
 [docs/history/handoff-2026-11-12-console-session.md](docs/history/handoff-2026-11-12-console-session.md)):** module-role
-confirmation + refusal messages (Sonnet) → Limits tile (Sonnet) → real bytes per org (Opus, migration) → REAL view-as (Opus + Fable
-review, docs/13). **Also unscheduled:** charts / other visualizations of platform statistics and threshold-triggered "at N users, do
+confirmation + refusal messages (Sonnet) → Limits tile (Sonnet) → real bytes per org (Opus, migration) — **all three DONE
+2026-11-12** → REAL view-as (Opus + Fable review, docs/13 "THE DESIGN" — in progress 2026-11-12). **Also unscheduled:** charts / other visualizations of platform statistics and threshold-triggered "at N users, do
 this" actions — the founder's wider original ask (see the handoff file); needs a founder conversation first.
 
 **Founder decisions pending / deferred — do NOT start these unprompted:**

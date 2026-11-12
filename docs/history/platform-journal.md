@@ -4,6 +4,36 @@ The running, dated build journal that used to live in `CLAUDE.md`'s "## Current 
 section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every session)
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
+- **2026-11-12 (Opus) — SIZE PER ORGANIZATION AND MODULE: migration `20261115010000_platform_storage_usage` ON PROD,
+  verified** (`scripts/prod-verify-storage-usage.mts` 9/5 → 18/0; `verify-acl-hardening.ts` 17/17 on prod; backup taken
+  first, dry run listed only this file). **What it is:** one superadmin-only definer, `platform_storage_usage()`,
+  returning the database size (`pg_database_size`, what the hosting plan's limit counts), every public table's
+  `pg_total_relation_size` split between orgs, and the bytes of uploaded files per bucket and org. **The estimate, and
+  why:** Postgres records no size per org, so a table's size (indexes and TOAST included) is split by each org's SHARE OF
+  ITS ROWS ("rows × average row size"). Weighting each row by its own `pg_column_size` was rejected: it reads and
+  un-compresses every value on every page load, and indexes and free space belong to no row anyway. Its weakness: an org
+  whose rows are much longer than others' is understated. Files are EXACT (Storage's recorded size), owned by the org
+  whose id is the first folder of the path, the convention every bucket's policies use. Rows with no org, tables with no
+  org column and empty tables' pages are "not attributable". **Shown:** `/console/overview` puts an amber "≈ size (+
+  files)" chip beside every "records" count, a totals line (database, tables, Postgres system/auth/storage share, files,
+  unattributed) and a note saying it is an estimate and how; the Limits tile's database-size and storage rows now show
+  real figures against 500 MB / 1 GB (binary units), "unavailable" if the reading fails, never 0. An org's size includes
+  modules it has switched off (switching off deletes nothing) and its share of shared platform tables. **Module
+  attribution** (table prefix / bucket → module) lives in `packages/platform/src/storage-usage.ts`; the db suite fails
+  if a bucket or a module's declared table is not mapped. **Reviews (two adversarial agents):** no blocker. Fixed:
+  partitioned tables (now counts ordinary tables, so a partitioned parent's bytes cannot vanish into "system"),
+  `lock_timeout = 2s` (a migration's lock must not hang the console), the note's wording (system share, shared tables,
+  module totals that exceed their listed orgs). The prod dependency found (the owner must BYPASS RLS or files silently
+  read 0) is asserted by the verifier: prod `postgres` has BYPASSRLS, no table forces RLS. **Open finding, NOT fixed
+  (needs its own storage-policy migration in two modules):** the `cls-submissions` and `vm-images` upload policies check
+  only folder [3] / [2], not that folder [1] is the uploader's org, so a member can file their own upload under another
+  org's id. Effects: the size is charged to that org, and a student's own file becomes readable by that other org's
+  classroom managers (`cls_submissions_storage_read`'s `cls_can_manage(foldername[1])` arm), a self-inflicted
+  cross-tenant path. **Tests:** `packages/db/src/storage-usage.test.ts` 6/6 (who may call it, the real ACL, bytes add up to
+  the catalog, files by org folder with a planted object, map coverage), `e2e/console-overview-rules.spec.ts` 5/5,
+  `e2e/console-overview.spec.ts` 1/1. **Cost:** ~90 `count(*)` per call, about 50 ms locally; revisit (reltuples or a
+  nightly snapshot) at millions of rows. **Not pushed at the time of writing:** b3's `09c8cc0` sits beneath it and is
+  held for that session's own "push".
 - **2026-11-12 (Sonnet) — MODULE-ROLE POPUPS + LIMITS TILE; no migration; typecheck + lint clean.** (1) **Grant role and the module-role chip ×** now ask first and show refusals inside the popup, like Remove (`RemoveModuleRoleButton` in `components/org-member-controls.tsx`, popup in `components/module-role-form.tsx`, both pages share them). `addModuleRole` / `removeModuleRoleAction` (org Members page AND console) return `ActionResult` via `memberActionFailure`, which now also words the module-seat refusals (own seat, authority, unknown role). Committed `09c8cc0`. E2E: grepped ALL of `apps/web/e2e` — only `platform.spec.ts` ("org self-management…") clicks these controls (`visual-messaging.spec.ts` only picks a role in the invite form); it now confirms/cancels both popups. 26 of 27 related tests passed on a prebuilt local server; the 27th, "speed-dating … counts pairings skipped by personal blocks", fails (also alone) in its `finally` cleanup waiting for an Unblock button — it touches none of this code and its first error is hidden by the timeout; NOT diagnosed, check it in CI. (2) **Limits tile** (`limitsSection`): active people (last 30 days, from `login_rollup`, a floor) vs 50,000; video people this calendar month (distinct check-ins in `sd_participants`) vs 25; database size and storage "not measurable yet" (limits 500 MB / 1 GB shown). Never green while two rows are unmeasured; near (80%) = amber + priority line, over = red. **Vendor numbers read from their own pages 2026-11-12** (`lib/vendor-limits.ts`): Supabase Free 50,000 MAU / 500 MB DB / 1 GB storage (supabase.com/pricing); Vercel Hobby 100 GB transfer, 1M invocations, non-commercial only (vercel.com/docs/limits/fair-use-guidelines) — recorded, not on the tile. The JaaS 25 is the docs/02 figure, not re-fetched. **Hand-off:** another session (bytes-per-org, migration `20261115010000`) will wire the two unmeasured rows to `getStorageUsage()`; TODO in `limitsSection`. Not pushed.
 - **2026-11-12 (Opus) — VENDOR LOCK-IN REVIEW (docs only, nothing built).** Founder asked which services lock us in and
   what the switch plans are. Measured Supabase coupling: `auth.uid()`/`auth.jwt()` in 68 of 82 migrations (512 uses),
