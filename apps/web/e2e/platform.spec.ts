@@ -139,6 +139,14 @@ test('org self-management: admin adds/removes members, changes roles, grants/rev
   // chip). The module-role-grant form is the last <form> on the page
   // (rendered after every member row and the add-member form).
   const orgtestRow = page.locator('li', { has: page.getByText('orgtest@demo.local') })
+  // CI runs the db suite first on the same database, which can leave this grant in place (it did
+  // on 2026-11-12), and the "nothing is written until you confirm" check below needs it absent.
+  // Clear a leftover through the same popup, so the precondition is real, not assumed.
+  if (await orgtestRow.getByText('Demo Module: user').count()) {
+    await orgtestRow.locator('li', { hasText: 'Demo Module: user' }).getByRole('button', { name: 'Remove this role' }).click()
+    await page.getByRole('dialog').filter({ hasText: 'Take the Demo Module role' }).getByRole('button', { name: 'Yes, take it away' }).click()
+    await expect(orgtestRow.getByText('Demo Module: user')).not.toBeVisible()
+  }
   const grantForm = page.locator('form').last()
   await grantForm.locator('select[name="userId"]').selectOption({ label: 'Org Test Member' })
   await grantForm.locator('select[name="moduleKey"]').selectOption({ label: 'Demo Module' })
