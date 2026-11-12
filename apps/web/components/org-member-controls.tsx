@@ -151,7 +151,9 @@ export function RemoveMemberButton(props: {
       >
         Remove
       </button>
-      <dialog ref={dialog} className="w-full max-w-md rounded-lg p-0 shadow-xl backdrop:bg-black/40">
+      {/* m-auto CENTERS it: the browser centres a modal <dialog> with margin:auto,
+          but Tailwind's reset zeroes every margin, which left it in the top-left. */}
+      <dialog ref={dialog} className="m-auto w-full max-w-md rounded-lg p-0 shadow-xl backdrop:bg-black/40">
         <div className="p-5">
           <h4 className="text-base font-semibold text-gray-900">
             {props.isPending

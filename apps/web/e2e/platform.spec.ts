@@ -41,9 +41,10 @@ test('owner has the console; regular users do not', async ({ page }) => {
   await page.getByRole('link', { name: 'Owner Console' }).click()
   await expect(page.getByRole('heading', { name: 'Owner Console' })).toBeVisible()
   await expect(page.getByText('Create organization')).toBeVisible()
-  // The org cards start closed; this test edits inside one, so open them all
-  // (and every reload below keeps that URL).
-  await page.getByRole('link', { name: 'Expand all' }).click()
+  // The org cards start closed; this test edits inside one and RELOADS the page, so
+  // open them by address (the Expand all button opens them in place and would not
+  // survive a reload).
+  await page.goto('/console?expand=all')
 
   // Founder feedback (2026-07-12): synagogue location settings were
   // seed-only, no UI. The superadmin console now edits them directly (no
@@ -274,12 +275,30 @@ test('owner console: org cards start closed, one click opens just that org, Expa
   await expect(card('Demo Dating').getByRole('heading', { name: 'Modules' })).not.toBeVisible()
   await expect(page.locator('section[data-testid="console-org"] details[open]')).toHaveCount(1)
 
-  // Expand all opens every card; Collapse all closes them again.
-  await page.getByRole('link', { name: 'Expand all' }).click()
+  // Expand all opens every card IN PLACE — the page is not reloaded (a marker set
+  // on the live window survives) and the address does not change; Collapse all too.
+  await page.evaluate(() => {
+    ;(window as unknown as { __stay: number }).__stay = 1
+  })
+  await page.getByRole('button', { name: 'Expand all' }).click()
   await expect(page.locator('section[data-testid="console-org"] details[open]')).toHaveCount(total)
   await expect(card('Demo Dating').getByRole('heading', { name: 'Modules' })).toBeVisible()
-  await page.getByRole('link', { name: 'Collapse all' }).click()
+  await expect(page).toHaveURL(/\/console$/)
+  expect(await page.evaluate(() => (window as unknown as { __stay?: number }).__stay)).toBe(1)
+  await page.getByRole('button', { name: 'Collapse all' }).click()
   await expect(page.locator('section[data-testid="console-org"] details[open]')).toHaveCount(0)
+  expect(await page.evaluate(() => (window as unknown as { __stay?: number }).__stay)).toBe(1)
+
+  // The Tools section: one card each for the tools that have no tile (and none for
+  // the pages a tile already opens), each with its one-line description.
+  const tools = page.getByRole('navigation', { name: 'Tools' })
+  await expect(tools.getByRole('link')).toHaveCount(6)
+  for (const name of ['Data browser', 'View as anything', 'Engagement', 'Zmanim', 'Positions', 'Costs']) {
+    await expect(tools.getByRole('link', { name: new RegExp('^' + name) })).toBeVisible()
+  }
+  await expect(tools.getByRole('link', { name: /^Feedback/ })).toHaveCount(0)
+  await tools.getByRole('link', { name: /^Engagement/ }).click()
+  await expect(page).toHaveURL(/\/console\/engagement/)
 })
 
 test('org invite-accept: an invitee accepts a pending invite from their dashboard', async ({ page }) => {
@@ -2497,6 +2516,12 @@ test('remove: asks first; cancelling removes no one; a refused removal explains 
   await seat.getByRole('button', { name: 'Remove', exact: true }).click()
   const popup = seat.getByRole('dialog')
   await expect(popup.getByRole('heading')).toContainText('Remove Org Test Member from Platform Self-Test?')
+  // Centered, not stuck in the top-left corner (Tailwind's reset zeroes the margin the
+  // browser centres a modal dialog with).
+  const box = (await popup.boundingBox())!
+  const view = page.viewportSize()!
+  expect(Math.abs(box.x + box.width / 2 - view.width / 2)).toBeLessThan(10)
+  expect(Math.abs(box.y + box.height / 2 - view.height / 2)).toBeLessThan(10)
   await popup.getByRole('button', { name: 'Cancel' }).click()
   await expect(popup).not.toBeVisible()
   await expect(seat).toBeVisible()

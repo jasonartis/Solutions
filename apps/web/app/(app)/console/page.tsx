@@ -6,6 +6,7 @@ import { getProfile } from '@/lib/platform'
 import OrgMembersPanel, { SUPERADMIN_RANK, type OrgMemberRow } from '@/components/org-members-panel'
 import OrgInviteSection from '@/components/org-invite-section'
 import OrgModuleToggles from '@/components/org-module-toggles'
+import OrgExpandControls from '@/components/console-org-controls'
 import SynagogueLocationFields, { type SynagogueSettings } from '@/components/synagogue-location-fields'
 import ConsoleDashboard from '@/components/console-dashboard'
 import { getDashboard } from '@/lib/console-dashboard'
@@ -23,6 +24,16 @@ import {
 } from './actions'
 
 const inputCls = 'rounded border border-gray-300 px-2 py-1 text-sm'
+
+// Console tools WITHOUT a dashboard tile (see the Tools section below).
+const CONSOLE_TOOLS = [
+  { href: '/console/data-browser', name: 'Data browser', blurb: 'Everything the platform holds about one person' },
+  { href: '/console/view-as', name: 'View as anything', blurb: 'What a position or a person can see in any org' },
+  { href: '/console/engagement', name: 'Engagement', blurb: 'Who is using the platform, and who has gone quiet' },
+  { href: '/console/zmanim', name: 'Zmanim', blurb: 'Is the next year of prayer-time data covered, and where are the gaps' },
+  { href: '/console/positions', name: 'Positions', blurb: 'Every position’s rank, and who can appoint or remove whom' },
+  { href: '/console/costs', name: 'Costs', blurb: 'What the platform costs to run, by module and size, and what to charge' },
+] as const
 
 export default async function ConsolePage(props: {
   searchParams?: Promise<{ error?: string; expand?: string }>
@@ -85,50 +96,24 @@ export default async function ConsolePage(props: {
 
       {/* Tools that have no tile above. Pages that DO have a tile (Platform overview,
           Content reports, Feedback, Account deletions, Vendor accounts) are opened from
-          their tile, which links to the same address, so they are not repeated here. */}
-      <nav aria-label="Tools" className="mb-6 flex flex-wrap items-baseline gap-3 text-sm">
-        <span className="font-medium text-gray-700">Tools:</span>
-        <Link href="/console/data-browser" className="text-blue-600 hover:underline">
-          Data browser
-        </Link>
-        <span className="text-gray-400" title="What I can see about a person, vs. what a person sees">
-          what I hold about a person
-        </span>
-        <span className="text-gray-300">·</span>
-        <Link href="/console/view-as" className="text-blue-600 hover:underline">
-          View as anything
-        </Link>
-        <span className="text-gray-400" title="Any position's declared surface in any org, ignoring the declared view-as edges">
-          what a position or person sees
-        </span>
-        <span className="text-gray-300">·</span>
-        <Link href="/console/engagement" className="text-blue-600 hover:underline">
-          Engagement
-        </Link>
-        <span className="text-gray-400" title="Who has gone quiet, and who to reach out to">
-          who is using the platform
-        </span>
-        <span className="text-gray-300">·</span>
-        <Link href="/console/zmanim" className="text-blue-600 hover:underline">
-          Zmanim
-        </Link>
-        <span className="text-gray-400" title="Is the next year of myzmanim data covered, and where are the holes">
-          zmanim prefetch coverage
-        </span>
-        <span className="text-gray-300">·</span>
-        <Link href="/console/positions" className="text-blue-600 hover:underline">
-          Positions
-        </Link>
-        <span className="text-gray-400" title="Every position's rank, read live from the database, and who can appoint or remove whom">
-          who can appoint whom
-        </span>
-        <span className="text-gray-300">·</span>
-        <Link href="/console/costs" className="text-blue-600 hover:underline">
-          Costs
-        </Link>
-        <span className="text-gray-400" title="What the platform costs by module and size, and what to charge">
-          what it costs to run
-        </span>
+          their tile, which links to the same address, so they are not repeated here.
+          Small cards, not status tiles: plain white with a name and one line, so they
+          read as "places to go" next to the coloured "things that need you" above. */}
+      <nav aria-label="Tools" className="mb-8">
+        <h2 className="mb-2 text-lg font-medium">Tools</h2>
+        <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {CONSOLE_TOOLS.map((t) => (
+            <li key={t.href}>
+              <Link
+                href={t.href}
+                className="block h-full rounded-lg border border-gray-200 bg-white p-3 hover:border-blue-300 hover:bg-blue-50"
+              >
+                <span className="block text-sm font-medium text-blue-700">{t.name}</span>
+                <span className="mt-0.5 block text-xs text-gray-500">{t.blurb}</span>
+              </Link>
+            </li>
+          ))}
+        </ul>
       </nav>
 
       <section className="mb-8 rounded-lg border border-gray-200 bg-white p-5">
@@ -180,12 +165,7 @@ export default async function ConsolePage(props: {
       <div className="mb-3 flex flex-wrap items-baseline gap-3 text-sm">
         <h2 className="text-lg font-medium">Organizations</h2>
         <span className="text-gray-500">{(orgs ?? []).length} · click one to open it</span>
-        <Link href="/console?expand=all" className="text-blue-600 hover:underline">
-          Expand all
-        </Link>
-        <Link href="/console" className="text-blue-600 hover:underline">
-          Collapse all
-        </Link>
+        <OrgExpandControls />
       </div>
 
       <div className="space-y-3">
