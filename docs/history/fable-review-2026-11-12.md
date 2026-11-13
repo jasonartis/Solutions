@@ -24,18 +24,22 @@ positives, not silence.
 | 4 | Superadmin lookup log | `20260807010000_superadmin_lookup_log.sql` | 2026-08-07 unverified | DONE | **HOLDS** — 2 LOW (stale comment, verifier structure-only) |
 | 5 | Login capture (phase 1) | `20260809010000_login_events.sql` | 2026-08-09 claimed-Fable; 08-16 `model: fable` | DONE | **HOLDS** — zero defects |
 | 6 | Activity events (phase 2) | `20260810010000_activity_events.sql` | 2026-08-11 Fable subagent, unverified | DONE | **1 MEDIUM** (rollup amplification NOT closed) + 8 holds |
-| 7 | Email definers / profiles public | `20260917010000`, `20260917020000`, docs/22 §13–14 | 2026-09-16 Fable-requested, orchestrator re-measured | **PAUSED** (5-hour limit) | — |
-| 8 | Rank map, three modules | `20260925030000_rank_map_three_modules.sql`, docs/24 | NEVER reviewed (Sonnet design after reseat; Opus build) | **PAUSED** | — |
-| 9 | Pending invites slice 1 (org) | `20261016010000_pending_invites_org.sql`, docs/25 §11 | 2026-10-15 "two narrow Fable reviewers" | **PAUSED** | — |
-| 10 | Pending invites slice 2 (chat + module role) | `20261018020000_pending_invites_chat.sql`, docs/25 §12 | 2026-10-18 "two narrow Fable reviewers" | **PAUSED** | — |
-| 11 | REAL view-as (design + draft code) | docs/13 "THE DESIGN", draft `20261116010000_real_view_as.sql` (uncommitted, another session's) | never — this is the review the design asked for | **PAUSED** | — |
+| 7 | Email definers / profiles public | `20260917010000`, `20260917020000`, docs/22 §13–14 | 2026-09-16 Fable-requested, orchestrator re-measured | DONE (after reset) | **HOLDS** — 1 LOW residual (`find_module_peer` co-member oracle, declared) |
+| 8 | Rank map, three modules | `20260925030000_rank_map_three_modules.sql`, docs/24 | NEVER reviewed (Sonnet design after reseat; Opus build) | DONE (after reset) | **1 MEDIUM** (module admins can grant to NON-members) + 1 LOW |
+| 9 | Pending invites slice 1 (org) | `20261016010000_pending_invites_org.sql`, docs/25 §11 | 2026-10-15 "two narrow Fable reviewers" | DONE (after reset) | **HOLDS** — 1 LOW (silent cap is a threshold signal) |
+| 10 | Pending invites slice 2 (chat + module role) | `20261018020000_pending_invites_chat.sql`, docs/25 §12 | 2026-10-18 "two narrow Fable reviewers" | DONE (after reset) | **HOLDS** — 1 LOW residual (cap timing signal) |
+| 11 | REAL view-as (design + draft code) | docs/13 "THE DESIGN", draft `20261116010000_real_view_as.sql` (uncommitted, another session's) | never — this is the review the design asked for | DONE — main session's own judgement (its fork died twice on the limit) | **HOLDS, no ship-blocker** — 4 LOW hardening items; written under docs/13 THE DESIGN as `### FABLE REVIEW (2026-11-12)` |
 
-**PAUSED = the reviewer hit the Fable 5-hour limit mid-run (resets 17:00 America/New_York,
-2026-11-12); its work is saved and the orchestrating session (`solutions-platform-27`) can resume
-each with one message.** If that session is gone, re-run each as a fresh narrow Fable fork with the
-question in "Pending questions" below. Item 11's findings are to be APPENDED to docs/13 under
-"THE DESIGN" as `### FABLE REVIEW (2026-11-12)` — that file only, unstaged — per the owning session
-(`solutions-platform-90`), which will fold the fixes in and commit.
+**All eleven complete.** Items 7–10's forks resumed after the 17:00 reset; item 11's fork died a second
+time at 23:40's limit, so the main (Fable) session read the ~1,160 lines itself and wrote the judgement
+directly into docs/13 (that file only, left unstaged for the owning session `solutions-platform-90` to
+fold in and commit).
+
+## The two MEDIUMs, both reproduced by the orchestrator
+
+1. **`activity_rollup` amplification (item 6)** — see §6 below.
+2. **`module_roles` has never required the grantee to be an org member, and `20260925030000` handed
+   that gap to two more non-org-admin tiers (item 8)** — see §8 below.
 
 ## Findings by item (completed reviews)
 
@@ -170,7 +174,120 @@ LOW (by design, documented `view-as.ts:217-219`): a session row outlives a revok
 30 min; `page.tsx:74-78` re-checks per render and the render is RLS-bounded anyway.
 Probe file: scratchpad `va_probe3.sql` (session-local, not kept).
 
-## Pending questions (for the five paused reviews — resume or re-run verbatim)
+### 9. Pending invites slice 1 (org) — holds
+
+Live function bodies probed (as superseded in place by `20261018020000`), all as forged
+`authenticated` in one rolled-back transaction. Issue is not an oracle: an address with an account,
+one without, and a superadmin's all answer `invited` and store/list identically (`:169-186`);
+`already_member` only restates what `org_member_profiles` already shows the admin. A demoted admin
+reads 0, lists 0, and `pending_invite_cancel` says "not found" (control 5 rows as postgres). Wrong
+person claims 0 and the row stays; exact match folds case on both sides and leaves `charlie+x` alone;
+`auth.uid()` is restored after the claim (`:443`); an unconfirmed address claims 0; a banned OR
+demoted inviter → claim 0, NO seat, row deleted (`:338-355`); an SSO twin with a duplicate email →
+claim 0 (fail closed). ACLs match `:518-530`: `apply`/`prune_expired` no api role; `claim_mine`/
+`issue_org` authenticated only. Catalog sweep of authenticated-executable functions reading
+`auth.users.email` without `is_superadmin`: 7, all org- or self-scoped; `org_find_user_by_email`
+is superadmin-gated as claimed.
+
+LOW (design signal, accepted trade-off): the per-address cap is SILENT (`:210-213`) — an inviter who
+gets `invited` but sees no row learns that ≥ 20 distinct OTHER inviters already hold that address.
+Threshold-only, cross-tenant, needs the admin to notice an absence. Say so in docs/25, and consider
+UI copy ("an invitation was recorded") that does not promise a row.
+Observation for docs/03: the guard's "no JWT = service path" branch (`:364-376`) is safe only
+because `apply` has no api EXECUTE and re-checks the inviter itself; any future definer that blanks
+claims inherits that full trust. Not re-probed: `org_accept_invite`'s `invited_by` re-check at
+accept (outside the artifact); prod GoTrue confirmation settings (what makes `email_confirmed_at`
+mean ownership) — `scripts/prod-verify-pending-invites.mts` reads them.
+
+### 8. Rank map for three modules — MEDIUM, confirmed by the orchestrator
+
+The rank-mapping itself is correct and the migration header's five-consumer analysis holds: 15
+functions and 4 policies (all on `module_roles`) read ranks; every `cls_/sal_/sd_` wrapper pins its
+module key literal, so a vm/matchmaking rank cannot leak into a speed-dating `rank >= N` test;
+`account_deletion_blockers`/`guard_last_director` test `>= 4` and the new max is 3; the
+`conversation_moderator` rename (`20261007020000`) handles rows and CHECKs soundly; an admin cannot
+mint a peer, cross-module, or cross-org, and `member→admin` re-points are refused.
+
+**MEDIUM — module admins who are NOT org admins can write `module_roles` rows for people who are
+not members of the org.** Nothing in `module_roles_guard_hierarchy` or any policy checks the
+GRANTEE's membership. Orchestrator re-run (rolled back): charlie, plain member of demo-a given vm
+`admin` in-transaction, `is_org_admin(demo-a)` = **false**, inserts `(demo-a, visual-messaging, bob,
+moderator)` where bob is **not** a member of demo-a (control false) → `INSERT 0 1`, 1 row. The grant
+is dormant while bob is outside (`has_module_role` requires `is_org_member`) and goes LIVE the moment
+he is invited and accepts — the exact class docs/25 §11.3 refused to allow on pre-invites. The class
+is pre-existing (the reviewer's control: frank, nail-salon admin with org role `member`, mints
+`worker` for a non-member → `INSERT 0 1`); `20260925030000` extends it to matchmaking and
+visual-messaging admins. The header's "the only real widening" (L58) describes the manager-grant
+flip but not this consequence.
+
+Recommended close (migration, Opus; founder go-ahead): one conjunct in the guard's step (3) — the
+grantee must be an ACTIVE `org_members` row of `new.org_id`, else raise — keeping the org-admin /
+superadmin / service bypass only if `seed.ts` order needs it (check first); an RLS test naming it
+for all six modules; add the probe to `scripts/prod-verify-module-roles-census.mts`.
+LOW: a rank-3 vm/mm admin can mint the GENERIC word `lead` (rank 2 via the fallback ladder),
+creating a grants-administering deputy with vocabulary the module never declares
+(`packages/platform/src/modules.ts:125`). Downward delegation, not escalation; decide whether
+`module_position_rank`'s generic fallback should apply only to modules that opt in.
+
+### 7. Email definers / profiles public — holds
+
+`has_column_privilege` on all 11 `auth.*` email-ish columns: anon/authenticated/service_role false,
+postgres true; `has_table_privilege(auth.users)` false for the three api roles. Views: 3 non-system,
+all in `extensions`/`vault` (control 146); `pg_publication_tables` 0 (control: `supabase_realtime`
+exists). 33 of 247 public functions reference `auth.users`/`email`; the 19 executable by
+`authenticated` are each gated (`is_superadmin()`, own row, `is_org_admin`, `is_org_member` + active
+seat, mutual pair, organizer + revealed); `anon` holds EXECUTE on none except `content_report_submit`
+(writes, returns void). As charlie (rank 0): every email-bearing definer returns 0 / `not_authorized`;
+direct selects 0 or permission denied. As anon: permission denied for function on all five, for
+table on `profiles`/`pending_invites`. Invite flow is not an account oracle for an org admin: an
+address with an account and one without both get `invited`, both `waiting_on = org_membership` with
+a module role, both `invited` on a chat invite (`20261018020000:641-644` measured true).
+
+LOW (declared residual, `20260917010000:194-205`): `find_module_peer` is an unthrottled, unlogged
+yes/no oracle for "is address X one of my ACTIVE org-mates" to any rank-0 member — bounded to
+co-members already visible by name, but guess-confirmable (`firstname@company.com`). Risk judgement
+is the design's; worth the sentence "unlimited attempts, not logged" in docs/22.
+NIT: the migration `create or replace`s `org_member_profiles` and `mm_mutual_matches` with no ACL
+statement, relying on the prior ACL surviving (it does; the prod verifier L200–206 covers it).
+Not covered by the verifier: the behavioural `invited`/`invited` pair (#6) — a prod regression in
+`pending_invite_waiting_on` would not be caught.
+
+### 10. Pending invites slice 2 (chat + module role) — holds
+
+The accept-time grant clears identity (`:527`) so the guard's rank rules do not run, but the guard's
+step (2) gives the same unconditional bypass to any org owner/admin and `apply` re-checks exactly
+that (`:469-471`: inviter must be an ACTIVE owner/admin of `inv.org_id`, or superadmin); scope
+tenancy (step 1) still runs. S-scenario: alice (owner) issues org + `visual-messaging/admin` → bob
+claims → seat pending, module-role row stamped (`claimed_by`, `seat_invited_at` = seat's
+`invited_at`), 0 `module_roles`; after `org_accept_invite`, claim #2 → row `admin`,
+`granted_by` = alice, `auth.uid()` restored. Control: bob's direct self-insert → "cannot grant a
+module position to yourself". Inviter authority is CURRENT at apply: alice banned before claim #2 →
+0 grants, row deleted as dead. A stamped row cannot be re-pointed (`:606` only where `claimed_by is
+null`; `org_accept_invite` never touches `invited_at`; re-issue to a seated address →
+`already_member` before the delete+replace). Chat pre-invite seats nobody who is not an ACTIVE
+member with a module role (`:510`, `:519`; the `20261015010000` rule is enforced at READ, so apply's
+insert-time check is the only gate and it is present). Identity restore on failure proven (an
+aborted subtransaction rolls `set_config(…, true)` back).
+
+LOW (residual, demonstrated): the distinct-inviter cap is a TIMING signal as well as a count — an
+inviter at the cap gets `invited` with no stored row; when every other row for that address vanishes
+(claim at sign-in deletes them all, `:613/:620`) the next issue IS stored. One retry per day ≈
+"something consumed every invitation for this address" ≈ sign-up timing, only for addresses with
+≥ `maxPerAddress` distinct inviters. docs/25 §11 L345 records the count half; add the timing half.
+INFO: role NAME is free text (`:70-72`), app-validated only — an owner can issue
+`visual-messaging/superduper` (a rank-0 row; the guard has no vocabulary check either, parity).
+Not probed: a conversation moved between orgs between issue and apply; two concurrent
+`claim_mine` calls (`skip locked`, read only).
+
+### 11. Real view-as — holds, no ship-blocker
+
+Written in full under docs/13 "THE DESIGN" → `### FABLE REVIEW (2026-11-12)` (11 findings: Q3
+measured and holding for classroom — the superadmin reads all six self-arm `cls_*` tables in full;
+four LOW hardening items: encode Q3 as a non-vacuous db test, record the `db_pre_request`
+platform-wide dependency in docs/12 + verifier, state edge functions, record the legacy-HS256
+fail-closed mode; the rest INFO).
+
+## Pending questions (kept for the record — all now answered above)
 
 - **7 (email):** can any `authenticated`/`anon` caller learn another person's email or confirm an
   address has an account, through any definer the two migrations create (ACL incl. anon, authority

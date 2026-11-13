@@ -11,6 +11,12 @@ extra-credit tier on top of that and isn't available right now — see
 adversarially or tested. Read [docs/19 §"STILL OPEN" item 1](19-seat-authority-audit.md) and
 [docs/15 §4, §9, §11](15-user-model.md) first — this doc builds directly on both.
 
+> **Fable review finally ran 2026-11-12** ([history/fable-review-2026-11-12.md](history/fable-review-2026-11-12.md) §8):
+> the rank-mapping itself holds, but it exposed a pre-existing MEDIUM — `module_roles` never checks that the GRANTEE is an
+> active org member, so a vm/matchmaking admin who is not an org admin can write a dormant grant for an outsider that goes
+> live when that person is later invited and accepts (reproduced: charlie → bob in demo-a, `INSERT 0 1`). Open; close is a
+> guard conjunct, migration + RLS test for all six modules.
+
 ## 0. Scope
 
 Founder-picked 2026-09-25 (broad option): settle what an audience/mentor seat means in speed
