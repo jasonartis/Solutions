@@ -11,6 +11,7 @@ import { runRescoreTick } from './jobs/matchmaking-rescore'
 import { runLoginEventsPrune } from './jobs/login-events-prune'
 import { runActivityEventsPrune } from './jobs/activity-events-prune'
 import { runZmanimPrefetch } from './jobs/zmanim-prefetch'
+import { runStorageOrphanSweep } from './jobs/storage-orphan-sweep'
 
 // import.meta.dirname is undefined under tsx — derive it from the module URL.
 const here = dirname(fileURLToPath(import.meta.url))
@@ -194,6 +195,16 @@ async function main() {
   await boss.schedule('synagogue.zmanim-prefetch', '40 4 * * *')
   await boss.work('synagogue.zmanim-prefetch', async () => {
     await runZmanimPrefetch(connectionString)
+  })
+
+  // Uploaded files whose owning record is gone (org, conversation, submission,
+  // exam, course): weekly, Sundays 04:50. Like the prunes above, this does not
+  // run on prod until an always-on worker exists; until then the same job runs by
+  // hand: `scripts/storage-orphan-sweep.mts` (dry run unless --apply).
+  await boss.createQueue('platform.storage-orphan-sweep')
+  await boss.schedule('platform.storage-orphan-sweep', '50 4 * * 0')
+  await boss.work('platform.storage-orphan-sweep', async () => {
+    await runStorageOrphanSweep(connectionString, makeAdminClient(), { apply: true })
   })
 
   const admin = makeAdminClient()
