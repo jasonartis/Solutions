@@ -3580,6 +3580,22 @@ checklist; it was written now because the Fable window closes before the draft c
    Square member reads ZERO co-member rows (control: the same person reads their co-members in a
    directory-ON org) and CAN read the name of their conversation partner (control: not a stranger's).
 
+9. **Lookup by email is OFF in the Square.** `find_module_peer` lets a member find a co-member by
+   address, unlimited and unlogged (docs/22, handoff S5). In an org that contains everyone that is
+   an oracle for "does this address have an account" over the whole platform. The Square's
+   searchable set is the handle and nothing else; the draft must show the email path is closed
+   for it (test: a Square member's lookup of a known co-member's address returns nothing;
+   control: the same lookup in a normal org still works).
+
+**The remaining P1-5 defaults — founder, 2026-11-15 (later still), all CLOSED:**
+
+| Question | Founder's answer | What it means |
+|---|---|---|
+| Q1 who moderates / owns | *"Just like any other org, it needs an owner… for now make it me, the super user, but I may assign it to someone else, or multiple other people in addition or instead of me."* | Ordinary org ownership; the console already allows several owners. Nothing to design. |
+| Q2 which modules | *"A for now"* — conversations (visual messaging) only. | The per-module default list shrinks to vm's rules, which are the Q3 row. |
+| Q3 who may message whom | *"Is this not taken care of by the fact that they don't have access to the full roster, and therefore Mallory cannot message Alice unless she has her email address or view-as name?"* | Mostly yes. By HANDLE is the intended discovery and is already safe: vm conversations are accept-first with decline-and-block (module-4 spec, on prod). By EMAIL is the gap → checklist point 9. View-as names are superadmin-only, not a door. So: anyone who knows the handle may send ONE request; accept-first + block + the §33.3 P1 ban do the rest. |
+| Q4 what a stranger sees | *"Every org has a set of items a user can choose to make viewable and the default is the minimum, so the handle."* | docs/22 §16 / §18.1 as decided: the Square's searchable set = the handle; rides on the in-org-profile slice (not built). |
+
 **Model plan:** Opus drafts the mechanism in one chat (next week, reading this list first) →
 Fable reviews the draft in one fork, the way docs/24 §7.2 was done → Opus builds. If no Fable
 window exists when the draft is ready, an Opus second reviewer works from this checklist — the
