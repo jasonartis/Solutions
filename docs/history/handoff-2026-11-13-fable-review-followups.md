@@ -51,7 +51,7 @@ One chat per numbered block; paste the prompt as written. Nothing here needs Fab
 
 ### S7 — docs/03 rule from review #9: a definer that blanks `request.jwt.claims` inherits the guard's "no JWT = service path" trust; say so and name `pending_invite_apply` as the one that may.
 
-### S8 — Real view-as hardening (docs/13 "FABLE REVIEW" items 2, 3, 7, 8) — ONLY after session `solutions-platform-90` has committed its work; coordinate via `ListAgents`/`SendMessage`.
+### S8 — Real view-as hardening (docs/13 "FABLE REVIEW" items 2, 3, 7, 8). Real view-as v1 is COMMITTED (`a1bdbac`, `2549a12`) and `20261116010000` is ON PROD (2026-11-15, verified 4/29 → 38/0; `SUPABASE_JWT_SECRET` set on Vercel). Read docs/13 "AS BUILT" first — it records which of the four items session 90 already folded in; do only the remainder. Founder decisions recorded there: no notification of the viewed person, no per-page log.
 
 ## Already started, no usage needed — the security review evidence pack
 `scripts/security-evidence-run.sh` was launched 2026-11-13 and writes to
