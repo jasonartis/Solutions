@@ -4,6 +4,37 @@ The running, dated build journal that used to live in `CLAUDE.md`'s "## Current 
 section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every session)
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
+- **2026-11-12 → 11-15 (Opus) — REAL VIEW-AS v1 (classroom): BUILT, commit `a1bdbac`; migration
+  `20261116010000_real_view_as` NOT ON PROD (awaits the founder's go-ahead + `SUPABASE_JWT_SECRET` on Vercel).** The
+  superadmin opens a person's actual classroom screens, rendered by the SAME pages and components (no second layout),
+  read-only, banner on every screen, every view and page logged. Design written first in docs/13 ("THE DESIGN"), then
+  reviewed three ways: Fable (run in a peer session after this session's Fable reviewer hit its 5-hour limit; "FABLE
+  REVIEW" in docs/13, no blocker), an app-code review and a SQL review (no blocker). Every finding closed: docs/13 "AS
+  BUILT" has the list. **Mechanism:** `createClient()` returns a client with a 5-minute HS256 token FOR the person
+  (signed on the server, never sent to the browser) when the proxy has checked the view with the database
+  (`view_as_real_check`, as the superadmin's own session) and forwarded a signed header bound to the browser's cookie.
+  **Read-only by four layers:** a PostgREST pre-request hook (`pgrst.db_pre_request` on `authenticator`) puts every
+  request carrying the `view_as` claim into a read-only transaction (measured: a POST RPC that writes gets `25006`; the
+  same call without the claim gets past the write); restrictive storage write policies (measured with a real upload:
+  refused with the claim, accepted without); the proxy refuses every non-GET; the client's auth allows `getUser` only
+  (GoTrue accepts the token, so a password change would otherwise be possible). The database also keeps every
+  non-classroom module table (46) and `sd_notes` dark to the token. **Five things measured the hard way:** (1) Next 16
+  strips its router headers and `_rsc` before the proxy runs, so the proxy cannot tell link clicks from page loads; a
+  client guard reloads instead when a click crosses the module boundary. (2) A plpgsql EXCEPTION block in the hook
+  silently reverted the read-only switch (subtransaction); removed, and the db test now guards it. (3) A server action's
+  redirect renders the next page inside the same request (before the cookie exists), so Start became a route handler.
+  (4) `org_modules_pin_enablement` silently reverts `enabled` for non-superadmins, which made a test pass for the wrong
+  reason. (5) The no-drift comparison must use two full page loads, and must ignore React's render-order counters on
+  hidden action inputs. **Tests:** db `real-view-as.test.ts` 10/10 (who may start/view, path scope, logging, revocation,
+  the read-only gate with controls, storage, `neverReadable` + module read-blocks, Q3: superadmin = owner row counts on
+  every `cls_` table); e2e `real-view-as.spec.ts` 2/2 (Charlie's home, homework and review pages, and Alice's manage page,
+  identical both ways; server action and form post 403; link clicks keep banner/header true; Stop);
+  `prod-verify-real-view-as.mts` 38/38 locally. Its prod "before" run passed every control, and proved the migration's
+  `ALTER ROLE authenticator` is permitted on hosted Supabase (rolled back). **Docs:** docs/13 design + AS BUILT (with the
+  founder's two Vercel steps), docs/15 §8.1 point 12 (the dated re-statement of "viewing, not impersonating"), docs/12
+  never-do (never drop/rename/make raise the hook). **Pushing `a1bdbac` before the migration is applied** leaves
+  `/console/view-as/real` erroring on prod; nothing else changes. Any session's `migrate:prod` dry run will now list
+  `20261116010000`, and it must not be applied without the founder's go-ahead for it.
 - **2026-11-12 (Opus) — SIZE PER ORGANIZATION AND MODULE: migration `20261115010000_platform_storage_usage` ON PROD,
   verified** (`scripts/prod-verify-storage-usage.mts` 9/5 → 18/0; `verify-acl-hardening.ts` 17/17 on prod; backup taken
   first, dry run listed only this file). **What it is:** one superadmin-only definer, `platform_storage_usage()`,

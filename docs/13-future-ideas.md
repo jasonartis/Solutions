@@ -727,7 +727,7 @@ and a subject). Writing surfaces for the remaining modules is the substantial
 part — **as of 2026-08-04 that is speed-dating only**, and its are the delicate ones
 (interest marks, safety reports; a host deliberately cannot read what an organizer can).
 
-## REAL VIEW-AS: SEE THE CLIENT'S ACTUAL SCREEN (founder decision, 2026-11-10 — NOT BUILT)
+## REAL VIEW-AS: SEE THE CLIENT'S ACTUAL SCREEN (founder decision, 2026-11-10 — BUILT for classroom 2026-11-15, migration NOT on prod; see "AS BUILT" at the end)
 
 **The ask.** Today "View as anything" (`/console/view-as`) shows the rows a position or named person can read, as labelled
 tables (`SectionTable`), not the screen. The founder wants the REAL thing: to see exactly what a client's user sees, the way
@@ -902,3 +902,58 @@ whether any classroom GET route handler has a non-database side effect (email/ex
 PostgREST's handling of a `Prefer: tx=…` header against a pre-request read-only mark (not used by the app); prod (the
 migration is not on prod and must not go until the founder's go-ahead, with a per-migration verifier that includes
 finding 3's two checks).
+
+### AS BUILT (Opus, 2026-11-12 → 11-15) — classroom v1, commit `a1bdbac`; migration `20261116010000` NOT ON PROD
+
+**Where it lives:** `lib/view-as-real.ts` (signed header, token, read-only client), `lib/supabase/server.ts` (the one
+switch), `proxy.ts`, `app/view-as/start` and `app/view-as/stop` (route handlers), `components/view-as-banner.tsx` +
+`view-as-guard.tsx`, `/console/view-as/real` (pick a person, recent views; also a Tools card on the console home).
+Tests: `packages/db/src/real-view-as.test.ts` (10), `apps/web/e2e/real-view-as.spec.ts` (2: the no-drift tests),
+`scripts/prod-verify-real-view-as.mts` (38 locally; prod "before" run: controls pass, and the migration's `ALTER ROLE
+authenticator` was proven PERMITTED on hosted Supabase in a rolled-back transaction).
+
+**Changed from the design while building (each found by a test or a review):**
+- *Start is a plain form POST to a route handler, not a server action.* A server action's redirect renders the next page
+  inside the same request, before the cookie exists, so the first "viewed" screen was the superadmin's own with no
+  banner. The handler checks `Origin` (route handlers get no automatic cross-site check).
+- *Banner/header across link clicks: a client guard, not the proxy.* The `(app)` layout is kept across client-side
+  navigation, so after a click out of the module the header still named the person. The plan was to make the proxy
+  refuse client navigations (forcing full loads), but **Next 16 strips its router headers and `_rsc` before the proxy
+  runs** (`server/web/adapter.js`, measured — the 409 never fired). `ViewAsGuard` reloads the page in full when the
+  path crosses the module boundary or the view's end time passes. Known residual: for a moment between the click and
+  the reload the old banner shows over the new page. The page log counts prefetches too (they cannot be told apart).
+- *The pre-request hook has NO exception handler.* Adding one (to "never raise") silently turned the gate OFF: a
+  plpgsql EXCEPTION block is a subtransaction, and leaving it reverts the `set_config`. Caught by the db test.
+  `is_view_as_request()` instead cannot raise (`pg_input_is_valid` before the JSON cast).
+- *The database also keeps other modules dark* (SQL review): the token reads through the person's RLS, which reaches
+  every module they use, so all 46 non-classroom module tables carry a RESTRICTIVE `<table>_no_view_as` (plus
+  `sd_notes`). A db test fails for any later module table without it; allowing a module = dropping its policies in a
+  migration after that module's own review.
+- *Smaller:* the signed header must match the browser's own `sp_view_as` cookie; `auth.admin`/`auth.mfa` are blocked;
+  the log sequence's default grants revoked; storage policies `to public`; policies use `(select
+  is_view_as_request())` (evaluated once per query); a page path under `/o/` ending in `.png` no longer skips the proxy.
+- *The no-drift comparison* masks two things that differ between two renders for the SAME person: signed-file tokens,
+  and React's render-order counters on server-action hidden inputs (their values still compare). The viewer's page must
+  be a full load like the person's, or the test compares React's client and server output instead of the screen.
+
+**Fable review dispositions:** 2 (Q3 as a test) DONE — superadmin row count = owner count for every `cls_` table, non-
+vacuous on the seed. 3 (hook dependency) DONE — docs/12 never-do item; the verifier asserts `pg_db_role_setting` and
+calls the hook as anon/authenticated with empty and non-JSON claims. 7 (edge functions) RECORDED: none are deployed;
+before allowing a module, grep its UI for `functions.invoke` (the token would reach an edge function as the person).
+8 (asymmetric keys) RECORDED in docs/12: if the project ever moves off the legacy HS256 secret, viewed pages ERROR
+(PostgREST rejects the token; no fallback to the superadmin's own reach) — fail-closed, the symptom is every viewed page
+failing. 9 (no `email` in the token): classroom policies do not read `auth.email()`; a module that does would show LESS.
+10/11: no action.
+
+**Open, by design:** the person is not notified (founder item, unchanged); one view at a time per superadmin; a token
+already minted lives until its 5-minute expiry after Stop (server-side only); widening to another module needs its own
+review plus the per-module checks above (client components querying from the browser, realtime, edge functions, GET
+route handlers with side effects).
+
+**Turning it on in production (founder, after saying "apply" for `20261116010000`):**
+1. Supabase dashboard → the project → Project Settings → API (or "JWT Keys" → "Legacy JWT secret") → reveal and copy the
+   JWT secret. **Do not paste it into any chat.**
+2. Vercel → the project → Settings → Environment Variables → add `SUPABASE_JWT_SECRET` (Production only; NOT a
+   `NEXT_PUBLIC_` name) with that value → Save → Redeploy the latest production deployment.
+3. Console → Tools → "See their real screen". Until both steps are done the page says "Not configured" (or errors before
+   the migration), and nothing else on the platform changes.

@@ -21,6 +21,11 @@ before re-deriving anything below; dated detail newer than that lives in
 section, keep it a SUMMARY with pointers: add the dated story to the journal / the topic doc, and only the one-line state here.
 
 ### ⚠ Live warnings (read first)
+- **`supabase/migrations/20261116010000_real_view_as.sql` is COMMITTED but NOT ON PROD (2026-11-15) — do not apply it
+  without the founder's explicit go-ahead FOR IT**; every `migrate:prod` dry run will list it until then. Reviewed (Fable +
+  two Opus reviews, no blocker); verifier `scripts/prod-verify-real-view-as.mts` (run before AND after). Once on prod,
+  **every API request calls `view_as_pre_request()`: never drop, rename or make it raise** (docs/12 never-do). Real
+  view-as also needs `SUPABASE_JWT_SECRET` on Vercel (docs/13 "AS BUILT", founder steps).
 - **NIGHTLY ENCRYPTED PROD BACKUP TO PRIVATE B2 — WORKING, RESTORE PROVEN (2026-11-09)** (`backup-b2.yml`; replaced the
   public-artifact `backup.yml`, docs/12 "FOUND 2026-11-03"). age-encrypted (private key offline with the founder), 30-day
   compliance lock per file; a restore drill matched prod on all 87 tables / 1,236 rows. **GREEN since 2026-11-10** on an
@@ -62,6 +67,10 @@ section, keep it a SUMMARY with pointers: add the dated story to the journal / t
   (archive file, "Host state").
 
 ### Shipped most recently (newest first; full stories in the linked docs)
+- **2026-11-15 (Opus): REAL view-as v1 (classroom) BUILT — `a1bdbac`; migration `20261116010000` NOT ON PROD.** The
+  superadmin sees a person's actual classroom screens through the SAME pages (a 5-minute server-signed token for the
+  person; read-only enforced by the database's pre-request hook, storage policies, the proxy and a guarded auth client;
+  banner; logged). No-drift e2e 2/2, db 10/10, verifier 38/38 local. docs/13 "AS BUILT", docs/15 §8.1 point 12, journal.
 - **2026-11-12 (Fable, review-only, nothing applied): the eleven "Fable-requested but unverified" reviews re-run on a
   confirmed Fable session** — [docs/history/fable-review-2026-11-12.md](docs/history/fable-review-2026-11-12.md). **All
   eleven done.** Nine HOLD (LOW nits only). **Two MEDIUMs, both reproduced, both need a migration (Opus, founder
@@ -84,8 +93,8 @@ section, keep it a SUMMARY with pointers: add the dated story to the journal / t
   (an org's last owner/admin) instead of the generic error page; ONE invite section shared by the org Members page and the
   console (an address with no account can be invited); `/console/overview` expandable headcount trees with row counts; Tools
   as cards. Journal 2026-11-10/12, docs/25 §13, module-9 spec §H. **Decided, then built 2026-11-12:** real bytes per org and the
-  Limits tile (entries above); **in progress 2026-11-12:** a REAL view-as (the client's actual screen, same components — docs/13 "REAL VIEW-AS";
-  Opus + Fable review). **Test lesson: when a shared control changes, grep EVERY file in `apps/web/e2e`.**
+  Limits tile (entries above); **built 2026-11-15 (migration not on prod):** a REAL view-as (the client's actual screen, same components — docs/13
+  "REAL VIEW-AS"). **Test lesson: when a shared control changes, grep EVERY file in `apps/web/e2e`.**
 - **2026-11-10 (Opus): platform legal slice — migration `20261114010000_content_reports` ON PROD, verified** (prod verifier
   `scripts/prod-verify-content-reports.mts` 3/32 → 43/0). Public `/report`, `/console/reports`, dashboard tile,
   terms/privacy text, 13+ box. Token installed; contact email set on Vercel, read only via
@@ -147,7 +156,7 @@ founder decision** — record it where it belongs, flag it, move on (2026-08-29)
 **Owner Console follow-ups (founder: "one by one", a fresh chat each — prompts, local-verify recipe and known small issues:
 [docs/history/handoff-2026-11-12-console-session.md](docs/history/handoff-2026-11-12-console-session.md)):** module-role
 confirmation + refusal messages (Sonnet) → Limits tile (Sonnet) → real bytes per org (Opus, migration) — **all three DONE
-2026-11-12** → REAL view-as (Opus + Fable review, docs/13 "THE DESIGN" — in progress 2026-11-12). **Also unscheduled:** charts / other visualizations of platform statistics and threshold-triggered "at N users, do
+2026-11-12** → REAL view-as (BUILT for classroom 2026-11-15; its migration awaits the founder's go-ahead — docs/13 "AS BUILT"). **Also unscheduled:** charts / other visualizations of platform statistics and threshold-triggered "at N users, do
 this" actions — the founder's wider original ask (see the handoff file); needs a founder conversation first.
 
 **Founder decisions pending / deferred — do NOT start these unprompted:**

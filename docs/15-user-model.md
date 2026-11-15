@@ -483,6 +483,17 @@ not buildable without these; several change claims made above.
     being silently assumed either way. Full reasoning + two rejected alternatives
     (rank-derived *default* edges; a dedicated RLS-bypassing read-path for
     item-level exclusion) in the Decisions log, 2026-07-30.
+12. **Re-statement for the SUPERADMIN's "real view-as" (2026-11-12; founder asked for it, Fable-reviewed; docs/13
+    "REAL VIEW-AS" → "THE DESIGN" / "AS BUILT").** The Owner Console can show a person's ACTUAL screen: the same pages
+    run with a short-lived, server-signed token for that person. This is a separate tool from module view-as, and for
+    it only: point 3's "NOT a re-execution" no longer applies (it existed because re-executing would have returned the
+    CALLER's rows; a token for the person removes that). Point 4's grant triple is replaced by (person, org, module).
+    Points 2 (read-only) and 6 (logged) apply in full and are enforced by the DATABASE (a pre-request hook makes every
+    such request a read-only transaction; restrictive policies), not the UI. Point 1's keystone is kept in this form:
+    a real view may show only what the superadmin already reads through the data browser, so a module is allowed only
+    after a measured check (classroom: superadmin row count = owner count on every `cls_` table, a db test), and every
+    other module's tables, plus every `neverReadable` table, are dark to the token. Point 7 stands: speed-dating and
+    matchmaking end users are not viewable. Module view-as (this section) is unchanged.
 
 ## 9. Per-module mapping (the vocabulary table)
 

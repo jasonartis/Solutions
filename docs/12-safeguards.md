@@ -85,6 +85,14 @@ rot; pipelines don't.
   in-conversation approval AND the marker. Migrations are forward-only,
   additive-first (CLAUDE.md working agreements).
 - Never put the service-role key anywhere but the worker (docs/03 #14).
+- **Never drop, rename or make raise `public.view_as_pre_request()` or `public.is_view_as_request()` (real view-as,
+  migration `20261116010000`, 2026-11-12).** `pgrst.db_pre_request` on the `authenticator` role makes EVERY API request
+  call the hook first, so a missing or raising hook takes the whole API down. Changing them: `create or replace` only,
+  keep both raise-free (no plpgsql EXCEPTION block in the hook — it silently reverts the read-only switch), and run
+  `scripts/prod-verify-real-view-as.mts` after. Removing the feature = `alter role authenticator reset
+  pgrst.db_pre_request` FIRST, then drop. Related: the real-view token is HS256 on the legacy JWT secret
+  (`SUPABASE_JWT_SECRET` on Vercel, server-only); if the project ever moves to asymmetric signing keys, every viewed page
+  errors (fail-closed, no fallback to the superadmin's reach) until the signing is moved too. docs/13 "REAL VIEW-AS".
 - **Never act on a conclusion that another session's work is ABANDONED — ask that
   session first (2026-10-02).** A session being absent from `ListAgents`, or
   unreachable under the name you last used, does **NOT** mean it has ended. It can
