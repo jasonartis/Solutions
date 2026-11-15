@@ -311,8 +311,8 @@ test('owner console: org cards start closed, one click opens just that org, Expa
   // The Tools section: one card each for the tools that have no tile (and none for
   // the pages a tile already opens), each with its one-line description.
   const tools = page.getByRole('navigation', { name: 'Tools' })
-  await expect(tools.getByRole('link')).toHaveCount(6)
-  for (const name of ['Data browser', 'View as anything', 'Engagement', 'Zmanim', 'Positions', 'Costs']) {
+  await expect(tools.getByRole('link')).toHaveCount(7)
+  for (const name of ['Data browser', 'View as anything', 'See their real screen', 'Engagement', 'Zmanim', 'Positions', 'Costs']) {
     await expect(tools.getByRole('link', { name: new RegExp('^' + name) })).toBeVisible()
   }
   await expect(tools.getByRole('link', { name: /^Feedback/ })).toHaveCount(0)
