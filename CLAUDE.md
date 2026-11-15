@@ -82,14 +82,13 @@ section, keep it a SUMMARY with pointers: add the dated story to the journal / t
   required the grantee to be an org member**, and `20260925030000` handed that to vm/matchmaking admins who are not org
   admins (a dormant grant that goes live on accept), close = an active-membership conjunct in
   `module_roles_guard_hierarchy` step (3). Real view-as (docs/13 "FABLE REVIEW"): no ship-blocker, four LOW items.
-- **2026-11-12 (Opus): size per org and module — `20261115010000` ON PROD, verified 9/5 → 18/0** (code NOT pushed: it sits
-  above b3's held `09c8cc0`). Superadmin-only `platform_storage_usage()`; `/console/overview` shows an ESTIMATED size beside
+- **2026-11-12 (Opus): size per org and module — `20261115010000` ON PROD, verified 9/5 → 18/0** (code pushed 2026-11-12, `a5922cd`). Superadmin-only `platform_storage_usage()`; `/console/overview` shows an ESTIMATED size beside
   every "records" count (a table's size split by each org's share of its rows; files exact by org folder); the Limits tile's
   database/storage rows are real. Journal 2026-11-12. (Its open finding — upload folder [1] not pinned — CLOSED 2026-11-15, `20261117010000`.)
-- **2026-11-12 (Sonnet): module-role popups + Limits tile — committed/local, NOT pushed, no migration.** Grant role and the chip ×
+- **2026-11-12 (Sonnet): module-role popups + Limits tile — ON master (pushed 2026-11-12), no migration.** Grant role and the chip ×
   ask first and show refusals in the popup (`09c8cc0`); dashboard "Limits" tile = active people + video people vs vendor free
   limits (`lib/vendor-limits.ts`, read from the vendors' pages 2026-11-12); database size/storage wired to
-  `getStorageUsage()` by the Opus session above. One unrelated speed-dating e2e failure undiagnosed — journal 2026-11-12.
+  `getStorageUsage()` by the Opus session above. The speed-dating blocked-pairs e2e flake found and fixed same day (a test race, not the app) — journal 2026-11-12.
 - **2026-11-12 (Sonnet): Owner Console home rebuilt — ON PROD, no migration** (CI green, Vercel READY `558ba39`). Dashboard
   tiles + priority list + a red 48-hour report banner on every console page; orgs start closed (Expand/Collapse all work in
   place); staged module toggles, an amber unsaved role dropdown, a Remove confirmation popup that shows the database's refusal
