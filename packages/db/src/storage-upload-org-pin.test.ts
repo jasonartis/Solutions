@@ -85,21 +85,17 @@ describe('storage upload paths must name the real org', () => {
 
   it('vm-images: only <the conversation org>/<conversation>/ is accepted', async () => {
     await rolledBack(async (tx) => {
-      // Not every seated member may post (a seat also needs a module role), so
-      // pick the first seat whose holder vm_can_post says yes to.
-      const seats = await tx`
-        select m.user_id, c.org_id, c.id as conversation_id
-        from public.vm_conversation_members m
-        join public.vm_conversations c on c.id = m.conversation_id
-        where m.status = 'active' and m.role = 'participant'`
-      let m: postgres.Row | undefined
-      for (const seat of seats) {
-        await tx`select set_config('request.jwt.claims', ${JSON.stringify({ sub: seat.user_id, role: 'authenticated' })}, true)`
-        const r = first(await tx`select public.vm_can_post(${seat.conversation_id}) as ok`, 'answer')
-        if (r.ok) { m = seat; break }
-      }
-      expect(m, 'seed has no vm participant who may post').toBeTruthy()
-      if (!m) return
+      // The seed has no conversations (e2e creates them), so make one inside the
+      // rollback with Charlie seated: he holds the vm member role in demo-visual.
+      const m = first(await tx`
+        select o.id as org_id, u.id as user_id
+        from public.orgs o, auth.users u
+        where o.slug = 'demo-visual' and u.email = 'charlie@demo.local'`, 'demo-visual org and charlie')
+      m.conversation_id = first(await tx`
+        insert into public.vm_conversations (org_id, title) values (${m.org_id}, 'upload pin probe') returning id`, 'conversation').id
+      await tx`
+        insert into public.vm_conversation_members (org_id, conversation_id, user_id, role, status)
+        values (${m.org_id}, ${m.conversation_id}, ${m.user_id}, 'participant', 'active')`
       const other = first(await tx`select id from public.orgs where id <> ${m.org_id} limit 1`, 'second org')
 
       expect(await uploadAs(tx, m.user_id, 'vm-images', `${m.org_id}/${m.conversation_id}/a.png`), 'control').toBeNull()

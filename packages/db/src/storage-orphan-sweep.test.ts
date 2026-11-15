@@ -23,7 +23,11 @@ describe('storage orphan sweep', () => {
     let names: Record<string, string> = {}
     await sql
       .begin(async (tx) => {
-        const [conv] = await tx`select id, org_id from public.vm_conversations limit 1`
+        // The seed has no conversations (e2e creates them): make one in the rollback.
+        const [conv] = await tx`
+          insert into public.vm_conversations (org_id, title)
+          select id, 'orphan sweep probe' from public.orgs where slug = 'demo-visual'
+          returning id, org_id`
         const [sub] = await tx`select id, org_id, class_id from public.cls_submissions limit 1`
         const [course] = await tx`select id, org_id from public.cls_courses limit 1`
         expect(conv && sub && course, 'seed needs a conversation, a submission and a course').toBeTruthy()
