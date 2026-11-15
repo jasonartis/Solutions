@@ -762,3 +762,143 @@ re-statement, not silence. (b) `docs/15` point that mode 2 is read-only "until a
    (docs/13 "whether view-as targets are notified" is already an open founder item).
 7. *Scope of v1:* pick one module's screens first, prove the no-drift property with a test that renders the same page both
    ways, then widen.
+
+### THE DESIGN (Opus, 2026-11-12) — answers to the draft questions, written before any code
+
+**Founder decisions for this design (2026-11-12, in the session that wrote it):** the web server MAY hold the key that
+signs a user token ("allow it"), so a page can truly run as the person; **classroom** is the first module. Everything
+else below is a design choice made here, each with its reason, for the Fable review to attack.
+
+**In one paragraph.** The superadmin starts a "real view" of one person in one org's classroom from the console. While
+it is open, every classroom page that person can open renders **through the very same route and components**, but its
+database client carries a short-lived token **for that person**, signed on the server, marked `view_as`, and never sent
+to the browser. The database treats every request with that mark as a **read-only transaction** (it refuses every write,
+including side-effect writes inside functions), the proxy refuses every non-GET request while a view is open, file
+storage refuses writes for that mark, and every viewed page is logged. A banner on every screen says whose screen it
+is, that it is read-only, and offers Stop.
+
+**Q1 — How a page runs as the target. Chosen: a server-minted token.** `lib/supabase/server.ts`'s `createClient()` is
+the one place every page, layout and helper gets its database client, so it is the single switch. When the proxy has
+marked the request as an in-scope real view (below), `createClient()` returns a supabase-js client whose
+`Authorization` is a fresh HS256 JWT for the target: `sub` = target, `role` = authenticated, `aud` = authenticated,
+`exp` at most 5 minutes away (never past the session's own expiry), plus `view_as: {session, actor}`. It is signed with
+`SUPABASE_JWT_SECRET`. Prod uses legacy HS256 keys (anon key is a JWT, read 2026-11-12), and PostgREST accepts the
+shared secret. That client reads and writes no cookies, so the superadmin's own session is untouched.
+*Measured locally 2026-11-12:* such a token reads Charlie's class through PostgREST, and GoTrue's `/user` returns
+Charlie's own user object. So `auth.getUser()` in the app shell and in pages returns the real target, which is what
+makes "no drift" achievable rather than approximated.
+*Rejected:* (a) `set local role` + claims inside a server-held SQL transaction: pages talk HTTP to PostgREST, not SQL,
+so every page would need a second data path, which IS drift; (b) per-surface definers: that is today's tables view;
+(c) the service-role key: forbidden (docs/03 #14).
+*How a request becomes "in a real view":* starting a view sets an httpOnly cookie `sp_view_as=<session id>`. On every
+request `proxy.ts` **first deletes any incoming `x-sp-view-as` header** (so a browser cannot forge one). Then, if the
+cookie is present, it calls `view_as_real_check(session, path, log)` **as the superadmin's own session**: the database
+confirms the session belongs to the caller, the caller is still superadmin, and the session is open and unexpired, and
+it returns the target, org slug and module. Only if the path is inside `/o/<that org's slug>/m/classroom` does the proxy
+set `x-sp-view-as` on the forwarded request. Anywhere else the superadmin is themselves, and the banner says the view
+is paused. A missing or failed check means no header, which means the superadmin's own view: the failure direction is
+"less", never "more".
+
+**Q2 — Writes are impossible, not hidden. There are four independent layers, any one of them sufficient for its path:**
+1. *Database (every PostgREST request, including POST RPC and GraphQL):* a PostgREST pre-request function
+   (`pgrst.db_pre_request`, set on the `authenticator` role; prod has none today, read 2026-11-12) sets
+   `transaction_read_only = on` whenever the JWT carries `view_as`. Postgres then refuses every INSERT/UPDATE/DELETE,
+   including writes inside any SECURITY DEFINER function, for the rest of that request. A function cannot switch it
+   back after the first query. *Measured locally:* with the mark, a POST RPC that updates returns `25006 cannot execute
+   UPDATE in a read-only transaction`; without the mark, the same call gets past the update. This is the layer that
+   catches SIDE-EFFECT writes (a "last read" stamp, an activity row, a lazily created record) without having to find
+   them all first.
+2. *File storage:* Supabase Storage is a separate service, and the hook above does not run there. So `storage.objects`
+   gets RESTRICTIVE policies for INSERT/UPDATE/DELETE: `not public.is_view_as_request()`.
+3. *The web app:* while the cookie is set, the proxy answers every non-GET/HEAD request with 403, except `POST
+   /view-as/stop`. No server action and no route-handler write runs at all, including non-database side effects
+   (emails, exports). `recordActivity` is only ever called from server actions (grepped 2026-11-12), so it never runs.
+4. *Auth:* GoTrue accepts the token, so the token COULD change the person's password or email. The token therefore
+   exists only inside the Next.js server process for one request: never in a cookie, a response header or the HTML.
+   The view-as client's `auth` object allows `getUser` only, and every other auth method throws. Layer 3 already stops
+   every code path that would call one, since they are all server actions.
+A page that tries to write during render will therefore FAIL LOUDLY with an error page. It will never succeed and
+never silently show stale data, and the no-drift test would catch it.
+
+**Q3 — What stays unreadable.** The real view shows exactly the target's RLS reach, which is not automatically inside
+the superadmin's. The rule, a dated restatement of docs/15 §8.1 point 1 for the SUPERADMIN (2026-11-12): *a real view
+may show only what the superadmin could already read through the data browser.* It is enforced two ways:
+- (a) A module is allowed only after a check that its per-person reach adds nothing beyond the data browser. Classroom
+  passes: its data-browser `neverReadable` list is empty, and its view-as `personal` lists are empty (every
+  student-readable row is also professor-readable in scope, docs/15 §8 2026-07-31).
+- (b) Every table in ANY module's `neverReadable` list (today only `sd_notes`) gets a RESTRICTIVE policy `not
+  public.is_view_as_request()`, so the strictest table stays dark even when a later module is allowed. A db test fails
+  if a `neverReadable` table lacks it.
+
+The module allowlist is hard-coded in the start function (classroom only); widening it is a migration plus that
+module's own review. **Speed-dating and matchmaking end users stay banned** (§8.1 point 7): a real view would show
+interest marks and match lists.
+
+**Q4 — Logging.** Two new tables, readable by the superadmin only and append-only: `view_as_real_sessions` (actor,
+target, org, module, created, expires = created + 30 min, ended) and `view_as_real_page_views` (session, path, at; one
+row per non-prefetch page load inside scope). They do not reuse `view_as_sessions`: its rows are a (person, position,
+scope) grant triple checked by a guard trigger against declared edges. A real view is of a PERSON in a module, not a
+position, and forcing it into that shape would weaken the existing guard. Writes go only through definers that
+re-check `is_superadmin()`. Foreign keys are `set null`, so the log outlives the people it names (the same reasoning as
+`view_as_sessions`). The console lists recent real views.
+
+**Q5 — Banner.** The `(app)` layout renders `ViewAsBanner` above `<main>` whenever the request is in a real view (or a
+view is paused): "You are viewing **Charlie**'s screen in **Demo A**, read-only · ends 14:32 · Stop viewing". It is
+amber, fixed at the top, carries `data-testid="view-as-banner"`, and sits outside `<main>`, so the drift test can compare
+`<main>` exactly. Screenshots of a viewed screen always carry it.
+
+**Q6 — Who may be viewed.** An ACTIVE member of the org, in an org with classroom ON. Never a superadmin (a real view
+of a superadmin would carry superadmin reach) and never oneself. The person is NOT notified; that stays the open founder
+item it already is (CLAUDE.md "whether view-as targets are notified"). The log exists either way (§8.1 point 6).
+
+**Q7 — Scope of v1.** Classroom pages under `/o/<slug>/m/classroom/**`, plus the shared app shell (the header) on those
+pages, which also renders as the person. **The no-drift test** (e2e):
+1. Sign in as Charlie, open the classroom home and a homework page, and keep each page's `<main>` HTML.
+2. Sign in as the superadmin, start a real view of Charlie, and open the same paths.
+3. Assert the `<main>` HTML is identical, and that a write attempted while viewing is refused and changes nothing.
+
+**Re-statement of the 2026-08-02 ruling ("viewing, not impersonating"; docs/15 §8.1 points 2–4), dated 2026-11-12.**
+Real view-as executes pages AS the target. §8.1 point 3 ruled that out for the tables view because the queries would
+have returned the caller's rows; with a target-signed token that reason no longer holds, so point 3's "NOT a
+re-execution" does not apply to real view-as. Points 2 (read-only; no row may name anyone but the true actor) and 6
+(logged) apply in full, enforced by the database rather than the UI. For the superadmin's real view only, point 4 (the
+grant triple) is replaced by (person, org, module), because the real screen shows all of the person's classroom roles
+together, exactly as they see it.
+
+**Known limits, accepted for v1:**
+- Client components that query the database from the browser would run as the superadmin, because the browser holds
+  the superadmin's session. Classroom has none (grepped 2026-11-12); any module allowed later must be checked for them.
+- Realtime is not used by classroom.
+- The token secret on Vercel can sign as anyone. It lives only in server env (never `NEXT_PUBLIC_`), and without it the
+  feature refuses to start rather than degrade.
+
+### FABLE REVIEW (2026-11-12) — design, draft migration `20261116010000`, and the uncommitted code
+
+**Reviewed on a confirmed Fable session** (`/model fable`; a fork of it died twice on the 5-hour limit, so the judgement
+below is the main session's own, after reading `20261116010000_real_view_as.sql`, `lib/view-as-real.ts`, `proxy.ts`,
+`lib/supabase/server.ts`, `app/view-as/stop/route.ts`, `console/view-as/real/actions.ts` and
+`packages/db/src/real-view-as.test.ts`; local rolled-back probes). Full status of the other ten re-reviews:
+[docs/history/fable-review-2026-11-12.md](history/fable-review-2026-11-12.md).
+
+**Verdict: no ship-blocker. The four write layers are independent and each is real; the token cannot leave the server
+by any path read here; Q3 holds for classroom (measured). Findings are hardening and record-keeping.**
+
+| # | Sev | Finding | Evidence | Status |
+|---|---|---|---|---|
+| 1 | — | **Q3(a) measured, holds.** The catalog lists 24 tables with a self-read arm (`auth.uid()`) and no `is_superadmin()` in any policy TEXT, six of them classroom (`cls_submissions`, `cls_grades`, `cls_review_comments`, `cls_review_assignments`, `cls_survey_answers`, `cls_exam_papers`). As the local superadmin, counts are identical to `postgres` (4/2/2/2/2/1) — the superadmin arm lives inside `cls_can_manage…`. | rolled-back probe | CONFIRMED |
+| 2 | **LOW → make it a test** | Finding 1 was proven by MEASUREMENT, not by the db suite. `real-view-as.test.ts` asserts only the `neverReadable` policies (Q3 b). Add: for the allowed module, every `<module>_*` table's superadmin row count equals the owner count on the seed (non-vacuous: seed rows > 0). Widening to a module later must re-run it — the other 18 self-arm tables (`mm_*`, `sd_*`, `sal_*`, `vm_*`) are exactly where the next module will fail this. | catalog query above | OPEN (test gap) |
+| 3 | **LOW (operational, record in docs/12)** | `alter role authenticator set pgrst.db_pre_request` makes EVERY API request depend on `view_as_pre_request()` existing and succeeding. A later migration that drops or renames it, or an `is_view_as_request()` that raises (e.g. a non-JSON `request.jwt.claims` set by a test — `::jsonb` would raise; PostgREST always sets valid JSON) takes the whole platform down, not just view-as. Never-do: drop/rename either function; prod verifier must assert `pg_db_role_setting` for `authenticator` AND call `view_as_pre_request()` as `anon` and `authenticated` with empty claims (control: returns, no error). | `:62-79` | OPEN (docs + verifier) |
+| 4 | — | "A function cannot switch read-only back off" is Postgres's documented rule (`transaction_read_only` on→off only before the transaction's first snapshot; the pre-request call itself takes one). PostgREST runs `db_pre_request` inside the request transaction after the role switch, for RPC and GraphQL (`/graphql/v1` is an RPC) alike. GET/HEAD are already read-only in PostgREST by default; the hook's real work is POST RPC. | design "measured locally"; db test `:172-180` | CONFIRMED by rule + the suite's own control |
+| 5 | — | Storage: three RESTRICTIVE policies, all three verbs, `to authenticated` — right, since the token's `role` is `authenticated`; service-role paths (worker) untouched. A bucket's permissive `to public` arms do not escape a restrictive `to authenticated` policy for that role. | `:84-93`; db test `:183-185` | CONFIRMED |
+| 6 | — | Token: minted fresh per `createClient()` (`:121-124`), `exp = min(now+5m, session end)`, `persistSession:false`, `auth` proxied so only `getUser(token)`/`getSession()` work; `getUser` is GoTrue `GET /user`, a pure read. The signed `x-sp-view-as` header is deleted from every inbound request before anything else (`proxy.ts:29-30`, case-insensitive) and is forwarded only server-side. Cookie is httpOnly/lax/secure-in-prod (`actions.ts:24-30`) and holds only a session id. | code | CONFIRMED |
+| 7 | **LOW** | `client.storage`, `client.functions` and `client.realtime` carry the same target token. Storage writes are blocked (5); classroom uses no realtime (design); **edge functions are not addressed** — none are deployed today (state it, and add "no `functions.invoke` under an allowed module" to the per-module allow check). | `view-as-real.ts:125-128` | OPEN (one sentence + a grep in the allow check) |
+| 8 | **LOW (fail-closed, record it)** | The token is HS256 on the legacy shared secret. If the Supabase project is ever moved to the new asymmetric signing keys, PostgREST/GoTrue reject it and `createClient()` STILL returns the view client (no fallback to the superadmin's own reach), so every viewed page errors. That is the right direction; record it in docs/28 (vendor) and docs/12 so the symptom is not misdiagnosed. | `view-as-real.ts:96-113`; design Q1 | OPEN (docs) |
+| 9 | INFO | The token carries no `email`/`session_id`/`iss`. Any policy or definer using `auth.jwt() ->> 'email'` / `auth.email()` sees NULL → the viewed page shows LESS than the person sees (drift in the safe direction). The no-drift e2e covers two pages; list every classroom route and render each both ways, or the next GET-time side effect (`25006` on render → error page by design) is found by the founder, not the suite. | design Q7 | OPEN (widen the e2e) |
+| 10 | INFO | Anyone can set an `sp_view_as` cookie by hand: they 403 their OWN non-GET requests and trigger one `view_as_real_check` per request that returns no row and clears the cookie (`proxy.ts:61-91`). Self-inflicted, harmless. A real view's page log over-counts: an RSC navigation can issue more than one in-scope GET per screen (only `prefetch` is excluded). | code | no action |
+| 11 | INFO | `view_as_real_check` runs per request as the superadmin's OWN session (no `view_as` claim), so its page-view INSERT is not read-only — correct; the design's layer 1 and the log do not fight. | `:231`, `proxy.ts:65` | CONFIRMED |
+
+**What was NOT checked here:** the Next 16 `proxy.ts` matcher behaviour for route handlers under `/api` (assumed matched);
+whether any classroom GET route handler has a non-database side effect (email/export) — grep before widening;
+PostgREST's handling of a `Prefer: tx=…` header against a pre-request read-only mark (not used by the app); prod (the
+migration is not on prod and must not go until the founder's go-ahead, with a per-migration verifier that includes
+finding 3's two checks).

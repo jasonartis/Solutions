@@ -118,7 +118,7 @@ jobs:
 
       - name: Export Supabase env
         run: |
-          eval "$(pnpm exec supabase status -o env | grep -E '^(API_URL|ANON_KEY|SERVICE_ROLE_KEY|DB_URL)=')"
+          eval "$(pnpm exec supabase status -o env | grep -E '^(API_URL|ANON_KEY|SERVICE_ROLE_KEY|DB_URL|JWT_SECRET)=')"
           {
             echo "SUPABASE_URL=$API_URL"
             echo "SUPABASE_ANON_KEY=$ANON_KEY"
@@ -127,6 +127,7 @@ jobs:
             echo "NEXT_PUBLIC_SUPABASE_URL=$API_URL"
             echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$ANON_KEY"
             echo "CONTENT_REPORT_TOKEN=local-dev-content-report-token"
+            echo "SUPABASE_JWT_SECRET=$JWT_SECRET"
           } >> "$GITHUB_ENV"
 
       - run: pnpm build

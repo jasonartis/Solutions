@@ -29,6 +29,7 @@ const inputCls = 'rounded border border-gray-300 px-2 py-1 text-sm'
 const CONSOLE_TOOLS = [
   { href: '/console/data-browser', name: 'Data browser', blurb: 'Everything the platform holds about one person' },
   { href: '/console/view-as', name: 'View as anything', blurb: 'What a position or a person can see in any org' },
+  { href: '/console/view-as/real', name: 'See their real screen', blurb: 'A person’s actual classroom pages, read-only, with a banner' },
   { href: '/console/engagement', name: 'Engagement', blurb: 'Who is using the platform, and who has gone quiet' },
   { href: '/console/zmanim', name: 'Zmanim', blurb: 'Is the next year of prayer-time data covered, and where are the gaps' },
   { href: '/console/positions', name: 'Positions', blurb: 'Every position’s rank, and who can appoint or remove whom' },

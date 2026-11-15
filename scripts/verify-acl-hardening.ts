@@ -56,6 +56,12 @@ const ANON_SIGNATURES = new Set([
   // location key, a date and public astronomical values — no org data. The
   // range is capped at 400 days so anon cannot bulk-dump a cache we pay for.
   'syn_zmanim_cached(check_location_key text, from_day date, to_day date)',
+  // Real view-as (20261116010000). Both run for EVERY role because PostgREST
+  // calls the pre-request hook as the request's role, and RLS policies call
+  // is_view_as_request() as the querying role. They read only the caller's own
+  // token claims and return nothing about anyone else.
+  'is_view_as_request()',
+  'view_as_pre_request()',
 ])
 const ORACLE_SIGNATURES = new Set([
   'module_scope_covers(ancestor uuid, descendant uuid)',
@@ -126,6 +132,10 @@ const TABLE_EXCEPTIONS: Record<string, string[]> = {
   vendor_account_dates: ['SELECT', 'INSERT', 'UPDATE', 'DELETE'],
   vendor_account_credentials: ['SELECT', 'INSERT', 'UPDATE', 'DELETE'],
   vendor_account_opens: ['SELECT'],
+  // Real view-as log (20261116010000, docs/13 "THE DESIGN"). SELECT only
+  // (superadmin, by policy); written only by the view_as_real_* definers.
+  view_as_real_sessions: ['SELECT'],
+  view_as_real_page_views: ['SELECT'],
 }
 
 // Functions whose intended EXECUTE differs from the blanket
@@ -231,6 +241,11 @@ const FUNCTION_EXCEPTIONS: Record<string, { auth: boolean; svc: boolean }> = {
   // re-checks is_superadmin(); the worker has no business with reports.
   'content_report_set_status(p_id uuid, p_status text, p_note text)': { auth: true, svc: false },
   'content_report_intake_status()': { auth: true, svc: false },
+  // 20261116010000: real view-as. Each re-checks is_superadmin() and refuses a
+  // view_as token; the worker has no use for them.
+  'view_as_real_start(p_target uuid, p_org uuid, p_module text)': { auth: true, svc: false },
+  'view_as_real_check(p_session uuid, p_path text, p_log boolean)': { auth: true, svc: false },
+  'view_as_real_end(p_session uuid)': { auth: true, svc: false },
   // 20261115010000: the Owner Console's size per org/module. Re-checks
   // is_superadmin(); the worker has no use for it.
   'platform_storage_usage()': { auth: true, svc: false },

@@ -96,6 +96,9 @@ if (status) {
       NEXT_PUBLIC_SUPABASE_ANON_KEY: anonKey,
       // The Report content page's server-only token (scripts/set-content-report-token.mts --local).
       CONTENT_REPORT_TOKEN: 'local-dev-content-report-token',
+      // Real view-as (docs/13 "THE DESIGN"): signs the short-lived, read-only token for
+      // the person being viewed. Server-only — never a NEXT_PUBLIC_ name.
+      SUPABASE_JWT_SECRET: status.JWT_SECRET ?? '',
       ...myzmanim,
       ...platformIdentityEnv(),
       ...sentryEnv(),

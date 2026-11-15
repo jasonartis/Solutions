@@ -156,6 +156,22 @@ export const platformDataBrowser = declareDataBrowser({
         'an open product question (docs/15 §8.1 point 6).',
     },
     {
+      table: 'view_as_real_sessions',
+      activity: true,
+      label: 'Real view-as sessions naming them',
+      personColumns: ['actor_user_id', 'target_user_id'],
+      orgColumn: 'org_id',
+      orderBy: { column: 'created_at', ascending: false },
+      limit: 100,
+      note:
+        'Every time a platform superadmin opened this person\'s ACTUAL screen (read-only, ' +
+        'docs/13 "REAL VIEW-AS", 2026-11-12), and the views this person opened as a superadmin. ' +
+        'Included for the same reason as the console lookups above: "we looked at your screen, ' +
+        'on these dates" is part of what is held about them. The pages viewed in each session ' +
+        'are in view_as_real_page_views (which names no person itself). Superadmin-read only; ' +
+        'whether targets are notified is still the open product question.',
+    },
+    {
       table: 'account_deletions',
       activity: true,
       label: 'Account deletion requests',
