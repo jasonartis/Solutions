@@ -3,10 +3,11 @@ import { cookies } from 'next/headers'
 import { requireSuperadmin } from '@/lib/platform'
 import { VIEW_AS_COOKIE, realViewConfigured } from '@/lib/view-as-real'
 
-// SEE THEIR REAL SCREEN (docs/13 "REAL VIEW-AS" → "THE DESIGN", 2026-11-12).
+// SEE THEIR REAL SCREEN (docs/13 "REAL VIEW-AS", built 2026-11-12/15).
 // Pick a person in an org that has Classroom on; their classroom pages then
 // render exactly as they see them, read-only, with a banner on every screen.
-// The database decides who may be viewed and logs every view and page.
+// The database decides who may be viewed. No page log and no notification
+// (founder decision 2026-11-15); the session row is only the on/off switch.
 
 type Props = { searchParams: Promise<{ error?: string }> }
 
@@ -17,27 +18,18 @@ export default async function RealViewPage({ searchParams }: Props) {
   const { error } = await searchParams
   const open = (await cookies()).get(VIEW_AS_COOKIE)?.value
 
-  const [orgs, entitlements, members, profiles, recent] = await Promise.all([
+  const [orgs, entitlements, members, profiles] = await Promise.all([
     supabase.from('orgs').select('id, name, slug').order('name'),
     supabase.from('org_modules').select('org_id').eq('module_key', 'classroom').eq('enabled', true),
     supabase.from('org_members').select('org_id, user_id, role, status'),
     supabase.from('profiles').select('user_id, display_name'),
-    supabase
-      .from('view_as_real_sessions')
-      .select('id, target_user_id, org_id, created_at, ended_at, expires_at')
-      .order('created_at', { ascending: false })
-      .limit(10),
   ])
-  const failed = [orgs, entitlements, members, profiles, recent].find((r) => r.error)
+  const failed = [orgs, entitlements, members, profiles].find((r) => r.error)
   if (failed?.error) throw new Error(`real view-as read failed: ${failed.error.message}`)
 
   const on = new Set((entitlements.data ?? []).map((e) => e.org_id as string))
   const nameOf = new Map((profiles.data ?? []).map((p) => [p.user_id as string, (p.display_name as string) || 'Unnamed member']))
-  const orgName = new Map((orgs.data ?? []).map((o) => [o.id as string, o.name as string]))
   const classroomOrgs = (orgs.data ?? []).filter((o) => on.has(o.id as string))
-  const status = (s: { ended_at: unknown; expires_at: unknown }, now: number) =>
-    s.ended_at ? 'stopped' : Date.parse(s.expires_at as string) < now ? 'expired' : 'open'
-  const now = new Date().getTime()
 
   return (
     <div className="max-w-3xl">
@@ -47,8 +39,8 @@ export default async function RealViewPage({ searchParams }: Props) {
       <h1 className="mt-2 mb-1 text-2xl font-semibold">See their real screen</h1>
       <p className="mb-4 text-sm text-gray-600">
         Opens a person&rsquo;s own Classroom pages, built by the same screens they use, for 30 minutes. It is
-        read-only: the database refuses every change, and forms cannot be sent. Every view and every page you open is
-        logged. A banner on every screen says whose screen it is. Only Classroom is available so far.
+        read-only: the database refuses every change, and forms cannot be sent. A banner on every screen says whose
+        screen it is. Only Classroom is available so far.
       </p>
 
       {!realViewConfigured() && (
@@ -94,21 +86,6 @@ export default async function RealViewPage({ searchParams }: Props) {
           </form>
         )
       })}
-
-      <h2 className="mt-8 mb-2 text-sm font-semibold text-gray-700">Recent real views</h2>
-      {(recent.data ?? []).length === 0 ? (
-        <p className="text-sm text-gray-500">None yet.</p>
-      ) : (
-        <ul className="text-sm text-gray-700" data-testid="real-view-recent">
-          {(recent.data ?? []).map((s) => (
-            <li key={s.id as string}>
-              {new Date(s.created_at as string).toLocaleString('en-US')} ·{' '}
-              {nameOf.get(s.target_user_id as string) ?? 'someone'} in {orgName.get(s.org_id as string) ?? 'a deleted org'} ·{' '}
-              {status(s, now)}
-            </li>
-          ))}
-        </ul>
-      )}
     </div>
   )
 }

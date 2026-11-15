@@ -21,11 +21,11 @@ before re-deriving anything below; dated detail newer than that lives in
 section, keep it a SUMMARY with pointers: add the dated story to the journal / the topic doc, and only the one-line state here.
 
 ### ⚠ Live warnings (read first)
-- **`supabase/migrations/20261116010000_real_view_as.sql` is COMMITTED but NOT ON PROD (2026-11-15) — do not apply it
-  without the founder's explicit go-ahead FOR IT**; every `migrate:prod` dry run will list it until then. Reviewed (Fable +
-  two Opus reviews, no blocker); verifier `scripts/prod-verify-real-view-as.mts` (run before AND after). Once on prod,
-  **every API request calls `view_as_pre_request()`: never drop, rename or make it raise** (docs/12 never-do). Real
-  view-as also needs `SUPABASE_JWT_SECRET` on Vercel (docs/13 "AS BUILT", founder steps).
+- **EVERY PROD API REQUEST NOW CALLS `public.view_as_pre_request()` (real view-as, `20261116010000`, on prod
+  2026-11-15): never drop, rename or make it (or `is_view_as_request()`) raise** — that takes the whole API down; no
+  plpgsql EXCEPTION block in the hook (it silently turns the read-only gate off). docs/12 never-do;
+  `scripts/prod-verify-real-view-as.mts` after any change. The view-as token is HS256 on the legacy JWT secret
+  (`SUPABASE_JWT_SECRET` on Vercel, set 2026-11-15).
 - **NIGHTLY ENCRYPTED PROD BACKUP TO PRIVATE B2 — WORKING, RESTORE PROVEN (2026-11-09)** (`backup-b2.yml`; replaced the
   public-artifact `backup.yml`, docs/12 "FOUND 2026-11-03"). age-encrypted (private key offline with the founder), 30-day
   compliance lock per file; a restore drill matched prod on all 87 tables / 1,236 rows. **GREEN since 2026-11-10** on an
@@ -67,10 +67,11 @@ section, keep it a SUMMARY with pointers: add the dated story to the journal / t
   (archive file, "Host state").
 
 ### Shipped most recently (newest first; full stories in the linked docs)
-- **2026-11-15 (Opus): REAL view-as v1 (classroom) BUILT — `a1bdbac`; migration `20261116010000` NOT ON PROD.** The
-  superadmin sees a person's actual classroom screens through the SAME pages (a 5-minute server-signed token for the
-  person; read-only enforced by the database's pre-request hook, storage policies, the proxy and a guarded auth client;
-  banner; logged). No-drift e2e 2/2, db 10/10, verifier 38/38 local. docs/13 "AS BUILT", docs/15 §8.1 point 12, journal.
+- **2026-11-15 (Opus): REAL view-as v1 (classroom) — `20261116010000` ON PROD, verified 4/29 → 38/0; secret on
+  Vercel.** The superadmin sees a person's actual classroom screens through the SAME pages (a 5-minute server-signed
+  token for the person; read-only enforced by the database's pre-request hook, storage policies, the proxy and a guarded
+  auth client; banner). Founder: no notification, NO per-page log (the session row is only the on/off switch). No-drift
+  e2e 2/2, db 10/10. docs/13 "AS BUILT", docs/15 §8.1 point 12, journal.
 - **2026-11-12 (Fable, review-only, nothing applied): the eleven "Fable-requested but unverified" reviews re-run on a
   confirmed Fable session** — [docs/history/fable-review-2026-11-12.md](docs/history/fable-review-2026-11-12.md). **All
   eleven done.** Nine HOLD (LOW nits only). **Two MEDIUMs, both reproduced, both need a migration (Opus, founder

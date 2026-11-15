@@ -6973,6 +6973,10 @@ describe('visual messaging: the `for all` split preserves manager reach (2026091
         where schemaname = 'public'
           and tablename = any(${SPLIT_TABLES})
           and cmd = 'ALL'
+          -- PERMISSIVE only: the trap is a USING that GRANTS a read. A RESTRICTIVE
+          -- policy can only take access away, so a restrictive FOR ALL is never a
+          -- read arm (e.g. real view-as's <table>_no_view_as, 20261116010000).
+          and permissive = 'PERMISSIVE'
       `
       expect(
         rows.map((r) => `${r.tablename}.${r.policyname}`),

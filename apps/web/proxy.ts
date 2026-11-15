@@ -67,12 +67,13 @@ export async function proxy(request: NextRequest) {
   if (viewSession && !isStop) {
     let view: RealView | null = null
     if (user) {
-      // Every request is logged, prefetches included (they cannot be told apart,
-      // see above), so no browser-controlled header can skip the log.
+      // Pages are NOT logged (founder decision 2026-11-15: no per-page log, no
+      // notification — he checks clients' screens constantly as part of finding
+      // bugs). The session row itself remains: it is the switch this check reads.
       const { data } = await supabase.rpc('view_as_real_check', {
         p_session: viewSession,
         p_path: path,
-        p_log: true,
+        p_log: false,
       })
       const row = (data as Record<string, unknown>[] | null)?.[0]
       if (row) {

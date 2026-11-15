@@ -488,8 +488,8 @@ not buildable without these; several change claims made above.
     run with a short-lived, server-signed token for that person. This is a separate tool from module view-as, and for
     it only: point 3's "NOT a re-execution" no longer applies (it existed because re-executing would have returned the
     CALLER's rows; a token for the person removes that). Point 4's grant triple is replaced by (person, org, module).
-    Points 2 (read-only) and 6 (logged) apply in full and are enforced by the DATABASE (a pre-request hook makes every
-    such request a read-only transaction; restrictive policies), not the UI. Point 1's keystone is kept in this form:
+    Point 2 (read-only) applies in full, enforced by the DATABASE (a pre-request hook makes every
+    such request a read-only transaction; restrictive policies), not the UI. Point 6 does NOT apply here: founder decision 2026-11-15, no notification and no per-page log (he checks clients' screens constantly); the only row kept is the session record that switches a view on and off. Point 1's keystone is kept in this form:
     a real view may show only what the superadmin already reads through the data browser, so a module is allowed only
     after a measured check (classroom: superadmin row count = owner count on every `cls_` table, a db test), and every
     other module's tables, plus every `neverReadable` table, are dark to the token. Point 7 stands: speed-dating and

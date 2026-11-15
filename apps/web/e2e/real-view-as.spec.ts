@@ -129,13 +129,15 @@ test('real view-as: the superadmin sees exactly what Charlie sees, read-only', a
   const post = await owner.request.post('/console', { form: { anything: 'x' } })
   expect(post.status()).toBe(403)
 
-  // Stop ends it: back on the console's page, no banner, the view listed as stopped.
+  // Stop ends it: back on the console's page, no banner, Start available again.
   await owner.goto('/console')
   await expect(owner.getByRole('heading', { name: 'Owner Console' })).toBeVisible()
   await banner.getByRole('button', { name: 'Stop viewing' }).click()
   await owner.waitForURL('**/console/view-as/real')
   await expect(owner.getByTestId('view-as-banner')).toHaveCount(0)
-  await expect(owner.getByTestId('real-view-recent')).toContainText('Charlie C in Demo Org A · stopped')
+  // The view is really over: no 'A view is open' notice, and Start can be pressed again.
+  await expect(owner.getByText('A view is open.')).toHaveCount(0)
+  await expect(owner.getByTestId('real-view-org').first().getByRole('button', { name: 'See their screen' })).toBeEnabled()
   await owner.goto(HOME)
   await expect(owner.getByTestId('view-as-banner')).toHaveCount(0)
   await ownerCtx.close()

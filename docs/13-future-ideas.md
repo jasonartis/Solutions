@@ -727,7 +727,7 @@ and a subject). Writing surfaces for the remaining modules is the substantial
 part — **as of 2026-08-04 that is speed-dating only**, and its are the delicate ones
 (interest marks, safety reports; a host deliberately cannot read what an organizer can).
 
-## REAL VIEW-AS: SEE THE CLIENT'S ACTUAL SCREEN (founder decision, 2026-11-10 — BUILT for classroom 2026-11-15, migration NOT on prod; see "AS BUILT" at the end)
+## REAL VIEW-AS: SEE THE CLIENT'S ACTUAL SCREEN (founder decision, 2026-11-10 — BUILT for classroom, ON PROD 2026-11-15; see "AS BUILT" at the end)
 
 **The ask.** Today "View as anything" (`/console/view-as`) shows the rows a position or named person can read, as labelled
 tables (`SectionTable`), not the screen. The founder wants the REAL thing: to see exactly what a client's user sees, the way
@@ -903,7 +903,7 @@ PostgREST's handling of a `Prefer: tx=…` header against a pre-request read-onl
 migration is not on prod and must not go until the founder's go-ahead, with a per-migration verifier that includes
 finding 3's two checks).
 
-### AS BUILT (Opus, 2026-11-12 → 11-15) — classroom v1, commit `a1bdbac`; migration `20261116010000` NOT ON PROD
+### AS BUILT (Opus, 2026-11-12 → 11-15) — classroom v1, commit `a1bdbac`; migration `20261116010000` ON PROD 2026-11-15
 
 **Where it lives:** `lib/view-as-real.ts` (signed header, token, read-only client), `lib/supabase/server.ts` (the one
 switch), `proxy.ts`, `app/view-as/start` and `app/view-as/stop` (route handlers), `components/view-as-banner.tsx` +
@@ -945,15 +945,15 @@ before allowing a module, grep its UI for `functions.invoke` (the token would re
 failing. 9 (no `email` in the token): classroom policies do not read `auth.email()`; a module that does would show LESS.
 10/11: no action.
 
-**Open, by design:** the person is not notified (founder item, unchanged); one view at a time per superadmin; a token
+**Founder decisions, 2026-11-15:** (1) APPLIED — `migrate:prod` after a backup and a dry run listing only this file; prod verifier 4/29 → 38/0; the live API checked straight after (anon RPC 200, a demo sign-in and read 200). (2) The JWT secret was put on Vercel by Claude (production only, type "sensitive"): read from the Supabase Management API and proven to be the right one by verifying the anon key's signature with it, never printed or written to disk. It takes effect at the next production deploy. (3) **No notification and NO per-page log**, his words: "Telling them every time will be annoying. I will be checking in all the time to see if everything looks right... Informing them each time and even logging it each time is ridiculous - no." So the proxy calls `view_as_real_check` with `p_log = false` and the console's "Recent real views" list is gone. **What remains, and why:** one `view_as_real_sessions` row per Start. It is the on/off switch the database reads on every request (who is viewing whom, until when, stopped or not), not a log; nothing displays it. `view_as_real_page_views` stays in the schema, unused. This overrides docs/15 §8.1 point 6 for the superadmin's real view only (docs/15 point 12).
+
+**Open, by design:** one view at a time per superadmin; a token
 already minted lives until its 5-minute expiry after Stop (server-side only); widening to another module needs its own
 review plus the per-module checks above (client components querying from the browser, realtime, edge functions, GET
 route handlers with side effects).
 
-**Turning it on in production (founder, after saying "apply" for `20261116010000`):**
-1. Supabase dashboard → the project → Project Settings → API (or "JWT Keys" → "Legacy JWT secret") → reveal and copy the
-   JWT secret. **Do not paste it into any chat.**
-2. Vercel → the project → Settings → Environment Variables → add `SUPABASE_JWT_SECRET` (Production only; NOT a
-   `NEXT_PUBLIC_` name) with that value → Save → Redeploy the latest production deployment.
-3. Console → Tools → "See their real screen". Until both steps are done the page says "Not configured" (or errors before
-   the migration), and nothing else on the platform changes.
+**Turning it on in production — DONE 2026-11-15 except the deploy** (migration applied; secret set on Vercel by
+Claude, decision (2) above). It works once a production deploy built after 2026-11-15 is live. If the secret ever has to
+be set again by hand (e.g. rotated): Supabase dashboard → Project Settings → API / "JWT Keys" → "Legacy JWT secret" →
+copy (never paste it into a chat) → Vercel → Settings → Environment Variables → `SUPABASE_JWT_SECRET`, Production only,
+not a `NEXT_PUBLIC_` name → Save → Redeploy. Rotating the JWT secret also invalidates every user's session.

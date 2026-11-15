@@ -4,6 +4,18 @@ The running, dated build journal that used to live in `CLAUDE.md`'s "## Current 
 section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every session)
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
+- **2026-11-15 (Opus) — REAL VIEW-AS ON PROD: `20261116010000` applied on the founder's "Apply"**, after a backup and
+  a dry run listing only that file; `prod-verify-real-view-as.mts` 4/29 → 38/0; the live API checked straight after (anon
+  RPC 200; a demo sign-in and signed-in read 200). **`SUPABASE_JWT_SECRET` put on Vercel by Claude** (founder: "Can you do
+  it?"): read from the Supabase Management API (`/v1/projects/<ref>/postgrest`), proven correct by verifying the anon
+  key's signature with it, upserted as a production-only "sensitive" variable; never printed or written to disk; live from
+  the next production deploy. **Founder decision: no notification and NO per-page log** ("Informing them each time and
+  even logging it each time is ridiculous - no") — the proxy now passes `p_log = false` and the console's recent-views list
+  is removed; the session row stays only because it is the on/off switch the database reads (docs/15 §8.1 point 12
+  amended: point 6 does not apply to the superadmin's real view). **CI on `0863fdf` was red, mine:** the
+  `rls.test.ts` ratchet "no `for all` policy on the five split vm tables" counted the new RESTRICTIVE `_no_view_as`
+  policies; a restrictive policy can only remove access, so the ratchet now counts permissive policies only (passes
+  locally). CI stopped there, so the e2e suite has not yet run on the view-as layout/proxy changes in CI.
 - **2026-11-12 → 11-15 (Opus) — REAL VIEW-AS v1 (classroom): BUILT, commit `a1bdbac`; migration
   `20261116010000_real_view_as` NOT ON PROD (awaits the founder's go-ahead + `SUPABASE_JWT_SECRET` on Vercel).** The
   superadmin opens a person's actual classroom screens, rendered by the SAME pages and components (no second layout),
