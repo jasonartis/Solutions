@@ -3516,7 +3516,74 @@ where each one already stands:
 
 **What this means for the next session:** the Square is a docs/22 §20 build (visibility and
 discovery), then a thin "Square org" on top; v4's §12 stays DEAD. Nothing here is a Fable task
-until a mechanism is designed; the decisions in the last two rows are the founder's.
+until a mechanism is designed; the decisions in the last two rows are the founder's — **and he
+took them the same day: §32.9.1.**
+
+### 32.9.1 FOUNDER, 2026-11-15 (later) — two decisions, and the shape of the mechanism
+
+**Decision 1 — the member directory is a per-org switch.** His words: *"let's make this a per-org
+switch which the GUI of the highest member of an org can switch on and off. On lets members see
+the list of members and off removes the GUI to see the other members and removes the actual
+permission to do so. Then we shut it off for the public square org, which should be another org."*
+
+**Decision 2 — P1-5, who is invited.** *"For now, everyone is invited by default to the public
+square, and acceptance is each person's."*
+
+**What the two decisions settle (read before re-deriving):**
+
+- **P1-4 is CLOSED by decision 1.** The Square is a separate, ordinary org with the directory OFF,
+  so "my org's roster" is empty there and no member can enumerate the platform.
+- **docs/22 §20.4 item 2 ("kill the blanket row-read — BLOCKED on 3") is REPLACED, not done.** The
+  blanket read is not killed for everyone; it is switched per org, **default ON**, so the day the
+  switch ships nothing changes for any existing org. The block on item 3 (entity-level visibility)
+  shrinks to one question: *inside an OFF org, which reads still need a co-member's name?* For the
+  Square that is the other party of a conversation — one entity type, not the whole generalization.
+- **§16.3's rejection of the auto-invite trigger is SUPERSEDED, for a reason that holds.** In July
+  2026 an invite WAS an active seat, so auto-invite meant auto-join. Since `org_accept_invite`
+  (2026-07-27, docs/25) an invite is pending until the person accepts — so "everyone invited,
+  acceptance is each person's" is exactly P1-2's rule applied to the Square.
+- **§33.3 P1 (the abuse posture) goes LIVE with decision 2** — its own row says *"the moment
+  auto-invite is switched on."* `/report` is on prod (2026-11-10); a user-level ban and rate limits
+  are NOT built. They are a precondition of the Square's first invite, not a follow-up.
+- **Still open on P1-5** (the founder answered only the invitation default): moderator = platform
+  staff? which modules are on (conversation only?)? who may start a conversation with whom? what a
+  stranger sees of a profile (P1-1's handle only?).
+
+**The mechanism — what the Opus draft must satisfy (Fable 5.1, 2026-11-15). This is the review
+checklist; it was written now because the Fable window closes before the draft can exist.**
+
+1. **"The actual permission" is several things, not one policy.** The org-wide directory is
+   `org_members_select_member` (`is_org_member(org_id)`), `profiles_select_shared_org` /
+   `shares_org_with`, the `org_member_profiles` view, `find_module_peer`, and every module
+   roster / "people" screen (docs/22 §3 R4's seven name chains). The switch gates the DIRECTORY
+   reads and nothing in `is_org_member` or any membership predicate: OFF must not change who is a
+   member, who can accept an invite, who can be granted a module role, who can leave.
+2. **OFF never widens anything.** Ratchet test: the permissive-policy set reachable by a member of
+   an OFF org is a strict subset of the ON set (count both; a zero on one side is a broken read).
+3. **Who flips it:** the org's top rank (owner) and the superadmin, through a SECURITY DEFINER
+   with a reason — not an UPDATE grant on `orgs`. The Square's switch is set OFF **before** its
+   first invite exists (otherwise the first joiners see each other for a while).
+4. **Default ON** for every existing org (`not null default true`) — shipping the switch is a
+   no-op on prod until someone flips it; the migration meets an empty database.
+5. **Inside an OFF org a member must still resolve the name of someone they are legitimately
+   interacting with** — docs/22 §20.2's resolver rule B, scoped to the ENTITY (the conversation),
+   never to the org. For the Square that is the only read that survives OFF.
+6. **The Square org is ordinary.** `orgs.kind` is NOT created (§33.1 F1 stands): one `orgs` row,
+   directory OFF, a pending invite for everyone, accepted per person, left by the ordinary
+   self-leave (docs/16). P1-1's handle is the Square's only visible name — a docs/22 in-org profile
+   field, not a `profiles` column (docs/22 §21.2's rule: `profiles` is public to every co-member).
+7. **Auto-invite is NOT a trigger on `auth.users`.** The prod Before-User-Created hook stays as it
+   is (docs/21 §7.12.1). Use docs/25's pending-invite path by address: a one-off backfill for
+   existing users, and the same row for each new signup through the path `pending_invite_apply`
+   already takes. The per-address cap in docs/25 §11 must not count the Square's invite.
+8. **Tests, with controls:** the usual RLS pairs for the switch; the Square-specific negative — a
+   Square member reads ZERO co-member rows (control: the same person reads their co-members in a
+   directory-ON org) and CAN read the name of their conversation partner (control: not a stranger's).
+
+**Model plan:** Opus drafts the mechanism in one chat (next week, reading this list first) →
+Fable reviews the draft in one fork, the way docs/24 §7.2 was done → Opus builds. If no Fable
+window exists when the draft is ready, an Opus second reviewer works from this checklist — the
+Fable judgement is front-loaded here, so the build is not blocked on Fable credits.
 
 ## 33. THE OPEN REGISTER — every unresolved item in one place
 

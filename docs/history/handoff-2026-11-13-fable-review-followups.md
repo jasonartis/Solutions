@@ -30,6 +30,16 @@ One chat per numbered block; paste the prompt as written. Nothing here needs Fab
 > Supabase's "secure password change" (reauthentication) in the project auth settings, add the reauth step to the
 > form, e2e it. No migration. Read docs/21 §7.12.1 first so the recovery notice stays identical.
 
+### O4 — DESIGN ONLY: the per-org member-directory switch + the Public Square org (founder 2026-11-15)
+> Read docs/20 §32.9 and §32.9.1 (the founder's two decisions and Fable's eight-point checklist), docs/22 §20 and §21.2,
+> docs/25 (pending invites), docs/16 (self-leave). Draft the mechanism as a dated DESIGN entry in docs/20 (the shape of
+> docs/24 §7.1): the `orgs` column + definer that flips it, every policy/view/definer the switch gates (enumerate them
+> from the catalog, not from memory), the conversation-scoped name read that survives OFF, the Square org row, the
+> pending-invite backfill + per-signup path, the ratchet test and the controls. Do NOT build; do NOT touch `is_org_member`.
+> State which of §33.3 P1's three items (user-level ban, rate limits, report path — `/report` exists) must ship first.
+> The draft then gets a Fable review in one fork (or an Opus second reviewer working from the checklist if no Fable
+> window exists) before any migration is written.
+
 ## Sonnet — docs, comments, verifiers, tests (can be ONE chat; no migration)
 
 ### S1 — stale "no `.rpc()` on this path" claims (reviews #2, #3)

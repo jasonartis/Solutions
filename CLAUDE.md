@@ -195,9 +195,11 @@ this" actions — the founder's wider original ask (see the handoff file); needs
   APPROVED (founder 2026-11-05, his wording "Only platform staff read it.", `f576095`).
 - The `corepack enable` as Administrator one-off (puts `pnpm` on PATH; workaround in the gotchas below).
 
-**Blocked / deferred by design (do not re-derive — read the doc):** killing the blanket member directory and entity-level
-visibility (docs/22 §20 — three-way split, do not merge); Public Square org (docs/20 — v4 withdrawn, `orgs.kind` never
-created); principle 8 per-purpose relationship config (docs/00, described-not-built); docs/15 slice 4 defaults-on-join and
+**Blocked / deferred by design (do not re-derive — read the doc):** entity-level visibility (docs/22 §20 — three-way
+split, do not merge; **item 2 became a per-org directory switch, founder 2026-11-15, docs/20 §32.9.1**); Public Square org
+(docs/20 — the IDEA stands, only v4's mechanism was withdrawn, `orgs.kind` never created; **decided 2026-11-15: a separate
+ordinary org, directory OFF, everyone invited / each person accepts — Opus drafts the mechanism against Fable's checklist
+in §32.9.1, and §33.3 P1 (user ban, rate limits) is a precondition**); principle 8 per-purpose relationship config (docs/00, described-not-built); docs/15 slice 4 defaults-on-join and
 entity-level joinPolicy; zmanim action buttons and every pg-boss cron job wait on an always-on worker (prod has none —
 `pnpm worker:prod` from the founder's PC is the stopgap; retention prunes do not run on prod meanwhile, docs/17).
 

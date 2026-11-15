@@ -1562,6 +1562,11 @@ independent, adversarially reviewed (§13, §14), and ready. **The wider change
    not a live leak.**
 2. **The org-level directory (§19.4)** — kill the blanket row-read. **BLOCKED on
    (3).** Do not start.
+   **FOUNDER 2026-11-15 — REPLACED, not killed:** the directory becomes a PER-ORG
+   SWITCH (owner-flipped, default ON, OFF for the Public Square org). The block on
+   (3) shrinks to "which name reads an OFF org still needs" — for the Square, only
+   the other party of a conversation (resolver rule B scoped to the entity). The
+   decision and Fable's mechanism checklist: docs/20 §32.9.1. Opus drafts next.
 3. **Entity-level visibility** — the founder's deferred generalization. Belongs
    with docs/15 §11's entity-level `joinPolicy`. **Needs its own discussion; may
    need more modules before it can be settled.**
