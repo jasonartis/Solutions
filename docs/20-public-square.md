@@ -3497,6 +3497,27 @@ neither appears in §10.
 
 ---
 
+## 32.9 FOUNDER, 2026-11-15 — THE IDEA IS NOT WITHDRAWN; ONLY v4 WAS
+
+Read this before §33. A session summarised this document as "Public Square withdrawn" and the
+founder corrected it: *"We need the public square — I do not recall withdrawing the idea
+altogether."* What F1 (§33.1) withdrew was the v4 MECHANISM (`orgs.kind`, the shared org built
+on `profiles.email` tricks). The product goal stands. His requirements, in his words, with
+where each one already stands:
+
+| Founder requirement (2026-11-15) | Status today |
+|---|---|
+| Each member opts in and can opt out / leave at any time | Invite-only + accept-first seats are built (§16.3, docs/25); member self-leave exists (docs/16 carve-out). Opt-in to the Square itself: NOT built (no Square org). |
+| Follow the WhatsApp model and other platforms' models | = no roster, discovery by a handle the person chose, per-person visibility settings. That is docs/22 §20's "entity-level visibility" work (three-way split, founder-gated) — the real precondition. |
+| **P1-1** — a public-square-visible USERNAME per person instead of an email | Emails left `profiles` on 2026-09-17 (docs/22): no member can read another's email anywhere. `display_name` exists but is not unique and not per-org; a chosen unique handle for the Square is NOT built. |
+| **P1-2** — "inviting never auto-joins anyone; why would it here?" | It doesn't, any more. In July 2026 an org invite created an ACTIVE seat at once, and the Square proposal added a trigger auto-inviting every new user — that pair was the finding. `org_accept_invite` (2026-07-27) made every seat pending-until-accepted, and the auto-invite trigger was rejected (§16.3). CLOSED by design. |
+| **P1-4** — "members can't enumerate another org's user list; why here?" | They can't — but every member CAN list their OWN org's members (`org_members_select_member` = `is_org_member(org_id)`), which is right for a class or a salon. In an org that contains everyone, "my org's roster" is the whole platform. So the Square needs a different read rule for its roster — again docs/22 §20. OPEN. |
+| **P1-5** — unvetted defaults | Every org/module default (who may start a conversation with whom, who moderates, who can invite, what a profile shows, caps) was designed for an org with a trusted admin who vetted its members. The Square has no such admin, so each default must be decided for it on purpose: moderator = platform staff? which modules are on (chat only?)? can anyone message anyone (spam)? what does a stranger see of a profile? OPEN — a decision list, not a mechanism. |
+
+**What this means for the next session:** the Square is a docs/22 §20 build (visibility and
+discovery), then a thin "Square org" on top; v4's §12 stays DEAD. Nothing here is a Fable task
+until a mechanism is designed; the decisions in the last two rows are the founder's.
+
 ## 33. THE OPEN REGISTER — every unresolved item in one place
 
 **Written 2026-09-15 because it did not exist.** Each item below was recorded
