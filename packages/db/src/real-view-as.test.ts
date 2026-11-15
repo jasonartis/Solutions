@@ -179,10 +179,16 @@ describe('the read-only gate', () => {
       const allowed = await viaHook(false)
       expect(allowed.error).toBeNull() // the control: the same call writes without the claim
 
-      // Storage: the restrictive policy refuses an insert for the claim.
+      // Storage: the restrictive policy refuses an insert for the claim. A
+      // throwaway bucket with an allow-all insert policy (rolled back) gives the
+      // control: without the claim the same insert succeeds, so the refusal is
+      // the view-as policy and not just the bucket's ordinary rules.
+      await tx`insert into storage.buckets (id, name, public) values ('view-as-probe', 'view-as-probe', false)`
+      await tx.unsafe(`create policy view_as_probe_put on storage.objects for insert to authenticated with check (bucket_id = 'view-as-probe')`)
       const put = (viewAs: boolean) =>
-        as(tx, 'p', () => tx`insert into storage.objects (bucket_id, name, owner) values ('vm-images', ${'probe/' + viewAs + '.png'}, ${ids.p})`, viewAs)
+        as(tx, 'p', () => tx`insert into storage.objects (bucket_id, name, owner) values ('view-as-probe', ${'probe/' + viewAs + '.png'}, ${ids.p})`, viewAs)
       expect((await put(true)).error).toMatch(/row-level security/)
+      expect((await put(false)).error).toBeNull()
     })
   })
 

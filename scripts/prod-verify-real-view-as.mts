@@ -213,9 +213,27 @@ try {
         await tx`select public.feedback_open('bug', 'verify title', 'verify body', null, null, '{}'::jsonb)`
       })
       check('  CONTROL: the same write WITHOUT the claim succeeds (then rolled back)', allowed === '', allowed)
-      const put = await attempt(target.user_id, true, () =>
-        tx`insert into storage.objects (bucket_id, name, owner) values ('vm-images', 'verify/x.png', ${target.user_id})`)
-      check('  WITH the claim, a storage insert is refused', /row-level security/.test(put), put || 'no error')
+      // Storage, with a control (2026-11-15: the old probe used a path no rule
+      // allowed, so it passed without the claim too). A member who may post an
+      // image, on a correct path: refused WITH the claim, uploads WITHOUT it.
+      const seats = await tx<{ user_id: string; org_id: string; conv: string }[]>`
+        select m.user_id, c.org_id, c.id as conv from public.vm_conversation_members m
+        join public.vm_conversations c on c.id = m.conversation_id where m.status = 'active'`
+      let poster: (typeof seats)[number] | undefined
+      for (const s of seats) {
+        await tx`select set_config('request.jwt.claims', ${JSON.stringify({ sub: s.user_id, role: 'authenticated' })}, true)`
+        const [r] = await tx<{ ok: boolean }[]>`select public.vm_can_post(${s.conv}) as ok`
+        if (r?.ok) { poster = s; break }
+      }
+      check('  CONTROL: a member who may post an image exists', !!poster)
+      if (poster) {
+        const putAs = (viewAs: boolean) => attempt(poster.user_id, viewAs, () =>
+          tx`insert into storage.objects (bucket_id, name, owner) values ('vm-images', ${`${poster.org_id}/${poster.conv}/verify-${viewAs}.png`}, ${poster.user_id})`)
+        const put = await putAs(true)
+        check('  WITH the claim, a storage insert is refused', /row-level security/.test(put), put || 'no error')
+        const free = await putAs(false)
+        check('  CONTROL: the same insert WITHOUT the claim succeeds (then rolled back)', free === '', free)
+      }
     })
   }
 } finally {
