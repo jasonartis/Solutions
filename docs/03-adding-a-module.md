@@ -652,6 +652,15 @@ others:
   test that chains two saves clobbers its own second one. Same family as the `<details open>`
   entry above: DOM state React does not control, reconciled rather than replaced. A reload between
   steps fixes both problems at once.
+- **THREE E2E TRAPS FROM ONE DAY (2026-11-12/15, org Members + speed-dating blocks).** (1) `page.waitForResponse((r) => r.request().method() === 'POST')`
+  resolves on ANY POST, not on your action's — after a click whose effect is invisible on the page (a block, a silent save) it can
+  return early, the next `signIn` then cuts the write off, and the test fails ~2 runs in 3. **Wait for the EFFECT** (re-read the page
+  the person would see, inside `expect(async () => { await page.goto(...); await expect(...).toBeVisible() }).toPass()`).
+  (2) **A throw inside `finally` REPLACES the error the test body raised**, so a cleanup that assumes the body got far enough ("click
+  Unblock") reports its own missing button and hides the real failure. Make cleanup tolerant (act only if the thing exists) so the
+  body's error survives. (3) **A "not there yet" assertion needs a setup step that makes it true**: CI runs the db suite first on the
+  SAME database, which can leave a grant in place that your seed never had, so `not.toBeVisible()` before the action failed only in CI.
+  Clear the leftover through the real UI first, then assert. Control for all three: reproduce CI's order, and look at the FIRST error.
 - **A FIXTURE MUST NOT PRE-SATISFY ANOTHER TEST'S STARTING CONDITION (2026-08-07).** The
   vacuity rule usually bites a test; this is it biting the SEED. Peer-review rows were seeded
   onto the same homework the grading-workflow e2e drives from `submitted` to `done`. That did

@@ -68,7 +68,7 @@ Run from `apps/web` unless stated. Each is a single plain command.
   (2) `NODE_OPTIONS=--max-old-space-size=4096 node ../../node_modules/next/dist/bin/next build`; (3) start
   `node ../../node_modules/next/dist/bin/next start -p 3000` in the background; (4)
   `node ../../node_modules/@playwright/test/cli.js test e2e/<file> -g "<pattern>" --workers=1 --reporter=list > log` (redirect to a
-  file, then grep it; never pipe through `tail`); (5) stop only a server whose command line matches `next start -p 3000`.
+  file, then grep it; never pipe through `tail`); (5) stop only the server YOU started: find the pid that LISTENS on :3000 (`Get-NetTCPConnection -LocalPort 3000 -State Listen`), read its CreationDate/CommandLine, then `Stop-Process -Id`. **Do NOT match processes by command-line text** (`Where-Object CommandLine -match 'next start'`): the shell wrappers that carry your own command also match (a 2026-11-15 sweep killed six processes), and another session's `next start` looks identical. A `(cmd &)` inside a background task detaches: the task reports "completed" at once while the build keeps running and holds `.next` (a second `next build` then dies "A next build is still in progress") — run the build as the background task itself.
   **The server is PREBUILT: rebuild after every source change.** `playwright.config` reuses a server already on :3000 when not in CI.
 - A database fact from the real database as the real user: sign in over the API (`owner@demo.local` / `password123` locally) with
   supabase-js, or replay a statement inside a rolled-back transaction (`set_config('request.jwt.claims', …)` + `set local role
