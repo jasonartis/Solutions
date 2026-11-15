@@ -174,6 +174,67 @@ test('org self-management: admin adds/removes members, changes roles, grants/rev
   await expect(page.getByText('bob@demo.local')).not.toBeVisible()
 })
 
+// Module-role refusals (2026-11-15). The database refuses almost nothing here (an org admin may grant
+// and remove any module role in their org — measured on the seed), so the one refusal a screen can
+// reach is a STALE page: an admin whose rights were taken away while the page was open. The popup
+// must say so and change nothing — never the generic "Something went wrong" page.
+test('module roles: a stale admin page is refused inside the popup, for Grant role and for the chip ×, and nothing changes', async ({
+  page,
+}) => {
+  const { default: postgres } = await import('postgres')
+  const sql = postgres(process.env.DATABASE_URL ?? 'postgresql://postgres:postgres@127.0.0.1:54322/postgres', { prepare: false, max: 1 })
+  const orgOf = sql`select id from orgs where slug = 'platform-self-test'`
+  const setRole = async (role: string) => {
+    await sql`update org_members set role = ${role}
+              where org_id = (select id from orgs where slug = 'platform-self-test')
+                and user_id = (select id from auth.users where email = 'orgtest@demo.local')`
+  }
+  const aliceSeats = async () =>
+    (
+      await sql`select count(*)::int as n from module_roles
+                where org_id = (select id from orgs where slug = 'platform-self-test')
+                  and user_id = (select id from auth.users where email = 'alice@demo.local')`
+    )[0].n as number
+  try {
+    await orgOf
+    await setRole('admin')
+    const before = await aliceSeats()
+    expect(before).toBeGreaterThan(0) // control: alice has a module role to lose, so "unchanged" means something
+
+    await signIn(page, 'orgtest@demo.local')
+    await page.goto('/o/platform-self-test/members')
+    const aliceRow = page.locator('li', { has: page.getByText('alice@demo.local') })
+    await expect(aliceRow.getByRole('button', { name: 'Remove this role' }).first()).toBeVisible()
+
+    // The page is now stale: the person is demoted after it loaded.
+    await setRole('member')
+
+    // Grant role -> confirm -> refused in the popup.
+    const grantForm = page.locator('form').last()
+    await grantForm.locator('select[name="userId"]').selectOption({ label: 'Org Test Member' })
+    await grantForm.locator('select[name="moduleKey"]').selectOption({ label: 'Demo Module' })
+    await grantForm.locator('select[name="role"]').selectOption('user')
+    await grantForm.getByRole('button', { name: 'Grant role' }).click()
+    const grantDialog = page.getByRole('dialog').filter({ hasText: 'Give Org Test Member the Demo Module role' })
+    await grantDialog.getByRole('button', { name: 'Yes, grant it' }).click()
+    await expect(grantDialog.getByRole('alert')).toContainText('You are not allowed to do that.')
+    await expect(grantDialog).toBeVisible() // stays open with the reason
+    await grantDialog.getByRole('button', { name: 'Cancel' }).click()
+
+    // The chip x -> confirm -> refused in the popup.
+    await aliceRow.getByRole('button', { name: 'Remove this role' }).first().click()
+    const removeDialog = page.getByRole('dialog').filter({ hasText: 'Take the Demo Module role' })
+    await removeDialog.getByRole('button', { name: 'Yes, take it away' }).click()
+    await expect(removeDialog.getByRole('alert')).toContainText('You are not allowed to do that.')
+    await expect(page.getByText('Something went wrong')).not.toBeVisible()
+
+    expect(await aliceSeats()).toBe(before) // the refused removal removed nothing
+  } finally {
+    await setRole('member')
+    await sql.end()
+  }
+})
+
 test('pending invites: an address with NO account is invited, signs up, and accepts (docs/25 scenario 1)', async ({
   page,
 }) => {
