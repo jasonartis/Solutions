@@ -4,6 +4,26 @@ The running, dated build journal that used to live in `CLAUDE.md`'s "## Current 
 section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every session)
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
+- **2026-11-15 (Opus) — UPLOAD PATHS PINNED TO THE REAL ORG (`20261117010000`, ON PROD, verified 14/12 → 26/0) + STORAGE
+  ORPHAN SWEEP (no migration).** Founder: "fix it", then "apply and then fix the new finding". (1) The 2026-11-12 open finding:
+  `cls_submissions_storage_write` / `vm_images_write` checked only the parent folder, so a member could upload their own file
+  under another org's id (for submissions that made it readable by that org's classroom managers). Two definer helpers
+  (`cls_submission_upload_ok`, `vm_image_upload_ok`) keep the old permission check — so neither is an oracle — and require the
+  path's org (and class) to be the parent row's; every id folder must be canonical (upper case/braces refused: the size figures
+  match folders as text). DELETE policies unchanged on purpose. Prod BEFORE proved the hole (a misfiled upload went through);
+  local proof that the OLD policy accepted it and the new one refuses. Review (one adversarial agent): nothing above LOW; two LOWs
+  closed (canonical ids; the verifier fails on any permissive INSERT policy without a bucket filter), one recorded:
+  `cls_submission_files.storage_path` is not required to start with its submission's folder (not reviewed). **Side fix:** the
+  view-as storage probes (db test + `prod-verify-real-view-as.mts`, now 40/0) were VACUOUS — they inserted at a path no policy
+  allowed, so they passed without the claim too; both now carry a control (same upload succeeds without the claim). Tests:
+  `storage-upload-org-pin.test.ts` 3/3, db suite 584 green. Commit `383b28f`. (2) **New finding, fixed: deleting a
+  conversation/submission/exam/course/org left its files in storage** (prod: one vm-images file of a conversation deleted in July,
+  in Demo Visual; org deletion leaves EVERY file, as `20260928010000`'s header admits). New worker job
+  `platform.storage-orphan-sweep` (weekly, Sun 04:50; like the prunes it does not run on prod until an always-on worker exists)
+  and `scripts/storage-orphan-sweep.mts` (dry run unless `--apply`). An orphan is decided by the folder that names the owning
+  record, only in the five org-prefixed buckets, never for unrecognised paths or files under 24 h (a student's file is not
+  recoverable: backups hold storage rows, not files). Test 4 found / 7 kept; a local end-to-end (upload → backdate → `--apply` →
+  row and file gone). Prod dry run: exactly that one file. Commit `53e8c57`.
 - **2026-11-15 (Opus) — REAL VIEW-AS ON PROD: `20261116010000` applied on the founder's "Apply"**, after a backup and
   a dry run listing only that file; `prod-verify-real-view-as.mts` 4/29 → 38/0; the live API checked straight after (anon
   RPC 200; a demo sign-in and signed-in read 200). **`SUPABASE_JWT_SECRET` put on Vercel by Claude** (founder: "Can you do

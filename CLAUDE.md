@@ -67,6 +67,8 @@ section, keep it a SUMMARY with pointers: add the dated story to the journal / t
   (archive file, "Host state").
 
 ### Shipped most recently (newest first; full stories in the linked docs)
+- **2026-11-15 (Opus): uploads pinned to the real org — `20261117010000` ON PROD, verified 14/12 → 26/0; storage orphan
+  sweep built (no migration; worker job + `scripts/storage-orphan-sweep.mts`, dry run unless `--apply`).** Journal 2026-11-15.
 - **2026-11-15 (Opus): REAL view-as v1 (classroom) — `20261116010000` ON PROD, verified 4/29 → 38/0; secret on
   Vercel.** The superadmin sees a person's actual classroom screens through the SAME pages (a 5-minute server-signed
   token for the person; read-only enforced by the database's pre-request hook, storage policies, the proxy and a guarded
@@ -83,7 +85,7 @@ section, keep it a SUMMARY with pointers: add the dated story to the journal / t
 - **2026-11-12 (Opus): size per org and module — `20261115010000` ON PROD, verified 9/5 → 18/0** (code NOT pushed: it sits
   above b3's held `09c8cc0`). Superadmin-only `platform_storage_usage()`; `/console/overview` shows an ESTIMATED size beside
   every "records" count (a table's size split by each org's share of its rows; files exact by org folder); the Limits tile's
-  database/storage rows are real. Open finding: two upload policies don't pin folder [1] to the uploader's org. Journal 2026-11-12.
+  database/storage rows are real. Journal 2026-11-12. (Its open finding — upload folder [1] not pinned — CLOSED 2026-11-15, `20261117010000`.)
 - **2026-11-12 (Sonnet): module-role popups + Limits tile — committed/local, NOT pushed, no migration.** Grant role and the chip ×
   ask first and show refusals in the popup (`09c8cc0`); dashboard "Limits" tile = active people + video people vs vendor free
   limits (`lib/vendor-limits.ts`, read from the vendors' pages 2026-11-12); database size/storage wired to

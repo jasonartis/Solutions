@@ -104,7 +104,8 @@ export default async function DeleteOrgPage(props: {
           <p className="mb-4 rounded border border-gray-200 bg-gray-50 p-3 text-xs text-gray-600">
             <strong>Not included above:</strong> uploaded files (submitted homework, exported
             schedules, shared images) live in file storage rather than in the database. They are
-            not deleted by this and would be left behind.
+            not deleted by this. The weekly storage clean-up removes them afterwards (until an always-on
+            worker runs, that clean-up is run by hand).
           </p>
 
           <form action={deleteOrg.bind(null, org.id)} className="flex flex-wrap items-end gap-3">

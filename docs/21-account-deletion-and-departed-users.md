@@ -108,7 +108,7 @@ be worse than leaving them. The per-column judgement in §4 is the work.
 | `cls_review_comments.author_id` | Feedback on another student's work — theirs, not the author's. |
 | `vm_flags.reporter_user_id` | An abuse report is a record of an incident. |
 | `sd_notes.author_user_id` | A safety note written *about someone else*. |
-| `cls_submissions.student_id` | Graded work; peer reviews and grades reference it. Also: deleting the row **orphans the file in storage**, which no FK reaches. |
+| `cls_submissions.student_id` | Graded work; peer reviews and grades reference it. Also: deleting the row **orphans the file in storage**, which no FK reaches (since 2026-11-15 the storage orphan sweep removes such files — journal). |
 | `cls_grades.student_id` | Part of the class's academic record. |
 | `cls_exam_papers.student_id` | Same. |
 | `cls_review_assignments.reviewer_id` | The record that a review was assigned and by whom. |
