@@ -1,0 +1,58 @@
+\pset format unaligned
+\set ON_ERROR_STOP off
+begin;
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"0ab0d8f7-f17a-4205-8e63-60101baab7ee","role":"authenticated"}', true);
+select 'S1 issue_org+module', public.pending_invite_issue_org('f94dd387-b02d-447e-97e5-ce7dfea0efac','bob@demo.local','member','visual-messaging','admin');
+select 'S2 issue_vm', public.pending_invite_issue_vm('702f0a8f-4e67-4453-86e7-0e769b6ce5ff','bob@demo.local');
+select set_config('request.jwt.claims', '{"sub":"fa2fb87a-5666-4e2a-9369-b0860e352207","role":"authenticated"}', true);
+select 'S3 bob claim #1', public.pending_invites_claim_mine();
+select public.org_accept_invite('f94dd387-b02d-447e-97e5-ce7dfea0efac');
+select 'S4 bob claim #2', public.pending_invites_claim_mine();
+select 'S4 auth.uid restored', auth.uid();
+savepoint ctl;
+insert into public.module_roles (org_id,user_id,module_key,role,granted_by) values ('f94dd387-b02d-447e-97e5-ce7dfea0efac','fa2fb87a-5666-4e2a-9369-b0860e352207','visual-messaging','moderator','fa2fb87a-5666-4e2a-9369-b0860e352207');
+rollback to savepoint ctl;
+savepoint ctl2;
+insert into public.vm_conversation_members (org_id, conversation_id, user_id, role, status) values ('f94dd387-b02d-447e-97e5-ce7dfea0efac','b6649ecd-af8c-496a-a8b3-8a0af47589cf','fa2fb87a-5666-4e2a-9369-b0860e352207','participant','pending');
+rollback to savepoint ctl2;
+reset role;
+select set_config('request.jwt.claims', '', true);
+select 'MODROLE after claim2', role, scope_ref, granted_by='0ab0d8f7-f17a-4205-8e63-60101baab7ee' as granted_by_alice from module_roles where user_id='fa2fb87a-5666-4e2a-9369-b0860e352207' and org_id='f94dd387-b02d-447e-97e5-ce7dfea0efac';
+select 'VMSEAT after claim2', role, status, invited_by='0ab0d8f7-f17a-4205-8e63-60101baab7ee' as by_alice from vm_conversation_members where user_id='fa2fb87a-5666-4e2a-9369-b0860e352207';
+select 'ROWS after claim2 (expect 0)', count(*) from public.pending_invites where email='bob@demo.local';
+rollback;
+
+begin;
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"0ab0d8f7-f17a-4205-8e63-60101baab7ee","role":"authenticated"}', true);
+select 'C1 issue_vm orgtest', public.pending_invite_issue_vm('702f0a8f-4e67-4453-86e7-0e769b6ce5ff','orgtest@demo.local');
+reset role;
+select set_config('request.jwt.claims', '', true);
+insert into org_members (org_id,user_id,role,status) values ('f94dd387-b02d-447e-97e5-ce7dfea0efac','67ebd240-69fb-44ff-96a7-96baceff5f1a','member','active');
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"67ebd240-69fb-44ff-96a7-96baceff5f1a","role":"authenticated"}', true);
+select 'C3 claim: active member, no module role (expect 0)', public.pending_invites_claim_mine();
+reset role;
+select set_config('request.jwt.claims', '', true);
+select 'C3 seat (expect 0)', count(*) from vm_conversation_members where user_id='67ebd240-69fb-44ff-96a7-96baceff5f1a';
+select 'C3 waiting_on as seen by org admin', public.pending_invite_waiting_on(id) from pending_invites where email='orgtest@demo.local';
+insert into module_roles (org_id,user_id,module_key,role,granted_by) values ('f94dd387-b02d-447e-97e5-ce7dfea0efac','67ebd240-69fb-44ff-96a7-96baceff5f1a','visual-messaging','member','0ab0d8f7-f17a-4205-8e63-60101baab7ee');
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"67ebd240-69fb-44ff-96a7-96baceff5f1a","role":"authenticated"}', true);
+select 'C4 claim with module role (expect 1)', public.pending_invites_claim_mine();
+reset role;
+select set_config('request.jwt.claims', '', true);
+select 'C4 seat', role, status from vm_conversation_members where user_id='67ebd240-69fb-44ff-96a7-96baceff5f1a';
+rollback;
+
+begin;
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"0ab0d8f7-f17a-4205-8e63-60101baab7ee","role":"authenticated"}', true);
+select 'F1 owner attaches role text nobody knows', public.pending_invite_issue_org('f94dd387-b02d-447e-97e5-ce7dfea0efac','bob@demo.local','member','visual-messaging','superduper');
+select 'F2 owner attaches role for a module NOT enabled', public.pending_invite_issue_org('f94dd387-b02d-447e-97e5-ce7dfea0efac','bob@demo.local','member','classroom','professor');
+savepoint c;
+insert into module_roles (org_id,user_id,module_key,role,granted_by) values ('f94dd387-b02d-447e-97e5-ce7dfea0efac','57e0314b-2110-4c4f-802c-a91308340bec','visual-messaging','superduper','0ab0d8f7-f17a-4205-8e63-60101baab7ee');
+select 'F3 direct grant of unknown role text by owner succeeded', count(*) from module_roles where role='superduper';
+rollback to savepoint c;
+rollback;

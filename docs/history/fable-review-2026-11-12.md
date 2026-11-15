@@ -172,7 +172,10 @@ LOW: `module_scope_covers` is a definer with NO api-role EXECUTE, so the TS mirr
 (`view-as.ts:95-112`) is the only thing the app can run — TS/SQL parity rests on the test suite.
 LOW (by design, documented `view-as.ts:217-219`): a session row outlives a revoked grant for up to
 30 min; `page.tsx:74-78` re-checks per render and the render is RLS-bounded anyway.
-Probe file: scratchpad `va_probe3.sql` (session-local, not kept).
+Probe file: `va_probe3.sql` — **kept 2026-11-15 with all sixteen probes of this review in
+[fable-review-2026-11-12-probes/](fable-review-2026-11-12-probes/)** (rolled-back local SQL, run as
+`cat <file> | docker exec -i supabase_db_Solutions_Platform psql -U postgres -d postgres`; `amp_probe.sql` = §6's
+27→527 amplification, `fable_main_probe.sql` + `selfonly.sql` = §8's non-member grantee; O1/O2 start from these).
 
 ### 9. Pending invites slice 1 (org) — holds
 

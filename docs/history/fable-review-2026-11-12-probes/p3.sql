@@ -1,0 +1,90 @@
+\pset format unaligned
+\set ON_ERROR_STOP off
+begin;
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"0ab0d8f7-f17a-4205-8e63-60101baab7ee","role":"authenticated"}', true);
+select 'S1 issue_org+module', public.pending_invite_issue_org('f94dd387-b02d-447e-97e5-ce7dfea0efac','bob@demo.local','member','visual-messaging','admin');
+select 'S2 issue_vm', public.pending_invite_issue_vm('702f0a8f-4e67-4453-86e7-0e769b6ce5ff','bob@demo.local');
+reset role;
+select 'ROWS after issue', kind, module_key, role, claimed_by, seat_invited_at from public.pending_invites where email='bob@demo.local' order by kind;
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"fa2fb87a-5666-4e2a-9369-b0860e352207","role":"authenticated"}', true);
+select 'S3 bob claim #1', public.pending_invites_claim_mine();
+reset role;
+select 'ROWS after claim1', kind, module_key, claimed_by is not null as stamped, seat_invited_at = (select invited_at from org_members where user_id='fa2fb87a-5666-4e2a-9369-b0860e352207' and org_id='f94dd387-b02d-447e-97e5-ce7dfea0efac') as stamp_matches_seat from public.pending_invites where email='bob@demo.local' order by kind;
+select 'SEAT after claim1', role, status, invited_by='0ab0d8f7-f17a-4205-8e63-60101baab7ee' as by_alice from org_members where user_id='fa2fb87a-5666-4e2a-9369-b0860e352207' and org_id='f94dd387-b02d-447e-97e5-ce7dfea0efac';
+select 'MODROLE after claim1', count(*) from module_roles where user_id='fa2fb87a-5666-4e2a-9369-b0860e352207' and org_id='f94dd387-b02d-447e-97e5-ce7dfea0efac';
+select 'VMSEAT after claim1', count(*) from vm_conversation_members where user_id='fa2fb87a-5666-4e2a-9369-b0860e352207';
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"fa2fb87a-5666-4e2a-9369-b0860e352207","role":"authenticated"}', true);
+select public.org_accept_invite('f94dd387-b02d-447e-97e5-ce7dfea0efac');
+select 'S4 bob claim #2', public.pending_invites_claim_mine();
+select 'S4 auth.uid restored', auth.uid();
+insert into public.module_roles (org_id,user_id,module_key,role,granted_by) values ('f94dd387-b02d-447e-97e5-ce7dfea0efac','fa2fb87a-5666-4e2a-9369-b0860e352207','visual-messaging','moderator','fa2fb87a-5666-4e2a-9369-b0860e352207');
+reset role;
+select 'MODROLE after claim2', role, granted_by='0ab0d8f7-f17a-4205-8e63-60101baab7ee' as granted_by_alice from module_roles where user_id='fa2fb87a-5666-4e2a-9369-b0860e352207' and org_id='f94dd387-b02d-447e-97e5-ce7dfea0efac';
+select 'VMSEAT after claim2', role, status, invited_by='0ab0d8f7-f17a-4205-8e63-60101baab7ee' as by_alice from vm_conversation_members where user_id='fa2fb87a-5666-4e2a-9369-b0860e352207';
+select 'ROWS after claim2', count(*) from public.pending_invites where email='bob@demo.local';
+rollback;
+
+begin;
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"0ab0d8f7-f17a-4205-8e63-60101baab7ee","role":"authenticated"}', true);
+select 'B1 issue', public.pending_invite_issue_org('f94dd387-b02d-447e-97e5-ce7dfea0efac','bob@demo.local','member','visual-messaging','admin');
+select set_config('request.jwt.claims', '{"sub":"fa2fb87a-5666-4e2a-9369-b0860e352207","role":"authenticated"}', true);
+select 'B2 claim1', public.pending_invites_claim_mine();
+select public.org_accept_invite('f94dd387-b02d-447e-97e5-ce7dfea0efac');
+reset role;
+update auth.users set banned_until = now() + interval '1 day' where id='0ab0d8f7-f17a-4205-8e63-60101baab7ee';
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"fa2fb87a-5666-4e2a-9369-b0860e352207","role":"authenticated"}', true);
+select 'B3 claim2 (expect 0)', public.pending_invites_claim_mine();
+reset role;
+select 'B modrole count (expect 0)', count(*) from module_roles where user_id='fa2fb87a-5666-4e2a-9369-b0860e352207';
+select 'B rows left (expect 0)', count(*) from pending_invites where email='bob@demo.local';
+rollback;
+
+begin;
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"0ab0d8f7-f17a-4205-8e63-60101baab7ee","role":"authenticated"}', true);
+select 'C1 issue_vm orgtest', public.pending_invite_issue_vm('702f0a8f-4e67-4453-86e7-0e769b6ce5ff','orgtest@demo.local');
+select set_config('request.jwt.claims', '{"sub":"67ebd240-69fb-44ff-96a7-96baceff5f1a","role":"authenticated"}', true);
+select 'C2 orgtest claim (expect 0)', public.pending_invites_claim_mine();
+reset role;
+select 'C seat (expect 0)', count(*) from vm_conversation_members where user_id='67ebd240-69fb-44ff-96a7-96baceff5f1a';
+select 'C row kept (expect 1)', count(*) from pending_invites where email='orgtest@demo.local';
+insert into org_members (org_id,user_id,role,status) values ('f94dd387-b02d-447e-97e5-ce7dfea0efac','67ebd240-69fb-44ff-96a7-96baceff5f1a','member','active');
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"67ebd240-69fb-44ff-96a7-96baceff5f1a","role":"authenticated"}', true);
+select 'C3 claim, member no module role (expect 0)', public.pending_invites_claim_mine();
+reset role;
+select 'C seat (expect 0)', count(*) from vm_conversation_members where user_id='67ebd240-69fb-44ff-96a7-96baceff5f1a';
+rollback;
+
+begin;
+insert into platform_settings (key, value) values ('pending_invites.caps', '{"maxPerAddress":1}') on conflict (key) do update set value = excluded.value;
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"0ab0d8f7-f17a-4205-8e63-60101baab7ee","role":"authenticated"}', true);
+select 'D1 alice invites zed', public.pending_invite_issue_org('f94dd387-b02d-447e-97e5-ce7dfea0efac','zed@x.test','member');
+select set_config('request.jwt.claims', '{"sub":"fa2fb87a-5666-4e2a-9369-b0860e352207","role":"authenticated"}', true);
+select 'D2 bob invites zed', public.pending_invite_issue_org('cd8a0f62-f183-4ccc-8bc6-89a456ca1ac6','zed@x.test','member');
+select 'D2 bob list rows', count(*) from public.pending_invites_list('cd8a0f62-f183-4ccc-8bc6-89a456ca1ac6');
+reset role;
+delete from pending_invites where email='zed@x.test';
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"fa2fb87a-5666-4e2a-9369-b0860e352207","role":"authenticated"}', true);
+select 'D3 bob invites again', public.pending_invite_issue_org('cd8a0f62-f183-4ccc-8bc6-89a456ca1ac6','zed@x.test','member');
+select 'D3 bob list rows', count(*) from public.pending_invites_list('cd8a0f62-f183-4ccc-8bc6-89a456ca1ac6');
+rollback;
+
+begin;
+select set_config('request.jwt.claims', '{"sub":"fa2fb87a-5666-4e2a-9369-b0860e352207"}', true);
+do $$ begin
+  begin
+    perform set_config('request.jwt.claims', '', true);
+    raise exception 'boom';
+  exception when others then null;
+  end;
+end $$;
+select 'E auth.uid after inner raise', auth.uid();
+rollback;

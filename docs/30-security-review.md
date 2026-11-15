@@ -57,6 +57,11 @@ read-only. The directory is OUTSIDE the public repo on purpose.
 6. Uploaded files have no backup (docs/28).
 7. No CAPTCHA, no custom SMTP (docs/18 item 7), no always-on worker (prunes don't run on prod).
 8. Real view-as: four LOW hardening items (docs/13 "FABLE REVIEW"), incl. the `db_pre_request` platform-wide dependency.
+9. **Read off `mgmt-config_auth.json` on 2026-11-13, before Step A ran** (so Step A starts from them, not from zero):
+   `password_min_length` = **6**; `password_hibp_enabled` = **false** (no breached-password check); TOTP MFA enabled
+   but **nobody enrolled**; `rate_limit_anonymous_users` = **30**. Each is a T4/T5 candidate for §6.
+10. **Public Square (founder 2026-11-15, docs/20 §32.9.1):** `find_module_peer`'s lookup-by-email becomes a
+    platform-wide "does this address have an account" oracle once an org contains everyone — must be OFF there.
 
 ## 4. How to resume when usage resets — model by model, cheapest first
 

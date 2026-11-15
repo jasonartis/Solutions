@@ -216,7 +216,8 @@ gitignored, only if the founder asks).
 
 ### Facts that are easy to get wrong
 - **CI/deploy without `gh`:** `printf 'protocol=https\nhost=github.com\n' | git credential fill` gives a bearer token for the
-  GitHub REST API (runs, jobs, `curl -L …/jobs/<id>/logs`, `rerun-failed-jobs`); `VERCEL_TOKEN` in `.env.deploy` +
+  GitHub REST API (runs, jobs, `curl -L …/jobs/<id>/logs`, `rerun-failed-jobs`; `…/actions/runs?head_sha=` needs the
+  FULL sha — a short one returns an empty list that reads as "no run"); `VERCEL_TOKEN` in `.env.deploy` +
   `GET https://api.vercel.com/v6/deployments?limit=8` (match `meta.githubCommitSha`; READY ⇒ `check` passed). Curl the stable
   alias `https://solutions-platform.vercel.app` (per-deployment URLs 302). A red `check` in `supabase/setup-cli`/`supabase
   start` with `rate limit`/`toomanyrequests` — or `failed to bind host port … address already in use` (2026-11-05, port
