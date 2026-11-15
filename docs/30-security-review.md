@@ -52,7 +52,7 @@ read-only. The directory is OUTSIDE the public repo on purpose.
 1. `/account` password change does not ask for the CURRENT password (CLAUDE.md; likely fix = GoTrue "secure password change").
 2. `module_roles` never checks the grantee is an active org member — MEDIUM, 2026-11-12 review #8.
 3. `activity_rollup` amplification — MEDIUM, review #6.
-4. ~~Two upload policies don't pin storage folder [1] to the uploader's org~~ — **CLOSED 2026-11-15** (`20261117010000` on prod, verified 26/0; journal 2026-11-15). Related, also built that day: the storage orphan sweep (files of deleted records).
+4. ~~Two upload policies don't pin storage folder [1] to the uploader's org~~ — **CLOSED 2026-11-15** (`20261117010000` on prod, `scripts/prod-verify-storage-upload-pin.mts` 26/0; journal 2026-11-15). Related, also built that day: the storage orphan sweep (files of deleted records).
 5. GitHub 2FA off; single-holder vendor accounts; plaintext dumps + `.env.deploy` on the travelling SSD (docs/28 F13, R1–R4).
 6. Uploaded files have no backup (docs/28).
 7. No CAPTCHA, no custom SMTP (docs/18 item 7), no always-on worker (prunes don't run on prod).

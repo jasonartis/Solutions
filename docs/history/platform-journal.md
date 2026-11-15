@@ -10,7 +10,8 @@ decision log, docs/03 conventions, docs/12 safeguards) — this is the chronolog
   under another org's id (for submissions that made it readable by that org's classroom managers). Two definer helpers
   (`cls_submission_upload_ok`, `vm_image_upload_ok`) keep the old permission check — so neither is an oracle — and require the
   path's org (and class) to be the parent row's; every id folder must be canonical (upper case/braces refused: the size figures
-  match folders as text). DELETE policies unchanged on purpose. Prod BEFORE proved the hole (a misfiled upload went through);
+  match folders as text). DELETE policies unchanged on purpose. Prod verifier `scripts/prod-verify-storage-upload-pin.mts` (also counts misfiled
+  files and lists orphans). Prod BEFORE proved the hole (a misfiled upload went through);
   local proof that the OLD policy accepted it and the new one refuses. Review (one adversarial agent): nothing above LOW; two LOWs
   closed (canonical ids; the verifier fails on any permissive INSERT policy without a bucket filter), one recorded:
   `cls_submission_files.storage_path` is not required to start with its submission's folder (not reviewed). **Side fix:** the
@@ -23,7 +24,13 @@ decision log, docs/03 conventions, docs/12 safeguards) — this is the chronolog
   and `scripts/storage-orphan-sweep.mts` (dry run unless `--apply`). An orphan is decided by the folder that names the owning
   record, only in the five org-prefixed buckets, never for unrecognised paths or files under 24 h (a student's file is not
   recoverable: backups hold storage rows, not files). Test 4 found / 7 kept; a local end-to-end (upload → backdate → `--apply` →
-  row and file gone). Prod dry run: exactly that one file. Commit `53e8c57`.
+  row and file gone). Prod dry run: exactly that one file. Commit `53e8c57`. **On the founder's "remove it": `--apply` on prod removed
+  it** (21 KB, `Rename RealTime Widget 2023_07_20.PNG`, Demo Visual); a dry run straight after found 0. (3) **CI went red on
+  `2d07dee`** (deploy skipped, prod kept the previous build): both new db tests used vm conversations that only exist locally
+  because earlier e2e runs created them — the SEED HAS NO vm conversations. Fixed in `5f4aee9` (each test makes its own inside the
+  rollback); CI green, Vercel READY. (4) **Checked on prod as the superadmin, view only:** Demo Org B's delete page shows the new
+  files note (the note shows only for an org with no user data; the others show the "holds data" refusal); `/console/overview`
+  shows sizes ("≈ 956.7 KB"); `/console/view-as/real` loads without the "Not configured" banner (the JWT secret is live).
 - **2026-11-15 (Opus) — REAL VIEW-AS ON PROD: `20261116010000` applied on the founder's "Apply"**, after a backup and
   a dry run listing only that file; `prod-verify-real-view-as.mts` 4/29 → 38/0; the live API checked straight after (anon
   RPC 200; a demo sign-in and signed-in read 200). **`SUPABASE_JWT_SECRET` put on Vercel by Claude** (founder: "Can you do

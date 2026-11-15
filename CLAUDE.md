@@ -202,9 +202,11 @@ split, do not merge; **item 2 became a per-org directory switch, founder 2026-11
 ordinary org, directory OFF, everyone invited / each person accepts — Opus drafts the mechanism against Fable's checklist
 in §32.9.1, and §33.3 P1 (user ban, rate limits) is a precondition**); principle 8 per-purpose relationship config (docs/00, described-not-built); docs/15 slice 4 defaults-on-join and
 entity-level joinPolicy; zmanim action buttons and every pg-boss cron job wait on an always-on worker (prod has none —
-`pnpm worker:prod` from the founder's PC is the stopgap; retention prunes do not run on prod meanwhile, docs/17).
+`pnpm worker:prod` from the founder's PC is the stopgap; retention prunes do not run on prod meanwhile, docs/17; neither does
+the weekly storage orphan sweep — run `scripts/storage-orphan-sweep.mts` by hand, dry run first, journal 2026-11-15).
 
-**Open, unranked, not founder-gated (small):** `/account`'s Change password form
+**Open, unranked, not founder-gated (small):** `cls_submission_files.storage_path` is not required to start with its own
+submission's folder (upload-pin review LOW, not reviewed, journal 2026-11-15); `/account`'s Change password form
 (`apps/web/app/(app)/account/password-form.tsx`) does not ask for the CURRENT password, so anyone at a signed-in browser
 can change it (found 2026-11-04; Supabase's "secure password change"/reauthentication setting is the likely fix); walk-in salon customers cannot be linked to an account (module-5 spec
 2026-08-03 finding — read before building); the residual census paths in module tables (docs/24 §6b.1, with docs/22 §20.2);
@@ -327,6 +329,12 @@ gitignored, only if the founder asks).
 - **Git Bash quoted heredocs (`<<'EOF'`) can still collapse `\\` to `\`** in a script body
   (hit 2026-10-14: a JS regex `/\\/g` arrived as `/\/g`). Write such files with the editor
   tool, or avoid the backslash (`String.fromCharCode(92)`).
+- **A DB TEST THAT PASSES LOCALLY CAN BE LEANING ON E2E LEFTOVERS (2026-11-15):** the local database keeps rows earlier e2e runs
+  created (vm conversations, open submissions); CI runs the db suite on a FRESH seed, which has none. Two new tests went red on
+  CI only. A db test makes its own fixtures inside its rolled-back transaction, or reads only what `seed.ts` creates.
+- **A NODE SCRIPTED EDIT WITH `String.replace` CAN DUPLICATE HALF A FILE (2026-11-15):** in the REPLACEMENT string `$'`, `$&`
+  and `` $` `` are patterns, so a replacement containing a regex ending in `$'` pasted the rest of the file in. Use
+  `s.split(a).join(b)`, or the editor tool, and read `git diff` after.
 - **NO PYTHON ON THIS HOST, AND THE PERL FALLBACK CORRUPTS FILES SILENTLY (2026-10-07).**
   `python3` opens the Microsoft Store stub. Reaching for `perl -0pi -e 's|...|...|'` instead
   mangled two source files: with `|` as the delimiter, an escaped `\|` inside the pattern

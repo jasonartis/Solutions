@@ -444,7 +444,8 @@ entry). ~~The "Content reports" tile is a placeholder~~ — wired 2026-11-10 (be
    `limitsSection`; limits + sources in `lib/vendor-limits.ts`. Active people = people whose last sign-in is in the last 30 days
    (`login_rollup`, a floor of Supabase's MAU: it ignores token refreshes) against Supabase Free's 50,000 MAU; video people =
    distinct people checked in at a speed-dating event this calendar month against the 25 free JaaS people. Database size and
-   storage print "not measurable yet", and the tile is never green "All clear" while they do.) Original text follows. Start with (a) active people per month, (b) database size and storage, (c) the
+   storage print "not measurable yet", and the tile is never green "All clear" while they do. **Superseded 2026-11-12/15:** both
+   rows are now real, from `platform_storage_usage()` (`20261115010000`, on prod; journal 2026-11-12).) Original text follows. Start with (a) active people per month, (b) database size and storage, (c) the
    25-active-people-a-month video cap (docs/02 "Video"). (a) and (c) are roughly measurable from existing tables; (b) waits for
    the real-bytes job (journal 2026-11-10). The vendors' exact free-tier numbers must be confirmed with the vendors before any
    are hard-coded.

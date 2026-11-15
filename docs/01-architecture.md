@@ -162,6 +162,8 @@ pg-boss stores its queue in Postgres — no Redis, no extra infrastructure. Job 
 - `email.send` — all outbound mail goes through the queue (retries, rate limits)
 - `speeddating.event-orchestrator` — event state machine driver (module 6)
 - `backup.dump` — scheduled pg_dump to storage (docs/05)
+- `platform.storage-orphan-sweep` — weekly: removes uploaded files whose org or owning record is gone (2026-11-15; until an
+  always-on worker runs, by hand via `scripts/storage-orphan-sweep.mts`; rules in the job's header)
 
 Rules: jobs are idempotent, org-scoped, and logged. Cron schedules live in code (worker startup), not in a dashboard.
 

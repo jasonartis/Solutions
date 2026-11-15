@@ -952,7 +952,8 @@ already minted lives until its 5-minute expiry after Stop (server-side only); wi
 review plus the per-module checks above (client components querying from the browser, realtime, edge functions, GET
 route handlers with side effects).
 
-**Turning it on in production — DONE 2026-11-15 except the deploy** (migration applied; secret set on Vercel by
+**Turning it on in production — DONE 2026-11-15, deploy included** (checked on prod that day: the page loads without the
+"Not configured" banner). (Migration applied; secret set on Vercel by
 Claude, decision (2) above). It works once a production deploy built after 2026-11-15 is live. If the secret ever has to
 be set again by hand (e.g. rotated): Supabase dashboard → Project Settings → API / "JWT Keys" → "Legacy JWT secret" →
 copy (never paste it into a chat) → Vercel → Settings → Environment Variables → `SUPABASE_JWT_SECRET`, Production only,

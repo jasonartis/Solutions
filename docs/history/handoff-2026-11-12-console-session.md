@@ -112,6 +112,9 @@ Run from `apps/web` unless stated. Each is a single plain command.
 
 **Pushed 2026-11-12** (master `558ba39..a5922cd`, by the module-roles/Limits session, on the founder's "push"): this session's four commits went out with the rest.
 
+**Chats 2 and 3 are DONE** (one Opus chat, 2026-11-12 → 11-15): real bytes per org `20261115010000` and real view-as for
+classroom `20261116010000`, both on prod and verified (journal 2026-11-12 / 2026-11-15; docs/13 "AS BUILT").
+
 **Chat 1 is DONE** (journal 2026-11-12, Sonnet): module-role popups `09c8cc0`, Limits tile `8788929`/`b514570`.
 
 On prod (CI green, Vercel READY `558ba39`): the dashboard, banner, Overview trees, shared invite section, closed org cards, staged
