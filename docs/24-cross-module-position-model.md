@@ -707,3 +707,124 @@ deferred pieces already need, which makes it worth doing properly once rather th
 times — and bolting it onto a fold commit would bury a guard change inside a refactor.
 
 **Next step:** the census-leak slice, at Opus tier, with the picker read path designed first.
+
+## 7.1 DESIGN — the self-join carve-out (option 1), drafted 2026-11-15 by Opus for Fable review; NOT BUILT
+
+**Read first — §7 is slightly wrong, measured from migration text (not live).** Registration
+already needs a grant: `sd_participants_insert_guard` (`20261027010000`) refuses unless
+`sd_is_participant(org)` = `has_module_role(org,'speed-dating','participant')`, a GLOBAL grant
+staff mint. So a self-registered user holds a global `participant` grant but **no event-scoped
+one**. This design mints the event-scoped seat-grant; it does not touch the global gate.
+
+**(a) The guard change.** The precedent has NO origin token: `org_members_guard_hierarchy`
+arm (a) is a pure row-shape predicate, and it is unreachable directly only because **no RLS
+policy gives an invitee UPDATE on their own row**. That does not transfer: a rank-2 organizer
+passes `module_roles_insert_module_manager`, so a shape-only arm would let staff self-mint
+seats with no definer. And the only origin tokens available (`set_config`) are forgeable and
+docs/20 §17.6 forbids that family. So **the arm proves legitimacy from DATA, not origin**: it
+admits a self-insert only when a live seat already backs it. Origin becomes irrelevant.
+
+New arm at the TOP of step (3)'s INSERT branch, before the self-grant refusal (and after the
+coming grantee-active check, (d)):
+
+```sql
+if tg_op = 'INSERT' and new.user_id = auth.uid()
+   and new.scope_ref is not null
+   and public.module_self_join_backed(new.org_id, new.module_key, new.role,
+                                      new.scope_ref, auth.uid()) then
+  new.granted_by := auth.uid();          -- self-join marker (docs/15 slice 4)
+  return new;
+end if;
+-- DELETE twin (mirrors org arm (b), "leave"): own row, scoped, self-joinable role,
+-- and NOT backed (seat already gone) -> return old.
+```
+
+`module_self_join_backed` is platform-owned, `security definer`, `stable`, pinned
+`search_path`, a hardcoded per-module `case` like `module_position_rank` (immutable config,
+docs/15 §4.1 #5). Speed-dating arm: `role in ('participant','audience','mentor')` AND exists
+an `sd_participants` row with `user_id = uid`, `seat_type = role`, `status in
+('registered','waitlisted')`, whose `sd_events.scope_node_id = scope` and `org_id = org`.
+Every other module: `false`. ACL: revoke all from public, anon, authenticated, service_role;
+no grant (callable only from the guard, owner rights).
+
+**(b) The definer: `sd_register_self(event_id uuid, side text)`, not a generic
+`module_self_join`.** Registration must write two rows atomically and keep the module's
+side/capacity/ban/state logic; a generic definer would take role and scope_ref as arguments,
+which docs/20 §17.6 forbids (scope enumeration, role escalation). The generic part is the
+guard predicate. Body: `auth.uid()` not null; `is_org_member(ev.org_id)` (active-only);
+`org_modules.enabled`; insert `sd_participants` (existing `sd_participants_insert_guard`
+still enforces open state, global participant grant, bans, side, status, and forces
+`seat_type='participant'`); then insert `module_roles (ev.org_id, uid, 'speed-dating',
+'participant', ev.scope_node_id)` `on conflict do nothing` (rejoin). Role and scope are
+derived, never passed. ACL: `revoke execute … from public, anon, authenticated,
+service_role; grant execute … to authenticated` (docs/03 #27). Withdraw keeps working via
+its existing self-update.
+
+**(c) Revocation.** Grant life = seat life, by an AFTER UPDATE trigger on `sd_participants`:
+status leaving `registered/waitlisted` → delete the matching scoped grant; a rejoin back to a
+live status re-inserts it. Self-withdraw passes the DELETE twin (seat no longer backed); an
+organizer/host removal (`removed`) passes step (3) by rank (2 or 1 > 0). Event **close does
+not revoke** — `closed` is reversible and participants keep reading revealed matches after
+`complete`. **Drift points (open):** (i) event delete — no trigger removes its scope node,
+so grants outlive it (scoped grant cascades only if the node goes); (ii) leaving the ORG —
+whether `module_roles` rows are removed was not verified; reads stay safe because every
+reader requires `is_org_member`; (iii) seed/service writes bypass the trigger; a ratchet test
+should assert zero live seats without a grant and zero self-joinable scoped grants without a
+live seat.
+
+**(d) Compatibility.** The fable-review-2026-11-12 §8 rule (grantee must be an ACTIVE member)
+is satisfied by construction (grantee = caller, checked by the definer) and must run BEFORE
+this arm so an early `return new` cannot skip it. **Shared groundwork, partly:** docs/20
+`join_module` (global, lowest role, `scope_ref` forced NULL) gets a `case` arm in the same
+predicate once its backing fact exists (an opt-in flag), but this design's `scope_ref is not
+null` excludes it today. docs/15 slice 4 (defaults on join) is SERVER-minted, not self — it
+does not need this arm; it does need the `granted_by` self-marker decision (docs/20 §16.3 #3).
+
+**(e) The fixture trap.** Vacuous: any test run on seeded users (`seed.ts:973-979` mints
+grants with the service role) or that inserts a grant before registering. Real fixture: a
+fresh user, active org member, global `participant` grant only, **zero event-scoped grants**,
+registering through `sd_register_self` as `authenticated`; assert the scoped grant appears,
+withdraw removes it, rejoin restores it. Controls: the same user's raw `module_roles`
+self-insert is refused; an organizer's raw self-insert of a `participant` grant at an event
+where they hold no seat is refused.
+
+**CLAIMS FOR FABLE TO ATTACK**
+
+1. No caller can obtain a scoped speed-dating grant without a live `sd_participants` seat of the same `seat_type` at that event's node.
+2. A rank-2 organizer passing the module-manager RLS policy still cannot self-mint any role through the new arm.
+3. The arm admits no role outside `participant/audience/mentor` and nothing in any other module.
+4. `sd_register_self` takes no argument that chooses role or scope_ref.
+5. The DELETE twin cannot remove a grant while its seat is live, nor anyone else's grant.
+6. Withdraw, removal and rejoin leave seats and grants equal (no drift) under concurrent calls.
+7. The grantee-active rule cannot be skipped by this arm's early return.
+8. No path in this design needs `set_config` or nulls `auth.uid()`.
+
+## 7.2 FABLE REVIEW of §7.1 (2026-11-15, confirmed Fable main session) — SOUND IN DIRECTION; SIX CHANGES BEFORE BUILD
+
+**The property that carries the design:** every role the arm can ever admit (`participant`,
+`audience`, `mentor`) is rank 0 in the speed-dating ladder. So even a wrong admission yields
+nothing above what a seat already implies, and the "widening" §7 feared is a bookkeeping fold,
+not new authority — a person can only self-mint a scoped rank-0 grant when staff already let
+them in (global `participant` grant + a live seat). Keying on DATA (a live seat) rather than an
+origin token is the right call; docs/20 §17.6's objection to `set_config` stands. **Risk: LOW.**
+Opus may build this without a second Fable pass if the six changes below are applied and
+their tests exist.
+
+| # | Claim attacked | Verdict | Change required |
+|---|---|---|---|
+| 1 | "No caller can obtain a scoped grant without a live seat" | Too strong as written: an organizer (rank 2) can still grant `mentor` to someone with no seat through step (3)'s rank rule — today's behaviour, wanted (the outside mentor, §5.1). | **F4** restate claim 1 as "no caller can SELF-mint …"; keep the organizer path and test it as a control. |
+| 2 | Organizer self-mint through the arm | Holds: the arm only yields rank-0 roles, and `sd_participants_insert_guard` forces a self-insert to `seat_type='participant'`. | **F3** put `module_position_rank(module, role) = 0` INSIDE `module_self_join_backed` as a second conjunct, so the invariant is enforced, not assumed, if the ladder ever changes. |
+| 3 | Revocation keeps seat and grant equal | **Gap:** (c) revokes on AFTER UPDATE only. A hard DELETE of an `sd_participants` row (the `sd_self_rejoin` migration has a delete path at `:336`) fires no UPDATE, so the grant outlives the seat. | **F1** AFTER DELETE trigger on `sd_participants` (same body), and an AFTER DELETE on `sd_events` that removes every scoped grant at that event's node — this also closes drift (c)(i). |
+| 4 | Status vocabulary | **Must verify before build:** (c) treats only `registered`/`waitlisted` as live. If check-in or any later step moves `status` to another value, the AFTER UPDATE trigger would REVOKE the grant at check-in — the exact moment it is needed. | **F2** read the live CHECK on `sd_participants.status` and `sd_check_in`'s write; define "live" as the complement of the terminal set (`withdrawn`, `removed`, …), not an allow-list. |
+| 5 | DELETE twin | Under-specified: "not backed → return old" is fine, but the design does not say what happens to a self-DELETE while the seat IS live (falls through to step (3) — is self-revoke refused today?). | **F5** state it: a live-seat self-delete is refused; withdraw goes through the seat, never the grant. Test both. |
+| 6 | Ordering with the grantee-active rule | (d) is right that the active check must precede the arm; the case that proves it: a member whose seat is live but whose `org_members.status` is no longer `active` (left, pending, banned) must be refused by the arm. | **F6** that fixture as an RLS test, plus the (e) fixture (fresh user, global grant only, zero scoped grants, registers through `sd_register_self` as `authenticated`). |
+| 7 | Claim 6 (concurrency) | Not provable by the suite; what IS provable is idempotency (`on conflict do nothing`, delete-if-exists). | Reword claim 6 to idempotency; note the BEFORE-trigger `raise` still propagates through `on conflict do nothing` (the conflict check comes after the trigger). |
+| 8 | Claim 8 | Holds by reading: the definer runs with the caller's claims intact, so `new.user_id = auth.uid()` is true inside it and no identity clearing is needed — unlike `pending_invite_apply`. | — |
+
+**Also confirmed from the draft:** `module_self_join_backed` with NO api-role EXECUTE is
+correct (it is reached only from the owner-run guard); `sd_register_self` taking only
+`(event_id, side)` is the right shape (role and scope derived); the `seed.ts` fixture trap in
+(e) is real and the proposed control (raw self-insert refused) is non-vacuous.
+
+**Build tier:** Opus, when a real speed-dating client exists (prod holds 0 seats). Prod
+verifier: copy `prod-verify-sd-self-rejoin.mts`, add the F6 fixtures as rolled-back probes.
