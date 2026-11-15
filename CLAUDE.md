@@ -94,7 +94,7 @@ section, keep it a SUMMARY with pointers: add the dated story to the journal / t
   (an org's last owner/admin) instead of the generic error page; ONE invite section shared by the org Members page and the
   console (an address with no account can be invited); `/console/overview` expandable headcount trees with row counts; Tools
   as cards. Journal 2026-11-10/12, docs/25 §13, module-9 spec §H. **Decided, then built 2026-11-12:** real bytes per org and the
-  Limits tile (entries above); **built 2026-11-15 (migration not on prod):** a REAL view-as (the client's actual screen, same components — docs/13
+  Limits tile (entries above); **built 2026-11-15, on prod:** a REAL view-as (the client's actual screen, same components — docs/13
   "REAL VIEW-AS"). **Test lesson: when a shared control changes, grep EVERY file in `apps/web/e2e`.**
 - **2026-11-10 (Opus): platform legal slice — migration `20261114010000_content_reports` ON PROD, verified** (prod verifier
   `scripts/prod-verify-content-reports.mts` 3/32 → 43/0). Public `/report`, `/console/reports`, dashboard tile,
@@ -157,7 +157,7 @@ founder decision** — record it where it belongs, flag it, move on (2026-08-29)
 **Owner Console follow-ups (founder: "one by one", a fresh chat each — prompts, local-verify recipe and known small issues:
 [docs/history/handoff-2026-11-12-console-session.md](docs/history/handoff-2026-11-12-console-session.md)):** module-role
 confirmation + refusal messages (Sonnet) → Limits tile (Sonnet) → real bytes per org (Opus, migration) — **all three DONE
-2026-11-12** → REAL view-as (BUILT for classroom 2026-11-15; its migration awaits the founder's go-ahead — docs/13 "AS BUILT"). **Also unscheduled:** charts / other visualizations of platform statistics and threshold-triggered "at N users, do
+2026-11-12** → REAL view-as (classroom, ON PROD 2026-11-15 — docs/13 "AS BUILT"; next module = widen per its allow check). **Also unscheduled:** charts / other visualizations of platform statistics and threshold-triggered "at N users, do
 this" actions — the founder's wider original ask (see the handoff file); needs a founder conversation first.
 
 **Founder decisions pending / deferred — do NOT start these unprompted:**
