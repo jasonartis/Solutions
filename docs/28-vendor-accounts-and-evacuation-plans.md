@@ -184,6 +184,11 @@ Record the drill's date here.
 
 ## Part B — dependency review and evacuation plans
 
+**Why "evacuation", not "exit plan" (founder, 2026-11-16 — keep the word):** an exit plan is for
+CHOOSING to leave a vendor. These plans are for being FORCED out (a fire, a suspension, a shutdown)
+and getting the service running somewhere else as fast as possible. Use "evacuation" in our docs;
+"failover", "standby" and "disaster recovery" are fine when explaining it to outsiders.
+
 For EVERY external service, listed or not, the planning session answers:
 
 1. **Do we want to depend on an outside company for this at all, or run our own?**
