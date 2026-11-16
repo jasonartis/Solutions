@@ -123,6 +123,15 @@ said Vercel used GitHub) and R2 below. GitHub itself signs in with email and pas
 (two-step not recorded). The B2 row's notes say where the backup private key is kept
 (a cloud document; paper copy at home decided, B.7 Q6).
 
+**Rows added on prod 2026-11-15 (founder asked; F14–F16):** Claude / Anthropic (active), Hetzner
+(standby servers) and DNS host (planned), "Cloud account holding the backup decryption key copy" and
+"Cloud account holding the B2 read key" (active), "Cloud drive for offsite snapshots" (planned): 18 →
+24 rows. Inserted by `scripts/prod-vendor-rows-2026-11-15.mts` (owner connection, skips existing
+names, the secret filter still fires); the verifier's seed check is now "at least 18", and passed 50/0
+afterwards. The key-holding rows are named generically on purpose: **the founder fills in which service
+and "Owned by" on the page**, never in this public repo. These rows are on PROD only; the local seed
+still has 18 (rank 7's migration adds them for local/CI with `on conflict (service) do nothing`).
+
 **docs/14 is retired** to a pointer at this page (its security rules stay). From now on
 the page is the list.
 
@@ -407,7 +416,7 @@ mail, GitHub two-step) are NOT on this list: they are his, or they wait for a cu
 | 4 | **Supabase settings sheet** (#4, F6) | A restore today would bring the sign-up hook back OFF | Sonnet (read-only Management API) | yes |
 | 5 | **Fonts in-house + git mirror + deploy-from-PC recipe** (#6, #8) | Small; removes two dependencies | Sonnet | yes |
 | 6 | **Standby recipes: web host on our own server, Jitsi build script** (#9) | Turns B.3-3/B.3-5 from prose into something runnable | Sonnet | yes |
-| 7 | **Exit plans + drill tracking on the vendor page, and the missing rows** (#13, added 2026-11-12) | Without it nothing reminds anyone a drill is due, and the standby providers have no account rows; it must exist before the first drill so that drill's date starts the clock | Opus (migration on the superadmin tables) | yes |
+| 7 | **Exit plans + drill tracking on the vendor page** (#13, added 2026-11-12; the missing rows themselves were added on prod 2026-11-15) | Without it nothing reminds anyone a drill is due, and the standby providers have no account rows; it must exist before the first drill so that drill's date starts the clock | Opus (migration on the superadmin tables) | yes |
 | 8 | **First drills** (#10, B.6), starting with the database + sign-in restore | A plan does not count until practised | Opus for the first one | after ranks 1–2 and 7 |
 
 Update this table when a rank ships (strike it through, date it) so the next chat sees what is left.
@@ -514,9 +523,10 @@ CLAUDE.md's one-line state, commit only your files (`git commit -- <paths>`).
   computed from it. (d) dashboard badge when an ACTIVE drill is overdue or never run; a PLANNED drill
   (its plan not built yet) is not badged, same reasoning as the offsite-snapshots row. (e) seed the nine
   B.6 drills, with the 2026-11-09 partial pass on the database drill; active only where the plan is
-  built today (database restore). (f) the missing rows: Claude / Anthropic (active), Hetzner and a DNS
-  host (planned), the accounts holding key copies and the snapshots' cloud drive (F16, described
-  generically; the founder fills in which service on prod, never in the repo).
+  built today (database restore). (f) the missing rows are **already on prod (2026-11-15, Part A "Rows
+  added")**; the migration only inserts the same six for local/CI parity, `on conflict (service) do
+  nothing`, so it never overwrites what the founder filled in on prod. Then give each its standby and
+  drill links like the rest.
 - *Rules to keep:* every new table and text column under the secret-refusing trigger (Part A, "read
   generically" covers new columns on `vendor_accounts`; new tables need the trigger bound); revoke
   before grant; superadmin only; classify in `verify-acl-hardening.ts` and the data browser; claim the

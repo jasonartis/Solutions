@@ -168,8 +168,8 @@ this" actions — the founder's wider original ask (see the handoff file); needs
   for module 9; DMCA waits for a real notice; off-dashboard alerts wait for SMTP.
 - **"What's next" → docs/28 B.4a (ranked list) + B.4b (a brief per rank).** Founder 2026-11-10: "do them all", so
   "work on what's next" = start the lowest unfinished rank, one per chat; check its model first. Rank 1 done.
-  2026-11-12: new rank 7 = exit plans + drill tracking on the vendor page + missing rows (Claude/Anthropic, Hetzner,
-  key-holding accounts; docs/28 F14–F16); drills moved to rank 8.
+  2026-11-12: new rank 7 = exit plans + drill tracking on the vendor page; drills moved to rank 8. The missing rows
+  (Claude/Anthropic, Hetzner, DNS host, key-holding accounts; docs/28 F14–F16) are ON PROD since 2026-11-15 (24 rows).
 - **Vendor accounts page + dependency/evacuation plans for every external service — docs/28.** Part B is PLANNED
   (2026-11-09, "THE PLAN": build order B.4, drills B.6; costs docs/costs/resilience.md), nothing built, every plan
   UNPRACTISED. Founder decided (B.7): cold now / warm at first client, only he holds access, **no domain until the first

@@ -4,6 +4,12 @@ The running, dated build journal that used to live in `CLAUDE.md`'s "## Current 
 section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every session)
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
+- **2026-11-15 (Opus) — SIX VENDOR ROWS ADDED ON PROD (no migration).** Founder: "please add them". Claude / Anthropic,
+  Hetzner (standby servers), DNS host, the two cloud accounts holding backup-key copies, the snapshots' cloud drive
+  (docs/28 F14–F16), via `scripts/prod-vendor-rows-2026-11-15.mts` (read-only listing first, then `--apply`; 18 → 24).
+  Key-holding rows are generic on purpose; the founder fills in which service on the page. `prod-verify-vendor-accounts.mts`
+  seed check changed from "exactly 18" to "at least 18" (it would have gone red on the next run), then 50/0 on prod.
+  Local seed still 18; rank 7's migration adds the six for parity.
 - **2026-11-15 (Opus) — UPLOAD PATHS PINNED TO THE REAL ORG (`20261117010000`, ON PROD, verified 14/12 → 26/0) + STORAGE
   ORPHAN SWEEP (no migration).** Founder: "fix it", then "apply and then fix the new finding". (1) The 2026-11-12 open finding:
   `cls_submissions_storage_write` / `vm_images_write` checked only the parent folder, so a member could upload their own file
