@@ -1,9 +1,10 @@
 # Resilience costs — standby, backups and drills (docs/28 Part B)
 
-> **PLANNED 2026-11-09, not built and not in `cost-model.ts` yet.** These are the costs of the protection levels in
+> **IN `cost-model.ts` since 2026-11-17** (`Globals.resilience`, `'cold'` by default; the page's "Protection level" switch): Cold = one flat
+> line "Backup extras" at $2/month (assumption); Warm adds "Standby server" = CPX22 price x EUR/USD. The domain is its own existing line, not
+> repeated. Planned 2026-11-09: these are the costs of the protection levels in
 > [docs/28 Part B](../28-vendor-accounts-and-evacuation-plans.md) (B.5). **Founder chose (B.7 Q1, 2026-11-09): Cold now,
-> Warm from the first paying client.** When those lines start costing money, add them to `packages/platform/src/cost-model.ts` and regenerate, so the page and the doc keep showing the
-> same numbers. Prices marked **sheet** are in [price-sheet.md](price-sheet.md) (checked 2026-11-09). Prices marked
+> Warm from the first paying client.** Change the numbers in `cost-model.ts` and regenerate, so the page and the doc keep showing the same numbers. Prices marked **sheet** are in [price-sheet.md](price-sheet.md) (checked 2026-11-09). Prices marked
 > **assumption** were not checked on the web: check them before buying.
 
 ## Cold (recommended now): nothing runs in standby, copies kept elsewhere, drills run on throwaway servers

@@ -100,39 +100,39 @@ Scenario/price edits are kept **in the browser only** (localStorage). *Planned:*
 
 | Registered users | Active (30%) | Monthly | Yearly | Per registered user / month | Architecture |
 |---:|---:|---:|---:|---:|---|
-| 10 | 3 | $69.07 | $829 | $6.91 | Managed services: Supabase + Vercel + a worker box |
-| 1k | 300 | $98.25 | $1,179 | $0.10 | Managed services: Supabase + Vercel + a worker box |
-| 100k | 30k | $958 | $11,493 | $0.01 | Managed services: Supabase + Vercel + a worker box |
-| 10M | 3M | $106,046 | $1,272,553 | $0.01 | Self-run: sharded Postgres, own containers, CDN |
-| 1B | 300M | $7,172,106 | $86,065,273 | $0.01 | Multi-region cells, own network edge |
+| 10 | 3 | $71.07 | $853 | $7.11 | Managed services: Supabase + Vercel + a worker box |
+| 1k | 300 | $100 | $1,203 | $0.10 | Managed services: Supabase + Vercel + a worker box |
+| 100k | 30k | $960 | $11,517 | $0.01 | Managed services: Supabase + Vercel + a worker box |
+| 10M | 3M | $106,048 | $1,272,577 | $0.01 | Self-run: sharded Postgres, own containers, CDN |
+| 1B | 300M | $7,172,108 | $86,065,297 | $0.01 | Multi-region cells, own network edge |
 
 ## Cost by module (monthly)
 
 | Module | 10 | 1k | 100k | 10M | 1B |
 |---|---:|---:|---:|---:|---:|
-| Platform core (sign-in, profile, orgs) | $33.19 | $45.88 | $131 | $12,331 | $755,886 |
-| Make-a-Match | $6.64 | $9.21 | $36.16 | $2,959 | $184,878 |
-| Classroom | $9.96 | $13.91 | $109 | $12,527 | $648,739 |
-| Synagogue Schedules | $2.21 | $3.05 | $4.74 | $754 | $38,411 |
-| Visual Messaging | $6.64 | $9.68 | $228 | $25,087 | $1,317,071 |
-| Nail Salon | $3.32 | $4.64 | $32.24 | $2,053 | $138,061 |
-| Speed Dating | $1.11 | $1.54 | $168 | $18,824 | $1,662,581 |
-| Photos (module 9, planned) | $5.53 | $7.67 | $39.36 | $10,638 | $344,993 |
-| AI features (résumé builder etc.) | $0.46 | $2.68 | $209 | $20,873 | $2,081,485 |
+| Platform core (sign-in, profile, orgs) | $34.16 | $46.84 | $132 | $12,332 | $755,887 |
+| Make-a-Match | $6.83 | $9.40 | $36.35 | $2,959 | $184,878 |
+| Classroom | $10.25 | $14.20 | $110 | $12,527 | $648,740 |
+| Synagogue Schedules | $2.28 | $3.11 | $4.81 | $754 | $38,411 |
+| Visual Messaging | $6.83 | $9.87 | $228 | $25,087 | $1,317,071 |
+| Nail Salon | $3.42 | $4.74 | $32.34 | $2,053 | $138,061 |
+| Speed Dating | $1.14 | $1.57 | $168 | $18,824 | $1,662,582 |
+| Photos (module 9, planned) | $5.69 | $7.83 | $39.52 | $10,638 | $344,993 |
+| AI features (résumé builder etc.) | $0.48 | $2.70 | $209 | $20,873 | $2,081,485 |
 
 ## Cost per ACTIVE user using that module (monthly)
 
 | Module | 10 | 1k | 100k | 10M | 1B |
 |---|---:|---:|---:|---:|---:|
-| Platform core (sign-in, profile, orgs) | $11.06 | $0.15 | $0.00 | $0.00 | $0.00 |
-| Make-a-Match | $14.75 | $0.20 | $0.01 | $0.01 | $0.00 |
-| Classroom | $22.13 | $0.31 | $0.02 | $0.03 | $0.01 |
-| Synagogue Schedules | $1.48 | $0.02 | $0.00 | $0.00 | $0.00 |
-| Visual Messaging | $11.07 | $0.16 | $0.04 | $0.04 | $0.02 |
-| Nail Salon | $7.38 | $0.10 | $0.01 | $0.00 | $0.00 |
-| Speed Dating | $7.38 | $0.10 | $0.11 | $0.13 | $0.11 |
-| Photos (module 9, planned) | $7.38 | $0.10 | $0.01 | $0.01 | $0.00 |
-| AI features (résumé builder etc.) | $1.54 | $0.09 | $0.07 | $0.07 | $0.07 |
+| Platform core (sign-in, profile, orgs) | $11.39 | $0.16 | $0.00 | $0.00 | $0.00 |
+| Make-a-Match | $15.18 | $0.21 | $0.01 | $0.01 | $0.00 |
+| Classroom | $22.77 | $0.32 | $0.02 | $0.03 | $0.01 |
+| Synagogue Schedules | $1.52 | $0.02 | $0.00 | $0.00 | $0.00 |
+| Visual Messaging | $11.39 | $0.16 | $0.04 | $0.04 | $0.02 |
+| Nail Salon | $7.59 | $0.11 | $0.01 | $0.00 | $0.00 |
+| Speed Dating | $7.59 | $0.10 | $0.11 | $0.13 | $0.11 |
+| Photos (module 9, planned) | $7.59 | $0.10 | $0.01 | $0.01 | $0.00 |
+| AI features (résumé builder etc.) | $1.59 | $0.09 | $0.07 | $0.07 | $0.07 |
 
 ## Marginal cost per ACTIVE user (usage-driven lines only, no share of fixed plans)
 
@@ -158,6 +158,16 @@ Scenario/price edits are kept **in the browser only** (localStorage). *Planned:*
 | 10M | $53,771 | $110,602 |
 | 1B | $2,742,033 | $10,736,008 |
 
+## Flat vs marginal per tier (flat = exists whatever one more user does; marginal = grows with use; cold resilience included)
+
+| Users | Flat | Marginal | Total | Marginal per active user |
+|---|---:|---:|---:|---:|
+| 10 | $71.04 | $0.03 | $71.07 | $0.01 |
+| 1k | $97.04 | $3.22 | $100 | $0.01 |
+| 100k | $247 | $713 | $960 | $0.02 |
+| 10M | $20,726 | $85,322 | $106,048 | $0.03 |
+| 1B | $1,160,990 | $6,011,118 | $7,172,108 | $0.02 |
+
 ## Line items per tier
 
 ### 10 users — Managed services: Supabase + Vercel + a worker box
@@ -175,7 +185,8 @@ Scenario/price edits are kept **in the browser only** (localStorage). *Planned:*
 | Worker & backups | Worker VPS × 1 | $22.79 | verified |
 | Worker & backups | Encrypted backups on B2 | $0.01 | verified |
 | Other | Domain | $1.25 | assumption |
-| | **Total** | **$69.07** | |
+| Resilience | Backup extras (file backup, password manager, drills, standby mail, git mirror) | $2.00 | assumption |
+| | **Total** | **$71.07** | |
 
 ### 1k users — Managed services: Supabase + Vercel + a worker box
 
@@ -193,7 +204,8 @@ Scenario/price edits are kept **in the browser only** (localStorage). *Planned:*
 | Worker & backups | Encrypted backups on B2 | $0.88 | verified |
 | Other | Domain | $1.25 | assumption |
 | Other | Sentry Team | $26.00 | assumption |
-| | **Total** | **$98.25** | |
+| Resilience | Backup extras (file backup, password manager, drills, standby mail, git mirror) | $2.00 | assumption |
+| | **Total** | **$100** | |
 
 ### 100k users — Managed services: Supabase + Vercel + a worker box
 
@@ -214,7 +226,8 @@ Scenario/price edits are kept **in the browser only** (localStorage). *Planned:*
 | Worker & backups | Encrypted backups on B2 | $87.89 | verified |
 | Other | Domain | $1.25 | assumption |
 | Other | Sentry Team | $26.00 | assumption |
-| | **Total** | **$958** | |
+| Resilience | Backup extras (file backup, password manager, drills, standby mail, git mirror) | $2.00 | assumption |
+| | **Total** | **$960** | |
 
 ### 10M users — Self-run: sharded Postgres, own containers, CDN
 
@@ -231,7 +244,8 @@ Scenario/price edits are kept **in the browser only** (localStorage). *Planned:*
 | Files | CDN egress 699,000 GB at $0.03/GB | $20,970 | assumption |
 | Worker & backups | Job workers (pg-boss or successor) + backups | $4,439 | assumption |
 | Other | Monitoring, logging, tooling | $8,000 | assumption |
-| | **Total** | **$106,046** | |
+| Resilience | Backup extras (file backup, password manager, drills, standby mail, git mirror) | $2.00 | assumption |
+| | **Total** | **$106,048** | |
 
 ### 1B users — Multi-region cells, own network edge
 
@@ -248,14 +262,15 @@ Scenario/price edits are kept **in the browser only** (localStorage). *Planned:*
 | Files | CDN egress 69,900,000 GB at $0.004/GB | $279,600 | assumption |
 | Worker & backups | Job workers (pg-boss or successor) + backups | $443,926 | assumption |
 | Other | Monitoring, logging, tooling | $200,000 | assumption |
-| | **Total** | **$7,172,106** | |
+| Resilience | Backup extras (file backup, password manager, drills, standby mail, git mirror) | $2.00 | assumption |
+| | **Total** | **$7,172,108** | |
 
 ## Worked persona: a Single who uses Make-a-Match + Photos
 
 | Users | Loaded cost / month | Marginal cost / month | Price at 40% margin | Price at 70% margin |
 |---|---:|---:|---:|---:|
-| 10 | $33.19 | $0.00 | $55.32 | $111 |
-| 1k | $0.46 | $0.00 | $0.77 | $1.53 |
+| 10 | $34.16 | $0.00 | $56.93 | $114 |
+| 1k | $0.47 | $0.00 | $0.78 | $1.56 |
 | 100k | $0.02 | $0.01 | $0.03 | $0.06 |
 | 10M | $0.02 | $0.01 | $0.04 | $0.08 |
 | 1B | $0.01 | $0.01 | $0.02 | $0.04 |

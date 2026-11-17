@@ -5,6 +5,10 @@
 > where you can type any user count, edit module adoption, build user types and read the price that earns a target margin.
 > The model is code: `packages/platform/src/cost-model.ts` (prices carry source + date + confidence; sanity test
 > `packages/db/src/cost-model.test.ts`); the docs' tables are generated from it by `scripts/print-cost-model.mts`.
+> **Third pass 2026-11-17 (Sonnet):** the page now splits every cost into **Flat** (exists whatever one more user does) and **Marginal**
+> (grows with use) in section 2's line items and section 6's all-sizes table, with marginal cost per active user; one-click **usage presets**
+> (Light / Typical / Heavy, "custom" once edited) beside the module shares; a **Protection level** switch (cold / warm, adds the
+> resilience.md lines to the total); and "Your own costs" is pre-filled with the Claude subscription ($200/month). No migration.
 > **Keep them in step:** change a price or assumption in the model file, regenerate, paste, update the `checked` date.
 > **Same day, second pass:** "Use my real numbers" button, editable prices (browser what-ifs), your-own-costs lines ($0 for now),
 > and a pricing section (base fee per org + AI/video credits, break-even, margin) — see cost-model.md "Pricing structure chosen"
@@ -30,7 +34,7 @@
 |---|---|
 | `cost-model.md` | the tables: fixed platform costs, per-module unit costs, totals per scale tier (10 / 1k / 100k / 10M / 1B users), monthly and yearly |
 | `price-sheet.md` | every vendor price used, with source URL and the date it was checked — prices drift, so each figure carries its date |
-| `resilience.md` | standby, backup and drill costs per protection level (docs/28 Part B) — PLANNED 2026-11-09, not yet in the model |
+| `resilience.md` | standby, backup and drill costs per protection level (docs/28 Part B) — IN THE MODEL since 2026-11-17 (cold/warm switch on the page) |
 | `ideas.md` | every not-yet-built idea (actuals ledger, saved scenarios, badges, price re-fetch, receivables by hand) and the open questions — 2026-11-10 |
 | `assumptions.md` | usage per user per module (photos uploaded, AI calls, video minutes …), stated once so every table uses the same numbers |
 

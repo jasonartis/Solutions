@@ -12,8 +12,12 @@ import {
   DEFAULT_MODULES,
   PRICES,
   TIERS,
+  USAGE_PRESETS,
+  activePreset,
   allocate,
+  applyPreset,
   evaluatePricing,
+  flatMarginal,
   personaCost,
   planFor,
   priceForMargin,
@@ -21,6 +25,7 @@ import {
   type Globals,
   type ModuleAssumption,
   type OwnCost,
+  type PresetKey,
   type PriceKey,
   type PriceOverrides,
   type PricingInputs,
@@ -32,7 +37,9 @@ const STORE = 'costs-calculator.v2'
 const STALE_DAYS = 90
 
 // The founder's own costs start at $0 on purpose (2026-11-09): he fills them in when he knows them.
+// Exception (2026-11-17): the Claude subscription is a known $200/month, so it is pre-filled.
 const DEFAULT_OWN_COSTS: OwnCost[] = [
+  { id: 5, name: 'Claude Max 20x (own subscription)', monthly: 200 },
   { id: 1, name: 'Legal / terms and privacy review', monthly: 0 },
   { id: 2, name: 'Accountant / bookkeeping', monthly: 0 },
   { id: 3, name: 'Insurance', monthly: 0 },
@@ -118,6 +125,9 @@ export default function CostsCalculator({ real }: { real: RealNumbers }) {
     () => evaluatePricing(users, modules, globals, overrides, { ...pricing, orgs: Math.max(1, pricing.orgs), ownCosts } satisfies PricingInputs, margin),
     [users, modules, globals, overrides, pricing, ownCosts, margin],
   )
+  const split = flatMarginal(plan.lines)
+  const preset = activePreset(modules)
+  const activeUsers = Math.max(1, users * globals.mauRatio)
   const moduleName = (k: string) => modules.find((m) => m.key === k)?.name ?? k
 
   const typeRows = types.map((t) => {
@@ -184,7 +194,7 @@ export default function CostsCalculator({ real }: { real: RealNumbers }) {
           </span>
         </div>
         {realNote && <p className="mt-2 rounded bg-blue-50 p-2 text-xs text-blue-900">{realNote}</p>}
-        <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <label className="text-sm">
             <span className="block text-gray-600">Share of users active in a month: {Math.round(globals.mauRatio * 100)}%</span>
             <input type="range" min={5} max={100} value={Math.round(globals.mauRatio * 100)} onChange={(e) => setGlobals({ ...globals, mauRatio: Number(e.target.value) / 100 })} className="w-full" />
@@ -199,6 +209,13 @@ export default function CostsCalculator({ real }: { real: RealNumbers }) {
           <label className="text-sm">
             <span className="block text-gray-600">Months of data kept in the database and file storage</span>
             <input type="number" min={1} max={120} value={globals.retentionMonths} onChange={(e) => setGlobals({ ...globals, retentionMonths: Math.max(1, Number(e.target.value) || 1) })} className={`${inputCls} w-24`} />
+          </label>
+          <label className="text-sm">
+            <span className="block text-gray-600">Protection level (docs/costs/resilience.md)</span>
+            <select value={globals.resilience} onChange={(e) => setGlobals({ ...globals, resilience: e.target.value as 'cold' | 'warm' })} className={inputCls}>
+              <option value="cold">Cold: backups and drills, no standby server (about $2/month)</option>
+              <option value="warm">Warm: cold plus a standby server restored nightly</option>
+            </select>
           </label>
           <label className="text-sm">
             <span className="block text-gray-600">Target margin on price: {margin}%</span>
@@ -235,7 +252,7 @@ export default function CostsCalculator({ real }: { real: RealNumbers }) {
                 <th className="py-1 pr-3">Group</th>
                 <th className="pr-3">Line</th>
                 <th className="pr-3 text-right">Monthly</th>
-                <th className="pr-3">Kind</th>
+                <th className="pr-3">Flat / Marginal</th>
                 <th>Confidence</th>
               </tr>
             </thead>
@@ -248,16 +265,35 @@ export default function CostsCalculator({ real }: { real: RealNumbers }) {
                     {l.note && <span className="block text-xs text-gray-500">{l.note}</span>}
                   </td>
                   <td className="pr-3 text-right tabular-nums">{usd(l.monthly)}</td>
-                  <td className="pr-3 text-xs text-gray-500">{l.fixed ? 'fixed' : 'usage'}</td>
+                  <td className="pr-3 text-xs text-gray-500">{l.fixed ? 'Flat' : 'Marginal'}</td>
                   <td>
                     <span className={`rounded px-1.5 py-0.5 text-xs ${CONF[l.confidence]}`}>{l.confidence}</span>
                   </td>
                 </tr>
               ))}
+              <tr className="border-b border-gray-100 font-medium">
+                <td className="py-1 pr-3" colSpan={2}>Flat total (exists whatever one more user does)</td>
+                <td className="pr-3 text-right tabular-nums">{usd(split.flat)}</td>
+                <td colSpan={2} />
+              </tr>
+              <tr className="border-b border-gray-100 font-medium">
+                <td className="py-1 pr-3" colSpan={2}>Marginal total (grows with use)</td>
+                <td className="pr-3 text-right tabular-nums">{usd(split.marginal)}</td>
+                <td colSpan={2} />
+              </tr>
+              <tr className="border-b border-gray-100 font-semibold">
+                <td className="py-1 pr-3" colSpan={2}>Total</td>
+                <td className="pr-3 text-right tabular-nums">{usd(split.total)}</td>
+                <td colSpan={2} />
+              </tr>
             </tbody>
           </table>
         </div>
         <p className="mt-3 text-sm text-gray-600">
+          Marginal cost per active user at this size: <strong>{usd(split.marginal / activeUsers)}</strong>/month (per registered user: {usd(split.marginal / users)}). The flat part is{' '}
+          {usd(split.flat)}/month however many people use it.
+        </p>
+        <p className="mt-1 text-sm text-gray-600">
           Platform infrastructure (database, auth, hosting, files) in this plan: <strong>{usd(plan.platformInfraMonthly)}</strong>/month. The same load on Supabase + Vercel list
           prices would be at least <strong>{usd(plan.staysManagedLowerBound)}</strong>/month
           {plan.architecture === 'managed' ? '.' : ' — and one managed database instance could not carry it.'}
@@ -271,6 +307,19 @@ export default function CostsCalculator({ real }: { real: RealNumbers }) {
           <strong>Loaded</strong> includes a share of the fixed plans (Supabase, Vercel, servers), split by each module&apos;s share of traffic. <strong>Marginal</strong> is only what a
           user&apos;s own usage costs. Price below marginal and you lose money on every user; price below loaded and you only cover the fixed plans at scale. Adoption is editable.
         </p>
+        <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
+          <span className="text-gray-600">Usage preset:</span>
+          {(Object.keys(USAGE_PRESETS) as PresetKey[]).map((k) => (
+            <button
+              key={k}
+              onClick={() => setModules(applyPreset(modules, k))}
+              className={`rounded border px-3 py-1 ${preset === k ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-gray-300'}`}
+            >
+              {USAGE_PRESETS[k].name}
+            </button>
+          ))}
+          <span className="text-gray-500">Now: {preset === 'custom' ? 'custom (edited)' : USAGE_PRESETS[preset].name}</span>
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -531,8 +580,11 @@ export default function CostsCalculator({ real }: { real: RealNumbers }) {
             <thead>
               <tr className="border-b text-left text-gray-500">
                 <th className="py-1 pr-3">Users</th>
-                <th className="pr-3 text-right">Monthly</th>
+                <th className="pr-3 text-right">Flat</th>
+                <th className="pr-3 text-right">Marginal</th>
+                <th className="pr-3 text-right">Monthly (total)</th>
                 <th className="pr-3 text-right">Yearly</th>
+                <th className="pr-3 text-right">Marginal / active user</th>
                 <th className="pr-3 text-right">Per registered user / month</th>
                 <th>Architecture</th>
               </tr>
@@ -541,8 +593,11 @@ export default function CostsCalculator({ real }: { real: RealNumbers }) {
               {allTiers.map(({ n, plan: p }) => (
                 <tr key={n} className="border-b border-gray-100">
                   <td className="py-1 pr-3">{short(n)}</td>
+                  <td className="pr-3 text-right tabular-nums">{usd(flatMarginal(p.lines).flat)}</td>
+                  <td className="pr-3 text-right tabular-nums">{usd(flatMarginal(p.lines).marginal)}</td>
                   <td className="pr-3 text-right tabular-nums">{usd(p.monthly)}</td>
                   <td className="pr-3 text-right tabular-nums">{usd(p.yearly)}</td>
+                  <td className="pr-3 text-right tabular-nums">{usd(flatMarginal(p.lines).marginal / Math.max(1, n * globals.mauRatio))}</td>
                   <td className="pr-3 text-right tabular-nums">{usd(p.monthly / n)}</td>
                   <td>{p.name}</td>
                 </tr>

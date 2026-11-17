@@ -1,7 +1,7 @@
 // Prints docs/costs/cost-model.md's tables from the SAME model the Owner Console
 // page uses (packages/platform/src/cost-model.ts). Run: pnpm exec tsx scripts/print-cost-model.mts
 // Paste/redirect the output into docs/costs/cost-model.md so docs and page never disagree.
-import { PRICES, DEFAULT_GLOBALS, DEFAULT_MODULES, TIERS, planFor, allocate, personaCost, priceForMargin, CORE_KEY } from '../packages/platform/src/cost-model'
+import { PRICES, DEFAULT_GLOBALS, DEFAULT_MODULES, TIERS, planFor, flatMarginal, allocate, personaCost, priceForMargin, CORE_KEY } from '../packages/platform/src/cost-model'
 
 const usd = (n: number) => '$' + (n >= 100 ? Math.round(n).toLocaleString('en-US') : n.toFixed(2))
 const label = (n: number) => (n >= 1e9 ? '1B' : n >= 1e6 ? n / 1e6 + 'M' : n >= 1e3 ? n / 1e3 + 'k' : String(n))
@@ -31,6 +31,12 @@ for (const mod of m) console.log(`| ${mod.name} | ` + allocs.map((a) => usd(a.fi
 console.log('\n## Staying managed vs the recommended architecture (platform infrastructure only: database, auth, hosting, files)\n')
 console.log('| Users | Recommended | Same load on Supabase + Vercel list prices (lower bound) |\n|---|---:|---:|')
 for (const { n, plan } of plans) console.log(`| ${label(n)} | ${usd(plan.platformInfraMonthly)} | ${usd(plan.staysManagedLowerBound)} |`)
+console.log('\n## Flat vs marginal per tier (flat = exists whatever one more user does; marginal = grows with use; cold resilience included)\n')
+console.log('| Users | Flat | Marginal | Total | Marginal per active user |\n|---|---:|---:|---:|---:|')
+for (const { n, plan } of plans) {
+  const fm = flatMarginal(plan.lines)
+  console.log(`| ${label(n)} | ${usd(fm.flat)} | ${usd(fm.marginal)} | ${usd(fm.total)} | ${usd(fm.marginal / Math.max(1, n * g.mauRatio))} |`)
+}
 console.log('\n## Line items per tier\n')
 for (const { n, plan } of plans) {
   console.log(`### ${label(n)} users — ${plan.name}\n`)

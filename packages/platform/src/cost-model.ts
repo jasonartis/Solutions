@@ -152,7 +152,11 @@ export interface Globals {
   participantsPerBridge: number
   /** Megabytes the bridge sends per participant-minute (~1.5 Mbit/s). */
   videoMbPerMin: number
+  /** Protection level (docs/costs/resilience.md): cold = copies kept elsewhere; warm = also a standby server restored nightly. */
+  resilience: Resilience
 }
+
+export type Resilience = 'cold' | 'warm'
 
 export const DEFAULT_GLOBALS: Globals = {
   mauRatio: 0.3,
@@ -164,6 +168,39 @@ export const DEFAULT_GLOBALS: Globals = {
   videoPeakShare: 0.2,
   participantsPerBridge: 150,
   videoMbPerMin: 11.25,
+  resilience: 'cold',
+}
+
+/** Cold-level extras, $/month (docs/costs/resilience.md "Cold" table total; an assumption, not a quote). */
+export const RESILIENCE_COLD_MONTHLY = 2
+
+// ---- Usage presets: one click sets every module's share of active users ----
+export type PresetKey = 'light' | 'typical' | 'heavy'
+const only = (keys: string[]) => Object.fromEntries(DEFAULT_MODULES.map((m) => [m.key, keys.includes(m.key) ? 1 : 0]))
+export const USAGE_PRESETS: Record<PresetKey, { name: string; adoption: Record<string, number> }> = {
+  light: { name: 'Light', adoption: only([CORE_KEY, 'synagogue-schedules']) },
+  typical: { name: 'Typical', adoption: Object.fromEntries(DEFAULT_MODULES.map((m) => [m.key, m.adoption])) },
+  heavy: { name: 'Heavy', adoption: only([CORE_KEY, 'visual-messaging', 'photos', 'speed-dating', 'ai', 'classroom']) },
+}
+
+export function applyPreset(modules: ModuleAssumption[], key: PresetKey): ModuleAssumption[] {
+  return modules.map((m) => ({ ...m, adoption: USAGE_PRESETS[key].adoption[m.key] ?? m.adoption }))
+}
+
+/** Which preset the modules' adoptions equal exactly, or 'custom'. */
+export function activePreset(modules: ModuleAssumption[]): PresetKey | 'custom' {
+  for (const k of Object.keys(USAGE_PRESETS) as PresetKey[]) {
+    const a = USAGE_PRESETS[k].adoption
+    if (modules.every((m) => Math.abs((a[m.key] ?? m.adoption) - m.adoption) < 1e-9)) return k
+  }
+  return 'custom'
+}
+
+/** Flat (exists whatever one more user does) vs marginal (grows with use) split of a plan's lines. */
+export function flatMarginal(lines: LineItem[]): { flat: number; marginal: number; total: number } {
+  const flat = lines.filter((l) => l.fixed).reduce((t, l) => t + l.monthly, 0)
+  const marginal = lines.filter((l) => !l.fixed).reduce((t, l) => t + l.monthly, 0)
+  return { flat, marginal, total: flat + marginal }
 }
 
 export const TIERS = [10, 1_000, 100_000, 10_000_000, 1_000_000_000] as const
@@ -384,6 +421,10 @@ export function planFor(users: number, modules: ModuleAssumption[], g: Globals, 
     if (arch === 'self-run') L('Other', 'Monitoring, logging, tooling', P.queuesAndSearchFlat, 'requests', 'assumption', 'Plus people — NOT in these numbers. A 10M-user platform needs an infrastructure team.', true)
     else L('Other', 'Monitoring, logging, tooling', P.queuesAndSearchFlat * 25, 'requests', 'assumption', 'Plus people and multi-region networking — NOT in these numbers.', true)
   }
+
+  // --- Resilience (docs/costs/resilience.md). The domain is already a line above: not counted again here. ---
+  L('Resilience', 'Backup extras (file backup, password manager, drills, standby mail, git mirror)', RESILIENCE_COLD_MONTHLY, 'requests', 'assumption', 'Cold level, docs/costs/resilience.md.', true)
+  if (g.resilience === 'warm') L('Resilience', 'Standby server (nightly-restored copy)', P.hetznerWorkerBox * eur, 'requests', 'verified', 'One CPX22-class Hetzner server; docs/28 Part B.', true)
 
   const monthly = lines.reduce((s, l) => s + l.monthly, 0)
 
