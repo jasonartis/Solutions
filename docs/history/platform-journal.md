@@ -4,6 +4,13 @@ The running, dated build journal that used to live in `CLAUDE.md`'s "## Current 
 section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every session)
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
+- **2026-11-17 (Opus) — CI e2e NEEDED FOUR ATTEMPTS FOR A UI-ONLY COMMIT (`86f889b`, costs page); OPEN, not fixed.** Each attempt
+  failed a different mix, always a 5 s `expect` timing out after a click (no server error logged): matchmaking (attempt 1),
+  classroom grading at "Compute finals" (attempts 2 and 3; it PASSED attempt 1), several visual-messaging tests (flaky every time).
+  The real blocker is that these long tests are NOT RETRY-SAFE: the first attempt advances seeded data (Charlie's match score
+  91% → 82%, the homework moved past "submitted"), so Playwright's one retry always fails at an earlier step. Three runs earlier the
+  same morning were clean (107 passed). Proposed fix, unscheduled: make each long test start from its own state (or `test.describe.serial`
+  + a reset), and/or raise the CI expect timeout for those flows. Run 44056991494.
 - **2026-11-17 (Sonnet) — COSTS PAGE: FLAT vs MARGINAL, USAGE PRESETS, RESILIENCE SWITCH, CLAUDE LINE (no migration, UI + pure model).**
   Founder asked for four things after a chat walk-through. (1) Section 2's line table marks each line Flat / Marginal with Flat total,
   Marginal total, Total and marginal cost per active user; section 6 gets Flat / Marginal / Marginal-per-active-user columns
