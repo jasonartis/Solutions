@@ -13,7 +13,10 @@ decision log, docs/03 conventions, docs/12 safeguards) — this is the chronolog
   every total in cost-model.md rose by $2/month. (4) "Your own costs" is pre-filled with the Claude subscription at $200/month; a browser
   with a saved list keeps its list. Reference check (mauRatio 100%, platform lines only) reproduced: Light 69.04 / 69.05 / 95.11,
   Typical 69.14 / 70.02 / 135.86, Heavy 69.88 / 153.78 / 481.77 at 10 / 100 / 1000 users; flat 69.04 / 69.04 / 95.04.
-  Tests: `packages/db/src/cost-model-presets.test.ts` (pure). Not browser-verified.
+  Tests: `packages/db/src/cost-model-presets.test.ts` (pure). **Browser-verified locally the same day (Opus, as the local
+  superadmin):** Claude line present, Cold selected, presets switch and show "Now: …", flat $71.04 at 100 users (69.04 + 2);
+  the page scrolled sideways at 390px (the new Protection select, plus the older fixed-width own-cost name box) — fixed in
+  `8fcb763`, now 390/390.
 - **2026-11-15 (Opus) — SIX VENDOR ROWS ADDED ON PROD (no migration).** Founder: "please add them". Claude / Anthropic,
   Hetzner (standby servers), DNS host, the two cloud accounts holding backup-key copies, the snapshots' cloud drive
   (docs/28 F14–F16), via `scripts/prod-vendor-rows-2026-11-15.mts` (read-only listing first, then `--apply`; 18 → 24).
