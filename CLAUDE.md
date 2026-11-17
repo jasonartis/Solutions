@@ -186,6 +186,9 @@ this" actions — the founder's wider original ask (see the handoff file); needs
   status row of someone who LEAVES THE ORG mid-event — recommended no; module-6 spec 2026-11-05 "THE MIGRATION".)
 - Speed dating's role conjunct / audience+mentor seats — blocked on docs/24 §7's second decision.
 - Feedback routing to org admins — docs/27's open review (founder item 6).
+- **Five old design questions** (module-role ladder, role labels everywhere, cross-org module switching, owner-only
+  settings, renaming prod's "Solutions" org) — moved out of the private to-do file 2026-11-17 into
+  [docs/04 "Open founder design questions"](docs/04-build-plan.md). One per fresh chat when he picks one.
 - Go-live items 4–7 and 9 paused until a real client signs (docs/18); 2FA deferred; custom SMTP is a blocker for onboarding a
   client's users (prod's built-in sender measured at 2 emails/HOUR, docs/18 item 7).
 - Wiring `verify-acl-hardening.ts` into CI (friction trade-off, founder opt-in); refining `prod-verify-migration.ts`'s

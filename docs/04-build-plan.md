@@ -148,3 +148,21 @@ Recorded so the next reader does not trust the wrong one. None was urgent; all w
    **fixed**: docs/17 §9 now carries a correction pointing to docs/12 item 6 as the current,
    accurate state of that obligation (still owed, both phases) rather than repeating a
    precondition claim that had already been broken by the time phase 2 shipped.
+
+## Open founder design questions (moved here from the private to-do file, 2026-11-17)
+
+These lived only in `founder-todo.md`, which is git-ignored and which chats read only when asked, so
+they could be lost. **This section is now their home**; CLAUDE.md's "Founder decisions pending"
+points here. None is urgent and none blocks other work. **Do not start any of them unprompted.**
+When the founder picks one up, open a fresh chat for it, ask it as a concrete scenario (CLAUDE.md
+"Founder profile"), record the answer in the relevant module spec or doc, and strike the row here.
+
+| # | Question | Where it stands (2026-11-17) | Where the answer goes |
+|---|---|---|---|
+| 1 | **Module-role ladder:** may a module's senior role grant junior roles without being an org admin? (e.g. a classroom professor making a GA or student, a nail-salon manager appointing cashiers) Each module's ladder differs. | Partly happened: visual-messaging and matchmaking admins can grant (`20260925030000`; note the Fable 2026-11-12 MEDIUM on that path, CLAUDE.md). No per-module decision for the rest. A professor can already enrol people into their own class. | each module spec; docs/19, docs/24 |
+| 2 | **Role labels everywhere:** always show which role and where ("Org A Member", "Classroom Professor"), plus a switch when someone holds several roles. | First pass of clearer labels done ("Organization role" vs "Module role: X"). The full layout pass across every module is open. Detail: founder testing items 31–42 in `founder-feedback.md` (git-ignored; copy them here when this is picked up). | docs/22 or a new doc |
+| 3 | **Cross-org module switching:** move between Org A and Org B from inside a module you belong to in both. | Open. (The rest of that proposal is settled: accept-required invites BUILT, docs/25; Public Square DECIDED 2026-11-15, docs/20 §32.9.1, not built.) | docs/20 |
+| 4 | **Owner-only settings:** reserve some org actions for owners, with admins limited to people and modules? | Decided for now: admins keep full org powers. **Revisit only if a real client asks.** | docs/15 |
+| 5 | **Rename the prod org "Solutions" to "Pozna Synagogue"?** (slug `pozne` stays; it is in the public link) | Asked long ago, never answered. A real prod data change, so it needs his yes. The Owner Console has a rename field. | journal |
+
+Settled the same day and NOT here: the matchmaking "It's a match!" panel (module-1 spec 2026-11-17).
