@@ -38,6 +38,13 @@
 | `ideas.md` | every not-yet-built idea (actuals ledger, saved scenarios, badges, price re-fetch, receivables by hand) and the open questions — 2026-11-10 |
 | `assumptions.md` | usage per user per module (photos uploaded, AI calls, video minutes …), stated once so every table uses the same numbers |
 
+## Claude subscription (the development tool) — measured 2026-11-17
+
+The costs page pre-fills "Claude Max 20x (own subscription)" at $200/month as an own cost: the safe figure from a
+measurement of real development use (the measurement and the plan choice are the founder's personal notes, kept
+outside this repo). Anthropic publishes plan limits only as multiples of Pro, per 5 hours and per week, never in
+tokens; the $100 plan may turn out to be enough. Update the own-cost line when the plan is chosen.
+
 ## Cost facts already in the repo (re-verify before reuse)
 
 | Fact | Where |
