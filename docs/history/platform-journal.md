@@ -17,6 +17,7 @@ decision log, docs/03 conventions, docs/12 safeguards) — this is the chronolog
   superadmin):** Claude line present, Cold selected, presets switch and show "Now: …", flat $71.04 at 100 users (69.04 + 2);
   the page scrolled sideways at 390px (the new Protection select, plus the older fixed-width own-cost name box) — fixed in
   `8fcb763`, now 390/390.
+  **Later 2026-11-17 (Sonnet), founder looked at the live page:** section 1 row now 3 columns at lg with hint lines (no overlap at 1024/1400/390); section 4 module checkboxes in a fixed 3-column grid; every money column decimal-aligned (no trailing zeros added; `N` helper); section 7 Checked on one line, price inputs and units aligned; section 2 gains "All-in monthly cost (platform + your own costs)". Browser-checked, 390px scrollWidth 390.
 - **2026-11-15 (Opus) — SIX VENDOR ROWS ADDED ON PROD (no migration).** Founder: "please add them". Claude / Anthropic,
   Hetzner (standby servers), DNS host, the two cloud accounts holding backup-key copies, the snapshots' cloud drive
   (docs/28 F14–F16), via `scripts/prod-vendor-rows-2026-11-15.mts` (read-only listing first, then `--apply`; 18 → 24).

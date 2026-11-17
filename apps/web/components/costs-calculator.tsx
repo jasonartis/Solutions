@@ -63,6 +63,21 @@ const DEFAULT_TYPES: UserType[] = [
 ]
 
 const usd = (n: number) => (n >= 1000 ? '$' + Math.round(n).toLocaleString('en-US') : n >= 1 ? '$' + n.toFixed(2) : '$' + n.toFixed(4))
+// Decimal alignment: split a formatted number at the point; the fraction gets a fixed width per column.
+const fracLen = (strs: string[]) => Math.max(0, ...strs.map((x) => (x.includes('.') ? x.length - x.indexOf('.') : 0)))
+function N({ s, w }: { s: string; w: number }) {
+  const i = s.indexOf('.')
+  const a = i < 0 ? s : s.slice(0, i)
+  const b = i < 0 ? '' : s.slice(i)
+  return (
+    <span className="inline-flex justify-end whitespace-nowrap tabular-nums">
+      <span>{a}</span>
+      <span className="inline-block text-left" style={{ width: w + 'ch' }}>
+        {b}
+      </span>
+    </span>
+  )
+}
 const short = (n: number) => (n >= 1e9 ? n / 1e9 + 'B' : n >= 1e6 ? n / 1e6 + 'M' : n >= 1e3 ? n / 1e3 + 'k' : String(n))
 
 const CONF: Record<Confidence, string> = {
@@ -134,6 +149,9 @@ export default function CostsCalculator({ real }: { real: RealNumbers }) {
     const c = personaCost(costs, t.modules)
     return { t, loaded: c.perUserMonthly, marginal: c.perUserMarginalMonthly, price: priceForMargin(c.perUserMonthly, margin) }
   })
+  const resultVals = [result.baseRevenue, result.aiRevenue, result.videoRevenue, result.revenue, -result.platformCost, -result.ownCostsTotal, -result.paymentFees, result.profit]
+  const wr = fracLen(resultVals.map((v) => (v < 0 ? '−' + usd(-v) : usd(v))))
+  const ws = fracLen([usd(result.suggestedBaseFeePerOrg), usd(result.suggestedAiPricePerCall), usd(result.suggestedVideoPricePerMinute)])
   const totalTypeUsers = types.reduce((s, t) => s + t.count, 0)
 
   return (
@@ -194,7 +212,7 @@ export default function CostsCalculator({ real }: { real: RealNumbers }) {
           </span>
         </div>
         {realNote && <p className="mt-2 rounded bg-blue-50 p-2 text-xs text-blue-900">{realNote}</p>}
-        <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-5 [&>label]:min-w-0">
+        <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 [&>label]:min-w-0">
           <label className="text-sm">
             <span className="block text-gray-600">Share of users active in a month: {Math.round(globals.mauRatio * 100)}%</span>
             <input type="range" min={5} max={100} value={Math.round(globals.mauRatio * 100)} onChange={(e) => setGlobals({ ...globals, mauRatio: Number(e.target.value) / 100 })} className="w-full" />
@@ -202,20 +220,23 @@ export default function CostsCalculator({ real }: { real: RealNumbers }) {
           <label className="text-sm">
             <span className="block text-gray-600">AI model</span>
             <select value={globals.aiModel} onChange={(e) => setGlobals({ ...globals, aiModel: e.target.value as 'sonnet' | 'haiku' })} className={`${inputCls} w-full`}>
-              <option value="sonnet">Sonnet 5.5 ($2 in / $10 out per M tokens)</option>
-              <option value="haiku">Haiku 5.5 ($0.10 / $0.50)</option>
+              <option value="sonnet">Sonnet 5.5</option>
+              <option value="haiku">Haiku 5.5</option>
             </select>
+            <span className="block text-xs text-gray-500">{globals.aiModel === 'sonnet' ? '$2 in / $10 out per M tokens' : '$0.10 in / $0.50 out per M tokens'}</span>
           </label>
           <label className="text-sm">
-            <span className="block text-gray-600">Months of data kept in the database and file storage</span>
+            <span className="block text-gray-600">Months of data kept</span>
             <input type="number" min={1} max={120} value={globals.retentionMonths} onChange={(e) => setGlobals({ ...globals, retentionMonths: Math.max(1, Number(e.target.value) || 1) })} className={`${inputCls} w-24`} />
+            <span className="block text-xs text-gray-500">In the database and file storage</span>
           </label>
           <label className="text-sm">
-            <span className="block text-gray-600">Protection level (docs/costs/resilience.md)</span>
+            <span className="block text-gray-600">Protection level</span>
             <select value={globals.resilience} onChange={(e) => setGlobals({ ...globals, resilience: e.target.value as 'cold' | 'warm' })} className={`${inputCls} w-full`}>
-              <option value="cold">Cold: backups and drills, no standby server (about $2/month)</option>
-              <option value="warm">Warm: cold plus a standby server restored nightly</option>
+              <option value="cold">Cold (≈$2/mo)</option>
+              <option value="warm">Warm (+ standby server)</option>
             </select>
+            <span className="block text-xs text-gray-500">Cold: backups and drills, no standby server. Warm adds a standby server restored nightly. See docs/costs/resilience.md.</span>
           </label>
           <label className="text-sm">
             <span className="block text-gray-600">Target margin on price: {margin}%</span>
@@ -245,6 +266,9 @@ export default function CostsCalculator({ real }: { real: RealNumbers }) {
         </ul>
 
         <h3 className="mt-5 font-semibold">Line items</h3>
+        {(() => {
+          const w = fracLen([...plan.lines.map((l) => usd(l.monthly)), usd(split.flat), usd(split.marginal), usd(split.total)])
+          return (
         <div className="overflow-x-auto">
           <table className="mt-1 w-full text-sm">
             <thead>
@@ -264,7 +288,7 @@ export default function CostsCalculator({ real }: { real: RealNumbers }) {
                     {l.label}
                     {l.note && <span className="block text-xs text-gray-500">{l.note}</span>}
                   </td>
-                  <td className="pr-3 text-right tabular-nums">{usd(l.monthly)}</td>
+                  <td className="pr-3 text-right"><N s={usd(l.monthly)} w={w} /></td>
                   <td className="pr-3 text-xs text-gray-500">{l.fixed ? 'Flat' : 'Marginal'}</td>
                   <td>
                     <span className={`rounded px-1.5 py-0.5 text-xs ${CONF[l.confidence]}`}>{l.confidence}</span>
@@ -273,22 +297,30 @@ export default function CostsCalculator({ real }: { real: RealNumbers }) {
               ))}
               <tr className="border-b border-gray-100 font-medium">
                 <td className="py-1 pr-3" colSpan={2}>Flat total (exists whatever one more user does)</td>
-                <td className="pr-3 text-right tabular-nums">{usd(split.flat)}</td>
+                <td className="pr-3 text-right"><N s={usd(split.flat)} w={w} /></td>
                 <td colSpan={2} />
               </tr>
               <tr className="border-b border-gray-100 font-medium">
                 <td className="py-1 pr-3" colSpan={2}>Marginal total (grows with use)</td>
-                <td className="pr-3 text-right tabular-nums">{usd(split.marginal)}</td>
+                <td className="pr-3 text-right"><N s={usd(split.marginal)} w={w} /></td>
                 <td colSpan={2} />
               </tr>
               <tr className="border-b border-gray-100 font-semibold">
                 <td className="py-1 pr-3" colSpan={2}>Total</td>
-                <td className="pr-3 text-right tabular-nums">{usd(split.total)}</td>
+                <td className="pr-3 text-right"><N s={usd(split.total)} w={w} /></td>
                 <td colSpan={2} />
               </tr>
             </tbody>
           </table>
         </div>
+          )
+        })()}
+        <p className="mt-3 text-sm text-gray-800">
+          <strong>All-in monthly cost (platform + your own costs): {usd(plan.monthly + ownCosts.reduce((a, c) => a + c.monthly, 0))}</strong>{' '}
+          <span className="text-gray-500">
+            = {usd(plan.monthly)} platform + {usd(ownCosts.reduce((a, c) => a + c.monthly, 0))} your own costs. What to charge: section 5.
+          </span>
+        </p>
         <p className="mt-3 text-sm text-gray-600">
           Marginal cost per active user at this size: <strong>{usd(split.marginal / activeUsers)}</strong>/month (per registered user: {usd(split.marginal / users)}). The flat part is{' '}
           {usd(split.flat)}/month however many people use it.
@@ -320,6 +352,9 @@ export default function CostsCalculator({ real }: { real: RealNumbers }) {
           ))}
           <span className="text-gray-500">Now: {preset === 'custom' ? 'custom (edited)' : USAGE_PRESETS[preset].name}</span>
         </div>
+        {(() => {
+          const wc = [0, 1, 2, 3].map((i) => fracLen(costs.map((c) => usd([c.monthly, c.monthly * 12, c.perUserMonthly, c.perUserMarginalMonthly][i]))))
+          return (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -354,16 +389,18 @@ export default function CostsCalculator({ real }: { real: RealNumbers }) {
                         />
                       )}
                     </td>
-                    <td className="pr-3 text-right tabular-nums">{usd(c.monthly)}</td>
-                    <td className="pr-3 text-right tabular-nums">{usd(c.monthly * 12)}</td>
-                    <td className="pr-3 text-right tabular-nums">{usd(c.perUserMonthly)}</td>
-                    <td className="text-right tabular-nums">{usd(c.perUserMarginalMonthly)}</td>
+                    <td className="pr-3 text-right"><N s={usd(c.monthly)} w={wc[0]} /></td>
+                    <td className="pr-3 text-right"><N s={usd(c.monthly * 12)} w={wc[1]} /></td>
+                    <td className="pr-3 text-right"><N s={usd(c.perUserMonthly)} w={wc[2]} /></td>
+                    <td className="text-right"><N s={usd(c.perUserMarginalMonthly)} w={wc[3]} /></td>
                   </tr>
                 )
               })}
             </tbody>
           </table>
         </div>
+          )
+        })()}
       </section>
 
       {/* User types */}
@@ -372,6 +409,9 @@ export default function CostsCalculator({ real }: { real: RealNumbers }) {
         <p className="mb-2 text-sm text-gray-600">
           A user type is a set of modules. The price shown earns your target margin ({margin}%) on the loaded cost at {short(users)} users. Types are kept in this browser only.
         </p>
+        {(() => {
+          const wt = [0, 1, 2, 3].map((i) => fracLen(typeRows.map((r) => usd([r.loaded, r.marginal, r.price, r.price * 12][i]))))
+          return (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -391,12 +431,12 @@ export default function CostsCalculator({ real }: { real: RealNumbers }) {
                   <td className="py-1 pr-3">
                     <input value={t.name} onChange={(e) => setTypes(types.map((x) => (x.id === t.id ? { ...x, name: e.target.value } : x)))} className={`${inputCls} w-52`} />
                   </td>
-                  <td className="pr-3">
-                    <div className="flex flex-wrap gap-x-3 gap-y-1">
+                  <td className="pr-6">
+                    <div className="grid w-[31rem] grid-cols-3 gap-x-3 gap-y-1">
                       {modules
                         .filter((m) => m.key !== CORE_KEY)
                         .map((m) => (
-                          <label key={m.key} className="whitespace-nowrap text-xs">
+                          <label key={m.key} className="min-w-0 whitespace-nowrap text-xs">
                             <input
                               type="checkbox"
                               checked={t.modules.includes(m.key)}
@@ -409,10 +449,10 @@ export default function CostsCalculator({ real }: { real: RealNumbers }) {
                         ))}
                     </div>
                   </td>
-                  <td className="pr-3 text-right tabular-nums">{usd(l)}</td>
-                  <td className="pr-3 text-right tabular-nums">{usd(marginal)}</td>
-                  <td className="pr-3 text-right tabular-nums">{usd(price)}</td>
-                  <td className="pr-3 text-right tabular-nums">{usd(price * 12)}</td>
+                  <td className="pr-3 text-right"><N s={usd(l)} w={wt[0]} /></td>
+                  <td className="pr-3 text-right"><N s={usd(marginal)} w={wt[1]} /></td>
+                  <td className="pr-3 text-right"><N s={usd(price)} w={wt[2]} /></td>
+                  <td className="pr-3 text-right"><N s={usd(price * 12)} w={wt[3]} /></td>
                   <td>
                     <button onClick={() => setTypes(types.filter((x) => x.id !== t.id))} className="text-xs text-red-600 hover:underline">
                       remove
@@ -423,6 +463,8 @@ export default function CostsCalculator({ real }: { real: RealNumbers }) {
             </tbody>
           </table>
         </div>
+          )
+        })()}
         <button
           onClick={() => setTypes([...types, { id: Math.max(0, ...types.map((t) => t.id)) + 1, name: 'New user type', count: 10, modules: [] }])}
           className="mt-2 rounded border border-gray-300 px-3 py-1 text-sm hover:bg-gray-50"
@@ -513,7 +555,7 @@ export default function CostsCalculator({ real }: { real: RealNumbers }) {
                 ).map(([label, v]) => (
                   <tr key={label} className={`border-b border-gray-100 ${label.startsWith('Profit') || label.startsWith('Revenue') ? 'font-semibold' : ''}`}>
                     <td className="py-1">{label}</td>
-                    <td className={`text-right tabular-nums ${label.startsWith('Profit') ? (v < 0 ? 'text-red-600' : 'text-green-700') : ''}`}>{v < 0 ? '−' + usd(-v) : usd(v)}</td>
+                    <td className={`text-right ${label.startsWith('Profit') ? (v < 0 ? 'text-red-600' : 'text-green-700') : ''}`}><N s={v < 0 ? '−' + usd(-v) : usd(v)} w={wr} /></td>
                   </tr>
                 ))}
               </tbody>
@@ -539,15 +581,15 @@ export default function CostsCalculator({ real }: { real: RealNumbers }) {
               <tbody>
                 <tr className="border-b border-gray-100">
                   <td className="py-1">Base fee per organisation / month</td>
-                  <td className="text-right tabular-nums">{usd(result.suggestedBaseFeePerOrg)}</td>
+                  <td className="text-right"><N s={usd(result.suggestedBaseFeePerOrg)} w={ws} /></td>
                 </tr>
                 <tr className="border-b border-gray-100">
                   <td className="py-1">Per AI call</td>
-                  <td className="text-right tabular-nums">{usd(result.suggestedAiPricePerCall)}</td>
+                  <td className="text-right"><N s={usd(result.suggestedAiPricePerCall)} w={ws} /></td>
                 </tr>
                 <tr className="border-b border-gray-100">
                   <td className="py-1">Per video minute</td>
-                  <td className="text-right tabular-nums">{usd(result.suggestedVideoPricePerMinute)}</td>
+                  <td className="text-right"><N s={usd(result.suggestedVideoPricePerMinute)} w={ws} /></td>
                 </tr>
               </tbody>
             </table>
@@ -575,6 +617,13 @@ export default function CostsCalculator({ real }: { real: RealNumbers }) {
       {/* All tiers */}
       <section className="rounded-lg border border-gray-200 bg-white p-5">
         <h2 className="mb-1 text-lg font-semibold">6. All sizes side by side</h2>
+        {(() => {
+          const rows6 = allTiers.map(({ n, plan: p }) => {
+            const fm = flatMarginal(p.lines)
+            return [fm.flat, fm.marginal, p.monthly, p.yearly, fm.marginal / Math.max(1, n * globals.mauRatio), p.monthly / n].map(usd)
+          })
+          const w6 = [0, 1, 2, 3, 4, 5].map((i) => fracLen(rows6.map((r) => r[i])))
+          return (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -590,21 +639,20 @@ export default function CostsCalculator({ real }: { real: RealNumbers }) {
               </tr>
             </thead>
             <tbody>
-              {allTiers.map(({ n, plan: p }) => (
+              {allTiers.map(({ n, plan: p }, ri) => (
                 <tr key={n} className="border-b border-gray-100">
                   <td className="py-1 pr-3">{short(n)}</td>
-                  <td className="pr-3 text-right tabular-nums">{usd(flatMarginal(p.lines).flat)}</td>
-                  <td className="pr-3 text-right tabular-nums">{usd(flatMarginal(p.lines).marginal)}</td>
-                  <td className="pr-3 text-right tabular-nums">{usd(p.monthly)}</td>
-                  <td className="pr-3 text-right tabular-nums">{usd(p.yearly)}</td>
-                  <td className="pr-3 text-right tabular-nums">{usd(flatMarginal(p.lines).marginal / Math.max(1, n * globals.mauRatio))}</td>
-                  <td className="pr-3 text-right tabular-nums">{usd(p.monthly / n)}</td>
+                  {rows6[ri].map((v, ci) => (
+                    <td key={ci} className="pr-3 text-right"><N s={v} w={w6[ci]} /></td>
+                  ))}
                   <td>{p.name}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+          )
+        })()}
       </section>
 
       {/* Price sheet */}
@@ -634,8 +682,9 @@ export default function CostsCalculator({ real }: { real: RealNumbers }) {
               <tr className="border-b text-left text-gray-500">
                 <th className="py-1 pr-3">Vendor</th>
                 <th className="pr-3">Item</th>
-                <th className="pr-3 text-right">Price</th>
-                <th className="pr-3">Checked</th>
+                <th className="pr-1 text-right">Price</th>
+                <th className="pr-3" />
+                <th className="pr-3 whitespace-nowrap">Checked</th>
                 <th>Confidence</th>
               </tr>
             </thead>
@@ -648,7 +697,7 @@ export default function CostsCalculator({ real }: { real: RealNumbers }) {
                     {'note' in p && p.note && <span className="block text-gray-500">{p.note}</span>}
                     <span className="block break-all text-gray-400">{p.source}</span>
                   </td>
-                  <td className="pr-3 text-right tabular-nums">
+                  <td className="pr-1 text-right align-top">
                     <input
                       type="number"
                       step="any"
@@ -661,12 +710,14 @@ export default function CostsCalculator({ real }: { real: RealNumbers }) {
                           setOverrides(rest)
                         } else setOverrides({ ...overrides, [key]: v })
                       }}
-                      className={`${inputCls} w-24 text-right ${key in overrides ? 'border-blue-500 bg-blue-50' : ''}`}
-                    />{' '}
+                      className={`${inputCls} w-28 text-right tabular-nums ${key in overrides ? 'border-blue-500 bg-blue-50' : ''}`}
+                    />
+                  </td>
+                  <td className="pr-3 text-left align-top">
                     <span className="text-gray-500">{p.unit}</span>
                     {key in overrides && <span className="block text-gray-400">list: {p.value}</span>}
                   </td>
-                  <td className="pr-3">
+                  <td className="whitespace-nowrap pr-3">
                     {p.checked}
                     {now !== null && (now - new Date(p.checked).getTime()) / 86_400_000 > STALE_DAYS && <span className="ml-1 rounded bg-red-100 px-1 text-red-700">stale</span>}
                   </td>

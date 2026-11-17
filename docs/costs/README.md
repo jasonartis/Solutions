@@ -8,7 +8,7 @@
 > **Third pass 2026-11-17 (Sonnet):** the page now splits every cost into **Flat** (exists whatever one more user does) and **Marginal**
 > (grows with use) in section 2's line items and section 6's all-sizes table, with marginal cost per active user; one-click **usage presets**
 > (Light / Typical / Heavy, "custom" once edited) beside the module shares; a **Protection level** switch (cold / warm, adds the
-> resilience.md lines to the total); and "Your own costs" is pre-filled with the Claude subscription ($200/month). No migration.
+> resilience.md lines to the total); and "Your own costs" is pre-filled with the Claude subscription ($200/month); section 2 ends with an **all-in monthly cost** (platform + those own costs). No migration.
 > **Keep them in step:** change a price or assumption in the model file, regenerate, paste, update the `checked` date.
 > **Same day, second pass:** "Use my real numbers" button, editable prices (browser what-ifs), your-own-costs lines ($0 for now),
 > and a pricing section (base fee per org + AI/video credits, break-even, margin) — see cost-model.md "Pricing structure chosen"
