@@ -186,3 +186,13 @@ other.
 
 Only the platform-wide 13+ signup line exists; this module does not ask for or enforce 18+. Recorded in full
 in the module-6 spec, "Safety (first-class)" (same gap, both dating modules). Not built, not scheduled.
+
+## 2026-11-17 — "It's a match!" box links to the shared answers (founder decision)
+
+Founder asked (old to-do item): should a match's share-flagged answers be repeated inside the green
+"It's a match!" box? **Decided: no repeat; link the two instead.** The box gets "See what they shared ↓"
+(an anchor to that person's line in "Your matches", shown only when they are in the list — it is cut
+at the top X — AND shared something); that line gets "↑ It's a match" back to the box (shown only for
+a mutual match). The target briefly rings when jumped to. UI only (`modules/matchmaking/ui/page.tsx`),
+no data change: both sections already render on the same page from the same reads. e2e: the
+matchmaking test asserts both links.

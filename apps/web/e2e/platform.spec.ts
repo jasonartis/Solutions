@@ -892,6 +892,9 @@ test('matchmaking module: single sees seeded matches and can answer; admin recom
   await expect(mutualList).toContainText('Dana D')
   await expect(mutualList).toContainText('dana@demo.local')
   await expect(mutualList).not.toContainText('Eve E')
+  // The match box and Dana's list line link to each other (founder 2026-11-17).
+  await expect(mutualList.getByRole('link', { name: 'See what they shared ↓' })).toHaveAttribute('href', /^#match-/)
+  await expect(matches.getByRole('link', { name: "↑ It's a match" })).toHaveAttribute('href', /^#its-a-match-/)
 
   // Answer the open exercise question (radio + save).
   const exercise = page.locator('form').filter({ hasText: 'I exercise' })

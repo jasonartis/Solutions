@@ -156,6 +156,11 @@ async function SingleView(props: { orgSlug: string; orgId: string; userId: strin
   // so a mutual match can point at a silhouette: no name, no email. Label it
   // as what it is rather than letting it read as a live "Someone" (§7.5).
   const formerIds = await loadFormerMembers(supabase, mutualMatches.map((m) => m.matched_user))
+  // Founder 2026-11-17: shared answers stay in the list (not repeated in the
+  // green box); each side links to the other with a page anchor. The list is
+  // cut at topX, so the down-link exists only if that person is in the list
+  // AND shared something.
+  const mutualIds = new Set(mutualMatches.map((m) => m.matched_user))
 
   return (
     <div className="space-y-8">
@@ -164,7 +169,11 @@ async function SingleView(props: { orgSlug: string; orgId: string; userId: strin
           <h2 className="mb-3 text-lg font-medium">It&apos;s a match! 🎉</h2>
           <ul className="space-y-1 text-sm">
             {mutualMatches.map((m) => (
-              <li key={m.matched_user} className="rounded border border-green-200 bg-green-50 px-3 py-2">
+              <li
+                key={m.matched_user}
+                id={`its-a-match-${m.matched_user}`}
+                className="scroll-mt-4 rounded border border-green-200 bg-green-50 px-3 py-2 target:ring-2 target:ring-green-400"
+              >
                 <span className="font-medium">
                   {formerIds.has(m.matched_user) ? FORMER_MEMBER_LABEL : m.display_name || 'Someone'}
                 </span>{' '}
@@ -178,6 +187,11 @@ async function SingleView(props: { orgSlug: string; orgId: string; userId: strin
                   </>
                 )}
                 .
+                {sharedByUser.has(m.matched_user) && (
+                  <a href={`#match-${m.matched_user}`} className="ml-2 text-xs text-blue-600 hover:underline">
+                    See what they shared ↓
+                  </a>
+                )}
               </li>
             ))}
           </ul>
@@ -197,9 +211,20 @@ async function SingleView(props: { orgSlug: string; orgId: string; userId: strin
               const shared = sharedByUser.get(other)
               const interested = interestedIn.has(other)
               return (
-                <li key={i} className="rounded border border-gray-100 bg-white px-3 py-2">
+                <li
+                  key={i}
+                  id={`match-${other}`}
+                  className="scroll-mt-4 rounded border border-gray-100 bg-white px-3 py-2 target:ring-2 target:ring-blue-300"
+                >
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span>{nameOf(other)}</span>
+                    <span>
+                      {nameOf(other)}
+                      {mutualIds.has(other) && (
+                        <a href={`#its-a-match-${other}`} className="ml-2 text-xs text-green-700 hover:underline">
+                          ↑ It&apos;s a match
+                        </a>
+                      )}
+                    </span>
                     <span className="flex flex-wrap items-center gap-2">
                       <span className="font-semibold">{s.percent}%</span>
                       {s.stale && <span className="text-xs text-amber-600">(recompute pending)</span>}
