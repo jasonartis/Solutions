@@ -194,14 +194,14 @@ export default function CostsCalculator({ real }: { real: RealNumbers }) {
           </span>
         </div>
         {realNote && <p className="mt-2 rounded bg-blue-50 p-2 text-xs text-blue-900">{realNote}</p>}
-        <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-5 [&>label]:min-w-0">
           <label className="text-sm">
             <span className="block text-gray-600">Share of users active in a month: {Math.round(globals.mauRatio * 100)}%</span>
             <input type="range" min={5} max={100} value={Math.round(globals.mauRatio * 100)} onChange={(e) => setGlobals({ ...globals, mauRatio: Number(e.target.value) / 100 })} className="w-full" />
           </label>
           <label className="text-sm">
             <span className="block text-gray-600">AI model</span>
-            <select value={globals.aiModel} onChange={(e) => setGlobals({ ...globals, aiModel: e.target.value as 'sonnet' | 'haiku' })} className={inputCls}>
+            <select value={globals.aiModel} onChange={(e) => setGlobals({ ...globals, aiModel: e.target.value as 'sonnet' | 'haiku' })} className={`${inputCls} w-full`}>
               <option value="sonnet">Sonnet 5.5 ($2 in / $10 out per M tokens)</option>
               <option value="haiku">Haiku 5.5 ($0.10 / $0.50)</option>
             </select>
@@ -212,7 +212,7 @@ export default function CostsCalculator({ real }: { real: RealNumbers }) {
           </label>
           <label className="text-sm">
             <span className="block text-gray-600">Protection level (docs/costs/resilience.md)</span>
-            <select value={globals.resilience} onChange={(e) => setGlobals({ ...globals, resilience: e.target.value as 'cold' | 'warm' })} className={inputCls}>
+            <select value={globals.resilience} onChange={(e) => setGlobals({ ...globals, resilience: e.target.value as 'cold' | 'warm' })} className={`${inputCls} w-full`}>
               <option value="cold">Cold: backups and drills, no standby server (about $2/month)</option>
               <option value="warm">Warm: cold plus a standby server restored nightly</option>
             </select>
@@ -472,14 +472,14 @@ export default function CostsCalculator({ real }: { real: RealNumbers }) {
         <div className="mt-1 space-y-1">
           {ownCosts.map((c) => (
             <div key={c.id} className="flex items-center gap-2">
-              <input value={c.name} onChange={(e) => setOwnCosts(ownCosts.map((x) => (x.id === c.id ? { ...x, name: e.target.value } : x)))} className={`${inputCls} w-72`} />
+              <input value={c.name} onChange={(e) => setOwnCosts(ownCosts.map((x) => (x.id === c.id ? { ...x, name: e.target.value } : x)))} className={`${inputCls} min-w-0 flex-1 sm:w-72 sm:flex-none`} />
               <span className="text-sm text-gray-500">$</span>
               <input
                 type="number"
                 min={0}
                 value={c.monthly}
                 onChange={(e) => setOwnCosts(ownCosts.map((x) => (x.id === c.id ? { ...x, monthly: Math.max(0, Number(e.target.value) || 0) } : x)))}
-                className={`${inputCls} w-28`}
+                className={`${inputCls} w-24 shrink-0`}
               />
               <button onClick={() => setOwnCosts(ownCosts.filter((x) => x.id !== c.id))} className="text-xs text-red-600 hover:underline">
                 remove
