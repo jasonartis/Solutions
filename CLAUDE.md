@@ -69,7 +69,8 @@ section, keep it a SUMMARY with pointers: add the dated story to the journal / t
 ### Shipped most recently (newest first; full stories in the linked docs)
 - **2026-11-18 (Opus + Sonnet agent): iOS 15 support (`fa8ea7d`, no migration)** — `browserslist` in `apps/web/package.json`
   includes safari/ios 15 (Next 16 otherwise emits syntax Safari 15 cannot parse); a red early-error box shows only when the
-  app fails to boot. Keep the browserslist. Journal 2026-11-18.
+  app fails to boot. Keep the browserslist. Founder-verified on his iPhone 7. Plus a Home Screen app (icon + manifest +
+  iOS full-screen tags, `edab4f1`). Journal 2026-11-18.
 - **2026-11-15 (Opus): uploads pinned to the real org — `20261117010000` ON PROD, verified 14/12 → 26/0; storage orphan
   sweep built (no migration; worker job + `scripts/storage-orphan-sweep.mts`, dry run unless `--apply`).** Journal 2026-11-15.
 - **2026-11-15 (Opus): REAL view-as v1 (classroom) — `20261116010000` ON PROD, verified 4/29 → 38/0; secret on
