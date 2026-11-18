@@ -4,6 +4,19 @@ The running, dated build journal that used to live in `CLAUDE.md`'s "## Current 
 section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every session)
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
+- **2026-11-18 (Opus orchestrating a Sonnet agent) — the app now runs on iOS 15 (`fa8ea7d`, no migration).** The founder's
+  iPhone 7 (iOS 15.8, Safari 15.6 engine, cannot update; every iOS browser uses that engine, so a custom "browser app" could
+  not help) showed the login page STYLED but with our "hasn't finished loading" notice: CSS fine, JS never ran. Cause, measured
+  in the built chunks: Next 16's default target (Safari 16.4+) left class static blocks (`static{...}`) in Next's OWN router
+  code, a SyntaxError on Safari 15. Fix: a `browserslist` in `apps/web/package.json` (chrome/edge/firefox 111, safari/ios_saf
+  >= 15); Turbopack honours it: static blocks 3 chunks → 0, no lookbehind regex, newer built-ins appear only as core-js
+  feature-detected polyfills, so none added. Plus a diagnostic: a tiny ES5 inline script in the root layout shows captured
+  script errors in a red box ONLY if `window.__spBooted` (set by `components/boot-flag.tsx`) is unset 6 s after load. CSS
+  (Tailwind 4.3 `@property`/`color-mix`) left alone: the iPhone screenshot showed styling working. **Keep the browserslist** —
+  dropping it, or a dependency that ships untranspilable syntax (regex lookbehind), breaks iOS 15 again. Process notes: the
+  Agent tool's `isolation: "worktree"` REFUSED on this host (drive-letter case `d:` vs `D:`), so the branch was built in a
+  hand-made worktree `D:/sp-ios15`; a local non-prod `vercel build` fails on exFAT/Windows (`EPERM symlink`), so there is no
+  hand-made preview here — a DRAFT PR (#2) ran the full CI check (green) without deploying, then the commit went to master.
 - **2026-11-17 (Opus) — CI e2e NEEDED FOUR ATTEMPTS FOR A UI-ONLY COMMIT (`86f889b`, costs page); OPEN, not fixed.** Each attempt
   failed a different mix, always a 5 s `expect` timing out after a click (no server error logged): matchmaking (attempt 1),
   classroom grading at "Compute finals" (attempts 2 and 3; it PASSED attempt 1), several visual-messaging tests (flaky every time).
