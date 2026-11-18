@@ -159,7 +159,10 @@ export default function LoginPage() {
               <style>{'@keyframes sp-late{to{opacity:1}}'}</style>
               <p
                 role="alert"
-                style={{ opacity: 0, animation: 'sp-late 0s 4s forwards' }}
+                // 10 s, not 4 s (2026-11-18): an iPhone 7's FIRST open of the Home Screen app
+                // (nothing cached) took longer than 4 s to start the scripts and showed this
+                // box as a false alarm; it vanishes by itself once the page is ready.
+                style={{ opacity: 0, animation: 'sp-late 0s 10s forwards' }}
                 className="mb-4 rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"
               >
                 This page hasn&apos;t finished loading. If tapping Sign in only clears the form, your browser is
