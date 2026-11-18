@@ -16,6 +16,12 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Solutions Platform",
   description: "Multi-tenant modular platform",
+  // Home Screen app on iPhone (2026-11-18): opens full-screen, without
+  // Safari's bars, under the name "Solutions". Next emits only the newer
+  // "mobile-web-app-capable" tag; iOS 15 needs the Apple-prefixed one, hence
+  // `other`. The manifest (app/manifest.ts) says the same for other phones.
+  appleWebApp: { capable: true, title: "Solutions", statusBarStyle: "default" },
+  other: { "apple-mobile-web-app-capable": "yes" },
 };
 
 // Founder feedback (2026-07-12, "doesn't come out very well on phone/
