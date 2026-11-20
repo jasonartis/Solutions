@@ -75,6 +75,10 @@ export const PRICES = {
   aiSonnetOut: { vendor: 'Anthropic', item: 'Sonnet 5.5 output', value: 10, unit: '$/million tokens', checked: CHECKED, source: 'https://claude.com/pricing', confidence: 'verified' },
   aiHaikuIn: { vendor: 'Anthropic', item: 'Haiku 5.5 input (≤100K context)', value: 0.1, unit: '$/million tokens', checked: CHECKED, source: 'https://claude.com/pricing', confidence: 'verified' },
   aiHaikuOut: { vendor: 'Anthropic', item: 'Haiku 5.5 output (≤100K context)', value: 0.5, unit: '$/million tokens', checked: CHECKED, source: 'https://claude.com/pricing', confidence: 'verified', note: 'Batch processing is 50% off; not assumed.' },
+  aiOpusIn: { vendor: 'Anthropic', item: 'Opus 5.5 input', value: 4, unit: '$/million tokens', checked: '2026-11-20', source: 'https://platform.claude.com/docs/en/about-claude/pricing', confidence: 'verified', note: 'Added 2026-11-20 (founder uses Opus).' },
+  aiOpusOut: { vendor: 'Anthropic', item: 'Opus 5.5 output', value: 20, unit: '$/million tokens', checked: '2026-11-20', source: 'https://platform.claude.com/docs/en/about-claude/pricing', confidence: 'verified' },
+  aiFableIn: { vendor: 'Anthropic', item: 'Fable 5.2 input', value: 8, unit: '$/million tokens', checked: '2026-11-20', source: 'https://platform.claude.com/docs/en/about-claude/pricing', confidence: 'verified', note: 'Fable 5.1 is $10 in / $50 out.' },
+  aiFableOut: { vendor: 'Anthropic', item: 'Fable 5.2 output', value: 40, unit: '$/million tokens', checked: '2026-11-20', source: 'https://platform.claude.com/docs/en/about-claude/pricing', confidence: 'verified' },
   // ---- Big-scale infrastructure (third-party / assumption) ----
   rdsR6g4xlMultiAzHour: { vendor: 'AWS RDS', item: 'PostgreSQL db.r6g.4xlarge Multi-AZ (us-east-1)', value: 3.6, unit: '$/hour', checked: CHECKED, source: 'https://sparecores.com/database/aws/db.r6g.4xlarge', confidence: 'third-party', note: 'AWS\'s own page would not render the table; confirm on aws.amazon.com/rds/postgresql/pricing before budgeting.' },
   rdsStorageGb: { vendor: 'AWS RDS', item: 'gp3 storage', value: 0.115, unit: '$/GB-month', checked: CHECKED, source: 'from memory of the RDS pricing page — NOT re-fetched', confidence: 'assumption' },
@@ -135,6 +139,15 @@ export const DEFAULT_MODULES: ModuleAssumption[] = [
   { key: 'ai', name: 'AI features (résumé builder etc.)', adoption: 0.1, usage: u({ requests: 20, dbMb: 0.05, aiCalls: 3 }), why: 'Three AI calls per active AI user per month.' },
 ]
 
+/** The Claude model the platform's own AI features call. Each maps to its price-sheet rows. */
+export type AiModel = 'haiku' | 'sonnet' | 'opus' | 'fable'
+export const AI_MODELS: Record<AiModel, { label: string; inKey: PriceKey; outKey: PriceKey }> = {
+  haiku: { label: 'Haiku 5.5', inKey: 'aiHaikuIn', outKey: 'aiHaikuOut' },
+  sonnet: { label: 'Sonnet 5.5', inKey: 'aiSonnetIn', outKey: 'aiSonnetOut' },
+  opus: { label: 'Opus 5.5', inKey: 'aiOpusIn', outKey: 'aiOpusOut' },
+  fable: { label: 'Fable 5.2', inKey: 'aiFableIn', outKey: 'aiFableOut' },
+}
+
 export interface Globals {
   /** Share of registered users active in a month. */
   mauRatio: number
@@ -143,7 +156,7 @@ export interface Globals {
   /** One AI call's tokens. */
   aiTokensIn: number
   aiTokensOut: number
-  aiModel: 'sonnet' | 'haiku'
+  aiModel: AiModel
   /** Peak-to-average traffic. */
   peakFactor: number
   /** Share of video MAU on a call at the busiest moment (events cluster). */
@@ -322,8 +335,8 @@ function emailMonthly(n: number, P: PriceValues): { price: number; label: string
 }
 
 function aiPerCall(g: Globals, P: PriceValues): number {
-  const inP = g.aiModel === 'sonnet' ? P.aiSonnetIn : P.aiHaikuIn
-  const outP = g.aiModel === 'sonnet' ? P.aiSonnetOut : P.aiHaikuOut
+  const inP = P[AI_MODELS[g.aiModel].inKey]
+  const outP = P[AI_MODELS[g.aiModel].outKey]
   return (g.aiTokensIn * inP + g.aiTokensOut * outP) / 1e6
 }
 
@@ -344,7 +357,7 @@ export function planFor(users: number, modules: ModuleAssumption[], g: Globals, 
   const videoEgressGb = f.total.videoMin * g.videoMbPerMin / 1000
 
   // --- AI: same at every size (priced per call; no scale discount assumed) ---
-  L('AI', `Claude API (${g.aiModel === 'sonnet' ? 'Sonnet 5.5' : 'Haiku 5.5'}), ${Math.round(f.total.aiCalls).toLocaleString('en-US')} calls`, f.total.aiCalls * aiPerCall(g, P), 'aiCalls', 'verified', 'Tokens per call are an assumption; batch (−50%) and caching not assumed.')
+  L('AI', `Claude API (${AI_MODELS[g.aiModel].label}),${Math.round(f.total.aiCalls).toLocaleString('en-US')} calls`, f.total.aiCalls * aiPerCall(g, P), 'aiCalls', 'verified', 'Tokens per call are an assumption; batch (−50%) and caching not assumed.')
 
   // --- Video ---
   if (arch === 'managed') {

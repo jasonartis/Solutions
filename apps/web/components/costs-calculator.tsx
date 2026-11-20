@@ -7,6 +7,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import {
+  AI_MODELS,
   CORE_KEY,
   DEFAULT_GLOBALS,
   DEFAULT_MODULES,
@@ -21,6 +22,7 @@ import {
   personaCost,
   planFor,
   priceForMargin,
+  type AiModel,
   type Confidence,
   type Globals,
   type ModuleAssumption,
@@ -219,11 +221,16 @@ export default function CostsCalculator({ real }: { real: RealNumbers }) {
           </label>
           <label className="text-sm">
             <span className="block text-gray-600">AI model</span>
-            <select value={globals.aiModel} onChange={(e) => setGlobals({ ...globals, aiModel: e.target.value as 'sonnet' | 'haiku' })} className={`${inputCls} w-full`}>
-              <option value="sonnet">Sonnet 5.5</option>
-              <option value="haiku">Haiku 5.5</option>
+            <select value={globals.aiModel} onChange={(e) => setGlobals({ ...globals, aiModel: e.target.value as AiModel })} className={`${inputCls} w-full`}>
+              {(Object.keys(AI_MODELS) as AiModel[]).map((k) => (
+                <option key={k} value={k}>
+                  {AI_MODELS[k].label}
+                </option>
+              ))}
             </select>
-            <span className="block text-xs text-gray-500">{globals.aiModel === 'sonnet' ? '$2 in / $10 out per M tokens' : '$0.10 in / $0.50 out per M tokens'}</span>
+            <span className="block text-xs text-gray-500">
+              ${PRICES[AI_MODELS[globals.aiModel].inKey].value} in / ${PRICES[AI_MODELS[globals.aiModel].outKey].value} out per M tokens
+            </span>
           </label>
           <label className="text-sm">
             <span className="block text-gray-600">Months of data kept</span>

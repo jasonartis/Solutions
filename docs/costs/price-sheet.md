@@ -65,6 +65,10 @@
 | Anthropic | Sonnet 5.5 output | 10 | $/million tokens | 2026-11-09 | verified | https://claude.com/pricing |
 | Anthropic | Haiku 5.5 input (≤100K context) | 0.1 | $/million tokens | 2026-11-09 | verified | https://claude.com/pricing |
 | Anthropic | Haiku 5.5 output (≤100K context) | 0.5 | $/million tokens | 2026-11-09 | verified | https://claude.com/pricing — Batch processing is 50% off; not assumed. |
+| Anthropic | Opus 5.5 input | 4 | $/million tokens | 2026-11-20 | verified | https://platform.claude.com/docs/en/about-claude/pricing — Added 2026-11-20 (founder uses Opus). |
+| Anthropic | Opus 5.5 output | 20 | $/million tokens | 2026-11-20 | verified | https://platform.claude.com/docs/en/about-claude/pricing |
+| Anthropic | Fable 5.2 input | 8 | $/million tokens | 2026-11-20 | verified | https://platform.claude.com/docs/en/about-claude/pricing — Fable 5.1 is $10 in / $50 out. |
+| Anthropic | Fable 5.2 output | 40 | $/million tokens | 2026-11-20 | verified | https://platform.claude.com/docs/en/about-claude/pricing |
 | AWS RDS | PostgreSQL db.r6g.4xlarge Multi-AZ (us-east-1) | 3.6 | $/hour | 2026-11-09 | third-party | https://sparecores.com/database/aws/db.r6g.4xlarge — AWS's own page would not render the table; confirm on aws.amazon.com/rds/postgresql/pricing before budgeting. |
 | AWS RDS | gp3 storage | 0.115 | $/GB-month | 2026-11-09 | assumption | from memory of the RDS pricing page — NOT re-fetched |
 | AWS CloudFront | Data transfer out, first 10 TB (US) | 0.085 | $/GB | 2026-11-09 | assumption | from memory of the CloudFront pricing page — NOT re-fetched |

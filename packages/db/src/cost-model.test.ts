@@ -96,6 +96,15 @@ describe('pricing (base fee per org + AI and video credits)', () => {
     if (k > 1) expect(at(k - 1)).toBeLessThan(0)
   })
 
+  it('every AI model option prices a call, and a bigger model costs more per call', () => {
+    const aiLine = (aiModel: 'haiku' | 'sonnet' | 'opus' | 'fable') =>
+      planFor(100_000, m, { ...g, aiModel }).lines.filter((l) => l.group === 'AI').reduce((s, l) => s + l.monthly, 0)
+    expect(aiLine('haiku')).toBeGreaterThan(0)
+    expect(aiLine('sonnet')).toBeGreaterThan(aiLine('haiku'))
+    expect(aiLine('opus')).toBeGreaterThan(aiLine('sonnet'))
+    expect(aiLine('fable')).toBeGreaterThan(aiLine('opus'))
+  })
+
   it('a price override changes the bill; an unknown or non-finite override is ignored', () => {
     const base = planFor(1_000, m, g).monthly
     expect(planFor(1_000, m, g, { vercelProSeat: 120 }).monthly).toBeCloseTo(base + 100, 6)
