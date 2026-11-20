@@ -31,6 +31,19 @@ late N days / written off; a "mark paid" button; optional reminder emails (day 1
 blocker cleared, docs/18 item 7); dashboard badge "3 clients late, $450 outstanding"; a monthly "collected vs expected"
 line beside the cost forecast. Card processing is a later, separate decision.
 
+## B2. Gaps found in a 2026-11-20 audit of the cost-model chat (also not built)
+
+- **What to charge is not only cost.** The page's suggested base fee is a cost-plus FLOOR. Nobody has compared what similar
+  small-organisation tools charge (prior-art rule, memory "check prior art before recommending"). Do that before quoting a
+  first client; a Sonnet research task, no code.
+- **Own costs are placeholders.** Legal, accountant, insurance and the founder's time are still $0 (the Claude subscription
+  line was pre-filled by another session). The founder fills them in on `/console/costs` section 5 — browser-only, so
+  re-enter them if the browser data is cleared (see A3 for saving in the database).
+- **The page was browser-verified on local data only** (2026-11-09/10). Prod has the real counts; do a click-through of
+  `/console/costs` on prod ("Use my real numbers", one price override) the next time the founder tests there.
+- **Prices go stale on 2027-02-07** (90 days after the 2026-11-09 check); the page shows a badge, nothing else reminds
+  anyone (A5 would).
+
 ## C. Open questions
 
 1. Build A1 and B as ONE migration (both hang off the vendor accounts / org tables)? See the 2026-11-10 chat answer.
