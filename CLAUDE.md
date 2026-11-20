@@ -193,8 +193,8 @@ this" actions — the founder's wider original ask (see the handoff file); needs
 - **Open founder design questions** (module-role ladder, role labels everywhere, cross-org module switching, owner-only
   settings, renaming prod's "Solutions" org, **CI browser tests not retry-safe — options A–E**) — in
   [docs/04 "Open founder design questions"](docs/04-build-plan.md). One per fresh chat when he picks one.
-  **When he asks "what's next" / "what's the todo for the platform", show BOTH lists:** docs/28 B.4a (build ranks)
-  AND this docs/04 table (things to decide/discuss).
+  **When he asks "what's next" / "what's the todo for the platform", read [docs/what-is-next.md](docs/what-is-next.md)
+  (the one index) and show the top of each list:** docs/28 B.4a (build ranks) AND the docs/04 table (decide/discuss).
 - Go-live items 4–7 and 9 paused until a real client signs (docs/18); 2FA deferred; custom SMTP is a blocker for onboarding a
   client's users (prod's built-in sender measured at 2 emails/HOUR, docs/18 item 7).
 - Wiring `verify-acl-hardening.ts` into CI (friction trade-off, founder opt-in); refining `prod-verify-migration.ts`'s
