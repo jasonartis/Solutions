@@ -44,6 +44,14 @@ line beside the cost forecast. Card processing is a later, separate decision.
 - **Prices go stale on 2027-02-07** (90 days after the 2026-11-09 check); the page shows a badge, nothing else reminds
   anyone (A5 would).
 
+## Fresh-chat prompts (model + paste-ready)
+
+- **Actuals ledger + receivables — OPUS (migration):** "Read docs/costs/ideas.md sections A1 and B and docs/28 Part A. Plan one
+  migration for a superadmin-only actuals ledger plus hand-entered client receivables. Ask me the open questions first, as
+  concrete scenarios."
+- **Fold standby costs into the model (A10) / re-fetch assumed prices / market-price research — SONNET (no migration):** "Read
+  docs/costs/ideas.md and docs/costs/cost-model.md 'Practical notes'. Do item <A10 | price re-fetch | what similar tools charge>."
+
 ## C. Open questions
 
 1. Build A1 and B as ONE migration (both hang off the vendor accounts / org tables)? See the 2026-11-10 chat answer.
