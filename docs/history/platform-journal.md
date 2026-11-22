@@ -4,6 +4,15 @@ The running, dated build journal that used to live in `CLAUDE.md`'s "## Current 
 section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every session)
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
+- **2026-11-09 → 11-20 (Sonnet) — cost model, pricing structure, ideas list, "what's next" index (no migration).** Built
+  `docs/costs/` + superadmin page `/console/costs` (pure model `packages/platform/src/cost-model.ts`, prices dated with confidence
+  labels). Second pass: "Use my real numbers", editable price what-ifs, break-even/margin, own-costs lines, pricing = base fee per
+  org + AI/video credits (founder's choice C). Founder decisions: invoice clients BY HAND first (no card processing); own costs
+  start at $0; ledger/receivables left for a later Opus chat. 2026-11-20: AI model dropdown gained Opus 5.5 and Fable 5.2 (prices
+  re-fetched from the docs pricing page — `claude.com/pricing` truncates before the API rates). Everything not built is in
+  `docs/costs/ideas.md` and docs/04 row 7; `docs/what-is-next.md` is the one index a fresh "what's next" chat starts from.
+  Practical editing notes (typecheck all three packages, browser-check recipe): cost-model.md "Practical notes". A broken
+  `noUncheckedIndexedAccess` typecheck from this work briefly reddened another session's pre-push (fixed `be1e49e`).
 - **2026-11-18 (Opus orchestrating a Sonnet agent) — the app now runs on iOS 15 (`fa8ea7d`, no migration).** The founder's
   iPhone 7 (iOS 15.8, Safari 15.6 engine, cannot update; every iOS browser uses that engine, so a custom "browser app" could
   not help) showed the login page STYLED but with our "hasn't finished loading" notice: CSS fine, JS never ran. Cause, measured

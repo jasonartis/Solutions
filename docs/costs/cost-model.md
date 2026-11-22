@@ -92,6 +92,22 @@ Other points the model supports:
 
 Scenario/price edits are kept **in the browser only** (localStorage). *Planned:* saved named scenarios in the database.
 
+### Practical notes for whoever edits the model (learned 2026-11-09 to 11-20)
+
+- **Re-fetching Anthropic prices:** `claude.com/pricing` truncates before the API rates (it shows plan limits only). Use
+  **`platform.claude.com/docs/en/about-claude/pricing`** — its table has base input/output per model, including newer and older
+  versions side by side (on 2026-11-20: Fable 5.2 $8/$40, Fable 5.1 $10/$50, Opus 5.5 $4/$20, Sonnet 5.5 $2/$10, Haiku 5.5 $0.10/$0.50).
+  The Sonnet/Haiku rows still cite the older URL; the numbers matched.
+- **Adding an AI model:** two price rows in `PRICES` (`aiXIn`, `aiXOut`) + one entry in `AI_MODELS` (`cost-model.ts`); the dropdown
+  and the line label follow. Then add the rows to `price-sheet.md` (or rerun `scripts/print-cost-model.mts --prices`) and extend the
+  "bigger model costs more" test. Give new rows their real fetch date, not the file-wide `CHECKED`.
+- **Typecheck all three places after a change:** `packages/platform`, `packages/db` and `apps/web` (`node ../../node_modules/typescript/bin/tsc
+  --noEmit` in each). The packages enable `noUncheckedIndexedAccess`; `apps/web` does not, so a clean web check can hide red errors
+  that break other sessions' pre-push hook (this happened 2026-11-09).
+- **Browser-checking the page locally:** sign in as `owner@demo.local` (superadmin), wait for the Dashboard heading before
+  navigating to `/console/costs`, and wait for hydration before asserting anything saved (the saved-edits check read stale
+  state when it ran too early). Local data: 11 registered, 10 active, 8 organisations.
+
 ## Generated tables
 
 <!-- BEGIN GENERATED (scripts/print-cost-model.mts) -->
