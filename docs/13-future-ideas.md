@@ -947,6 +947,117 @@ failing. 9 (no `email` in the token): classroom policies do not read `auth.email
 
 **Founder decisions, 2026-11-15:** (1) APPLIED — `migrate:prod` after a backup and a dry run listing only this file; prod verifier 4/29 → 38/0; the live API checked straight after (anon RPC 200, a demo sign-in and read 200). (2) The JWT secret was put on Vercel by Claude (production only, type "sensitive"): read from the Supabase Management API and proven to be the right one by verifying the anon key's signature with it, never printed or written to disk. It takes effect at the next production deploy. (3) **No notification and NO per-page log**, his words: "Telling them every time will be annoying. I will be checking in all the time to see if everything looks right... Informing them each time and even logging it each time is ridiculous - no." So the proxy calls `view_as_real_check` with `p_log = false` and the console's "Recent real views" list is gone. **What remains, and why:** one `view_as_real_sessions` row per Start. It is the on/off switch the database reads on every request (who is viewing whom, until when, stopped or not), not a log; nothing displays it. `view_as_real_page_views` stays in the schema, unused. This overrides docs/15 §8.1 point 6 for the superadmin's real view only (docs/15 point 12).
 
+**Founder decision, 2026-11-23 — widen to the WHOLE account, every module.** Pick a person, see what they see when they
+log in: every org they belong to, every module, matchmaking and speed dating included (docs/15 §8.1 point 12, the
+"SUPERSEDED" note, has his words). This is his user-testing method. Not built yet; each module still needs the per-module
+checks below. Known hard parts to design first: client components that query from the BROWSER (they would run as the
+superadmin, not the person, which is drift), realtime (speed dating), and video (joining a JaaS room as the person must be
+impossible, since others would see "them" arrive).
+**Same day, second decision — private text shows as a placeholder, not blank and not readable.** Where the platform
+decided nobody but the author reads something (today only `sd_notes`, the dater's private notes — the one
+`neverReadable` table), the real view shows the row in its place with filler such as "‹private note · 212 characters›",
+so he can see the feature is in use and working without reading it. It must be generalised (one mechanism, the same
+page code for the person and the viewer, only the masked column differs), most likely in the database: the page reads
+through one view/function that returns the text to the author and the placeholder to a view-as request.
+**The mechanism must be adoptable by the future résumé builder's private "vault"** (module-9 spec: the second thing the
+superadmin does not see) — design it as a general "private field" rule, not an `sd_notes` special case.
+**Where the decision happens (founder, same day):** at the last possible stage, so everything above it is identical for
+the person and the viewer. "Last stage" = the database (the function/policy that hands rows back), NOT the page
+component: if a component chose, the real text would already have reached the server's page code, and one bug would
+show it. Pages and components never branch on "am I being viewed".
+**For the later STAFF version (org staff viewing a person, trimmed to the viewer's own area):** a whole page outside the
+viewer's area renders a placeholder ("‹Math 101 · outside your area›"); a private field renders a placeholder; rows
+outside the area are decided PER TABLE — a placeholder count where harmless, removed outright where the count itself
+is the secret (speed-dating interest marks: "‹3 marks hidden›" would reveal them).
+**Renames (agreed):** "See their real screen" → **"View as"**; the tables tool ("View as anything") → a name with
+**"Readable table data"** (founder, 2026-11-23). The staff's in-module "View as" (tables) keeps its name until the
+staff real-screen version replaces it.
+
+### WHOLE-ACCOUNT VIEW AS — THE DESIGN (Opus, 2026-11-23; founder go-ahead to design; NOT BUILT, awaiting his OK)
+
+**In one paragraph.** The superadmin picks a PERSON (not an org, not a module). Until Stop or 30 minutes, every page
+outside `/console` renders as that person, through the same routes, components and database client switch as v1
+(`createClient()` → a 5-minute token for the person, read-only at the database). Their dashboard, every org, every
+module, their account, feedback and help pages. The only differences from what the person sees are listed in "What you
+will see differently" below, and each one is decided in the database or at a browser-side writer, never in a display
+component.
+
+**Measured before writing this (two read-only surveys of every module and platform page, 2026-11-23):**
+- *Browser-side database access:* none that reads. No Realtime anywhere, no `functions.invoke`, no browser `fetch` to
+  app routes. Speed dating's "live" updates are `router.refresh()` polling (`live-round-refresh.tsx`), which re-renders
+  on the server, i.e. as the person: correct for free. The one browser-side caller is `DeviceReporter`
+  (`events/[eventId]/device-reporter.tsx`), a WRITE (`sd_report_device_status`) through the browser's own session,
+  i.e. as the superadmin, not the person.
+- *Video:* the JaaS token comes from the server action `getVideoJoinToken` (a POST), which the proxy already refuses
+  while a view is open, so the superadmin cannot enter a call as the person. (Minting does not write to the
+  database, so the read-only gate alone would NOT have stopped it; the proxy's non-GET refusal does.)
+- *Email in the token:* no policy or function reads `auth.email()`/the JWT email; `getUser(token)` asks GoTrue, which
+  returns the stored email. No change needed.
+- *Writes during render (these fail with 25006 under read-only; supabase-js returns `{error}`, which these callers
+  ignore, so the screen silently DIFFERS rather than erroring):*
+  | Caller | Function | What it writes |
+  |---|---|---|
+  | `dashboard/page.tsx:22` | `account_deletion_resume` | cancels a pending self-deletion on sign-in |
+  | `dashboard/page.tsx:25` (via `lib/platform.ts:73`), vm `ui/page.tsx:25`, vm `conversations/[id]/page.tsx:84` | `pending_invites_claim_mine` | turns invites addressed to their email into seats |
+  | `matchmaking/ui/page.tsx:106` | `mm_ensure_answer` | lazily creates a default answer row per question |
+  | `feedback/[ticketId]/page.tsx:40` | `feedback_mark_read` | stamps `user_read_at` |
+  Plus one non-database side effect: synagogue's `buildWeekWithProvenance` calls the paid myzmanim API on a cache miss
+  (the same call the person's own visit would make; accepted, no change).
+
+**Database (one migration, Opus; version claimed with other sessions first):**
+1. *Sessions are per person.* `view_as_real_start(p_target)` (new 1-argument form): superadmin only, never oneself,
+   never a superadmin, the target must be a live (non-deleted) account. `org_id`/`module_key` become nullable on
+   `view_as_real_sessions`. `view_as_real_check` keeps its return columns (org/module null for a whole-account view)
+   and returns `in_scope = true` for every path except `/console…` and `/view-as/…`. The 3-argument start is kept
+   unchanged until the app deploy that stops calling it, then dropped in a later migration (so the minutes between
+   the migration and the deploy do not break the live console).
+2. *Drop the 46 `<table>_no_view_as` policies* (4b in `20261116010000`) on every module table EXCEPT the private
+   ones (today `sd_notes`). The db test inverts: every table on the private list HAS the policy, and no other table
+   does (catches both a missed private table and a stale block).
+3. *The private-field mechanism (general; the résumé vault adopts it unchanged).*
+   - The private table keeps its restrictive `_no_view_as` policy, so a direct read with a view token returns
+     nothing, whatever a page asks for.
+   - The page reads through ONE reader function per private table (`sd_my_notes(p_event)`), a definer that applies
+     the table's own owner rule (`author_user_id = auth.uid()`) and returns each private column through
+     `public.private_text(value, label)`: the real value normally, `‹private note · 212 characters›` for a view-as
+     request.
+   - The person and the viewer run the SAME page code (`events/[eventId]/page.tsx:137` switches from
+     `.from('sd_notes')` to the reader for both). Adding a private field later = one line in a reader, no page change.
+   - The data-browser `neverReadable` list stays the single list of private tables; the db test reads it.
+4. *Render-time writers become view-aware, in the database.* Each function in the table above starts with
+   `if public.is_view_as_request() then … end if` and returns what the page needs WITHOUT writing:
+   `account_deletion_resume` reports the pending deletion without cancelling it; `pending_invites_claim_mine`
+   claims nothing; `mm_ensure_answer` returns the default answer it would have created, unsaved; `feedback_mark_read`
+   does nothing. A db test calls each one with a view token and asserts no error and no row change. New convention
+   for docs/03: a function a page calls during render must be view-aware.
+5. ACLs: revoke-before-grant on the new functions; classify them in `verify-acl-hardening.ts` and the data browser.
+
+**App:**
+- `proxy.ts`/`lib/view-as-real.ts`: scope from the check (`in_scope`), no module list. `ViewAsGuard`'s boundary
+  becomes "/console and /view-as" (crossing it = a full reload; the superadmin is themselves inside the console).
+- Console: the page now called "View as" picks a person from every account (search by name, shows their orgs).
+- `DeviceReporter` does not mount while a view is open. This is the ONE app-side branch, allowed because it is a
+  browser-side WRITER, not display: the database cannot tell it apart (it carries the superadmin's own session).
+- Clicking Join video / any button while viewing gets the proxy's 403 today; it should instead show a plain
+  "Read-only view: this doesn't do anything while you're viewing" notice (the click result, not the screen).
+
+**What you will see differently from the person (the complete list):**
+1. Private notes show `‹private note · N characters›`.
+2. Invites they have not yet signed in to accept are not claimed, so a new org appears for them but not yet for you.
+3. A pending self-deletion is shown as pending (their real sign-in would cancel it).
+4. Buttons and forms do nothing (a notice says so).
+5. Their camera/mic status is not reported to the organizer's Ready board.
+6. Opening a feedback ticket does not mark it read for them.
+
+**Tests:** the no-drift e2e (render as the person, render as the viewer, compare) widened from 2 classroom pages to
+one page per module plus dashboard, account, feedback; the db tests above; a prod verifier copied from
+`prod-verify-real-view-as.mts`, run before and after.
+
+**Review:** Fable adversarial review of the MIGRATION DRAFT (not of this doc), since the private-field reader is a
+new mechanism and dropping 46 policies widens what a view token reads (founder-decided, but the review checks
+nothing ELSE widens, e.g. the token reaching a write path the four layers miss). Then local verify → prod verifier
+before → founder go-ahead for `migrate:prod` → after.
+
 **Open, by design:** one view at a time per superadmin; a token
 already minted lives until its 5-minute expiry after Stop (server-side only); widening to another module needs its own
 review plus the per-module checks above (client components querying from the browser, realtime, edge functions, GET

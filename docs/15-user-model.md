@@ -492,8 +492,15 @@ not buildable without these; several change claims made above.
     such request a read-only transaction; restrictive policies), not the UI. Point 6 does NOT apply here: founder decision 2026-11-15, no notification and no per-page log (he checks clients' screens constantly); the only row kept is the session record that switches a view on and off. Point 1's keystone is kept in this form:
     a real view may show only what the superadmin already reads through the data browser, so a module is allowed only
     after a measured check (classroom: superadmin row count = owner count on every `cls_` table, a db test), and every
-    other module's tables, plus every `neverReadable` table, are dark to the token. Point 7 stands: speed-dating and
-    matchmaking end users are not viewable. Module view-as (this section) is unchanged.
+    other module's tables, plus every `neverReadable` table, are dark to the token. ~~Point 7 stands: speed-dating and
+    matchmaking end users are not viewable.~~ **SUPERSEDED 2026-11-23 (founder):** the real view must cover the WHOLE
+    account (every org, every module the person has), **matchmaking and speed dating included** — his words: "I need to
+    see the matchmaking and speed dating. This is how I advance the product... going from account to account and module
+    to module and navigating around and seeing that each thing is working. Having no visual as the user has makes
+    managing and even properly building things initially... an avoidable, unreasonably impossible task." Point 7 still
+    governs MODULE view-as (org staff viewing a position); it no longer limits the superadmin's real view. Widening is
+    still per module (its own migration + review, docs/13 "REAL VIEW-AS" → "Open, by design"). Module view-as (this
+    section) is unchanged.
 
 ## 9. Per-module mapping (the vocabulary table)
 
