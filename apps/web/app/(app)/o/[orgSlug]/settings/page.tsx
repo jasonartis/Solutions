@@ -1,4 +1,4 @@
-import Link from 'next/link'
+import { PageHeader } from '@/components/page-header'
 import { requireOrgAdmin } from '@/lib/platform'
 import SynagogueLocationFields, { type SynagogueSettings } from '@/components/synagogue-location-fields'
 import VisualMessagingGuardFields from '@/components/visual-messaging-guard-fields'
@@ -26,13 +26,7 @@ export default async function OrgSettingsPage(props: { params: Promise<{ orgSlug
 
   return (
     <div>
-      <p className="mb-1 text-sm text-gray-400">{org.name}</p>
-      <div className="mb-6 flex items-baseline gap-4">
-        <h1 className="text-2xl font-semibold">Settings</h1>
-        <Link href="/dashboard" className="text-sm text-blue-600 hover:underline">
-          ← Dashboard
-        </Link>
-      </div>
+      <PageHeader eyebrow={org.name} back={{ href: '/dashboard', label: 'Dashboard' }} title="Settings" />
       <p className="mb-6 max-w-2xl text-sm text-gray-500">
         Configure the modules enabled for this organization. Which modules are enabled is set by
         the platform owner, not from this page.

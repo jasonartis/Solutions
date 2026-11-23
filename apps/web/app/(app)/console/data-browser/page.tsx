@@ -1,4 +1,4 @@
-import Link from 'next/link'
+import { PageHeader } from '@/components/page-header'
 import { requireSuperadmin } from '@/lib/platform'
 import { browsePerson, browsableModuleKeys, subjectsIn } from '@/lib/data-browser'
 import DataBrowserResults from '@/components/data-browser/results'
@@ -35,14 +35,14 @@ import { logSuperadminLookup } from '@/lib/superadmin-log'
 // incoherent (docs/15 decision 5's own words).
 
 type Props = {
-  searchParams: Promise<{ org?: string; subject?: string }>
+  searchParams: Promise<{ org?: string; subject?: string; from?: string; fromLabel?: string }>
 }
 
 const inputCls = 'rounded border border-gray-300 px-2 py-1 text-sm'
 
 export default async function DataBrowserPage({ searchParams }: Props) {
   const { supabase } = await requireSuperadmin()
-  const { org: orgId, subject: subjectId } = await searchParams
+  const { org: orgId, subject: subjectId, from, fromLabel } = await searchParams
 
   // Every org: a superadmin picks any of them (docs/13 answer 4). RLS permits
   // it via is_superadmin(), so this is an ordinary read.
@@ -76,12 +76,12 @@ export default async function DataBrowserPage({ searchParams }: Props) {
 
   return (
     <main className="mx-auto max-w-6xl p-6">
-      <div className="mb-1 flex items-baseline gap-3">
-        <h1 className="text-xl font-semibold">Data browser</h1>
-        <Link href="/console" className="text-sm text-blue-600 hover:underline">
-          ← Owner Console
-        </Link>
-      </div>
+      <PageHeader
+        back={{ href: '/console', label: 'Owner Console', from, fromLabel }}
+        title="Data browser"
+        titleClassName="text-xl font-semibold"
+        className="mb-1"
+      />
       <p className="mb-4 max-w-3xl text-sm text-gray-600">
         <strong>What I can see about this person</strong> — every row you are allowed to read that
         names them. This is <em>not</em> what they see: that is{' '}
@@ -90,6 +90,9 @@ export default async function DataBrowserPage({ searchParams }: Props) {
       </p>
 
       <form method="get" className="mb-6 flex flex-wrap items-end gap-3 rounded-lg border border-gray-200 bg-white p-4">
+        {/* keep the "came from" through the form's own GET submit */}
+        {from && fromLabel && <input type="hidden" name="from" value={from} />}
+        {from && fromLabel && <input type="hidden" name="fromLabel" value={fromLabel} />}
         <label className="flex flex-col gap-1 text-xs text-gray-600">
           Organisation
           <select name="org" defaultValue={org?.id ?? ''} className={inputCls}>

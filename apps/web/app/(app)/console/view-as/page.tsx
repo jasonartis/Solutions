@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { PageHeader, withFrom } from '@/components/page-header'
 import { getModule, moduleRegistry } from '@platform/core'
 import { requireSuperadmin } from '@/lib/platform'
 import { orgModuleEntitlements } from '@/lib/data-browser'
@@ -37,6 +38,8 @@ type Props = {
     mode?: string
     person?: string
     scope?: string
+    from?: string
+    fromLabel?: string
   }>
 }
 
@@ -180,6 +183,8 @@ export default async function ConsoleViewAsPage({ searchParams }: Props) {
       mode: String(mode),
       person: sp.person,
       scope: sp.scope,
+      from: sp.from,
+      fromLabel: sp.fromLabel,
       ...over,
     }
     for (const [k, v] of Object.entries(merged)) if (v) params.set(k, v)
@@ -188,12 +193,12 @@ export default async function ConsoleViewAsPage({ searchParams }: Props) {
 
   return (
     <main className="mx-auto max-w-6xl p-6">
-      <div className="mb-1 flex items-baseline gap-3">
-        <h1 className="text-xl font-semibold">View as anything</h1>
-        <Link href="/console" className="text-sm text-blue-600 hover:underline">
-          ← Owner Console
-        </Link>
-      </div>
+      <PageHeader
+        back={{ href: '/console', label: 'Owner Console', from: sp.from, fromLabel: sp.fromLabel }}
+        title="Readable table data"
+        titleClassName="text-xl font-semibold"
+        className="mb-1"
+      />
 
       {/* Stated on screen, not only in the code. The operator must always know
           which of the two console tools they are in, and which rules this one is
@@ -202,7 +207,7 @@ export default async function ConsoleViewAsPage({ searchParams }: Props) {
         <strong>What this position or person sees</strong> — the module&rsquo;s own declared surface,
         rendered for any position in any org, ignoring the manifest&rsquo;s view-as edges. This is{' '}
         <em>not</em> the{' '}
-        <Link href="/console/data-browser" className="text-blue-600 hover:underline">
+        <Link href={withFrom('/console/data-browser', '/console/view-as', 'Readable table data')} className="text-blue-600 hover:underline">
           data browser
         </Link>
         , which answers the opposite question — what the platform holds <em>about</em> a person.
@@ -227,6 +232,9 @@ export default async function ConsoleViewAsPage({ searchParams }: Props) {
       </p>
 
       <form method="get" className="mb-6 flex flex-wrap items-end gap-3 rounded-lg border border-gray-200 bg-white p-4">
+        {/* keep the "came from" through the form's own GET submit */}
+        {sp.from && sp.fromLabel && <input type="hidden" name="from" value={sp.from} />}
+        {sp.from && sp.fromLabel && <input type="hidden" name="fromLabel" value={sp.fromLabel} />}
         <label className="flex flex-col gap-1 text-xs text-gray-600">
           Organisation
           <select name="org" defaultValue={org?.id ?? ''} className={inputCls}>

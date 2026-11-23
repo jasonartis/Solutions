@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { PageHeader } from '@/components/page-header'
 import { notFound } from 'next/navigation'
 import { FORMER_MEMBER_LABEL, loadFormerMembers } from '@platform/core'
 import { createClient } from '@/lib/supabase/server'
@@ -91,7 +92,7 @@ export default async function ConversationPage(props: {
       return (
         <div className="mx-auto max-w-md py-12 text-center">
           <p className="mb-1 text-sm text-gray-400">{org.name}</p>
-          <h1 className="mb-3 text-xl font-semibold">You&apos;re invited to “{invite.title}”</h1>
+          <PageHeader back={{ href: `/o/${orgSlug}/m/visual-messaging`, label: 'Visual Messaging' }} title={`You're invited to “${invite.title}”`} titleClassName="text-xl font-semibold" className="mb-3 text-left" />
           <p className="mb-6 text-sm text-gray-500">
             {invite.invited_by_name ?? 'A member'} invited you. You won&apos;t see its pictures or replies until you
             accept.
@@ -117,7 +118,7 @@ export default async function ConversationPage(props: {
     return (
       <div className="mx-auto max-w-md py-12 text-center">
         <p className="mb-1 text-sm text-gray-400">{org.name}</p>
-        <h1 className="mb-3 text-xl font-semibold">Join this conversation?</h1>
+        <PageHeader back={{ href: `/o/${orgSlug}/m/visual-messaging`, label: 'Visual Messaging' }} title="Join this conversation?" titleClassName="text-xl font-semibold" className="mb-3 text-left" />
         <p className="mb-6 text-sm text-gray-500">
           You reached a shared link to a conversation you haven&apos;t joined. If its owner has
           opened it up, you can join as a read-only viewer.
@@ -127,12 +128,6 @@ export default async function ConversationPage(props: {
             Join conversation
           </button>
         </ActionForm>
-        <Link
-          href={`/o/${orgSlug}/m/visual-messaging`}
-          className="mt-4 inline-block text-sm text-blue-600 hover:underline"
-        >
-          ← Back to conversations
-        </Link>
       </div>
     )
   }
@@ -317,13 +312,7 @@ export default async function ConversationPage(props: {
 
   return (
     <div>
-      <p className="mb-1 text-sm text-gray-400">{org.name}</p>
-      <div className="mb-2 flex items-baseline gap-4">
-        <h1 className="text-2xl font-semibold">{conversation.title}</h1>
-        <Link href={`/o/${orgSlug}/m/visual-messaging`} className="text-sm text-blue-600 hover:underline">
-          ← Conversations
-        </Link>
-      </div>
+      <PageHeader eyebrow={org.name} back={{ href: `/o/${orgSlug}/m/visual-messaging`, label: 'Visual Messaging' }} title={conversation.title} className="mb-2" />
       {/* Rename: the conversation admin's (vm_conversations_update_admin). */}
       {canAdmin && (
         <details className="mb-3 text-sm">

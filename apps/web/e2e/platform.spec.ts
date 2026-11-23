@@ -373,7 +373,7 @@ test('owner console: org cards start closed, one click opens just that org, Expa
   // the pages a tile already opens), each with its one-line description.
   const tools = page.getByRole('navigation', { name: 'Tools' })
   await expect(tools.getByRole('link')).toHaveCount(7)
-  for (const name of ['Data browser', 'View as anything', 'See their real screen', 'Engagement', 'Zmanim', 'Positions', 'Costs']) {
+  for (const name of ['Data browser', 'Readable table data', 'View as', 'Engagement', 'Zmanim', 'Positions', 'Costs']) {
     await expect(tools.getByRole('link', { name: new RegExp('^' + name) })).toBeVisible()
   }
   await expect(tools.getByRole('link', { name: /^Feedback/ })).toHaveCount(0)
@@ -535,14 +535,14 @@ test('alice sees a generated week in the synagogue schedules module', async ({ p
 test('classroom module: professor sees the seeded class, student view is scoped', async ({ page }) => {
   await signIn(page, 'alice@demo.local')
   await page.getByRole('link', { name: 'Classroom' }).click()
-  await expect(page.getByRole('heading', { name: 'Classes' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Classroom', exact: true })).toBeVisible()
   await expect(page.getByText('Statistics 101 — Fall')).toBeVisible()
   await expect(page.getByText('Welcome to Statistics 101!')).toBeVisible()
   await expect(page.getByText('Homework 1 — Descriptive statistics')).toBeVisible()
 
   // Professor-only manage console: roster with preferred/display names.
   await page.getByRole('link', { name: 'Manage' }).click()
-  await expect(page.getByRole('heading', { name: 'Classroom — Manage' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Manage', exact: true })).toBeVisible()
   await expect(page.getByText('Roster (3)')).toBeVisible()
   await expect(page.getByText('Charlie C')).toBeVisible()
 
@@ -642,7 +642,7 @@ test('classroom module: student sees published materials and can submit homework
 test('classroom module: professor publishes a material with a visibility window', async ({ page }) => {
   await signIn(page, 'alice@demo.local')
   await page.goto('/o/demo-a/m/classroom/manage/materials')
-  await expect(page.getByRole('heading', { name: 'Classroom — Materials' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Materials', exact: true })).toBeVisible()
 
   // Scope to the Statistics 101 course section — there's more than one
   // course now (a professor can create courses directly, 2026-07-12), so an
@@ -837,7 +837,7 @@ test('classroom module: GA reaches the manage console but sees no professor cont
   // gate is staff-or-GA; creating/configuring anything stays professor-only.
   await signIn(page, 'gabe@demo.local')
   await page.goto('/o/demo-a/m/classroom/manage')
-  await expect(page.getByRole('heading', { name: 'Classroom — Manage' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Manage', exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Create course' })).not.toBeVisible()
   await expect(page.getByRole('button', { name: 'Add homework' })).not.toBeVisible()
   await expect(page.getByRole('link', { name: 'Materials' })).not.toBeVisible()
@@ -904,11 +904,11 @@ test('matchmaking module: single sees seeded matches and can answer; admin recom
   // Admin can recompute from the Manage console.
   await signIn(page, 'alice@demo.local')
   await page.goto('/o/demo-match/m/matchmaking/manage')
-  await expect(page.getByRole('heading', { name: 'Make-a-Match — Manage' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Manage', exact: true })).toBeVisible()
   await expect(page.getByText('Approved questions (3)')).toBeVisible()
   await page.getByRole('button', { name: 'Recompute all matches' }).click()
   // Page reloads with the recompute done (no error surfaced).
-  await expect(page.getByRole('heading', { name: 'Make-a-Match — Manage' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Manage', exact: true })).toBeVisible()
 
   // The admin console lists the seeded Charlie↔Dana mutual pair (pair order
   // is canonical by user id, so either name may come first).
@@ -1041,7 +1041,7 @@ test('nail-salon module: operator runs an appointment from booked to paid', asyn
 test('nail-salon module: manager runs the back-office (catalog, expenses, shopping→expense)', async ({ page }) => {
   await signIn(page, 'alice@demo.local')
   await page.goto('/o/demo-salon/m/nail-salon/manage')
-  await expect(page.getByRole('heading', { name: 'Salon — Manage' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Manage', exact: true })).toBeVisible()
 
   // Catalog: add a service. `.first()` keeps the assertion stable if a prior
   // retry of this test already inserted one (rows accumulate across attempts).
@@ -2369,7 +2369,7 @@ test('owner console view-as: a non-superadmin cannot reach it', async ({ page })
   // must 404 without leaking that the page exists.
   await signIn(page, 'alice@demo.local')
   await page.goto('/console/view-as')
-  await expect(page.getByRole('heading', { name: 'View as anything' })).not.toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Readable table data' })).not.toBeVisible()
 })
 
 test('unauthenticated visitors are redirected to login', async ({ page }) => {
@@ -3287,7 +3287,7 @@ test('speed-dating module: an unavailable event shows a friendly panel, not a 40
   await signIn(page, 'charlie@demo.local')
   await page.goto('/o/demo-dating/m/speed-dating/events/00000000-0000-0000-0000-000000000000')
   await expect(page.getByTestId('event-unavailable')).toContainText("This event isn't available right now")
-  await expect(page.getByRole('link', { name: '← Back to events' })).toBeVisible()
+  await expect(page.getByRole('link', { name: '← Speed Dating' })).toBeVisible()
   // A value that is not even a UUID gets the identical panel.
   await page.goto('/o/demo-dating/m/speed-dating/events/not-an-id')
   await expect(page.getByTestId('event-unavailable')).toBeVisible()

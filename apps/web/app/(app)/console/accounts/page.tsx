@@ -1,4 +1,4 @@
-import Link from 'next/link'
+import { PageHeader } from '@/components/page-header'
 import { requireSuperadmin } from '@/lib/platform'
 import {
   cancelAccountDeletion,
@@ -113,10 +113,7 @@ export default async function AccountsPage(props: {
 
   return (
     <div className="max-w-4xl">
-      <Link href="/console" className="text-sm text-blue-600 hover:underline">
-        ← Owner Console
-      </Link>
-      <h1 className="mt-2 mb-6 text-2xl font-semibold">Account deletions</h1>
+      <PageHeader back={{ href: '/console', label: 'Owner Console' }} title="Account deletions" className="mb-6" />
 
       {error && <p className="mb-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
       {notice && <p className="mb-4 rounded border border-green-200 bg-green-50 p-3 text-sm text-green-800">{notice}</p>}

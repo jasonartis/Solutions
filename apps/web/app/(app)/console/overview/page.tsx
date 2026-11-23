@@ -1,4 +1,4 @@
-import Link from 'next/link'
+import { PageHeader } from '@/components/page-header'
 import { requireSuperadmin } from '@/lib/platform'
 import { formatBytes, getOverview, type Bytes, type ModuleInOrg, type Person } from '@/lib/console-overview'
 
@@ -67,10 +67,7 @@ export default async function OverviewPage() {
 
   return (
     <div className="max-w-4xl">
-      <Link href="/console" className="text-sm text-blue-600 hover:underline">
-        ← Owner Console
-      </Link>
-      <h1 className="mt-2 mb-1 text-2xl font-semibold">Platform overview</h1>
+      <PageHeader back={{ href: '/console', label: 'Owner Console' }} title="Platform overview" className="mb-1" />
       <p className="mb-4 text-sm text-gray-600">
         <strong>{o.orgCount}</strong> organization{o.orgCount === 1 ? '' : 's'} ·{' '}
         <strong>{o.distinctPeople}</strong> {o.distinctPeople === 1 ? 'person' : 'people'} (each counted once, however

@@ -1,5 +1,5 @@
-import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { PageHeader } from '@/components/page-header'
 import { requireOrgModule } from '@/lib/module-gate'
 import AssignMatchmakerForm from './assign-matchmaker-form'
 import {
@@ -81,13 +81,7 @@ export default async function MatchmakingManagePage(props: {
 
   return (
     <div>
-      <p className="mb-1 text-sm text-gray-400">{org.name}</p>
-      <div className="mb-6 flex items-baseline gap-4">
-        <h1 className="text-2xl font-semibold">Make-a-Match — Manage</h1>
-        <Link href={`/o/${orgSlug}/m/matchmaking`} className="text-sm text-blue-600 hover:underline">
-          ← Match
-        </Link>
-      </div>
+      <PageHeader eyebrow={org.name} back={{ href: `/o/${orgSlug}/m/matchmaking`, label: 'Make-a-Match' }} title="Manage" />
 
       <section className="mb-8 rounded-lg border border-gray-200 bg-white p-5">
         <div className="flex items-center justify-between">

@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
+import { PageHeader } from '@/components/page-header'
 import { createClient } from '@/lib/supabase/server'
 import { kindLabel, statusLabel } from '@/lib/feedback'
 
@@ -22,15 +23,14 @@ export default async function MyFeedbackPage() {
 
   return (
     <div className="max-w-3xl">
-      <div className="mb-4 flex items-baseline justify-between gap-4">
-        <h1 className="text-2xl font-semibold">My feedback</h1>
+      <PageHeader back={{ href: '/dashboard', label: 'Dashboard' }} title="My feedback" className="mb-4">
         <Link
           href="/feedback/new"
           className="rounded bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700"
         >
           Send feedback
         </Link>
-      </div>
+      </PageHeader>
       {error && <p className="mb-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error.message}</p>}
       {(tickets ?? []).length === 0 ? (
         <p className="text-sm text-gray-600">You have not sent any feedback yet.</p>

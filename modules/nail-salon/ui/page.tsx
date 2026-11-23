@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { FORMER_MEMBER_LABEL, loadFormerMembers } from '@platform/core'
+import { PageHeader } from '@/components/page-header'
 import { requireOrgModule } from '@/lib/module-gate'
 import {
   bookAppointment,
@@ -52,9 +53,7 @@ export default async function NailSalonPage(props: { params: Promise<{ orgSlug: 
 
   return (
     <div>
-      <p className="mb-1 text-sm text-gray-400">{org.name}</p>
-      <div className="mb-6 flex items-baseline gap-4">
-        <h1 className="text-2xl font-semibold">Nail Salon{location ? ` — ${location.name}` : ''}</h1>
+      <PageHeader eyebrow={org.name} back={null} title={`Nail Salon${location ? ` — ${location.name}` : ''}`}>
         {canManage && (
           <>
             <Link href={`/o/${orgSlug}/m/nail-salon/manage`} className="text-sm text-blue-600 hover:underline">
@@ -71,7 +70,7 @@ export default async function NailSalonPage(props: { params: Promise<{ orgSlug: 
             </Link>
           </>
         )}
-      </div>
+      </PageHeader>
 
       {!location && <p className="text-gray-500">No location configured yet.</p>}
 

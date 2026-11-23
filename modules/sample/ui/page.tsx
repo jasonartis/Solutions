@@ -3,6 +3,7 @@
 //   - requireOrgModule() gate (docs/03 #2) — org by slug → entitlement → 404
 //   - role detection via the module's definer rpc, not client-side guessing
 //   - role-adaptive rendering (staff form vs member view)
+import { PageHeader } from '@/components/page-header'
 import { requireOrgModule } from '@/lib/module-gate'
 import { addItem, createProject, deleteProject, toggleItem } from './actions'
 
@@ -21,8 +22,7 @@ export default async function SamplePage(props: { params: Promise<{ orgSlug: str
 
   return (
     <div>
-      <p className="mb-1 text-sm text-gray-400">{org.name}</p>
-      <h1 className="mb-6 text-2xl font-semibold">Sample Module</h1>
+      <PageHeader eyebrow={org.name} back={null} title="Sample Module" />
 
       {canManage && (
         <form action={createProject.bind(null, orgSlug)} className="mb-6 flex flex-wrap items-center gap-2">

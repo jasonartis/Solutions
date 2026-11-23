@@ -1,4 +1,4 @@
-import Link from 'next/link'
+import { PageHeader } from '@/components/page-header'
 import { notFound } from 'next/navigation'
 import { requireSuperadmin } from '@/lib/platform'
 import { blockingRows, unlinkedRows } from '@/lib/org-delete'
@@ -40,10 +40,7 @@ export default async function DeleteOrgPage(props: {
 
   return (
     <div className="max-w-3xl">
-      <Link href="/console" className="text-sm text-blue-600 hover:underline">
-        ← Owner Console
-      </Link>
-      <h1 className="mt-2 mb-1 text-2xl font-semibold">Delete {org.name}</h1>
+      <PageHeader back={{ href: '/console', label: 'Owner Console' }} title={<>Delete {org.name}</>} className="mb-1" />
       <p className="mb-6 text-sm text-gray-400">
         <code>/{org.slug}</code>
       </p>

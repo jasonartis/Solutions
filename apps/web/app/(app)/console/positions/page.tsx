@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { PageHeader, withFrom } from '@/components/page-header'
 import { requireSuperadmin } from '@/lib/platform'
 import { canManage, getPositionsSnapshot, type PositionRow } from '@/lib/positions-console'
 
@@ -41,12 +42,7 @@ export default async function PositionsConsolePage() {
 
   return (
     <div className="mx-auto max-w-5xl p-6">
-      <div className="mb-1 text-sm">
-        <Link href="/console" className="text-blue-600 hover:underline">
-          ← Owner Console
-        </Link>
-      </div>
-      <h1 className="mb-1 text-2xl font-semibold">Positions and authority</h1>
+      <PageHeader back={{ href: '/console', label: 'Owner Console' }} title="Positions and authority" className="mb-1" />
       <p className="mb-6 max-w-3xl text-sm text-gray-600">
         Every position on the platform and who can appoint or remove whom. Ranks are read from the database&rsquo;s
         own <code className="rounded bg-gray-100 px-1">module_position_rank()</code> on every load, so this is the
@@ -98,8 +94,8 @@ export default async function PositionsConsolePage() {
         <p className="mt-2 text-sm text-gray-600">
           Rank decides <em>who appoints whom</em>. It does not decide who sees what — a GA and a student are both rank
           1 with entirely different views. For that question use{' '}
-          <Link href="/console/view-as" className="text-blue-600 hover:underline">
-            View as anything
+          <Link href={withFrom('/console/view-as', '/console/positions', 'Positions and authority')} className="text-blue-600 hover:underline">
+            Readable table data
           </Link>
           .
         </p>

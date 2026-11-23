@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { PageHeader } from '@/components/page-header'
 import { requireOrgModule } from '@/lib/module-gate'
 import { answerSurvey } from './actions'
 
@@ -118,9 +119,7 @@ export default async function ClassroomPage(props: { params: Promise<{ orgSlug: 
 
   return (
     <div>
-      <p className="mb-1 text-sm text-gray-400">{org.name}</p>
-      <div className="mb-6 flex items-baseline gap-4">
-        <h1 className="text-2xl font-semibold">Classes</h1>
+      <PageHeader eyebrow={org.name} back={null} title="Classroom">
         {isStaff && (
           <>
             <Link
@@ -139,7 +138,7 @@ export default async function ClassroomPage(props: { params: Promise<{ orgSlug: 
             </Link>
           </>
         )}
-      </div>
+      </PageHeader>
 
       {visibleClasses.length === 0 && (
         <p className="text-gray-500">You are not enrolled in any class yet.</p>

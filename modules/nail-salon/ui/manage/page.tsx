@@ -1,6 +1,6 @@
-import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { FORMER_MEMBER_LABEL, loadFormerMembers } from '@platform/core'
+import { PageHeader } from '@/components/page-header'
 import { requireOrgModule } from '@/lib/module-gate'
 import { ORDERED_DAYS, formatDayRangesForInput, type WeeklySchedule } from '../availability'
 import {
@@ -114,13 +114,11 @@ export default async function SalonManagePage(props: { params: Promise<{ orgSlug
 
   return (
     <div>
-      <p className="mb-1 text-sm text-gray-400">{org.name}</p>
-      <div className="mb-6 flex items-baseline gap-4">
-        <h1 className="text-2xl font-semibold">Salon — Manage</h1>
-        <Link href={`/o/${orgSlug}/m/nail-salon`} className="text-sm text-blue-600 hover:underline">
-          ← Day board
-        </Link>
-      </div>
+      <PageHeader
+        eyebrow={org.name}
+        back={{ href: `/o/${orgSlug}/m/nail-salon`, label: `Nail Salon — ${location.name}` }}
+        title="Manage"
+      />
 
       <section className="mb-8 grid gap-4 md:grid-cols-4">
         <div className="rounded-lg border border-gray-200 bg-white p-4">

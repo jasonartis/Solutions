@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { PageHeader } from '@/components/page-header'
 import { getOrgsWithModules, getPendingOrgInvites } from '@/lib/platform'
 import { createClient } from '@/lib/supabase/server'
 import { acceptInvite, declineInvite, leaveOrg } from './actions'
@@ -38,7 +39,7 @@ export default async function DashboardPage() {
 
   return (
     <div>
-      <h1 className="mb-6 text-2xl font-semibold">Dashboard</h1>
+      <PageHeader back={null} title="Dashboard" />
 
       {deletionCancelled && (
         <p className="mb-6 rounded border border-green-200 bg-green-50 p-3 text-sm text-green-800">

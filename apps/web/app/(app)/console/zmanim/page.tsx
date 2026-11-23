@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/page-header'
 import { requireSuperadmin } from '@/lib/platform'
 import {
   getLastSweepSummary,
@@ -46,7 +47,7 @@ export default async function ZmanimConsolePage() {
 
   return (
     <div>
-      <h1 className="mb-1 text-2xl font-semibold">Zmanim prefetch</h1>
+      <PageHeader back={{ href: '/console', label: 'Owner Console' }} title="Zmanim prefetch" className="mb-1" />
       <p className="mb-6 text-sm text-gray-400">
         Is the next year covered, and if not, where are the holes? Read-only for now — see
         docs/23 §5c for why the action buttons wait on a running worker.

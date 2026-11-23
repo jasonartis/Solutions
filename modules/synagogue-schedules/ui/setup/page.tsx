@@ -1,5 +1,5 @@
-import Link from 'next/link'
 import { dayTypeSchema, zmanNameSchema } from '@modules/synagogue-schedules'
+import { PageHeader } from '@/components/page-header'
 import { requireOrgModule } from '@/lib/module-gate'
 import {
   createLine,
@@ -78,16 +78,11 @@ export default async function SetupPage(props: { params: Promise<{ orgSlug: stri
 
   return (
     <div>
-      <p className="mb-1 text-sm text-gray-400">{org.name}</p>
-      <div className="mb-6 flex items-baseline justify-between">
-        <h1 className="text-2xl font-semibold">Schedule Setup</h1>
-        <Link
-          href={`/o/${orgSlug}/m/synagogue-schedules`}
-          className="text-sm text-blue-600 hover:underline"
-        >
-          View schedules →
-        </Link>
-      </div>
+      <PageHeader
+        eyebrow={org.name}
+        back={{ href: `/o/${orgSlug}/m/synagogue-schedules`, label: 'Schedules' }}
+        title="Schedule Setup"
+      />
 
       <div className="space-y-8">
         {(types ?? []).map((type) => {

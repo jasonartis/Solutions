@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { PageHeader } from '@/components/page-header'
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getProfile } from '@/lib/platform'
@@ -41,10 +42,7 @@ export default async function ConsoleFeedbackPage(props: {
 
   return (
     <div>
-      <Link href="/console" className="text-sm text-blue-600 hover:underline">
-        ← Owner Console
-      </Link>
-      <h1 className="mt-2 mb-2 text-2xl font-semibold">Feedback</h1>
+      <PageHeader back={{ href: '/console', label: 'Owner Console' }} title="Feedback" className="mb-2" />
       <nav className="mb-4 flex flex-wrap gap-3 text-sm">
         {filterLink('Needs attention (new + open)', {})}
         {FEEDBACK_STATUSES.map((s) => (

@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { FORMER_MEMBER_LABEL, loadFormerMembers } from '@platform/core'
+import { PageHeader } from '@/components/page-header'
 import { requireOrgModule } from '@/lib/module-gate'
 import { createEvent, unblockUser } from './actions'
 import { SubmitButton } from './submit-button'
@@ -65,8 +66,7 @@ export default async function SpeedDatingPage(props: {
 
   return (
     <div>
-      <p className="mb-1 text-sm text-gray-400">{org.name}</p>
-      <h1 className="mb-6 text-2xl font-semibold">Speed Dating — Events</h1>
+      <PageHeader eyebrow={org.name} back={null} title="Speed Dating" />
 
       {notice === 'create-timing' && (
         <p className="mb-6 rounded border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">

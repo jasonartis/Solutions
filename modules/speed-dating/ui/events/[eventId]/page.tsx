@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { FORMER_MEMBER_LABEL, loadFormerMembers } from '@platform/core'
+import { PageHeader } from '@/components/page-header'
 import { requireOrgModule } from '@/lib/module-gate'
 import {
   blockUser,
@@ -81,13 +82,15 @@ export default async function EventPage(props: {
       <div>
         <p className="mb-1 text-sm text-gray-400">{org.name}</p>
         <section className="rounded-lg border border-gray-200 bg-white p-5" data-testid="event-unavailable">
-          <h1 className="mb-2 text-lg font-semibold">This event isn&apos;t available right now</h1>
+          <PageHeader
+            back={{ href: `/o/${orgSlug}/m/speed-dating`, label: 'Speed Dating' }}
+            title="This event isn't available right now"
+            titleClassName="text-lg font-semibold"
+            className="mb-2"
+          />
           <p className="text-sm text-gray-600">
             The organizer may have moved it back to draft or removed it. Check the events list for what is open.
           </p>
-          <Link href={`/o/${orgSlug}/m/speed-dating`} className="mt-3 inline-block text-sm text-blue-600 hover:underline">
-            ← Back to events
-          </Link>
         </section>
       </div>
     )
@@ -265,13 +268,7 @@ export default async function EventPage(props: {
 
   return (
     <div>
-      <p className="mb-1 text-sm text-gray-400">{org.name}</p>
-      <div className="mb-2 flex items-baseline gap-4">
-        <h1 className="text-2xl font-semibold">{event.name}</h1>
-        <Link href={`/o/${orgSlug}/m/speed-dating`} className="text-sm text-blue-600 hover:underline">
-          ← Events
-        </Link>
-      </div>
+      <PageHeader eyebrow={org.name} back={{ href: `/o/${orgSlug}/m/speed-dating`, label: 'Speed Dating' }} title={event.name} className="mb-2" />
       <p className="mb-6 text-sm uppercase tracking-wide text-gray-400">
         {event.state === 'closed' ? 'registration closed' : event.state}
       </p>

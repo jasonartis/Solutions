@@ -1,9 +1,9 @@
-import Link from 'next/link'
+import { PageHeader } from '@/components/page-header'
 import { cookies } from 'next/headers'
 import { requireSuperadmin } from '@/lib/platform'
 import { VIEW_AS_COOKIE, realViewConfigured } from '@/lib/view-as-real'
 
-// SEE THEIR REAL SCREEN (docs/13 "REAL VIEW-AS", built 2026-11-12/15).
+// VIEW AS (was "See their real screen" until 2026-11-23) (docs/13 "REAL VIEW-AS", built 2026-11-12/15).
 // Pick a person in an org that has Classroom on; their classroom pages then
 // render exactly as they see them, read-only, with a banner on every screen.
 // The database decides who may be viewed. No page log and no notification
@@ -33,10 +33,7 @@ export default async function RealViewPage({ searchParams }: Props) {
 
   return (
     <div className="max-w-3xl">
-      <Link href="/console" className="text-sm text-blue-600 hover:underline">
-        ← Owner Console
-      </Link>
-      <h1 className="mt-2 mb-1 text-2xl font-semibold">See their real screen</h1>
+      <PageHeader back={{ href: '/console', label: 'Owner Console' }} title="View as" className="mb-1" />
       <p className="mb-4 text-sm text-gray-600">
         Opens a person&rsquo;s own Classroom pages, built by the same screens they use, for 30 minutes. It is
         read-only: the database refuses every change, and forms cannot be sent. A banner on every screen says whose

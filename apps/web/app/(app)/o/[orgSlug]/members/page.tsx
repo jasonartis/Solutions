@@ -1,4 +1,4 @@
-import Link from 'next/link'
+import { PageHeader } from '@/components/page-header'
 import { moduleRegistry } from '@platform/core'
 import { requireOrgAdmin } from '@/lib/platform'
 import { type OrgMemberProfile } from '@/lib/org-members'
@@ -66,13 +66,7 @@ export default async function MembersPage(props: { params: Promise<{ orgSlug: st
 
   return (
     <div>
-      <p className="mb-1 text-sm text-gray-400">{org.name}</p>
-      <div className="mb-6 flex items-baseline gap-4">
-        <h1 className="text-2xl font-semibold">Members</h1>
-        <Link href="/dashboard" className="text-sm text-blue-600 hover:underline">
-          ← Dashboard
-        </Link>
-      </div>
+      <PageHeader eyebrow={org.name} back={{ href: '/dashboard', label: 'Dashboard' }} title="Members" />
       <p className="mb-6 max-w-2xl text-sm text-gray-500">
         Add people to this organization and grant module-specific roles (professor, matchmaker,
         cashier, etc.) for modules already enabled here. Which modules are enabled is set by the

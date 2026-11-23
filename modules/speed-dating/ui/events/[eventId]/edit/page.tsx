@@ -1,5 +1,5 @@
-import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
+import { PageHeader } from '@/components/page-header'
 import { requireOrgModule } from '@/lib/module-gate'
 import { updateEvent } from '../../../actions'
 import { EventSettingsFields } from '../../../event-settings-fields'
@@ -52,13 +52,7 @@ export default async function EditEventPage(props: {
 
   return (
     <div>
-      <p className="mb-1 text-sm text-gray-400">{org.name}</p>
-      <div className="mb-6 flex items-baseline gap-4">
-        <h1 className="text-2xl font-semibold">Edit event</h1>
-        <Link href={base} className="text-sm text-blue-600 hover:underline">
-          ← Back to the event
-        </Link>
-      </div>
+      <PageHeader eyebrow={org.name} back={{ href: base, label: event.name }} title="Edit event" />
       {notice && NOTICES[notice] && (
         <p className="mb-6 rounded border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">{NOTICES[notice]}</p>
       )}

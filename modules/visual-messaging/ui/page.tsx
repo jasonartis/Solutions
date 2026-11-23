@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { ActionForm } from './action-form'
+import { PageHeader } from '@/components/page-header'
 import { requireOrgModule } from '@/lib/module-gate'
 import {
   acceptConversationInvite,
@@ -52,8 +53,7 @@ export default async function VisualMessagingPage(props: { params: Promise<{ org
 
   return (
     <div>
-      <p className="mb-1 text-sm text-gray-400">{org.name}</p>
-      <h1 className="mb-6 text-2xl font-semibold">Visual Messaging</h1>
+      <PageHeader eyebrow={org.name} back={null} title="Visual Messaging" />
 
       {pending.length > 0 && (
         <section className="mb-8 rounded-lg border border-blue-200 bg-blue-50 p-5">

@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { PageHeader, withFrom } from '@/components/page-header'
 import { requireSuperadmin } from '@/lib/platform'
 import {
   allPeople,
@@ -80,20 +81,15 @@ export default async function EngagementPage({ searchParams }: Props) {
 
   return (
     <main className="mx-auto max-w-5xl p-6">
-      <div className="mb-1 flex items-baseline gap-3">
-        <h1 className="text-xl font-semibold">Engagement</h1>
-        <Link href="/console" className="text-sm text-blue-600 hover:underline">
-          ← Owner Console
-        </Link>
-      </div>
+      <PageHeader back={{ href: '/console', label: 'Owner Console' }} title="Engagement" titleClassName="text-xl font-semibold" className="mb-1" />
       <p className="mb-4 max-w-3xl text-sm text-gray-600">
         <strong>Who has gone quiet, and who should I reach out to</strong> — not the same question
         as the other two console tools:{' '}
-        <Link href="/console/data-browser" className="text-blue-600 hover:underline">
+        <Link href={withFrom('/console/data-browser', '/console/engagement', 'Engagement')} className="text-blue-600 hover:underline">
           data browser
         </Link>{' '}
         answers what I hold about a person,{' '}
-        <Link href="/console/view-as" className="text-blue-600 hover:underline">
+        <Link href={withFrom('/console/view-as', '/console/engagement', 'Engagement')} className="text-blue-600 hover:underline">
           view-as
         </Link>{' '}
         answers what a person sees. This one answers who is still using the platform.

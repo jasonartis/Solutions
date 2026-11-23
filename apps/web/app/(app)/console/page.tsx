@@ -9,6 +9,7 @@ import OrgModuleToggles from '@/components/org-module-toggles'
 import OrgExpandControls from '@/components/console-org-controls'
 import SynagogueLocationFields, { type SynagogueSettings } from '@/components/synagogue-location-fields'
 import ConsoleDashboard from '@/components/console-dashboard'
+import { PageHeader } from '@/components/page-header'
 import { getDashboard } from '@/lib/console-dashboard'
 import {
   addModuleRole,
@@ -28,8 +29,8 @@ const inputCls = 'rounded border border-gray-300 px-2 py-1 text-sm'
 // Console tools WITHOUT a dashboard tile (see the Tools section below).
 const CONSOLE_TOOLS = [
   { href: '/console/data-browser', name: 'Data browser', blurb: 'Everything the platform holds about one person' },
-  { href: '/console/view-as', name: 'View as anything', blurb: 'What a position or a person can see in any org' },
-  { href: '/console/view-as/real', name: 'See their real screen', blurb: 'A person’s actual classroom pages, read-only, with a banner' },
+  { href: '/console/view-as', name: 'Readable table data', blurb: 'What a position or a person can see in any org' },
+  { href: '/console/view-as/real', name: 'View as', blurb: 'A person’s actual classroom pages, read-only, with a banner' },
   { href: '/console/engagement', name: 'Engagement', blurb: 'Who is using the platform, and who has gone quiet' },
   { href: '/console/zmanim', name: 'Zmanim', blurb: 'Is the next year of prayer-time data covered, and where are the gaps' },
   { href: '/console/positions', name: 'Positions', blurb: 'Every position’s rank, and who can appoint or remove whom' },
@@ -84,7 +85,7 @@ export default async function ConsolePage(props: {
 
   return (
     <div>
-      <h1 className="mb-2 text-2xl font-semibold">Owner Console</h1>
+      <PageHeader back={null} title="Owner Console" className="mb-2" />
 
       {actionError && (
         <p className="mb-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">

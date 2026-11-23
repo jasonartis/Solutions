@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { PageHeader } from '@/components/page-header'
 import { getModule } from '@platform/core'
 import { createClient } from '@/lib/supabase/server'
 import { helpRegistry } from '@/lib/help-registry'
@@ -36,8 +37,7 @@ export default async function HelpIndexPage(props: { params: Promise<{ orgSlug: 
 
   return (
     <div>
-      <p className="mb-1 text-sm text-gray-400">{org.name}</p>
-      <h1 className="mb-2 text-2xl font-semibold">Help & walkthroughs</h1>
+      <PageHeader eyebrow={org.name} back={{ href: '/dashboard', label: 'Dashboard' }} title="Help & walkthroughs" className="mb-2" />
       <p className="mb-8 max-w-2xl text-sm text-gray-500">
         Step-by-step guides for everything you can do here, written for your role. Follow them
         top to bottom to learn a module — or to test it and tell us where a step doesn&apos;t match.

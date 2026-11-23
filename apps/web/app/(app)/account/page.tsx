@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { PageHeader } from '@/components/page-header'
 import { getProfile } from '@/lib/platform'
 import DisplayNameForm from './display-name-form'
 import DeleteAccountForm from './delete-account-form'
@@ -17,7 +18,7 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
 
   return (
     <div className="max-w-lg">
-      <h1 className="mb-6 text-2xl font-semibold">Your account</h1>
+      <PageHeader back={{ href: '/dashboard', label: 'Dashboard' }} title="Your account" />
 
       {reset && <PasswordForm reset />}
 

@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { PageHeader } from '@/components/page-header'
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getProfile } from '@/lib/platform'
@@ -37,10 +38,7 @@ export default async function ConsoleReportsPage(props: { searchParams?: Promise
 
   return (
     <div>
-      <Link href="/console" className="text-sm text-blue-600 hover:underline">
-        ← Owner Console
-      </Link>
-      <h1 className="mt-2 mb-2 text-2xl font-semibold">Content reports</h1>
+      <PageHeader back={{ href: '/console', label: 'Owner Console' }} title="Content reports" className="mb-2" />
       <p className="mb-3 text-sm text-gray-600">
         Sent from the public Report content page. A valid report of an intimate image shared without consent must be
         acted on within {DEADLINE_HOURS} hours.

@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation'
+import { PageHeader } from '@/components/page-header'
 import { requireOrgModule } from '@/lib/module-gate'
 import { createClient } from '@/lib/supabase/server'
 import { deleteSubmissionFile, getOrCreateSubmission, uploadSubmissionFile } from './actions'
@@ -34,8 +35,7 @@ export default async function HomeworkPage(props: {
   if (isStaff) {
     return (
       <div>
-        <p className="mb-1 text-sm text-gray-400">{org.name}</p>
-        <h1 className="mb-4 text-2xl font-semibold">{homework.title}</h1>
+        <PageHeader eyebrow={org.name} back={{ href: `/o/${orgSlug}/m/classroom`, label: 'Classroom' }} title={homework.title} className="mb-4" />
         <p className="text-gray-500">
           Staff view — grading and submission review are managed from the Manage console.
         </p>
@@ -80,8 +80,7 @@ export default async function HomeworkPage(props: {
 
   return (
     <div>
-      <p className="mb-1 text-sm text-gray-400">{org.name}</p>
-      <h1 className="mb-1 text-2xl font-semibold">{homework.title}</h1>
+      <PageHeader eyebrow={org.name} back={{ href: `/o/${orgSlug}/m/classroom`, label: 'Classroom' }} title={homework.title} className="mb-1" />
       <p className="mb-6 text-sm text-gray-400">
         {homework.due_at ? `Due ${new Date(homework.due_at).toLocaleString()}` : 'No deadline'}
         {deadlinePassed && ' — deadline passed'}

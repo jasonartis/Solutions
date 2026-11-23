@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { PageHeader } from '@/components/page-header'
 import { notFound } from 'next/navigation'
 import { getModule } from '@platform/core'
 import { requireOrgModule } from '@/lib/module-gate'
@@ -54,14 +55,10 @@ export async function ViewAsPage({ moduleKey, params, searchParams }: Props) {
   if (tabs.length === 0) {
     return (
       <div>
-        <p className="mb-1 text-sm text-gray-400">{org.name}</p>
-        <h1 className="mb-4 text-2xl font-semibold">View as</h1>
+        <PageHeader eyebrow={org.name} back={{ href: base, label: manifest.name }} title="View as" className="mb-4" />
         <p className="text-gray-500">
           None of the positions you hold in {manifest.name} has a declared view-as edge below it.
         </p>
-        <Link href={base} className="mt-4 inline-block text-sm text-blue-600 hover:underline">
-          Back to {manifest.name}
-        </Link>
       </div>
     )
   }
@@ -123,13 +120,7 @@ export async function ViewAsPage({ moduleKey, params, searchParams }: Props) {
 
   return (
     <div>
-      <p className="mb-1 text-sm text-gray-400">{org.name}</p>
-      <div className="mb-4 flex items-baseline gap-4">
-        <h1 className="text-2xl font-semibold">View as</h1>
-        <Link href={base} className="text-sm text-blue-600 hover:underline">
-          Back to {manifest.name}
-        </Link>
-      </div>
+      <PageHeader eyebrow={org.name} back={{ href: base, label: manifest.name }} title="View as" className="mb-4" />
 
       <p className="mb-4 max-w-3xl text-sm text-gray-600">
         Each tab is a position below one you hold. It shows that position&rsquo;s data surface — never

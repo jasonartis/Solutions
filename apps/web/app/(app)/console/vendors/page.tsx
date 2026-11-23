@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { PageHeader } from '@/components/page-header'
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getProfile } from '@/lib/platform'
@@ -164,10 +165,7 @@ export default async function VendorAccountsPage(props: { searchParams?: Promise
 
   return (
     <div>
-      <Link href="/console" className="text-sm text-blue-600 hover:underline">
-        ← Owner Console
-      </Link>
-      <h1 className="mt-2 mb-1 text-2xl font-semibold">Vendor accounts</h1>
+      <PageHeader back={{ href: '/console', label: 'Owner Console' }} title="Vendor accounts" className="mb-1" />
       <p className="mb-4 text-sm text-gray-600">
         Every outside account the platform depends on. Go to a vendor through its <strong>Open</strong> button, so this
         page records when you last checked it. What to do if one is lost:{' '}

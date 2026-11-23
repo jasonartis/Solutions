@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation'
+import { PageHeader } from '@/components/page-header'
 import { requireOrgModule } from '@/lib/module-gate'
 import { addReviewComment, submitPeerGrade } from './actions'
 
@@ -41,8 +42,7 @@ export default async function ReviewPage(props: {
 
   return (
     <div>
-      <p className="mb-1 text-sm text-gray-400">{org.name}</p>
-      <h1 className="mb-6 text-2xl font-semibold">Peer review</h1>
+      <PageHeader eyebrow={org.name} back={{ href: `/o/${orgSlug}/m/classroom`, label: 'Classroom' }} title="Peer review" />
 
       <section className="mb-6 rounded-lg border border-gray-200 bg-white p-5">
         <h2 className="mb-3 text-lg font-medium">Submission files</h2>

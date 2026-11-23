@@ -1,4 +1,4 @@
-import Link from 'next/link'
+import { PageHeader } from '@/components/page-header'
 import { createClient } from '@/lib/supabase/server'
 import { parseFromPath } from '@/lib/feedback'
 import { NewFeedbackForm } from '../forms'
@@ -19,12 +19,7 @@ export default async function NewFeedbackPage(props: { searchParams?: Promise<{ 
 
   return (
     <div className="max-w-2xl">
-      <div className="mb-4 flex items-baseline justify-between gap-4">
-        <h1 className="text-2xl font-semibold">Send feedback</h1>
-        <Link href="/feedback" className="text-sm text-blue-600 hover:underline">
-          My feedback
-        </Link>
-      </div>
+      <PageHeader back={{ href: '/feedback', label: 'My feedback' }} title="Send feedback" className="mb-4" />
       <p className="mb-4 text-sm text-gray-600">
         Report a problem, suggest something, or ask a question. You can follow the conversation under My feedback.
       </p>

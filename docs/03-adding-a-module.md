@@ -1487,6 +1487,25 @@ mechanism is proven in the managed environment, but it carries rules that are no
     and the text between `as $$` and `$$;` in the source file (the regex the `prod-verify-*.mts` scripts use);
     they must match BEFORE you apply. `account_silhouette` and `sd_pin_participant` were checked this way.
 
+37. **EVERY PAGE USES `PageHeader` — ONE BACK-LINK CONVENTION (founder, 2026-11-23).** A page's title and its way
+    back come from `apps/web/components/page-header.tsx` (modules import it as `@/components/page-header`); never
+    hand-write a back link or an `<h1>` on a page. The rules:
+    - **Format `← Page name`** — the destination page's heading copied EXACTLY (a module home titled `Classroom` is
+      linked as `← Classroom`; a named thing — an event, a conversation — uses its name). No "Back to …" wording for
+      navigation. (Actions such as "Back to draft" are not navigation; leave them.)
+    - **Where you came from, else the parent.** `back={{ href: parentHref, label: parentHeading, from:
+      searchParams.from, fromLabel: searchParams.fromLabel }}`. A page reachable from more than one place has its
+      linking pages build the link with `withFrom(href, '/this/page', 'This page heading')` (`lib/back-link.ts`);
+      the back link then says and goes there, and falls back to the parent with no `from` (bookmark, pasted link).
+      The path is validated as same-origin relative (one leading `/`, no `//`, no backslash, no whitespace) or
+      ignored; a GET form on such a page must carry `from`/`fromLabel` as hidden inputs. Always ONE back link.
+      Worked example: `/console/data-browser` and `/console/view-as` (from the console home, Engagement, Positions).
+    - **The `back` prop is required**: pass a target, or `back={null}` on purpose for a top page (dashboard, a
+      module home, the console home), so TypeScript fails when a page forgets to decide.
+    - **Enforced** by `packages/db/src/page-header-coverage.test.ts`: every `page.tsx` under `apps/web/app/(app)`
+      and `modules/*/ui` must use `PageHeader` (or be a one-line re-export of a module page); the short allowlist
+      in that test carries a reason per entry — add to it only for a page that genuinely cannot (full-screen, public).
+
 ## Hard rules
 
 1. **Never fork a platform primitive.** If the notifications/files/workflow primitive almost fits, extend it in `packages/platform` (benefiting every module) — don't copy it into the module.

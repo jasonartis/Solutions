@@ -1,4 +1,4 @@
-import Link from 'next/link'
+import { PageHeader } from '@/components/page-header'
 import { notFound } from 'next/navigation'
 import { getProfile } from '@/lib/platform'
 import { createClient } from '@/lib/supabase/server'
@@ -14,12 +14,7 @@ export default async function CostsPage() {
 
   return (
     <div>
-      <p className="mb-2 text-sm">
-        <Link href="/console" className="text-blue-600 hover:underline">
-          ← Owner Console
-        </Link>
-      </p>
-      <h1 className="mb-1 text-2xl font-semibold">Platform costs</h1>
+      <PageHeader back={{ href: '/console', label: 'Owner Console' }} title="Platform costs" className="mb-1" />
       <p className="mb-6 max-w-3xl text-sm text-gray-600">
         What the platform costs per month and per year, by module, at any size, and what to charge. Built from the vendor price sheet below (each price dated) and the usage
         assumptions in <code>docs/costs/assumptions.md</code>. Above ~5 million users the architecture changes, so those rows are not the small-scale bill multiplied. Your own costs

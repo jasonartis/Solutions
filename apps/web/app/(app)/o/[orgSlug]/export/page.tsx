@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { PageHeader } from '@/components/page-header'
 import { getModule } from '@platform/core'
 import { createClient } from '@/lib/supabase/server'
 import { exportRegistry } from '@/lib/export-registry'
@@ -93,8 +94,7 @@ export default async function ExportPage(props: {
 
   return (
     <div>
-      <p className="mb-1 text-sm text-gray-400">{org.name}</p>
-      <h1 className="mb-2 text-2xl font-semibold">Export your data</h1>
+      <PageHeader eyebrow={org.name} back={{ href: '/dashboard', label: 'Dashboard' }} title="Export your data" className="mb-2" />
       <p className="mb-8 max-w-2xl text-sm text-gray-500">
         An export contains exactly what you can already see in the app, as CSV (for
         spreadsheets) and JSON (for machines) in one zip. If you hold a higher role you may

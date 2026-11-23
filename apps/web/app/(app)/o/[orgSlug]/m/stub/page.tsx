@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation'
+import { PageHeader } from '@/components/page-header'
 import { stubModule } from '@platform/core'
 import { createClient } from '@/lib/supabase/server'
 
@@ -38,8 +39,7 @@ export default async function StubModulePage(props: {
 
   return (
     <div>
-      <p className="mb-1 text-sm text-gray-400">{org.name}</p>
-      <h1 className="mb-4 text-2xl font-semibold">{stubModule.name}</h1>
+      <PageHeader eyebrow={org.name} back={null} title={stubModule.name} className="mb-4" />
       <div className="rounded-lg border border-gray-200 bg-white p-5 text-sm leading-6 text-gray-700">
         <p>{stubModule.description}</p>
         <p className="mt-3">

@@ -1,6 +1,6 @@
-import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { FORMER_MEMBER_LABEL, loadFormerMembers } from '@platform/core'
+import { PageHeader } from '@/components/page-header'
 import { requireOrgModule } from '@/lib/module-gate'
 import { publishExamFinal, saveExamScores, uploadExamPaper } from './actions'
 
@@ -69,13 +69,7 @@ export default async function ExamGradingPage(props: {
 
   return (
     <div>
-      <p className="mb-1 text-sm text-gray-400">{org.name}</p>
-      <div className="mb-2 flex items-baseline gap-4">
-        <h1 className="text-2xl font-semibold">Exam — {exam.title}</h1>
-        <Link href={`/o/${orgSlug}/m/classroom/manage`} className="text-sm text-blue-600 hover:underline">
-          ← Manage
-        </Link>
-      </div>
+      <PageHeader eyebrow={org.name} back={{ href: `/o/${orgSlug}/m/classroom/manage`, label: 'Manage' }} title={`Exam — ${exam.title}`} className="mb-2" />
       <p className="mb-6 text-sm text-gray-400">
         {structure.length > 0
           ? `Problems: ${structure.map((p) => `${p.label} (${p.points})`).join(' · ')} — max ${maxTotal}`

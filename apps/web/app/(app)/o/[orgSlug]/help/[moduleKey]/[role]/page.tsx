@@ -1,5 +1,5 @@
-import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { PageHeader } from '@/components/page-header'
 import { marked } from 'marked'
 import { getModule } from '@platform/core'
 import { createClient } from '@/lib/supabase/server'
@@ -40,15 +40,11 @@ export default async function GuidePage(props: {
 
   return (
     <div>
-      <p className="mb-1 text-sm text-gray-400">
-        {org.name} · {manifest.name}
-      </p>
-      <div className="mb-6 flex items-baseline gap-4">
-        <h1 className="text-2xl font-semibold">{guide.title}</h1>
-        <Link href={`/o/${orgSlug}/help`} className="text-sm text-blue-600 hover:underline">
-          ← All guides
-        </Link>
-      </div>
+      <PageHeader
+        eyebrow={`${org.name} · ${manifest.name}`}
+        back={{ href: `/o/${orgSlug}/help`, label: 'Help & walkthroughs' }}
+        title={guide.title}
+      />
       <article
         className="prose-sm max-w-2xl rounded-lg border border-gray-200 bg-white p-6 [&_h2]:mb-2 [&_h2]:mt-5 [&_h2]:text-base [&_h2]:font-semibold [&_li]:mb-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:mb-3 [&_ul]:list-disc [&_ul]:pl-5"
         dangerouslySetInnerHTML={{ __html: html }}

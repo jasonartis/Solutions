@@ -1,4 +1,4 @@
-import Link from 'next/link'
+import { PageHeader } from '@/components/page-header'
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getProfile } from '@/lib/platform'
@@ -48,10 +48,7 @@ export default async function ConsoleFeedbackTicketPage(props: { params: Promise
 
   return (
     <div>
-      <Link href="/console/feedback" className="text-sm text-blue-600 hover:underline">
-        ← Feedback
-      </Link>
-      <h1 className="mt-2 text-2xl font-semibold">{ticket.title}</h1>
+      <PageHeader back={{ href: '/console/feedback', label: 'Feedback' }} title={ticket.title} className="mb-1" />
       <p className="mb-4 text-sm text-gray-600">
         {ticket.kind} · status <span data-testid="console-ticket-status">{ticket.status}</span> · from{' '}
         {author?.display_name ?? 'Former member'}

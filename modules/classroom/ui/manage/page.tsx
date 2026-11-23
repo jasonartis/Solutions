@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { FORMER_MEMBER_LABEL, loadFormerMembers } from '@platform/core'
+import { PageHeader } from '@/components/page-header'
 import { requireOrgModule } from '@/lib/module-gate'
 import {
   createClass,
@@ -56,15 +57,13 @@ export default async function ManagePage(props: { params: Promise<{ orgSlug: str
 
   return (
     <div>
-      <p className="mb-1 text-sm text-gray-400">{org.name}</p>
-      <div className="mb-6 flex items-baseline gap-4">
-        <h1 className="text-2xl font-semibold">Classroom — Manage</h1>
+      <PageHeader eyebrow={org.name} back={{ href: `/o/${orgSlug}/m/classroom`, label: 'Classroom' }} title="Manage">
         {canManage && (
           <Link href={`/o/${orgSlug}/m/classroom/manage/materials`} className="text-sm text-blue-600 hover:underline">
             Materials
           </Link>
         )}
-      </div>
+      </PageHeader>
 
       <section className="mb-8 rounded-lg border border-gray-200 bg-white p-5">
         <h2 className="mb-3 text-lg font-medium">Courses</h2>
