@@ -18,7 +18,8 @@
 | **Follow-ups on a shipped feature** | Small known gaps, deferred items, "do NOT start unprompted" | CLAUDE.md "Next / open" |
 
 Also open but not on those lists: costs ideas (actuals ledger, receivables, badges) are row 7 of the docs/04 table,
-detail in [docs/costs/ideas.md](costs/ideas.md).
+detail in [docs/costs/ideas.md](costs/ideas.md). **Questions to take to a lawyer / insurance broker before the first
+client:** [docs/31](31-questions-for-a-lawyer.md) (the one list; add new ones there).
 
 ## When something new is decided or finished
 
