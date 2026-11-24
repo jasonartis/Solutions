@@ -89,8 +89,11 @@ differed, ids collided, nobody said exactly what failed.
 - **The one risk the design cannot remove:** a place the column list did not predict. The allowlist default and the scan
   shrink it; they do not close it.
 
-## 7. Second developer (later, not v1)
+## 7. Second developer (later, not v1) — FOUNDER 2026-11-24: "don't forget it for when we have future developers"
 
+When a second developer is about to join, REOPEN this section before giving them anything: per-requester profiles (a
+developer's copy built from the orgs/modules they are granted, no superadmin role), the org-less-table rules in §6, the
+encrypted-to-their-own-key handoff below, a cloud dev database decision, and the "no development access" tier (docs/31 B3).
 Do **not** hand out the prod database password, the B2 key or the `age` backup key (the key opens every backup ever made,
 cannot be rotated for past files, and today sits on the founder's PC plus a cloud copy, docs/28 B.7). The founder runs the
 script and gives the developer only the **scrubbed file encrypted to that developer's own `age` key**. A profile
@@ -105,7 +108,26 @@ by allowlist. 8. Leftover scan. 9. Apply pending migrations (the rehearsal; veri
 scrubbed file (`age`-encrypted, 30-day expiry; the next run deletes expired ones) and print a report: copied, excluded
 and why, anything that did not restore. 11. Remove the throwaway container and assert nothing unscrubbed remains.
 
-## 9. Not decided / not tested
+## 9. Build brief (for the fresh chat that builds it)
+
+**Model: Opus** (restore + scrub + grants are security-sensitive; docs/03 #12 rhythm applies: draft → adversarial review
+→ prove it on a real restore → docs). Sonnet may write the tests and docs. Fable not needed. Paste-ready prompt:
+
+> Build the prod-copy script designed in docs/32 (read it, docs/12 "restore drill", docs/31 B4, and CLAUDE.md first).
+> Version 1 = founder only, everything, one snapshot, separate stack on its own ports, allowlist scrub, leftover scan,
+> version check that stops when prod's auth/storage is ahead, 30-day expiry of the saved encrypted file. Start by
+> classifying every table/column for the scrub (write the new text/json-column coverage test first). Do not apply
+> anything to prod; read-only on prod. Report each step with evidence, then run the adversarial review, then update
+> docs/32 and the journal. Do not build per-requester profiles or the second-developer path (docs/32 §7).
+
+Spike recipes (so they are not rediscovered): restore order auth → public → storage (as `supabase_admin`, not
+`postgres`); drop the image's auth stub and comment out `CREATE SCHEMA` lines; blanket revoke + replay the dump's
+GRANT/REVOKE; re-set `authenticator`'s `pgrst.db_pre_request`; set the auth/storage admin role passwords; `PGOPTIONS`
+read-only is ignored by prod's pooler, so run `set default_transaction_read_only=on` first; Windows excluded port range
+blocks 53000 (use another); Git Bash needs `MSYS_NO_PATHCONV=1`; a scrubbed copy signed in through the real Next app
+(a 30-line proxy standing in for Kong, `next dev -p 3100`, env vars on the process).
+
+## 10. Not decided / not tested
 
 - A real storage-api container against the restored storage schema.
 - A rehearsal with migrations actually pending.

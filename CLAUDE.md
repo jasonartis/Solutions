@@ -166,6 +166,10 @@ confirmation + refusal messages (Sonnet) → Limits tile (Sonnet) → real bytes
 this" actions — the founder's wider original ask (see the handoff file); needs a founder conversation first.
 
 **Founder decisions pending / deferred — do NOT start these unprompted:**
+- **Prod copy for development (docs/32, designed + reviewed 2026-11-24, NOT built; docs/04 row 8)** and the **questions for
+  a lawyer (docs/31 — the one list; add new ones there)**. Copy = one-way, scrubbed, separate local stack, 30-day expiry of
+  the saved file, v1 founder-only; **second-developer setup + per-requester profiles are deferred but MUST be reopened
+  before any developer joins (docs/32 §7).** Also open: docs/04 row 9 (audit whether console tools follow live activity).
 - Module 9 photos (module-9 spec). Its platform legal slice (report route, terms, 13+) is ON PROD 2026-11-10.
   **Founder DECIDED 2026-11-10 (§I A–E):** next small slice = 1-year retention of closed reports with a legal-evidence
   hold + erasing a reporter's email on request (one migration; privacy sentence shown to him first); quarantine waits

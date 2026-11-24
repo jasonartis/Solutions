@@ -4,6 +4,20 @@ The running, dated build journal that used to live in `CLAUDE.md`'s "## Current 
 section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every session)
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
+- **2026-11-23/24 (Sonnet, planning only, no migration) — lawyer list + prod-copy-for-development design.** Founder's
+  planning chat (AI resume-builder idea, staff access to client data, consent/disclosure design, view-as, an easy prod→dev
+  copy). **Written down:** [docs/31](../31-questions-for-a-lawyer.md) (the one list of questions for a lawyer/insurance
+  broker; 14 gathered, 10 from this chat, 15 added by an adversarial gap review; public-repo wording kept to question stems)
+  and [docs/32](../32-prod-copy-for-development.md) (prod copy design, NOT built; three throwaway spikes restored a read-only
+  dump of prod, signed the real app in as a scrubbed user, restored the storage schema, found that prod's auth/storage
+  versions are AHEAD of the local images; two adversarial reviews folded in). **Founder decisions:** one-way copy only
+  (data never merges back; a "branch of prod, merge back" idea was rejected after a seven-case review), saved scrubbed
+  file auto-expires after 30 days, v1 = founder only/everything, per-requester profiles and a second developer's setup
+  DEFERRED (docs/32 §7 — founder: "don't forget it"), dev stays local until a second developer exists, no staff-access log
+  for dev copies. docs/04 rows 8 (build the copy) and 9 (audit: do superadmin tools follow live activity? NOT audited).
+  **Discussed but deliberately NOT documented (founder: "document only what I agree to"):** the AI Career Resume Builder module
+  (vault ownership, AI vendor questions, "scores are AI opinions" caveat wording), developer/staff-access policy and tiers,
+  per-module disclosures page; their open questions are rows B1–B10 in docs/31. Pushed with others' commits (`d08244f`).
 - **2026-11-09 → 11-20 (Sonnet) — cost model, pricing structure, ideas list, "what's next" index (no migration).** Built
   `docs/costs/` + superadmin page `/console/costs` (pure model `packages/platform/src/cost-model.ts`, prices dated with confidence
   labels). Second pass: "Use my real numbers", editable price what-ifs, break-even/margin, own-costs lines, pricing = base fee per
