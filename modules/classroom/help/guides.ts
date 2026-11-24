@@ -18,7 +18,7 @@ grades your professor publishes.
 ## Your class page
 
 1. Sign in and click your organization's **Classroom** button on the Dashboard.
-2. You land on **Classes** — one card per class you're enrolled in. Each card
+2. You land on **Classroom** — one card per class you're enrolled in. Each card
    shows **Materials**, **Announcements**, **Homework**, and (when relevant)
    **Peer reviews assigned to you**, **Your grades**, and **Surveys**.
 
@@ -39,7 +39,7 @@ grades your professor publishes.
 
 ## Peer review (when assigned)
 
-7. Back on **Classes**, a **Peer reviews assigned to you** section lists each
+7. Back on **Classroom**, a **Peer reviews assigned to you** section lists each
    review with a *pending* or *graded* tag. Click one.
 8. On the review page: open the submission's files, type comments in the
    **Your comments** box (the author never sees your name), enter a number in

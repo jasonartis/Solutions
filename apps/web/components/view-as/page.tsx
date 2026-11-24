@@ -33,14 +33,17 @@ type Props = {
   moduleKey: string
   params: Promise<{ orgSlug: string }>
   searchParams: Promise<{ tab?: string; mode?: string }>
+  /** The module home's exact heading, when it is not just the manifest name (nail-salon adds the location). */
+  homeHeading?: string
 }
 
-export async function ViewAsPage({ moduleKey, params, searchParams }: Props) {
+export async function ViewAsPage({ moduleKey, params, searchParams, homeHeading: homeHeadingProp }: Props) {
   const { orgSlug } = await params
   const { tab: tabParam, mode: modeParam } = await searchParams
   const { supabase, org } = await requireOrgModule(orgSlug, moduleKey)
 
   const manifest = getModule(moduleKey)!
+  const homeHeading = homeHeadingProp ?? manifest.name
   const decl = manifest.viewAs
 
   const {
@@ -55,7 +58,7 @@ export async function ViewAsPage({ moduleKey, params, searchParams }: Props) {
   if (tabs.length === 0) {
     return (
       <div>
-        <PageHeader eyebrow={org.name} back={{ href: base, label: manifest.name }} title="View as" className="mb-4" />
+        <PageHeader eyebrow={org.name} back={{ href: base, label: homeHeading }} title="View as" className="mb-4" />
         <p className="text-gray-500">
           None of the positions you hold in {manifest.name} has a declared view-as edge below it.
         </p>
@@ -120,7 +123,7 @@ export async function ViewAsPage({ moduleKey, params, searchParams }: Props) {
 
   return (
     <div>
-      <PageHeader eyebrow={org.name} back={{ href: base, label: manifest.name }} title="View as" className="mb-4" />
+      <PageHeader eyebrow={org.name} back={{ href: base, label: homeHeading }} title="View as" className="mb-4" />
 
       <p className="mb-4 max-w-3xl text-sm text-gray-600">
         Each tab is a position below one you hold. It shows that position&rsquo;s data surface — never

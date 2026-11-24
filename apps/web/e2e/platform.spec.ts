@@ -2367,8 +2367,16 @@ test('owner console view-as: a non-superadmin cannot reach it', async ({ page })
   // Same shape as the data browser's gate test. It is a UI gate over data the
   // caller could already read (docs/03 #19) — but it must still be shut, and it
   // must 404 without leaking that the page exists.
+  // Positive control first: the superadmin DOES see the heading, so the negative below is not vacuous.
+  await signIn(page, 'owner@demo.local')
+  await page.goto('/console/view-as')
+  await expect(page.getByRole('heading', { name: 'Readable table data' })).toBeVisible()
+  await page.getByRole('button', { name: 'Sign out' }).click()
+  await expect(page).toHaveURL(/\/login/)
+
   await signIn(page, 'alice@demo.local')
   await page.goto('/console/view-as')
+  await expect(page.getByText('404')).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Readable table data' })).not.toBeVisible()
 })
 

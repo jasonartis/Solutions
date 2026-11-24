@@ -69,6 +69,9 @@ export default async function ConsoleViewAsPage({ searchParams }: Props) {
   // It is the only way to build the `platform-superadmin` authority below.
   const { supabase, userId, gate } = await requireSuperadmin()
   const sp = await searchParams
+  // This page's own address INCLUDING its query, so the data browser's back link returns to this exact view.
+  const thisQuery = new URLSearchParams(Object.entries(sp).filter((e): e is [string, string] => typeof e[1] === 'string')).toString()
+  const thisPath = thisQuery ? `/console/view-as?${thisQuery}` : '/console/view-as'
   const mode: ConsoleMode = sp.mode === '2' ? 2 : sp.mode === '3' ? 3 : 1
 
   // Every org — a superadmin picks any of them (docs/13 answer 4). An ordinary
@@ -207,7 +210,7 @@ export default async function ConsoleViewAsPage({ searchParams }: Props) {
         <strong>What this position or person sees</strong> — the module&rsquo;s own declared surface,
         rendered for any position in any org, ignoring the manifest&rsquo;s view-as edges. This is{' '}
         <em>not</em> the{' '}
-        <Link href={withFrom('/console/data-browser', '/console/view-as', 'Readable table data')} className="text-blue-600 hover:underline">
+        <Link href={withFrom('/console/data-browser', thisPath, 'Readable table data')} className="text-blue-600 hover:underline">
           data browser
         </Link>
         , which answers the opposite question — what the platform holds <em>about</em> a person.

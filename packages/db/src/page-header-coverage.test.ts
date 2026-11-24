@@ -11,7 +11,7 @@ import { describe, expect, it } from 'vitest'
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { resolveBack, safeFromPath, withFrom } from '../../../apps/web/lib/back-link'
+import { headingForPath, resolveBack, safeFromPath, withFrom } from '../../../apps/web/lib/back-link'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const repoRoot = resolve(here, '../../..')
@@ -52,6 +52,21 @@ const ALLOWLIST: Record<string, string> = {
     'one-line wrapper around ViewAsPage, which uses PageHeader (asserted below)',
 }
 
+// The ONLY pages allowed `back={null}`: the dashboard, the console home, and each module home.
+// Adding a page here is a convention decision (docs/03 #37), not a convenience.
+const TOP_PAGES = [
+  'apps/web/app/(app)/dashboard/page.tsx',
+  'apps/web/app/(app)/console/page.tsx',
+  'apps/web/app/(app)/o/[orgSlug]/m/stub/page.tsx',
+  'modules/classroom/ui/page.tsx',
+  'modules/matchmaking/ui/page.tsx',
+  'modules/nail-salon/ui/page.tsx',
+  'modules/sample/ui/page.tsx',
+  'modules/speed-dating/ui/page.tsx',
+  'modules/synagogue-schedules/ui/page.tsx',
+  'modules/visual-messaging/ui/page.tsx',
+]
+
 describe('every page uses PageHeader (docs/03 #37)', () => {
   it('found the pages (control: the scan is not vacuous)', () => {
     expect(pages.length).toBeGreaterThan(40)
@@ -71,11 +86,20 @@ describe('every page uses PageHeader (docs/03 #37)', () => {
       if (/<h1[\s>]/.test(src)) offenders.push(`${p}: hand-written <h1> (put the title in PageHeader)`)
       // Navigation links say "← Page name". Actions (Back to draft / layer / their screen) are not navigation.
       const stripped = src.replace(/Back to (draft|layer|their screen)/g, '')
-      if (/>\s*(←\s*)?Back to /.test(stripped)) {
+      if (/(>|[{]\s*['"`])\s*(←\s*)?Back to /.test(stripped)) {
         offenders.push(`${p}: a "Back to ..." link (use "← Page name" via PageHeader)`)
       }
     }
     expect(offenders).toEqual([])
+  })
+
+  it('only the listed TOP pages pass back={null}', () => {
+    const found: string[] = []
+    for (const p of pages) {
+      const src = readFileSync(join(repoRoot, p), 'utf8')
+      if (/back=[{]\s*null\s*[}]/.test(src)) found.push(p)
+    }
+    expect(found.sort()).toEqual([...TOP_PAGES].sort())
   })
 
   it('the allowlist has no stale entries, and the view-as wrapper target uses PageHeader', () => {
@@ -102,7 +126,23 @@ describe('back-link helpers', () => {
     expect(safeFromPath(undefined)).toBeNull()
     expect(safeFromPath(null)).toBeNull()
     expect(safeFromPath('/' + 'a'.repeat(600))).toBeNull()
-    expect(safeFromPath(['/ok', '//bad'])).toBe('/ok')
+    expect(safeFromPath(['/dashboard', '//bad'])).toBe('/dashboard')
+  })
+
+  it('safeFromPath rejects non-page routes and unknown prefixes', () => {
+    for (const ok of ['/dashboard', '/console', '/feedback/new', '/account', '/o/a/m/b?x=1']) expect(safeFromPath(ok)).toBe(ok)
+    for (const bad of ['/auth/callback', '/api/export', '/view-as/x', '/login', '/consolex', '/dashboardx', '/x', '/ok', '/oops']) {
+      expect(safeFromPath(bad)).toBeNull()
+    }
+  })
+
+  it('headingForPath names only routes it knows exactly', () => {
+    expect(headingForPath('/dashboard')).toBe('Dashboard')
+    expect(headingForPath('/console?x=1')).toBe('Owner Console')
+    expect(headingForPath('/o/demo-a/m/classroom')).toBe('Classroom')
+    expect(headingForPath('/o/demo-a/m/nail-salon')).toBeNull()
+    expect(headingForPath('/o/demo-a/m/classroom/manage')).toBeNull()
+    expect(headingForPath(null)).toBeNull()
   })
 
   it('resolveBack prefers a valid came-from WITH a label, else the parent', () => {
@@ -114,7 +154,7 @@ describe('back-link helpers', () => {
     expect(resolveBack({ ...parent })).toEqual(parent)
     expect(resolveBack({ ...parent, from: '/console/engagement' })).toEqual(parent) // no label: cannot say where
     expect(resolveBack({ ...parent, from: '//evil.com', fromLabel: 'Engagement' })).toEqual(parent)
-    expect(resolveBack({ ...parent, from: '/x', fromLabel: '   ' })).toEqual(parent)
+    expect(resolveBack({ ...parent, from: '/dashboard', fromLabel: '   ' })).toEqual(parent)
   })
 
   it('withFrom round-trips through resolveBack', () => {

@@ -1,6 +1,7 @@
 import { PageHeader } from '@/components/page-header'
 import { createClient } from '@/lib/supabase/server'
 import { parseFromPath } from '@/lib/feedback'
+import { headingForPath, safeFromPath } from '@/lib/back-link'
 import { NewFeedbackForm } from '../forms'
 
 // "Send feedback" (docs/27). Reached from the link in the top bar, which passes
@@ -17,9 +18,13 @@ export default async function NewFeedbackPage(props: { searchParams?: Promise<{ 
     orgName = data?.name ?? null
   }
 
+  // Back goes to the page the feedback is about when its heading is known exactly; else My feedback.
+  const aboutPath = safeFromPath(from)
+  const aboutLabel = headingForPath(aboutPath)
+
   return (
     <div className="max-w-2xl">
-      <PageHeader back={{ href: '/feedback', label: 'My feedback' }} title="Send feedback" className="mb-4" />
+      <PageHeader back={{ href: '/feedback', label: 'My feedback', from: aboutPath, fromLabel: aboutLabel }} title="Send feedback" className="mb-4" />
       <p className="mb-4 text-sm text-gray-600">
         Report a problem, suggest something, or ask a question. You can follow the conversation under My feedback.
       </p>

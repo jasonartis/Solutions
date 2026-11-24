@@ -1497,11 +1497,13 @@ mechanism is proven in the managed environment, but it carries rules that are no
       searchParams.from, fromLabel: searchParams.fromLabel }}`. A page reachable from more than one place has its
       linking pages build the link with `withFrom(href, '/this/page', 'This page heading')` (`lib/back-link.ts`);
       the back link then says and goes there, and falls back to the parent with no `from` (bookmark, pasted link).
-      The path is validated as same-origin relative (one leading `/`, no `//`, no backslash, no whitespace) or
+      The path is validated as same-origin relative (one leading `/`, no `//`, no backslash, no whitespace) AND
+      under a page route (`/console`, `/o/`, `/dashboard`, `/feedback`, `/account`; never `/auth`, `/api`, `/view-as`) or
       ignored; a GET form on such a page must carry `from`/`fromLabel` as hidden inputs. Always ONE back link.
       Worked example: `/console/data-browser` and `/console/view-as` (from the console home, Engagement, Positions).
     - **The `back` prop is required**: pass a target, or `back={null}` on purpose for a top page (dashboard, a
-      module home, the console home), so TypeScript fails when a page forgets to decide.
+      module home, the console home), so TypeScript fails when a page forgets to decide. The test pins the exact list of `back={null}` pages
+      (`TOP_PAGES`); a new one is a convention decision, not a convenience.
     - **Enforced** by `packages/db/src/page-header-coverage.test.ts`: every `page.tsx` under `apps/web/app/(app)`
       and `modules/*/ui` must use `PageHeader` (or be a one-line re-export of a module page); the short allowlist
       in that test carries a reason per entry — add to it only for a page that genuinely cannot (full-screen, public).

@@ -14,7 +14,16 @@ export type BackTarget = {
   fromLabel?: string | string[] | null
 }
 
-/** A same-origin relative path or null: starts with ONE '/', no '//', no backslash, no whitespace/control chars. */
+// `from` may only point at an app PAGE route, never /auth, /api, /view-as or any route handler.
+const FROM_PREFIXES = ['/console', '/dashboard', '/feedback', '/account']
+
+function fromPathAllowed(v: string): boolean {
+  const pathOnly = v.split(/[?#]/)[0]!
+  if (pathOnly.startsWith('/o/')) return true
+  return FROM_PREFIXES.some((p) => pathOnly === p || pathOnly.startsWith(p + '/'))
+}
+
+/** A same-origin relative app-page path or null: ONE '/', no '//', no backslash, no whitespace/control chars, under an allowed page prefix. */
 export function safeFromPath(raw: string | string[] | null | undefined): string | null {
   const v = Array.isArray(raw) ? raw[0] : raw
   if (typeof v !== 'string' || v.length === 0 || v.length > 500) return null
@@ -22,7 +31,30 @@ export function safeFromPath(raw: string | string[] | null | undefined): string 
   if (v.includes(String.fromCharCode(92))) return null // backslash
   // eslint-disable-next-line no-control-regex
   if (/[\u0000-\u001f\u007f\s]/.test(v)) return null
+  if (!fromPathAllowed(v)) return null
   return v
+}
+
+// Exact headings of pages whose heading is known without a lookup (for feedback's
+// back link). Keep in step with the module homes' PageHeader titles.
+const MODULE_HOME_HEADINGS: Record<string, string> = {
+  classroom: 'Classroom',
+  matchmaking: 'Make-a-Match',
+  'speed-dating': 'Speed Dating',
+  'visual-messaging': 'Visual Messaging',
+  'synagogue-schedules': 'Schedules',
+  sample: 'Sample Module',
+  // nail-salon is absent on purpose: its heading includes the location name.
+}
+
+/** The exact heading of the page a path points at, or null when unknown (caller falls back to its parent). */
+export function headingForPath(path: string | null): string | null {
+  if (!path) return null
+  const segs = path.split(/[?#]/)[0]!.split('/').filter(Boolean)
+  if (segs[0] === 'dashboard' && segs.length === 1) return 'Dashboard'
+  if (segs[0] === 'console' && segs.length === 1) return 'Owner Console'
+  if (segs[0] === 'o' && segs[2] === 'm' && segs.length === 4) return MODULE_HOME_HEADINGS[segs[3]!] ?? null
+  return null
 }
 
 function cleanLabel(raw: string | string[] | null | undefined): string | null {
