@@ -1058,6 +1058,94 @@ new mechanism and dropping 46 policies widens what a view token reads (founder-d
 nothing ELSE widens, e.g. the token reaching a write path the four layers miss). Then local verify → prod verifier
 before → founder go-ahead for `migrate:prod` → after.
 
+### WHOLE-ACCOUNT VIEW AS — FOUR-WAY REVIEW OF THE DESIGN (2026-11-24) AND THE REVISIONS IT FORCES
+
+Four independent read-only reviewers (security; drift; rollout/product; plus the back-link commit). **No BLOCKER, no
+HIGH security finding**: writes as the person stay closed (the proxy signs the view header for GET/HEAD only, and
+`createClient()` gives the person's client only with that header, `lib/supabase/server.ts:14-15`; a POST that skipped
+the proxy would run as the superadmin, never as the person). Everything below AMENDS the design above; where they
+conflict, this section wins.
+
+**Revisions (decided here; technical):**
+1. *Two migrations, not one (rollout HIGH).* **A — additive, safe with the old app live:** the 1-argument start;
+   nullable `org_id`/`module_key`; `view_as_real_check` rewritten with a LEFT JOIN to orgs and a per-request liveness
+   check for a whole-account session (account not deleted, not banned, not a superadmin), while a session that HAS an
+   org keeps the old path scope (so the old `ViewAsGuard` cannot reload forever in the gap); the view-aware readers and
+   writers (5–8 below); the second view flag (9). Then push the app and confirm Vercel READY. **B — the widening:**
+   replace the 46 `<table>_no_view_as` policies (11). The rollback migration (re-create them) is written before B
+   applies. The 3-argument start is dropped in a later cleanup.
+2. *Scope = the `(app)` pages only (drift 4, security L1).* In scope: `/dashboard`, `/account`, `/feedback…`,
+   `/o/…`. OUT: `/console…`, `/view-as/…`, `/auth/…`, `/login`, and the public pages `/`, `/privacy`, `/report`,
+   `/s/…` (they have no banner or guard, and the superadmin's own email links must use his own client).
+   `ViewAsGuard`'s boundary is the same list. The proxy and banner handle a null org/module (today they would build
+   `/o/null/m/null`).
+3. *Proxy matcher (security L4):* the "image paths skip the proxy" exception is removed for every in-scope path, so a
+   POST to a path ending `.png` is still refused while viewing.
+4. *Read-only clicks (drift):* one notice for every refused action — server actions AND plain form POSTs (Sign out,
+   export, report) — instead of the raw 403 text page; Join video shows the notice instead of hanging on
+   "Connecting…" (`video-room.tsx:393` does not catch the rejection).
+5. *Matchmaking (drift 1, security M3):* the page throws away `mm_ensure_answer`'s return and re-reads `mm_answers`
+   (`matchmaking/ui/page.tsx:104-111`), so "return the default unsaved" would not reach the screen, and the page's own
+   stand-in ignores admin locks. Fix: one reader `mm_my_answers(org)` returning stored rows plus the computed defaults
+   (locks applied) for missing questions, used by the person and the viewer alike; creating the row moves to save.
+   **And a PRE-EXISTING tenancy gap found by the same review, verified by reading 2026-11-24:** `mm_ensure_answer` is a
+   definer with no membership check (`20260709020000_matchmaking.sql:447`), so any signed-in user holding another
+   org's question id can create an answer row in that org (bypassing `mm_answers_insert_own`'s `mm_is_single`). Ids
+   are UUIDs and only members see them, so exploitation needs a leaked id. Closed in migration A (the function gains
+   the `mm_is_single(q.org_id)` check, or is retired with 5's reader). Not yet reproduced live; the migration's test
+   must reproduce it first.
+6. *Invites (drift 3):* claiming makes a PENDING seat (an amber "You've been invited to join X" card, and in chat the
+   "You're invited to…" page), not an org. Fix entirely in the database: under a view, `org_my_pending_invites` and
+   `vm_my_pending_invites` also return the person's unclaimed `pending_invites` rows (for their confirmed email),
+   writing nothing; `pending_invites_claim_mine` returns 0 **before** its `FOR UPDATE` loop (a locking read fails in a
+   read-only transaction for the whole function). The screen then matches exactly.
+7. *Account deletion (drift 2):* no in-scope page shows a pending deletion; `account_deletion_resume` only acts after
+   a real sign-in and the dashboard ignores its return. It becomes a plain no-op under a view, and the old "item 3"
+   difference is removed (there is none).
+8. *Branch placement (security M3):* every view-aware branch goes AFTER the function's own identity/scope checks and
+   immediately before the write, never first, so a view branch cannot return data the checks would refuse.
+9. *A second, sticky view flag (security M1):* some definers blank `request.jwt.claims` while they run
+   (`pending_invites_chat.sql:527`, `pending_invites_org.sql:364`), which would make `is_view_as_request()` answer "not
+   a view" inside them and let a reader return a real private value. The pre-request hook also sets
+   `sp.view_as = 'on'` for the transaction; `private_text` and every view branch mask when EITHER is true. A db test
+   calls the reader from inside a claims-blanking definer.
+10. *Private FILES, not only text (security M2; needed for the résumé vault):* signed URLs minted with the person's
+    token are 1-hour links that outlive Stop. A private bucket gets a RESTRICTIVE SELECT policy on `storage.objects`
+    for a view (same shape as the existing write policies), and the page shows a placeholder instead of the link. No
+    private bucket exists today; the rule is written so the vault adopts it unchanged.
+11. *Do not just drop the 46 policies; replace them with ONE shared rule (rollout F5).* Each becomes `using
+    (public.view_as_may_read(org_id, '<module>'))`, which is `true` for a superadmin session today and is where the
+    later STAFF version adds "within the viewer's area". The token carries the session id so the viewer is looked up.
+    The data-browser promise in docs/15 point 12 ("a real view shows only what the superadmin reads in the data
+    browser") is RETIRED for the superadmin's real view by his 2026-11-23 decision (recorded there); the per-module
+    superadmin-count test is kept anyway as a check that nothing ELSE widened.
+12. *What a masked note still shows (security L5):* that a note exists, its length, whom it is about (it sits beside
+    that partner), and when it was written. Placement is the screen itself, so hiding "whom" would be drift; the
+    founder is asked to confirm.
+13. *Browser-client allowlist (security L6):* a test allows the browser database client only in listed files (today
+    `login/page.tsx`, `device-reporter.tsx`), so a future browser-side writer cannot silently write as the superadmin.
+
+**Tests (rollout HIGH 2):** the no-drift e2e renders as the VIEWER FIRST (otherwise the person's render runs the
+writers and the later comparison matches by accident), over seeded fixtures that make each case non-vacuous (a
+pending invite, an unanswered locked mm question, an unread feedback reply, an `sd_notes` row), with before/after row
+counts around the viewer's render, a "has content" control per page, and the placeholder mask scoped to the notes
+element only.
+
+**Known differences that remain (the revised complete list):** private text and files show placeholders;
+buttons/forms show the read-only notice; camera/mic status is not reported; opening a feedback ticket does not mark it
+read; the in-module staff "View as" picker state (a browser cookie, `lib/view-as.ts:226`) shows the superadmin's, not
+the person's (drift 5); and **it is looking, not doing** — he cannot test a flow by clicking through it as the person
+(demo accounts remain the way to test actions).
+
+**Founder decisions this review raises (shown text that becomes untrue; his call):**
+- `/privacy` says staff look only when someone "needs" it ("for example, to help with a support question") and that
+  "there's always a record of who looked, and when", kept permanently. Real use is routine checking, and the only
+  record is the `view_as_real_sessions` row, which docs/13 calls "not a log". Either declare that row the permanent
+  access record (never pruned; docs/12) and reword "needs", or reword both.
+- The speed-dating note box says "Only you can see this": still true of the words, not of the note's existence,
+  length, subject and date (12).
+- Lawyer questions B5 / B10 (docs/31) are open while the feature widens.
+
 **Open, by design:** one view at a time per superadmin; a token
 already minted lives until its 5-minute expiry after Stop (server-side only); widening to another module needs its own
 review plus the per-module checks above (client components querying from the browser, realtime, edge functions, GET
