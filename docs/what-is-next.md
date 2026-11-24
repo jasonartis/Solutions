@@ -20,7 +20,9 @@
 Also open but not on those lists: costs ideas (actuals ledger, receivables, badges) are row 7 of the docs/04 table,
 detail in [docs/costs/ideas.md](costs/ideas.md). **Questions to take to a lawyer / insurance broker before the first
 client:** [docs/31](31-questions-for-a-lawyer.md) (the one list; add new ones there). **Prod copy for development (designed, reviewed,
-NOT built):** [docs/32](32-prod-copy-for-development.md) — build only when the founder starts it.
+NOT built):** [docs/32](32-prod-copy-for-development.md) — build only when the founder starts it. **Ideas recorded,
+not started:** [docs/33](33-ai-career-resume-builder.md) (AI Career Resume Builder — maybe a shared TOOL, not a module) and
+[docs/34](34-disclosures-page.md) (disclosures page).
 
 ## When something new is decided or finished
 

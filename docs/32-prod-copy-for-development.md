@@ -22,11 +22,11 @@ differed, ids collided, nobody said exactly what failed.
 | Dev environment | Stays local (Docker) for now; a cloud dev database only when a second developer arrives. |
 | Real but scrubbed | Real shape, personal data replaced. **It is still personal data, not anonymous data** (UUIDs, timestamps and org structure are kept), so it is handled and disclosed as such (docs/31 B4). |
 | IDs | **User and org UUIDs are kept** (they are random `gen_random_uuid()` ids, so a copy never collides with itself); only identifying text is scrubbed. |
-| Version 1 scope | **Everything, requested by the founder only.** Per-requester profiles, org/module/user subsets are DEFERRED until a second developer or a second real client exists (extract-don't-speculate). The one v1 filter is an exclude-org list for a client barred from development access; it needs the org-less-table rules in §6 before it can be trusted. |
+| Version 1 scope | **Everything, requested by the founder only.** Per-requester profiles, org/module/user subsets are DEFERRED until a second developer or a second real client exists (extract-don't-speculate). **No v1 filter at all:** the founder decided 2026-11-24 that a client barred from development access is never possible (not having access prevents development), so there is no exclude-org list. The org-less-table rules in §6 apply only if a subset is ever built (second developer, §7). |
 | Expiry | The **saved scrubbed file expires after 30 days**; the next run of the script deletes expired files (the founder's PC has no always-on scheduler). The working database copy is the developer's own and is deleted on request. |
 | Staff-access log | None for dev copies. |
 | "Sign in as the user" for support | Real view-as exists on prod for **classroom**; whole-account is designed, not built (docs/13). A copy is stale and scrubbed, so it is NOT the answer to "my screen shows X". |
-| "No development access" tier | Deferred; the exclude-org list is the switch. |
+| "No development access" tier | **Rejected by the founder, 2026-11-24: "To not have access, prevents development, I don't think this is a possibility, ever."** Every client's data is reachable for development; the protection is contract, scrub and handling, not exclusion (docs/31 B1, B4). |
 
 ## 3. What the spikes proved (real prod, read-only, then deleted)
 
@@ -83,7 +83,7 @@ differed, ids collided, nobody said exactly what failed.
   reports, feedback, jsonb) blanked unless explicitly marked safe.
 - **Tables with no `org_id`** (login/activity events and rollups, feedback, content reports, view-as sessions, lookup
   logs, signup blocks, storage rows whose org is in the path) each get an explicit rule — drop, or filter by the kept
-  user/org set — before the exclude-org list can be trusted. A user in both a kept and an excluded org needs a rule too.
+  user/org set — before any subset (§7) can be trusted. A user in both a kept and an excluded org needs a rule too.
 - **Leftover scan:** matches the real names, emails, phones and IPs taken from prod BEFORE the scrub (a list built up front
   and discarded), across every text/json column; fails on any hit; carries a before-scrub control.
 - **The one risk the design cannot remove:** a place the column list did not predict. The allowlist default and the scan
@@ -93,7 +93,7 @@ differed, ids collided, nobody said exactly what failed.
 
 When a second developer is about to join, REOPEN this section before giving them anything: per-requester profiles (a
 developer's copy built from the orgs/modules they are granted, no superadmin role), the org-less-table rules in §6, the
-encrypted-to-their-own-key handoff below, a cloud dev database decision, and the "no development access" tier (docs/31 B3).
+encrypted-to-their-own-key handoff below, and a cloud dev database decision. (A "no development access" tier was rejected 2026-11-24.)
 Do **not** hand out the prod database password, the B2 key or the `age` backup key (the key opens every backup ever made,
 cannot be rotated for past files, and today sits on the founder's PC plus a cloud copy, docs/28 B.7). The founder runs the
 script and gives the developer only the **scrubbed file encrypted to that developer's own `age` key**. A profile

@@ -15,9 +15,13 @@ decision log, docs/03 conventions, docs/12 safeguards) — this is the chronolog
   file auto-expires after 30 days, v1 = founder only/everything, per-requester profiles and a second developer's setup
   DEFERRED (docs/32 §7 — founder: "don't forget it"), dev stays local until a second developer exists, no staff-access log
   for dev copies. docs/04 rows 8 (build the copy) and 9 (audit: do superadmin tools follow live activity? NOT audited).
-  **Discussed but deliberately NOT documented (founder: "document only what I agree to"):** the AI Career Resume Builder module
-  (vault ownership, AI vendor questions, "scores are AI opinions" caveat wording), developer/staff-access policy and tiers,
-  per-module disclosures page; their open questions are rows B1–B10 in docs/31. Pushed with others' commits (`d08244f`).
+  **Later the same day the founder said "document" for the resume builder and the disclosures page:** written as
+  [docs/33](../33-ai-career-resume-builder.md) and [docs/34](../34-disclosures-page.md), every line labelled FOUNDER /
+  PROPOSED / OPEN (recovered from this chat's transcript by an extraction agent, then the assistant's own over-stated
+  "agreed" table was re-checked against his actual words). He added: the resume builder may be a TOOL several modules use
+  (speed-dating pairing, AI-assisted match settings), not a module. **He rejected a "no development access" tier outright**
+  (docs/31 B3 struck; docs/32 updated). Console drift audit run: docs/history/console-drift-audit-2026-11-24.md.
+  Open questions stay in docs/31 B1–B10. Pushed with others' commits (`d08244f`, `fec1a4f`).
 - **2026-11-09 → 11-20 (Sonnet) — cost model, pricing structure, ideas list, "what's next" index (no migration).** Built
   `docs/costs/` + superadmin page `/console/costs` (pure model `packages/platform/src/cost-model.ts`, prices dated with confidence
   labels). Second pass: "Use my real numbers", editable price what-ifs, break-even/margin, own-costs lines, pricing = base fee per
