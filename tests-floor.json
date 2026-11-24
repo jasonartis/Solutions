@@ -8,6 +8,7 @@
     "packages/db/src/rank-admission.test.ts",
     "docs/rank-admission-map.md",
     "packages/db/src/profiles-public-columns.test.ts",
-    "packages/db/src/page-header-coverage.test.ts"
+    "packages/db/src/page-header-coverage.test.ts",
+    "packages/db/src/browser-client-allowlist.test.ts"
   ]
 }
