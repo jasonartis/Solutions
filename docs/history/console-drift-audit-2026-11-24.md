@@ -22,7 +22,12 @@ has an FK to a person; otherwise it needs a `via` declaration by hand. (3) Canno
 counts and data browser for tables with no direct person column; table view-as for an unclassified surface (CI blocks it);
 cost prices; vendor rows and limits; the module list if a module is not registered; `rank-admission-map.md`.
 
-**Recommendations (small, not scheduled; none started):** triage the tier-2 indirect-link report and promote real
+**STATUS 2026-11-25 (founder: "do your recommendations"):** items 1 (label) and 2 (last-verified dates) DONE in `6d51dbc`;
+items 3 (triage indirect links) and 4 (every-table-classified test) are docs/04 row 10 with a paste-ready Opus prompt in
+[handoff-2026-11-25-console-drift-followups.md](handoff-2026-11-25-console-drift-followups.md); item 5 is the View-as
+session's work (docs/13). The original list follows.
+
+**Recommendations (originally small, not scheduled):** triage the tier-2 indirect-link report and promote real
 person-links to `via`; label overview's "records" as "person-linked only" in the UI; add a "last verified" date beside cost
 prices, vendor rows and vendor limits; treat table view-as as an audit aid, not a mirror, and extend real view-as to more
 modules (whole-account design: docs/13); optionally a test that every `public` table is classified somewhere (data browser,

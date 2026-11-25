@@ -169,7 +169,7 @@ this" actions — the founder's wider original ask (see the handoff file); needs
 - **Prod copy for development (docs/32, designed + reviewed 2026-11-24, NOT built; docs/04 row 8)** and the **questions for
   a lawyer (docs/31 — the one list; add new ones there)**. Copy = one-way, scrubbed, separate local stack, 30-day expiry of
   the saved file, v1 founder-only; **second-developer setup + per-requester profiles are deferred but MUST be reopened
-  before any developer joins (docs/32 §7).** Audit of console tools done (docs/history/console-drift-audit-2026-11-24.md; five small follow-ups, none started).
+  before any developer joins (docs/32 §7).** Audit of console tools done (docs/history/console-drift-audit-2026-11-24.md); follow-ups 1+2 done `6d51dbc`; **3+4 (data-browser indirect links + a "every table classified" test) are docs/04 row 10, Opus, one fresh chat, prompt in docs/history/handoff-2026-11-25-console-drift-followups.md**; 5 is the View-as session's work.
   **Ideas recorded 2026-11-24, NOT started:** docs/33 AI Career Resume Builder (founder: perhaps a TOOL several modules
   use, not an isolated module — to discuss when we get to it) and docs/34 disclosures page. **A "no development access"
   tier was REJECTED by the founder ("not a possibility, ever") — do not re-propose.**

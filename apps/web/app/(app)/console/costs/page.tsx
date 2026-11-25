@@ -26,8 +26,8 @@ export default async function CostsPage() {
         (legal, accountant, your time) are lines you add in section 5; they start at $0.
       </p>
       <p className="mb-6 max-w-3xl text-sm text-gray-600" data-testid="costs-last-verified">
-        <strong>Prices last verified:</strong> {oldest === newest ? oldest : `${oldest} to ${newest}`} (each price&rsquo;s own date and
-        confidence are in the price sheet below).
+        <strong>Prices last verified:</strong> {oldest === newest ? oldest : `${oldest} to ${newest}`}{' '}
+        (each price&rsquo;s own date and confidence are in the price sheet below).
       </p>
       <CostsCalculator real={real} />
     </div>
