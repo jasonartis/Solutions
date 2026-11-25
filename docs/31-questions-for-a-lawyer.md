@@ -10,7 +10,7 @@
 >
 > **This repo is public, so the file holds question STEMS, not admissions of current practice.** The specifics a lawyer or
 > insurer needs (which controls are open, exactly what is retained, who can read what) are in the cited docs and the
-> founder's private notes; bring them to the meeting. Reviewed by adversarial agents 2026-11-24 (sources checked; wording
+> founder's private briefing file (kept outside this repo, in his personal folder, written 2026-11-25); bring it to the meeting. Reviewed by adversarial agents 2026-11-24 (sources checked; wording
 > trimmed; section D added).
 
 ## A. Gathered from the existing docs (source in brackets)
@@ -49,6 +49,8 @@ that the superadmin needs real access to client work data to build and debug. Re
 | B8 | **AI vendor terms for a real client:** use a plan with stated no-training and (ideally) zero-retention terms; read the vendor's commercial retention article before any client data goes through it. | planning discussion |
 | B9 | **Resumes and truthfulness:** an AI that drafts resume lines from a person's own facts — any liability or advertising/consumer-law issue if a user submits a misleading line the tool helped write? | planning discussion |
 | B10 | **Disclosure and notification for administrative view-as sessions** (the superadmin sees a person's actual screens, read-only; widening to every module decided 2026-11-23). What must a person be told, and is it different for sensitive modules (dating) or minors? | docs/13 "AS BUILT"; docs/15 §8.1 point 12 |
+
+| B11 | **Dev-copy tensions found by review (2026-11-25):** (a) deletion on a client's exit cannot reach saved scrubbed files or a developer's working copy; (b) B1's "a record where staff touch a named person's account" vs the founder's "no log for dev copies"; (c) AI sessions read scrubbed copies (B2/B8). What must a client contract promise, and what must it not? | docs/32 §10 |
 
 ## C. For the insurance broker (not a lawyer question)
 

@@ -47,7 +47,7 @@ differed, ids collided, nobody said exactly what failed.
 
 | Wall | Fix |
 |---|---|
-| **Prod's auth (GoTrue 2.198.0) and storage (1.96.4) are NEWER than the local images (2.193.0 / 1.65.1)** (also recorded in docs/12 "restore drill"). | A version check that **STOPS the script** when prod is ahead, reading prod's versions live every run (never hard-coded), and prints the fix (set `supabase/.temp/gotrue-version` / `storage-version`, restart). Tested check: `max(version)` of prod's `auth.schema_migrations` vs the newest migration file in the local auth image. |
+| **Prod's auth (GoTrue 2.198.0) and storage (1.96.4) are NEWER than the local images (2.193.0 / 1.65.1)** (docs/12 "restore drill" records older numbers, GoTrue 2.197.0 / storage 1.89.13, from 2026-11-09; the versions drift, so always read them live). | A version check that **STOPS the script** when prod is ahead, reading prod's versions live every run (never hard-coded), and prints the fix (set `supabase/.temp/gotrue-version` / `storage-version`, restart). Tested check: `max(version)` of prod's `auth.schema_migrations` vs the newest migration file in the local auth image. |
 | Files are not in the database. | The copy has no files; features that read files show them missing. Storage `owner`/`owner_id` hold real user ids with no foreign key: **set them to null or a kept fake user in the scrub.** Path segment 1 is an org uuid (kept). |
 | `storage` restores only as `supabase_admin`; 3 auth triggers call `public.*`. | Restore as `supabase_admin`; replay the 3 trigger lines after `public`. |
 | Settings outside the dump. | The script lists and **asserts each**: authenticator's pre-request hook, other role settings (e.g. the statement timeout on `authenticated`), database-level `ALTER DATABASE … SET`, role passwords, the supabase_migrations ledger (needed to know what is pending), extensions. The Before-User-Created sign-up hook is GoTrue config, not data: **not carried; the copy's sign-up behaviour differs from prod**. |
@@ -57,14 +57,17 @@ differed, ids collided, nobody said exactly what failed.
 
 ## 5. Where it lives, and how it is run
 
-- **A second stack, never the seed stack.** Own `project_id`, own ports (the 553xx range docs/12 already uses for the
-  restore drill), own env file for the app. The founder's seeded local stack (5432x) is **never touched**; **db tests and
+- **A second stack, never the seed stack.** Own `project_id`, own ports in a range of its own (**not** 553xx: the docs/12
+  restore drill uses 553xx, db 55322, and the two could run together; the spikes used 55432/55433 for bare containers, so
+  pick one documented range at build time), own env file for the app. The founder's seeded local stack (5432x) is **never touched**; **db tests and
   e2e never run against the copy** (they assume a fresh seed; CI is unaffected). Switching = pointing the app at the other env file.
 - **Only the local machine can reach it:** ports bound to `127.0.0.1`; a **random** password for every copied user and a
   **random** JWT secret/anon key per copy (never the public local default, never prod's). The script **refuses to run**
   unless the app's Supabase URL is localhost and no prod key is in the environment.
-- **Where unscrubbed data may exist:** only in a throwaway container/volume, removed on ANY exit (including a crash) and
-  asserted gone. Dump files never touch the repo (`backups/` is for the real backup job; **do not reuse
+- **Where unscrubbed data may exist:** only in a **bare Postgres container with no published ports, no network and NO
+  auth or REST service** (so real auth rows and tokens are never served by GoTrue/PostgREST), with pg_cron jobs disabled and
+  `pgboss` emptied BEFORE anything else runs; removed on ANY exit (including a crash) and asserted gone. The scrubbed result
+  is then loaded into the §5 second stack as its own step. Dump files never touch the repo (`backups/` is for the real backup job; **do not reuse
   `scripts/backup-restore-from-b2.mts`'s habit of writing plaintext into `backups/`**). The travelling SSD is
   unencrypted (BitLocker declined, docs/28 F13), so the copy and the saved file live on the internal disk.
 - **One snapshot:** a single `pg_dump` (one transaction) of auth + public + storage + the ledger, not three runs; after the
@@ -74,18 +77,27 @@ differed, ids collided, nobody said exactly what failed.
 ## 6. The scrub (allowlist by default)
 
 - **Auth:** truncate `sessions`, `refresh_tokens`, `one_time_tokens`, `mfa_*`, `flow_state`, `audit_log_entries` (IPs,
-  browsers, emails; a refresh or recovery token copied out would still work against PROD); rewrite `identities.identity_data`;
-  fake emails are **random per copy** (not a hash of the real address, which a dictionary attack reverses); recompute
-  `email_fingerprint` from the fake address.
+  browsers, emails; a refresh or recovery token copied out would still work against PROD; sign-in creates new ones, so
+  emptying them is safe). **On `auth.users` itself:** blank every token column (`confirmation_token`, `recovery_token`,
+  `email_change_token_*`, `reauthentication_token`), scrub `raw_user_meta_data`/`raw_app_meta_data` (names, emails), `phone`
+  and `email_change`; rewrite `identities.identity_data` (`sub` and `email` matching the fake). **Kept so password sign-in
+  works:** `auth.users` `email`, `encrypted_password`, `email_confirmed_at`, `aud`, `role`, `instance_id`, and the email row
+  in `identities` (`provider_id` = the user id). Fake emails are **random per copy** (not a hash of the real address, which a
+  dictionary attack reverses). **The founder's own copied account gets a one-time random password printed once** by the
+  script (every copied user gets a random password, so without this he could not sign in). Whether the spike sign-in ran
+  with these tables emptied is not recorded: the build must prove sign-in AFTER the full scrub.
+- **Public:** recompute `email_fingerprint` (a `public` column on `account_signup_blocks`/`pending_invites`) from the fake address.
 - **Public:** every column is classified (keep / replace / blank / drop). **Unclassified = blanked or excluded and
   reported**, enforced by a NEW test that lists every text/json column in every copied schema (the data-browser coverage
   test only catches foreign keys to users, not free text). `inet` columns nulled; free text (notes, safety and content
   reports, feedback, jsonb) blanked unless explicitly marked safe.
 - **Tables with no `org_id`** (login/activity events and rollups, feedback, content reports, view-as sessions, lookup
   logs, signup blocks, storage rows whose org is in the path) each get an explicit rule — drop, or filter by the kept
-  user/org set — before any subset (§7) can be trusted. A user in both a kept and an excluded org needs a rule too.
+  user/org set — before any subset can be trusted. **This applies only to the §7 subset (a second developer); v1 copies
+  everything and has no exclusions.**
 - **Leftover scan:** matches the real names, emails, phones and IPs taken from prod BEFORE the scrub (a list built up front
-  and discarded), across every text/json column; fails on any hit; carries a before-scrub control.
+  and discarded), across every text/json column **including `auth.users`**; fails on any hit; carries a before-scrub control; **runs again
+  as the last step**, after any migration, so a new column cannot slip through.
 - **The one risk the design cannot remove:** a place the column list did not predict. The allowlist default and the scan
   shrink it; they do not close it.
 
@@ -101,12 +113,19 @@ script and gives the developer only the **scrubbed file encrypted to that develo
 
 ## 8. Order of the script (when built)
 
-1. Version check (stop if prod ahead). 2. One read-only snapshot dump. 3. Throwaway database; restore auth → public →
-storage (as `supabase_admin`), data in replica mode; replay the 3 triggers. 4. Foreign-key resolve check. 5. Blanket
-revoke + replay grants; re-apply and assert settings; unschedule cron; truncate `pgboss`. 6. Apply exclusions. 7. Scrub
-by allowlist. 8. Leftover scan. 9. Apply pending migrations (the rehearsal; verify the ledger first). 10. Save the
-scrubbed file (`age`-encrypted, 30-day expiry; the next run deletes expired ones) and print a report: copied, excluded
-and why, anything that did not restore. 11. Remove the throwaway container and assert nothing unscrubbed remains.
+1. Version check (stop if prod ahead). 2. One read-only snapshot dump. 3. **Bare** throwaway Postgres (no ports, no auth/REST
+service; cron disabled, `pgboss` emptied first); restore auth → public → storage (as `supabase_admin`), data in replica
+mode; replay the 3 triggers. 4. Foreign-key resolve check. 5. Blanket revoke + replay grants; re-apply and assert settings.
+6. **Apply pending migrations here, BEFORE the scrub** (the rehearsal; verify the ledger first; the throwaway is isolated, so
+real data is fine here and backfills see real values, not blanks). 7. Scrub by allowlist (§6). 8. Leftover scan (every
+column incl. `auth.users`; fail on any hit). 9. Save the scrubbed file (`age`-encrypted to a **separate dev-copy key**, see
+below; stamped to expire in 30 days). 10. Load the scrubbed file into the §5 second stack; prove password sign-in as the
+founder's copied account. 11. Remove the bare container and assert nothing unscrubbed remains. 12. Print a report: what was
+copied and anything that did not restore. **Expiry is enforced only when the script runs again** (it deletes expired files
+then); nothing else deletes them.
+
+**The saved file's key:** a SEPARATE dev-copy `age` key held by the founder (location to be decided at build, docs/28
+B.7 style) — NOT the backup key, or whoever can open a dev copy could open every backup (§7).
 
 ## 9. Build brief (for the fresh chat that builds it)
 
@@ -128,6 +147,14 @@ blocks 53000 (use another); Git Bash needs `MSYS_NO_PATHCONV=1`; a scrubbed copy
 (a 30-line proxy standing in for Kong, `next dev -p 3100`, env vars on the process).
 
 ## 10. Not decided / not tested
+
+**Tensions with what docs/31 would promise a client — OPEN, for the founder and the lawyer (do not resolve silently):**
+- **Deletion on exit (B4):** nothing can remove one org's data from saved files or from the working copy; the saved file
+  expires in 30 days, **the working copy has no expiry** (reviewer suggested one; founder's call).
+- **A record where staff touch a named person's account (B1) vs "Staff-access log: none" for dev copies (§2):** the founder
+  decided no log for dev copies; B1's contract wording must not promise one for copies.
+- **AI sessions will read the copy (B2):** disclosure and the vendor's retention terms (B8) apply to scrubbed data too.
+- **The v1 build must prove sign-in after the full scrub** (§6) and pending-migration application on a bare database (§8).
 
 - A real storage-api container against the restored storage schema.
 - A rehearsal with migrations actually pending.
