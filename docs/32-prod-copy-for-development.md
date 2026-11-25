@@ -23,7 +23,7 @@ differed, ids collided, nobody said exactly what failed.
 | Real but scrubbed | Real shape, personal data replaced. **It is still personal data, not anonymous data** (UUIDs, timestamps and org structure are kept), so it is handled and disclosed as such (docs/31 B4). |
 | IDs | **User and org UUIDs are kept** (they are random `gen_random_uuid()` ids, so a copy never collides with itself); only identifying text is scrubbed. |
 | Version 1 scope | **Everything, requested by the founder only.** Per-requester profiles, org/module/user subsets are DEFERRED until a second developer or a second real client exists (extract-don't-speculate). **No v1 filter at all:** the founder decided 2026-11-24 that a client barred from development access is never possible (not having access prevents development), so there is no exclude-org list. The org-less-table rules in §6 apply only if a subset is ever built (second developer, §7). |
-| Expiry | The **saved scrubbed file expires after 30 days**; the next run of the script deletes expired files (the founder's PC has no always-on scheduler). The working database copy is the developer's own and is deleted on request. |
+| Expiry | The **saved scrubbed file expires after 30 days**; the next run of the script deletes expired files (the founder's PC has no always-on scheduler). **The working copy (the second stack) expires after 30 days too** (founder delegated the call, 2026-11-25: "whatever you recommend"; reason: a forgotten copy of client data is the risk this design exists to limit, and one command rebuilds it): the script warns when a copy is older than 30 days and the next run removes it unless the developer renews it. It can be deleted any time sooner. |
 | Staff-access log | None for dev copies. |
 | "Sign in as the user" for support | Real view-as exists on prod for **classroom**; whole-account is designed, not built (docs/13). A copy is stale and scrubbed, so it is NOT the answer to "my screen shows X". |
 | "No development access" tier | **Rejected by the founder, 2026-11-24: "To not have access, prevents development, I don't think this is a possibility, ever."** Every client's data is reachable for development; the protection is contract, scrub and handling, not exclusion (docs/31 B1, B4). |
@@ -150,7 +150,7 @@ blocks 53000 (use another); Git Bash needs `MSYS_NO_PATHCONV=1`; a scrubbed copy
 
 **Tensions with what docs/31 would promise a client — OPEN, for the founder and the lawyer (do not resolve silently):**
 - **Deletion on exit (B4):** nothing can remove one org's data from saved files or from the working copy; the saved file
-  expires in 30 days, **the working copy has no expiry** (reviewer suggested one; founder's call).
+  AND the working copy expire in 30 days (decided 2026-11-25, §2), but neither can be pulled back from one org on request.
 - **A record where staff touch a named person's account (B1) vs "Staff-access log: none" for dev copies (§2):** the founder
   decided no log for dev copies; B1's contract wording must not promise one for copies.
 - **AI sessions will read the copy (B2):** disclosure and the vendor's retention terms (B8) apply to scrubbed data too.
