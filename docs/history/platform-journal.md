@@ -53,7 +53,10 @@ decision log, docs/03 conventions, docs/12 safeguards) — this is the chronolog
   and showed it as a false alarm; (2) `a4a41a7` — `globals.css` sets form fields to 16px under `@media (pointer: coarse)`,
   outside any `@layer` so it beats Tailwind's `text-sm`: iOS zooms the page in on focusing a field under 16px and keeps the
   zoom after navigation (the page after sign-in opened zoomed, left side cut off). Desktop unchanged. **Founder confirmed
-  both on the iPhone (2026-11-25).**
+  both on the iPhone (2026-11-25).** Durable rules moved to docs/02 "Browser support" (which also corrects its stale "Vercel
+  auto-deploys previews per PR"). Cleanup 2026-11-25: worktree, local + remote `ios15-compat` branch and the `D:\sp-*.log`
+  build logs deleted; note that Claude Code's built-in safety check refuses a GLOB delete at a drive root (`rm D:/sp-*.log`)
+  — name each file explicitly (`Remove-Item -LiteralPath …`).
 - **2026-11-17 (Opus) — CI e2e NEEDED FOUR ATTEMPTS FOR A UI-ONLY COMMIT (`86f889b`, costs page); OPEN, not fixed.** Each attempt
   failed a different mix, always a 5 s `expect` timing out after a click (no server error logged): matchmaking (attempt 1),
   classroom grading at "Compute finals" (attempts 2 and 3; it PASSED attempt 1), several visual-messaging tests (flaky every time).

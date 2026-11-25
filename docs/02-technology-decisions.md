@@ -149,7 +149,40 @@ carrying the AppID and room rather than BOSH.
   account got charged for overage; see CLAUDE.md's incident log and docs/12 for the full
   decision (revisit going private only alongside real Actions-usage discipline, not casually).
   Push → Actions: typecheck, lint, tests, build; on main: apply migrations to cloud, deploy web
-  + worker. Vercel auto-deploys previews per PR.
+  + worker. ~~Vercel auto-deploys previews per PR.~~ **CORRECTED 2026-11-18 (measured): there are NO
+  automatic previews** — CI deploys only on a push to master (`vercel build --prod` on the runner, then
+  `deploy --prebuilt --prod`); Vercel never builds from source. **A pull request DOES run the full `check`
+  job (db + e2e) and skips `deploy`** (`ci.yml`: `on: pull_request`; deploy `if: push && master`) — so a
+  DRAFT PR is the way to test a branch in CI without touching prod (used for the iOS 15 change, PR #2).
+  A hand-made preview from this PC fails: `vercel build` dies with `EPERM … symlink` (Windows/exFAT, the
+  same no-symlink limit as docs/01), although the Vercel preview environment does hold the
+  `NEXT_PUBLIC_SUPABASE_*` vars.
+
+## Browser support: down to iOS / Safari 15 (since 2026-11-18)
+
+- **Floor: Safari/iOS 15** (the founder's iPhone 7 cannot update past iOS 15.8). `apps/web/package.json`
+  carries a `browserslist` (chrome/edge/firefox 111, safari/ios_saf >= 15) that Next 16 / Turbopack
+  honours. **Without it the app is DEAD on iOS 15, not degraded:** Next 16 defaults to Safari 16.4+ and
+  left class static blocks (`static{…}`) in its own router chunks, a SyntaxError that stops all JS — the
+  page renders styled but nothing responds. Do not remove it; a new dependency shipping regex lookbehind
+  (`(?<=`, untranspilable) would break iOS 15 the same way.
+- **Every iOS browser is Safari underneath** (Chrome/Firefox on iOS use the same engine; alternative
+  engines only from iOS 17.4, EU only), so "another browser" or a custom wrapper app cannot help an
+  old iPhone — and building any iOS app needs a Mac. Fix the site instead.
+- **Tailwind 4.3's CSS was fine on Safari 15.6** (styling rendered correctly in the founder's screenshot),
+  so no `@property`/`color-mix()` fallbacks were added; fix specific screens only if reported.
+- **Debugging a phone with no Mac:** the root layout's ES5 early-error script shows captured script errors
+  in a red box if the app has not booted 6 s after load (`components/boot-flag.tsx` sets the flag) — ask
+  for a screenshot. The login page's yellow "hasn't finished loading" box is CSS-only and appears after
+  10 s without hydration. Untried alternative: BrowserStack's trial gives Safari dev tools on a real iOS
+  15 device from Windows.
+- **Phones:** form fields are 16px on touch screens (`globals.css`, `@media (pointer: coarse)`, outside any
+  `@layer`) because iOS zooms in on focusing a smaller field and keeps the zoom. **Home Screen app:**
+  `app/manifest.ts` (standalone), `app/icon.tsx` + `app/apple-icon.tsx` (a placeholder blue "SP", drawn in
+  code), `appleWebApp` metadata plus an explicit `apple-mobile-web-app-capable` tag (Next 16 emits only
+  `mobile-web-app-capable`, which iOS 15 ignores). On iOS the Home Screen app keeps its OWN sign-in
+  (separate from Safari's), email links (password reset) open in Safari, and after a manifest/icon change
+  the shortcut must be deleted and re-added.
 
 ## Hosting (phased — decided 2026-07-06, "managed-first, VPS later")
 
