@@ -126,6 +126,12 @@ else you think". v1 delivers the "exact report + copy what can be copied" half (
 the design stays on paper and is built only when prod is too big or too mixed (e.g. two real clients); a "keep only these
 orgs" option applied after a full restore is the cheap first version of it.
 
+**Why a developer needs no prod access (assistant reasoning, 2026-11-24, not yet a decision):** today `is_superadmin` is one
+yes/no flag and a second superadmin is the recorded trigger to design a narrower tier (docs/12 item 9). The prod database
+password is effectively god mode (it bypasses every app role), so the real boundary when developers are added is **who
+holds production credentials**; developers working on the scrubbed copy never touch prod. When a real developer joins, a
+narrower "developer" tier becomes a short design item: read-only, no deletes, no personal disclosures.
+
 When a second developer is about to join, REOPEN this section before giving them anything: per-requester profiles (a
 developer's copy built from the orgs/modules they are granted, no superadmin role), the org-less-table rules in §6, the
 encrypted-to-their-own-key handoff below, and a cloud dev database decision. (A "no development access" tier was rejected 2026-11-24.)

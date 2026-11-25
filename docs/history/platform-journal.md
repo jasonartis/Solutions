@@ -27,8 +27,9 @@ decision log, docs/03 conventions, docs/12 safeguards) — this is the chronolog
   written OUTSIDE the repo (his personal folder), drift follow-ups 1+2 shipped (`6d51dbc`, `6da263d`, CI + Vercel green),
   3+4 queued as docs/04 row 10. **Raw record:** this planning chat's full transcript is
   `~/.claude/projects/d--Solutions-Platform/4ad1d135-024b-4500-8567-d07d5ffb8c60.jsonl` on the founder's PC (not in the
-  repo); search it for the assistant's original explanations (vault ownership scenarios, safety-access tiers A/B/C) if a
-  doc line needs its reasoning.
+  repo); the vault-ownership reasoning, the three reviews and the access tiers A/B were recovered into docs/33 §10-11
+  on 2026-11-25 (the founder asked "are you sure it is not documented elsewhere?" — it was not); search the transcript for any
+  other original explanation a doc line needs.
 - **2026-11-09 → 11-20 (Sonnet) — cost model, pricing structure, ideas list, "what's next" index (no migration).** Built
   `docs/costs/` + superadmin page `/console/costs` (pure model `packages/platform/src/cost-model.ts`, prices dated with confidence
   labels). Second pass: "Use my real numbers", editable price what-ifs, break-even/margin, own-costs lines, pricing = base fee per
