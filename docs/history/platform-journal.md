@@ -52,7 +52,8 @@ decision log, docs/03 conventions, docs/12 safeguards) — this is the chronolog
   loading" notice waits 10 s, not 4 s: the Home Screen app's FIRST open (empty cache, 2016 phone) took over 4 s to hydrate
   and showed it as a false alarm; (2) `a4a41a7` — `globals.css` sets form fields to 16px under `@media (pointer: coarse)`,
   outside any `@layer` so it beats Tailwind's `text-sm`: iOS zooms the page in on focusing a field under 16px and keeps the
-  zoom after navigation (the page after sign-in opened zoomed, left side cut off). Desktop unchanged.
+  zoom after navigation (the page after sign-in opened zoomed, left side cut off). Desktop unchanged. **Founder confirmed
+  both on the iPhone (2026-11-25).**
 - **2026-11-17 (Opus) — CI e2e NEEDED FOUR ATTEMPTS FOR A UI-ONLY COMMIT (`86f889b`, costs page); OPEN, not fixed.** Each attempt
   failed a different mix, always a 5 s `expect` timing out after a click (no server error logged): matchmaking (attempt 1),
   classroom grading at "Compute finals" (attempts 2 and 3; it PASSED attempt 1), several visual-messaging tests (flaky every time).
