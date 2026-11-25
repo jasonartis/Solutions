@@ -4,7 +4,7 @@ The running, dated build journal that used to live in `CLAUDE.md`'s "## Current 
 section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every session)
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
-- **2026-11-23/24 (Sonnet, planning only, no migration) — lawyer list + prod-copy-for-development design.** Founder's
+- **2026-10-26 → 11-25 (Sonnet, planning only, no migration; the chat began 2026-10-26 and was compacted twice) — lawyer list + prod-copy-for-development design.** Founder's
   planning chat (AI resume-builder idea, staff access to client data, consent/disclosure design, view-as, an easy prod→dev
   copy). **Written down:** [docs/31](../31-questions-for-a-lawyer.md) (the one list of questions for a lawyer/insurance
   broker; 14 gathered, 10 from this chat, 15 added by an adversarial gap review; public-repo wording kept to question stems)
@@ -25,7 +25,14 @@ decision log, docs/03 conventions, docs/12 safeguards) — this is the chronolog
   adversarial reviews of docs/32 folded in (bare no-network throwaway; auth.users token scrub; migrations before the scrub;
   separate dev-copy age key; working copy also expires in 30 days — founder delegated), a private lawyer-specifics file
   written OUTSIDE the repo (his personal folder), drift follow-ups 1+2 shipped (`6d51dbc`, `6da263d`, CI + Vercel green),
-  3+4 queued as docs/04 row 10. **No transcript is kept** (Claude Code deletes chats after ~30 days; a copy made
+  3+4 queued as docs/04 row 10. **When the founder said what (from the chat's own timestamps, checked 2026-11-25):** resume-builder idea and free-API/who-pays
+  2026-10-26; vault ownership, status bars, cost levels, caveat wording, "login as any user" 2026-10-27; "vital that I have
+  full access", the improve-the-platform checkbox, "I can't allow an org to keep data private from my development" 2026-10-28;
+  the accessories example, "Operational data yes", the sandbox-org rejection 2026-11-01; the old-company cloud-dev correction,
+  "local one-way copy as the starting design", the disclosures-page proposal, view-as questions, no staff-access log
+  2026-11-02; the view-as drift worry, the legal-list request and "run the spikes" 2026-11-23; auto-expiry, requester-level access,
+  "document the resume builder and disclosures page", "no development access tier — never", "run the audit" 2026-11-24.
+  **No transcript is kept** (Claude Code deletes chats after ~30 days; a copy made
   mid-session was deleted again at the founder's request, "that is too much"). Instead the WHOLE planning chat was swept by
   three extraction agents against the docs and every gap was written down: vault-ownership reasoning, three reviews, access
   tiers A/B and the build-level appendix → docs/33 §10–12; the old-company layout, the rejected sandbox-org idea, the shelved

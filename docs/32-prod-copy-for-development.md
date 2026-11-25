@@ -13,7 +13,7 @@ A bug or feature often needs the SHAPE of real client data, and a migration shou
 Seed data is tidy; prod is not. At the founder's previous company getting prod data into dev was a bottleneck: schemas
 differed, ids collided, nobody said exactly what failed.
 
-## 2. Decisions (founder, 2026-11-23/24)
+## 2. Decisions (founder; direction and scrub choices 2026-11-02, scope/expiry/review decisions 2026-11-24)
 
 | Decision | Detail |
 |---|---|
@@ -117,7 +117,7 @@ real or revives something deliberately removed. So a data fix returns as a new r
 
 ## 7. Second developer (later, not v1) — FOUNDER 2026-11-24: "don't forget it for when we have future developers"
 
-**The founder's original requirements for the copy tool (2026-11-23), kept here so the deferred half is not lost:** make the
+**The founder's original requirements for the copy tool (2026-11-02), kept here so the deferred half is not lost:** make the
 copy EASY to run (this was "a big bottleneck in my old company"); let the requester CHOOSE what is copied — "a specific
 user/set of users and org, a module, an org-module combo"; **if the schema differs, tell the requester exactly what went
 wrong or which subset can be copied, and copy what can be**; give the requester the choices over scrubbing "and whatever
@@ -199,7 +199,7 @@ blocks 53000 (use another); Git Bash needs `MSYS_NO_PATHCONV=1`; a scrubbed copy
 Labels: FOUNDER = his words/decision; PROPOSED = assistant suggestion he did not explicitly accept; MEASURED = a number or fact checked at the time; OPEN = unanswered.
 
 **Decisions and reasons not stated above**
-- **FOUNDER rejected a "sandbox org per engagement" (2026-11-23):** "no. The way we did this was we fixed things up in a dev environment that had a copy of the prod data. The client only accessed prod." The idea rested on a real gap: acting as a manager inside the live org would write a real order row under her name. At his old company an org switcher was absent for a one-site client, showed only their own sites to a multi-site client, and staff could choose any client. What the console's org picker does today was never checked (OPEN).
+- **FOUNDER rejected a "sandbox org per engagement" (2026-11-01):** "no. The way we did this was we fixed things up in a dev environment that had a copy of the prod data. The client only accessed prod." The idea rested on a real gap: acting as a manager inside the live org would write a real order row under her name. At his old company an org switcher was absent for a one-site client, showed only their own sites to a multi-site client, and staff could choose any client. What the console's org picker does today was never checked (OPEN).
 - **FOUNDER's old company's layout (corrects an assistant assumption that "your laptop holds client data"):** local development against a CLOUD dev database, a deployed online dev front end, and a separate prod front end and database. Rungs agreed: a second Supabase dev project "would solve lots of things including development by multiple developers" but is not needed now; a cloud dev front end only "upon company expansion to multiple developers and testers"; a second dev Vercel deployment left open. Assistant notes (PROPOSED/unverified): a hosted dev project catches local-vs-prod divergences (default privileges, auth settings), gives a real URL to show a client, needs a second Supabase project (free tier allows two: UNVERIFIED), and a refresh that wipes dev first makes a departed client disappear.
 - **Why no staff-access log for dev copies (FOUNDER):** "That is like logging the fact that someone is working on development today." Assistant's one carve-out (PROPOSED, decide then): a copy made to debug ONE named person's problem is close to the support lookup `/privacy` describes; org or module copies need no log.
 - **The assistant's first five-question design, answered "1-4 sounds good" (only the log was dropped):** pointer pulls; **personal-disclosure tables (vault, notes, dating) excluded by default unless explicitly chosen, with a typed reason**; ~30-day expiry; "only you, always with a typed reason". The later full-copy design did not restate the exclusion of personal-disclosure tables. **OPEN: does that default survive into v1?** (v1 as written copies everything, scrubbed.)
