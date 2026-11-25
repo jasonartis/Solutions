@@ -21,12 +21,25 @@ differed, ids collided, nobody said exactly what failed.
 | Why not "branch of prod, merge back" | Merging code works because git knows what changed. Prod data has many authors, rules that check each write, and keeps changing while a copy sits aside; the copy is scrubbed, so pasting it back would overwrite real data, revive deleted rows, skip the database's guard rules and cross tenants. |
 | Dev environment | Stays local (Docker) for now; a cloud dev database only when a second developer arrives. |
 | Real but scrubbed | Real shape, personal data replaced. **It is still personal data, not anonymous data** (UUIDs, timestamps and org structure are kept), so it is handled and disclosed as such (docs/31 B4). |
-| IDs | **User and org UUIDs are kept** (they are random `gen_random_uuid()` ids, so a copy never collides with itself); only identifying text is scrubbed. |
+| IDs | **User and org UUIDs are kept** (they are random `gen_random_uuid()` ids, so a copy never collides with itself); only identifying text is scrubbed. **Measured 2026-11-25:** 83 `gen_random_uuid()` uses in the migrations; the ONLY non-uuid ids are two `bigint generated always as identity` tables, `content_report_intake` and `view_as_real_page_views` (both log-style). A dump carries their ids and sequence positions, so the copy keeps the same ids and new rows continue from the same counter — no collision, but a row added in the copy and one added on prod later would share an id, which is harmless because data never merges back. (The founder's old-company problem — "ids that generate themselves" — was this; here it is two log tables.) |
 | Version 1 scope | **Everything, requested by the founder only.** Per-requester profiles, org/module/user subsets are DEFERRED until a second developer or a second real client exists (extract-don't-speculate). **No v1 filter at all:** the founder decided 2026-11-24 that a client barred from development access is never possible (not having access prevents development), so there is no exclude-org list. The org-less-table rules in §6 apply only if a subset is ever built (second developer, §7). |
 | Expiry | The **saved scrubbed file expires after 30 days**; the next run of the script deletes expired files (the founder's PC has no always-on scheduler). **The working copy (the second stack) expires after 30 days too** (founder delegated the call, 2026-11-25: "whatever you recommend"; reason: a forgotten copy of client data is the risk this design exists to limit, and one command rebuilds it): the script warns when a copy is older than 30 days and the next run removes it unless the developer renews it. It can be deleted any time sooner. |
 | Staff-access log | None for dev copies. |
 | "Sign in as the user" for support | Real view-as exists on prod for **classroom**; whole-account is designed, not built (docs/13). A copy is stale and scrubbed, so it is NOT the answer to "my screen shows X". |
 | "No development access" tier | **Rejected by the founder, 2026-11-24: "To not have access, prevents development, I don't think this is a possibility, ever."** Every client's data is reachable for development; the protection is contract, scrub and handling, not exclusion (docs/31 B1, B4). |
+
+**The seven cases the design review tested (2026-11-24; winner per case):** (1) reproduce a bug from one client's data —
+the copy (if the bug depends on a scrubbed field, read the real value through real view-as on prod instead); (2) rehearse a
+migration on real volume — the copy, but a local rehearsal cannot prove ACLs (prod's default privileges differ), so keep
+the per-migration `prod-verify-*.mts` before and after the prod apply; (3) build a feature on real data — explore on the
+copy, **ship against `seed.ts`** (CI and e2e run on seed; use the copy only to find the shapes the seed rows should have);
+(4) "my screen shows X" — neither: real view-as; (5) a client with a no-development-access clause — moot (rejected 2026-11-24);
+(6) a copy forgotten on a laptop — the weak spot, mitigated by encryption at rest and expiry; (7) prod keeps taking writes
+while a copy is used — a disposable copy may drift harmlessly (a merge-back would break). **Plain version of why data
+cannot merge back:** merging code is like changing a restaurant's recipe (tested in a test kitchen, applies to every future
+meal, touches nothing already served); merging data is like photocopying last week's order book, scribbling on the copy
+(with names blacked out) and pasting it back while customers kept ordering — every pasted line either overwrites something
+real or revives something deliberately removed. So a data fix returns as a new recipe step: a migration.
 
 ## 3. What the spikes proved (real prod, read-only, then deleted)
 
@@ -37,6 +50,7 @@ differed, ids collided, nobody said exactly what failed.
 | Privileges | Image defaults over-privilege `anon`. Blanket revoke, then replay the dump's GRANT/REVOKE lines → grant COUNTS equal prod's (the build compares the actual grants, not counts). |
 | Role settings | NOT in a dump. `authenticator`'s `pgrst.db_pre_request = public.view_as_pre_request` had to be re-applied by hand; without it the read-only gate is silently off. |
 | Scrub + email scan | Emails/passwords/names replaced; 0 real addresses after (10 before — a control proving the scan works). Real addresses also lived in `profiles`, `pending_invites`, `content_reports`, `sal_customers`, `vendor_accounts.owner_login`. **An email-only scan is not enough** (§6). |
+| First spike's table/function counts | Of 135 dumped tables, 117 (every `public` and `auth` table that has rows) matched the dump exactly; the 18 not restored were `pgboss.*` (job queue — should not be copied anyway), `storage.*` (the image has no tables there until its schema is restored; spike 3 fixed that) and `auth.audit_log_entries`. Functions: 249 of 251 `public` functions restored — **the 2-function gap was never explained**; the build must diff function lists and report any missing one. |
 | Real auth server on the copy | Up; sign-in 200 for a demo and a scrubbed user, wrong password 400. |
 | PostgREST (RLS) | Correct for the users tried (demo user 7/9 orgs, superadmin 9/9, anon refused) — two users, not an RLS test; the real RLS suite is the proof. |
 | Real Next app | Signed in at `/login`, dashboard rendered, the browser contacted only localhost (the database side was not network-audited). |
@@ -103,6 +117,15 @@ differed, ids collided, nobody said exactly what failed.
 
 ## 7. Second developer (later, not v1) — FOUNDER 2026-11-24: "don't forget it for when we have future developers"
 
+**The founder's original requirements for the copy tool (2026-11-23), kept here so the deferred half is not lost:** make the
+copy EASY to run (this was "a big bottleneck in my old company"); let the requester CHOOSE what is copied — "a specific
+user/set of users and org, a module, an org-module combo"; **if the schema differs, tell the requester exactly what went
+wrong or which subset can be copied, and copy what can be**; give the requester the choices over scrubbing "and whatever
+else you think". v1 delivers the "exact report + copy what can be copied" half (§8 step 12) and everything-at-once; the
+**choosable subset and the per-copy scrub choices are the deferred half**. "Subset pulls shelved" means exactly that:
+the design stays on paper and is built only when prod is too big or too mixed (e.g. two real clients); a "keep only these
+orgs" option applied after a full restore is the cheap first version of it.
+
 When a second developer is about to join, REOPEN this section before giving them anything: per-requester profiles (a
 developer's copy built from the orgs/modules they are granted, no superadmin role), the org-less-table rules in §6, the
 encrypted-to-their-own-key handoff below, and a cloud dev database decision. (A "no development access" tier was rejected 2026-11-24.)
@@ -139,7 +162,10 @@ B.7 style) — NOT the backup key, or whoever can open a dev copy could open eve
 > anything to prod; read-only on prod. Report each step with evidence, then run the adversarial review, then update
 > docs/32 and the journal. Do not build per-requester profiles or the second-developer path (docs/32 §7).
 
-Spike recipes (so they are not rediscovered): restore order auth → public → storage (as `supabase_admin`, not
+Spike recipes (so they are not rediscovered): run `pg_dump` INSIDE the throwaway container (the host needs no Postgres
+client) against prod's session pooler; an md5 of two schema dumps differs every run because `pg_dump` writes a random
+`\restrict` key — it is not evidence of change, diff with that line removed; the image's `postgres` role is not a
+superuser (restore storage as `supabase_admin`); restore order auth → public → storage (as `supabase_admin`, not
 `postgres`); drop the image's auth stub and comment out `CREATE SCHEMA` lines; blanket revoke + replay the dump's
 GRANT/REVOKE; re-set `authenticator`'s `pgrst.db_pre_request`; set the auth/storage admin role passwords; `PGOPTIONS`
 read-only is ignored by prod's pooler, so run `set default_transaction_read_only=on` first; Windows excluded port range
