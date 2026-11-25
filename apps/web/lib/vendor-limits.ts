@@ -34,6 +34,10 @@ export const VENDOR_LIMITS = {
 // (Vercel's usage page is the only source). Recorded here so the next session need not
 // re-fetch it for a budget.
 
+// The date the Supabase and Vercel caps above were read from the vendors' pages (the
+// 8x8 video cap carries its own, older date in its `checked` field). Shown on the Limits tile.
+export const VENDOR_LIMITS_CHECKED = '2026-11-12'
+
 // How a figure compares with its limit.
 export type LimitLevel = 'ok' | 'near' | 'over'
 

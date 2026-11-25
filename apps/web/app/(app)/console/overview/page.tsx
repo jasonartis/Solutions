@@ -68,6 +68,9 @@ export default async function OverviewPage() {
   return (
     <div className="max-w-4xl">
       <PageHeader back={{ href: '/console', label: 'Owner Console' }} title="Platform overview" className="mb-1" />
+      <p className="mb-2 text-xs font-medium text-amber-800" data-testid="overview-records-hint">
+        &ldquo;Records&rdquo; below = person-linked records only &mdash; a floor, not a total.
+      </p>
       <p className="mb-4 text-sm text-gray-600">
         <strong>{o.orgCount}</strong> organization{o.orgCount === 1 ? '' : 's'} ·{' '}
         <strong>{o.distinctPeople}</strong> {o.distinctPeople === 1 ? 'person' : 'people'} (each counted once, however
@@ -150,7 +153,7 @@ export default async function OverviewPage() {
         Names are display names; people who never set one show as &ldquo;Unnamed member&rdquo;.
       </p>
       <p data-testid="overview-records-note" className="mt-3 rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-gray-600">
-        <strong>&ldquo;Records&rdquo;</strong> is a count of rows, not storage size: the rows an organization holds in
+        <strong>&ldquo;Records&rdquo;</strong> counts person-linked records only &mdash; a floor, not a total. It is a count of rows, not storage size: the rows an organization holds in
         the tables each module declares for people (grades, bookings, messages and so on). It is a floor, not the
         full total, because tables that name nobody are not counted, and it counts only what you can read.
         {o.recordsScan.cappedTables.length > 0 && (

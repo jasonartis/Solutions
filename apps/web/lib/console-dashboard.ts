@@ -16,7 +16,7 @@ import { getZmanimCoverage, getZmanimPrefetchSettings } from '@/lib/zmanim-conso
 import { getVendorData, vendorIssues, type VendorIssue } from '@/lib/vendor-accounts'
 import { PLATFORM_CONTACT_EMAIL } from '@/lib/platform-identity'
 import { formatBytes, getOverview, getStorageUsage } from '@/lib/console-overview'
-import { VENDOR_LIMITS, limitLevel, type LimitLevel } from '@/lib/vendor-limits'
+import { VENDOR_LIMITS, VENDOR_LIMITS_CHECKED, limitLevel, type LimitLevel } from '@/lib/vendor-limits'
 
 // 'info' is a neutral count tile (the Platform tile): it never claims things are
 // fine or wrong, so it must not borrow the green "All clear" word.
@@ -417,6 +417,10 @@ async function limitsSection(supabase: SupabaseClient, items: PriorityItem[]): P
     lines.push(`storage: ${formatBytes(fileBytes)} of ${VENDOR_LIMITS.supabaseStorageGb.value} GB`)
     note(limitLevel(fileBytes, fileCapBytes), `Uploaded files total ${formatBytes(fileBytes)} — the free plan allows ${VENDOR_LIMITS.supabaseStorageGb.value} GB`)
   }
+
+  lines.push(
+    `caps read from vendor pages ${VENDOR_LIMITS_CHECKED} (video cap last checked ${VENDOR_LIMITS.jaasFreeMau.checked})`,
+  )
 
   return {
     key: 'limits',
