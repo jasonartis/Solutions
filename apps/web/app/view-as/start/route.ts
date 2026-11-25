@@ -8,7 +8,7 @@ import { VIEW_AS_COOKIE, realViewConfigured } from '@/lib/view-as-real'
 // the cookie exists, i.e. as the superadmin with no banner).
 //
 // The database decides who may be viewed (view_as_real_start: superadmin only,
-// classroom only, an active member, never a superadmin or oneself) and logs it.
+// the whole account, never a superadmin or oneself) and logs it.
 // A route handler gets no automatic cross-site check, so the Origin is checked
 // here; the cookie is httpOnly and SameSite=Lax.
 export async function POST(request: NextRequest) {
@@ -16,21 +16,25 @@ export async function POST(request: NextRequest) {
     NextResponse.redirect(new URL(`/console/view-as/real?error=${encodeURIComponent(msg)}`, request.url), 303)
 
   const origin = request.headers.get('origin')
-  if (!origin || new URL(origin).host !== request.nextUrl.host) {
+  let originHost: string | null = null
+  try {
+    originHost = origin ? new URL(origin).host : null // 'null' or garbage throws: refuse, not 500
+  } catch {
+    originHost = null
+  }
+  if (!originHost || originHost !== request.nextUrl.host) {
     return new NextResponse('Cross-site request refused', { status: 403 })
   }
   if (!realViewConfigured()) return back('Real view-as is not configured on this server (SUPABASE_JWT_SECRET is missing).')
 
   const form = await request.formData()
   const target = String(form.get('target') ?? '')
-  const org = String(form.get('org') ?? '')
-  const slug = String(form.get('slug') ?? '')
 
   const supabase = await createClient()
-  const { data, error } = await supabase.rpc('view_as_real_start', { p_target: target, p_org: org, p_module: 'classroom' })
+  const { data, error } = await supabase.rpc('view_as_real_start', { p_target: target })
   if (error || !data) return back(error?.message ?? 'Could not start the view')
 
-  const res = NextResponse.redirect(new URL(`/o/${encodeURIComponent(slug)}/m/classroom`, request.url), 303)
+  const res = NextResponse.redirect(new URL('/dashboard', request.url), 303)
   res.cookies.set(VIEW_AS_COOKIE, data as string, {
     httpOnly: true,
     sameSite: 'lax',

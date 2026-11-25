@@ -62,6 +62,13 @@ const ANON_SIGNATURES = new Set([
   // token claims and return nothing about anyone else.
   'is_view_as_request()',
   'view_as_pre_request()',
+  // Whole-account View as (20261125010000): granted to anon ON PURPOSE, same
+  // reason. in_view_as() is the two-flag form of is_view_as_request();
+  // view_as_may_read() is the rule migration B puts in every module table's
+  // restrictive policy `to public`, so anon's queries evaluate it too. Both
+  // return true/false only, about the caller's own token / its own view session.
+  'in_view_as()',
+  'view_as_may_read(p_org_id uuid, p_module text)',
 ])
 const ORACLE_SIGNATURES = new Set([
   'module_scope_covers(ancestor uuid, descendant uuid)',
@@ -246,6 +253,14 @@ const FUNCTION_EXCEPTIONS: Record<string, { auth: boolean; svc: boolean }> = {
   'view_as_real_start(p_target uuid, p_org uuid, p_module text)': { auth: true, svc: false },
   'view_as_real_check(p_session uuid, p_path text, p_log boolean)': { auth: true, svc: false },
   'view_as_real_end(p_session uuid)': { auth: true, svc: false },
+  // 20261125010000: whole-account View as. The 1-argument start re-checks
+  // is_superadmin(); the two readers act on auth.uid(); the invite preview is
+  // internal (called only from org_/vm_my_pending_invites, as their owner).
+  // private_text keeps the default (authenticated + service_role).
+  'view_as_real_start(p_target uuid)': { auth: true, svc: false },
+  'sd_my_notes(p_event_id uuid)': { auth: true, svc: false },
+  'mm_my_answers(p_org_id uuid)': { auth: true, svc: false },
+  'pending_invite_would_apply(p_invite uuid, p_invitee uuid)': { auth: false, svc: false },
   // 20261115010000: the Owner Console's size per org/module. Re-checks
   // is_superadmin(); the worker has no use for it.
   'platform_storage_usage()': { auth: true, svc: false },
@@ -620,6 +635,10 @@ async function main() {
     superadmin_lookup_log: ['SELECT'],
     syn_zmanim_fetch_log: ['SELECT', 'INSERT'],
     view_as_sessions: ['SELECT'],
+    // 20261116010000 revokes service_role and never re-grants: only the
+    // view_as_real_* definers write them (found missing 2026-11-24: 16/17 locally).
+    view_as_real_sessions: [],
+    view_as_real_page_views: [],
     platform_settings: ['SELECT', 'INSERT', 'UPDATE'],
     // 20261007090000 revokes service_role and never re-grants: the worker has no
     // business with deletion requests, and the expiry runs in pg_cron as postgres.

@@ -4,6 +4,7 @@ import { getProfile } from '@/lib/platform'
 import { SiteFooter } from '@/components/site-footer'
 import { AppHeader } from '@/components/app-header'
 import { ViewAsBanner } from '@/components/view-as-banner'
+import { ViewingProvider } from '@/components/view-as-context'
 import { getRealView } from '@/lib/view-as-real'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -32,6 +33,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const realView = await getRealView()
 
   return (
+    <ViewingProvider viewing={!!realView}>
     <div className="min-h-screen bg-gray-50">
       {realView && <ViewAsBanner view={realView} />}
       <AppHeader
@@ -43,5 +45,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <main className="mx-auto max-w-5xl p-4 sm:p-6">{children}</main>
       <SiteFooter />
     </div>
+    </ViewingProvider>
   )
 }

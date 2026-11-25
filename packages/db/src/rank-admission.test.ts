@@ -602,7 +602,10 @@ describe('rank admission: what each rank gate lets through (docs/13, CLAUDE.md N
       // against the other's arguments — so fail here rather than quietly
       // mis-attribute.
       const overloaded = [...new Map(fnRows.map((r) => [r.name, 0])).keys()]
-        .filter((n) => fnRows.filter((r) => r.name === n).length > 1 && n !== 'module_position_rank')
+        .filter((n) => fnRows.filter((r) => r.name === n).length > 1 && n !== 'module_position_rank'
+          // TEMPORARY (20261125010000): the 3-argument org-scoped start stays until the app deploy
+          // that stops calling it; a later cleanup drops it. Neither form is a rank gate.
+          && n !== 'view_as_real_start')
         .sort()
       expect(
         overloaded,

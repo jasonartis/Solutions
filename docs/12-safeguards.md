@@ -85,6 +85,10 @@ rot; pipelines don't.
   in-conversation approval AND the marker. Migrations are forward-only,
   additive-first (CLAUDE.md working agreements).
 - Never put the service-role key anywhere but the worker (docs/03 #14).
+- **Never delete, prune or add a retention job to `public.view_as_real_sessions` (founder 2026-11-24, docs/13
+  "FOUR-WAY REVIEW" decision 1A).** It is the platform's permanent staff-access record — who viewed whose account, and
+  when — and `/privacy` promises exactly that ("there's always a record of who looked, and when", kept permanently).
+  Its person/org columns go NULL on account deletion (FK `set null`), which is what the page describes.
 - **Never drop, rename or make raise `public.view_as_pre_request()` or `public.is_view_as_request()` (real view-as,
   migration `20261116010000`, 2026-11-12).** `pgrst.db_pre_request` on the `authenticator` role makes EVERY API request
   call the hook first, so a missing or raising hook takes the whole API down. Changing them: `create or replace` only,
@@ -93,6 +97,10 @@ rot; pipelines don't.
   pgrst.db_pre_request` FIRST, then drop. Related: the real-view token is HS256 on the legacy JWT secret
   (`SUPABASE_JWT_SECRET` on Vercel, server-only); if the project ever moves to asymmetric signing keys, every viewed page
   errors (fail-closed, no fallback to the superadmin's reach) until the signing is moved too. docs/13 "REAL VIEW-AS".
+  **The same applies to `public.in_view_as()` and `public.view_as_may_read(uuid, text)`** (whole-account View as,
+  `20261125010000`): after migration B (`20261126010000_view_as_widen`) they sit in the restrictive `<table>_no_view_as`
+  policy of EVERY module table, so a dropped or raising one darkens (or errors) every module read for everyone, not
+  only views. Raise-free, `create or replace` only; `scripts/prod-verify-view-as-whole-account.mts` after.
 - **Never act on a conclusion that another session's work is ABANDONED — ask that
   session first (2026-10-02).** A session being absent from `ListAgents`, or
   unreachable under the name you last used, does **NOT** mean it has ended. It can

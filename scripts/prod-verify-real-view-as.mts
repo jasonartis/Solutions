@@ -21,7 +21,7 @@
 //     as read-only, and the same write succeeds without it (the control); a
 //     storage insert with the claim is refused.
 import { createHash } from 'node:crypto'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import postgres from 'postgres'
@@ -68,6 +68,16 @@ const text = readFileSync(resolve(root, 'supabase/migrations/20261116010000_real
 const expected = new Map<string, string>()
 const re = /create or replace function public\.(\w+)\([\s\S]*?\nas \$\$([\s\S]*?)\$\$;/g
 for (let m = re.exec(text); m; m = re.exec(text)) expected.set(m[1]!, createHash('md5').update(m[2]!).digest('hex'))
+// 20261125010000 (whole-account View as) re-creates two of the five; once it is
+// applied their bodies come from there (the 3-argument start is unchanged).
+const NEWER = resolve(root, 'supabase/migrations/20261125010000_view_as_whole_account.sql')
+if (existsSync(NEWER)) {
+  const t2 = readFileSync(NEWER, 'utf8')
+  const re2 = new RegExp(re.source, 'g')
+  for (let m = re2.exec(t2); m; m = re2.exec(t2)) {
+    if (m[1] === 'view_as_pre_request' || m[1] === 'view_as_real_check') expected.set(m[1], createHash('md5').update(m[2]!).digest('hex'))
+  }
+}
 
 // name -> [security definer?, anon?, authenticated?, service_role?]
 const INTENT: Record<string, [boolean, boolean, boolean, boolean]> = {
@@ -102,7 +112,8 @@ try {
              has_function_privilege('authenticated', p.oid, 'execute') as u,
              has_function_privilege('service_role', p.oid, 'execute') as s,
              coalesce(p.proacl::text, '') ~ '(^|[{,])=X/' as p
-      from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname = ${name}`
+      from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname = ${name}
+      order by p.pronargs desc limit 1`
     check(`${name} exists, body matches the migration`, f?.md5 === expected.get(name), `db=${f?.md5 ?? '-'}`)
     check(`  definer = ${secdef}, search_path pinned`, f?.secdef === secdef && JSON.stringify(f?.config) === '["search_path=\\"\\""]', JSON.stringify(f?.config))
     check(`  EXECUTE anon=${anon} authenticated=${auth} service_role=${svc}, never PUBLIC`, !!f && f.a === anon && f.u === auth && f.s === svc && !f.p, f ? `${f.a}/${f.u}/${f.s}/public=${f.p}` : '-')

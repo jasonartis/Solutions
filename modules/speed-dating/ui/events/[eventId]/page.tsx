@@ -137,7 +137,9 @@ export default async function EventPage(props: {
       .eq('event_id', eventId)
       .order('created_at', { ascending: false }),
     me
-      ? supabase.from('sd_notes').select('about_user_id, body').eq('event_id', eventId).eq('author_user_id', me.id)
+      ? // Through the one reader (20261125010000): the author gets the text; a View as
+        // request gets '‹private note · N characters›'. Same code for both.
+        supabase.rpc('sd_my_notes', { p_event_id: eventId })
       : Promise.resolve({ data: null }),
   ])
 
@@ -214,7 +216,8 @@ export default async function EventPage(props: {
     const prof = (profiles ?? []).find((pr) => pr.user_id === seat.user_id)
     return prof?.display_name || 'Someone'
   }
-  const noteFor = (userId: string) => (myNotes ?? []).find((n) => n.about_user_id === userId)?.body ?? ''
+  const noteFor = (userId: string) =>
+    ((myNotes ?? []) as { about_user_id: string; body: string }[]).find((n) => n.about_user_id === userId)?.body ?? ''
   const openReportCount = (reports ?? []).filter((r) => r.state === 'open').length
   const profileCardFor = (participantId: string) =>
     (participants ?? []).find((p) => p.id === participantId)?.profile_card ?? ''

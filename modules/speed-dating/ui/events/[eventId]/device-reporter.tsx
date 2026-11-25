@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { useIsViewing } from '@/components/view-as-context'
 
 // Tells the organizer's Ready board whether THIS person's camera, microphone and connection are fine
 // (module-6 spec 2026-11-05, "THE CLIENT CONTRACT"). Renders nothing. Mounted only for a person with a
@@ -55,7 +56,11 @@ async function probeDevices(): Promise<Pick<Report, 'camera' | 'mic'>> {
 }
 
 export default function DeviceReporter({ eventId }: { eventId: string }) {
+  // While the superadmin views someone's screen, this component would write AS THE SUPERADMIN
+  // (it uses the browser client): render nothing and send nothing (whole-account revision 13).
+  const viewing = useIsViewing()
   useEffect(() => {
+    if (viewing) return
     const supabase = createClient()
     let stopped = false
     let probed: Pick<Report, 'camera' | 'mic'> = { camera: 'unknown', mic: 'unknown' }
@@ -131,7 +136,7 @@ export default function DeviceReporter({ eventId }: { eventId: string }) {
       navigator.mediaDevices?.removeEventListener?.('devicechange', reprobe)
       for (const s of permissionStatuses) s.onchange = null
     }
-  }, [eventId])
+  }, [eventId, viewing])
 
   return null
 }

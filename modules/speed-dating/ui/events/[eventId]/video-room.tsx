@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from 'react'
 import type { VideoConnectionOptions } from '@modules/speed-dating'
 import { getVideoJoinToken } from '../../actions'
+import { showReadOnlyNotice, useIsViewing } from '@/components/view-as-context'
 import { announceCallState, type DeviceWord as Device } from './device-reporter'
 
 // The bare video surface behind the module's own chrome (timer, notepad,
@@ -207,6 +208,7 @@ export default function VideoRoom({
   roundEndsAt: string | null
 }) {
   const partnerFirstName = partnerName.trim().split(/\s+/)[0] || 'Partner'
+  const viewing = useIsViewing()
   const [status, setStatus] = useState<Status>('idle')
   const [error, setError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
@@ -390,7 +392,17 @@ export default function VideoRoom({
     // genuine client-side failures from here on (lib-jitsi-meet itself) are
     // real thrown exceptions, since they never cross the Server Action
     // boundary.
-    const result = await getVideoJoinToken(orgSlug, eventId, pairingId)
+    // While someone views this screen read-only, the request is refused before it reaches the action
+    // (it rejects instead of returning a reason): show the one read-only notice instead of hanging.
+    let result: Awaited<ReturnType<typeof getVideoJoinToken>>
+    try {
+      result = await getVideoJoinToken(orgSlug, eventId, pairingId)
+    } catch (e) {
+      if (!viewing) throw e
+      showReadOnlyNotice()
+      setStatus('idle')
+      return
+    }
     if (!result.ok) {
       setError(result.reason)
       setStatus('error')

@@ -1088,12 +1088,12 @@ conflict, this section wins.
    (`matchmaking/ui/page.tsx:104-111`), so "return the default unsaved" would not reach the screen, and the page's own
    stand-in ignores admin locks. Fix: one reader `mm_my_answers(org)` returning stored rows plus the computed defaults
    (locks applied) for missing questions, used by the person and the viewer alike; creating the row moves to save.
-   **And a PRE-EXISTING tenancy gap found by the same review, verified by reading 2026-11-24:** `mm_ensure_answer` is a
-   definer with no membership check (`20260709020000_matchmaking.sql:447`), so any signed-in user holding another
-   org's question id can create an answer row in that org (bypassing `mm_answers_insert_own`'s `mm_is_single`). Ids
-   are UUIDs and only members see them, so exploitation needs a leaked id. Closed in migration A (the function gains
-   the `mm_is_single(q.org_id)` check, or is retired with 5's reader). Not yet reproduced live; the migration's test
-   must reproduce it first.
+   ~~**And a PRE-EXISTING tenancy gap …** `mm_ensure_answer` … no membership check (`:447`)~~ **WITHDRAWN 2026-11-24
+   — NOT A GAP.** The reviewer and the orchestrator both read only the FIRST definition (line 447); the same migration
+   re-creates the function at line 608 with `if not public.mm_is_single(q.org_id) then raise`. Reproduced as a test
+   (`view-as-whole-account.test.ts`): a single of another org and a plain member of org B both get "Only singles answer
+   questions" with 0 rows; the control (a single of B) succeeds. Lesson: a `create function` is not the latest
+   definition until the rest of the file AND later migrations are searched for `create or replace`.
 6. *Invites (drift 3):* claiming makes a PENDING seat (an amber "You've been invited to join X" card, and in chat the
    "You're invited to…" page), not an org. Fix entirely in the database: under a view, `org_my_pending_invites` and
    `vm_my_pending_invites` also return the person's unclaimed `pending_invites` rows (for their confirmed email),
@@ -1145,6 +1145,48 @@ the person's (drift 5); and **it is looking, not doing** — he cannot test a fl
 - The speed-dating note box says "Only you can see this": still true of the words, not of the note's existence,
   length, subject and date (12).
 - Lawyer questions B5 / B10 (docs/31) are open while the feature widens.
+
+### WHOLE-ACCOUNT VIEW AS — AS BUILT (Opus + agents, 2026-11-24/25; migration A `20261125010000` ON PROD 2026-11-25, verified 24/33 → 81/0 and v1 38/2 → 40/0; migration B NOT yet)
+
+**Files:** migration A `supabase/migrations/20261125010000_view_as_whole_account.sql`; migration B
+`supabase/pending/20261126010000_view_as_widen.sql` (moves into `migrations/` only after A + the app are live);
+rollback `supabase/pending/ROLLBACK-view-as-widen.sql` (not a migration — copy it in with a NEW version to use it);
+tests `packages/db/src/view-as-whole-account.test.ts`, `browser-client-allowlist.test.ts`, `e2e/real-view-as.spec.ts`
+(`MODULES_WIDENED` flips in B's commit); prod verifier `scripts/prod-verify-view-as-whole-account.mts` (reports which
+state prod is in, A or B, and fails only on a mixed state). Convention: docs/03 #38.
+
+**Changed while building (each from a review or a test):**
+- *A ends every open v1 (org-scoped) session*, since the new app no longer understands v1 scope.
+- *`mm_ensure_answer` returns NULL to every view under A* (A keeps matchmaking dark); B re-creates it to return the
+  stored row or the unsaved default when `view_as_may_read` allows. The page ignores its result and reads
+  `mm_my_answers` (invoker, so table policies decide). The render-time lazy-create stays (client spec: a locked
+  dealbreaker counts from first sight), it is just view-aware.
+- *`view_as_may_read`* also re-checks the person on every call (not a superadmin, not deleted/departed, not banned),
+  so an already-minted token stops reading at once if any of those changes.
+- *Under A alone*, `sd_my_notes` (masked) and the invite view branches already answer a whole-account view; the
+  module tables stay dark until B. Accepted: masked or invite-shaped data only, and the gap lasts one deploy.
+- *The proxy sends the database a DECODED path*; an undecodable path, `.`/`..` segments, a backslash or NUL become
+  `/invalid` (in scope nowhere → the superadmin's own view).
+- *App:* any open view (paused or not) stops browser-side writers (`DeviceReporter`); the submit blocker lets GET
+  forms through; visual-messaging's canvas Send and image upload show the read-only notice; the banner counts down in
+  local time; an expired view lands on the console with "Your view of <name> ended"; `Origin: null` → 403.
+- *Not a gap after all:* the `mm_ensure_answer` "cross-org insert" (see revision 5's WITHDRAWN note).
+
+**Final adversarial review (2026-11-24/25, four reviewers: SQL security, app code, tests/rollout, plus the earlier
+plan reviews):** no BLOCKER, no HIGH except the ship order below; every MEDIUM/LOW closed in the code above. A Fable
+SQL review was attempted and refused for lack of usage credits; it was re-run on Opus.
+
+**SHIP ORDER (do not change):** `pnpm backup:prod` → `migrate:prod --dry-run` lists ONLY `20261125010000` → founder
+go-ahead → apply → verifier + `prod-verify-real-view-as.mts` (before AND after) → ONLY THEN commit + push the app
+(the pages read `sd_my_notes`/`mm_my_answers`; pushed first, every dater's note box renders empty and a save would
+overwrite the real note). After Vercel READY: move B into `migrations/`, flip `MODULES_WIDENED`, push, and apply B with
+its own go-ahead.
+
+**Founder answers, 2026-11-24:** (1) **A** — `view_as_real_sessions` IS the permanent staff-access record (never
+pruned; docs/12 never-do), and `/privacy` now reads "Platform staff regularly look at accounts the way their owners see
+them, to check that everything works. That's tracked too — so there's always a record of who looked, and when."
+(2) Masked notes may show existence, length, subject and date — never the words. (3) **Go** on building migration A +
+the app, with adversarial reviewers over the finished work.
 
 **Open, by design:** one view at a time per superadmin; a token
 already minted lives until its 5-minute expiry after Stop (server-side only); widening to another module needs its own

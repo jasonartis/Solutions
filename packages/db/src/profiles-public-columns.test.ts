@@ -45,6 +45,21 @@ const PROFILES_PUBLIC_COLUMNS = ['user_id', 'display_name', 'created_at', 'updat
 
 /** Functions that genuinely READ an address. Each needs a reason. */
 const EMAIL_READERS: Record<string, string> = {
+  // Whole-account View as (20261125010000).
+  pending_invite_would_apply:
+    "Internal (no API EXECUTE). The read-only twin of the claim: compares an invitation's stored " +
+    "address with the invitee's OWN confirmed address (and counts accounts sharing it), reads the " +
+    "inviter's ban/deletion state; returns a boolean, never an address.",
+  view_as_real_start:
+    "Superadmin only. The 1-argument form reads auth.users for the TARGET's deleted_at/banned_until " +
+    '(may this account be viewed?); no address is read or returned.',
+  view_as_real_check:
+    "Superadmin only (the proxy's per-request check). Reads auth.users for the viewed person's " +
+    'deleted_at/banned_until (a whole-account view dies with the account); no address.',
+  view_as_may_read:
+    "Every role (it sits in module-table policies after migration B), but only evaluated under a view " +
+    "token. Reads auth.users for the VIEWED person's deleted_at/banned_until (a still-valid token stops " +
+    'reading once the account is banned or gone); returns a boolean, never an address.',
   org_member_profiles:
     'The admin-scoped member roster. Gated on is_org_admin(check_org_id) — an org admin sees the ' +
     'addresses of the people they administer, which is unchanged from before the slice.',

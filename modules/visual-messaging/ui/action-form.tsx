@@ -9,6 +9,7 @@
 import { useState, useTransition, type ReactNode } from 'react'
 import type { ActionResult } from './actions'
 import { prepareImage } from './image-shrink'
+import { showReadOnlyNotice, useIsViewing } from '@/components/view-as-context'
 
 export const STALE_DEPLOY_MESSAGE =
   'The site was updated while this page was open. Reload the page to continue — nothing you have drawn here has been lost until you do.'
@@ -56,6 +57,7 @@ export function ActionForm(props: {
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState(false)
   const [pending, startTransition] = useTransition()
+  const viewing = useIsViewing() // a View as is open: nothing is sent (the proxy would refuse it)
 
   return (
     <form
@@ -64,6 +66,10 @@ export function ActionForm(props: {
       onInput={() => setDone(false)}
       onSubmit={(e) => {
         e.preventDefault()
+        if (viewing) {
+          showReadOnlyNotice()
+          return
+        }
         const form = e.currentTarget
         const formData = new FormData(form)
         setError(null)

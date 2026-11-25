@@ -4,6 +4,16 @@ The running, dated build journal that used to live in `CLAUDE.md`'s "## Current 
 section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every session)
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
+- **2026-11-25 (Opus + agents): WHOLE-ACCOUNT VIEW AS, step 1 — migration A `20261125010000` ON PROD, verified** (new
+  verifier `scripts/prod-verify-view-as-whole-account.mts` 24/33 → 81/0; v1 `prod-verify-real-view-as.mts` 38/2 → 40/0;
+  backup `2026-11-25T09-26-53` first; dry run listed only A). The superadmin picks ANY person in `/console/view-as/real`
+  ("View as") and sees their dashboard, account, feedback and classroom pages as they do; matchmaking / speed dating /
+  visual messaging tables stay dark to a view until migration B (`supabase/pending/20261126010000_view_as_widen.sql`,
+  moves in with `MODULES_WIDENED = true` in the e2e, its own go-ahead). Private fields show `‹private note · N characters›`
+  (`private_text()`, `sd_my_notes()`); render-time writers are view-aware. Back-link convention (`PageHeader`, docs/03 #37)
+  shipped earlier the same days (`c683494`, `4aea9ce`). Four adversarial reviews, all findings closed. Local: db 631/631,
+  typecheck 9/9, build, e2e real-view-as + visual-messaging green on a fresh seed. Design + review + AS BUILT: docs/13;
+  convention docs/03 #38; never-do docs/12.
 - **2026-10-26 → 11-25 (Sonnet, planning only, no migration; the chat began 2026-10-26 and was compacted twice) — lawyer list + prod-copy-for-development design.** Founder's
   planning chat (AI resume-builder idea, staff access to client data, consent/disclosure design, view-as, an easy prod→dev
   copy). **Written down:** [docs/31](../31-questions-for-a-lawyer.md) (the one list of questions for a lawyer/insurance

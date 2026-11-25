@@ -104,11 +104,11 @@ async function SingleView(props: { orgSlug: string; orgId: string; userId: strin
   for (const q of questions ?? []) {
     await supabase.rpc('mm_ensure_answer', { check_question_id: q.id })
   }
-  const { data: answers } = await supabase
-    .from('mm_answers')
-    .select('question_id, position, care, dealbreaker, share_with_match, auto')
-    .eq('user_id', props.userId)
-  const answerByQ = new Map((answers ?? []).map((a) => [a.question_id, a as AnswerRow]))
+  // Read through mm_my_answers (20261125010000): stored rows plus the default
+  // (admin locks applied) for any question without one. Under View as the loop
+  // above writes nothing, and this still shows what the person would see.
+  const { data: answers } = await supabase.rpc('mm_my_answers', { p_org_id: props.orgId })
+  const answerByQ = new Map(((answers ?? []) as AnswerRow[]).map((a) => [a.question_id, a]))
 
   // Own matches: RLS already hides excluded pairs and rows I'm not in.
   const { data: scores } = await supabase

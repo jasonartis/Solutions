@@ -1507,6 +1507,24 @@ mechanism is proven in the managed environment, but it carries rules that are no
     - **Enforced** by `packages/db/src/page-header-coverage.test.ts`: every `page.tsx` under `apps/web/app/(app)`
       and `modules/*/ui` must use `PageHeader` (or be a one-line re-export of a module page); the short allowlist
       in that test carries a reason per entry — add to it only for a page that genuinely cannot (full-screen, public).
+38. **A PAGE MUST LOOK THE SAME WHEN THE SUPERADMIN VIEWS IT ("View as", 2026-11-24, migration `20261125010000`,
+    docs/13 "WHOLE-ACCOUNT VIEW AS").** Every page under `/dashboard`, `/account`, `/feedback` and `/o/…` can be
+    rendered with a read-only token for the person being viewed. So:
+    - **A database function a page calls while RENDERING must be view-aware** if it writes (lazy-create, mark-read,
+      claim, resume): after its own identity/scope checks and immediately before the write, `if
+      public.in_view_as() then <return what the page needs, writing nothing>; end if;`. Under a view the write
+      would fail with 25006, supabase-js returns `{error}`, and the screen silently differs. Never put the branch
+      first (it would skip the checks). Worked examples: `mm_ensure_answer`, `pending_invites_claim_mine`,
+      `account_deletion_resume`, `feedback_mark_read`.
+    - **A private field** (only its author may read it, not even the superadmin — the data-browser `neverReadable`
+      list) is read through ONE definer reader that applies the table's owner rule and returns the column through
+      `public.private_text(value, label)`; the table keeps a restrictive `<table>_no_view_as` policy. Worked
+      example: `sd_my_notes`. Pages never branch on "am I being viewed".
+    - **Never query the database from the browser** (`@/lib/supabase/client`, `createBrowserClient`): it runs as the
+      viewer, not the person. Enforced by `packages/db/src/browser-client-allowlist.test.ts`; a browser-side WRITER
+      must not run while `useIsViewing()` is true (`DeviceReporter`).
+    - **A new module table** gets `<table>_no_view_as` using `(select not public.in_view_as()) or
+      public.view_as_may_read(org_id, '<module>')` (migration `20261126010000`'s shape), or the db test fails.
 
 ## Hard rules
 

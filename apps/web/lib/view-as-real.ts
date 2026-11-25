@@ -29,8 +29,6 @@ import { createClient as createSupabaseClient, type SupabaseClient } from '@supa
 
 export const VIEW_AS_COOKIE = 'sp_view_as'
 export const VIEW_AS_HEADER = 'x-sp-view-as'
-/** Modules a real view may open (the database enforces the same list). */
-export const REAL_VIEW_MODULES = ['classroom'] as const
 const TOKEN_SECONDS = 5 * 60
 
 /** What the proxy learned from view_as_real_check, passed to the page in a signed header. */
@@ -39,12 +37,14 @@ export type RealView = {
   actor: string
   target: string
   targetName: string | null
-  orgSlug: string
-  orgName: string
-  module: string
+  /** Null for a whole-account session (the person's whole account, not one org's module). */
+  orgSlug: string | null
+  orgName: string | null
+  module: string | null
   /** ISO time the session ends. */
   expiresAt: string
-  /** True only inside /o/<orgSlug>/m/<module>: elsewhere the superadmin is themselves. */
+  /** The DATABASE's answer (view_as_real_check): true on the in-scope pages (/dashboard, /account, /feedback, /o/…);
+   *  elsewhere (e.g. /console) the superadmin is themselves. */
   inScope: boolean
 }
 

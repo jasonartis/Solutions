@@ -23,6 +23,7 @@ import { useRouter, usePathname } from 'next/navigation'
 import { Stage, Layer, Group, Line, Text as KonvaText, Image as KonvaImage, Transformer } from 'react-konva'
 import { getStroke } from 'perfect-freehand'
 import { runAction } from './action-form'
+import { showReadOnlyNotice, useIsViewing } from '@/components/view-as-context'
 import { prepareImage } from './image-shrink'
 import { navFor, type LayerNav, type TreeNode } from './layer-nav'
 
@@ -210,6 +211,7 @@ export default function LayerCanvas(props: {
   // Entering or leaving drawing changes what X-ray means, so start each mode clear.
   useEffect(() => setXrayLevel(0), [mode])
   const [pending, startTransition] = useTransition()
+  const viewing = useIsViewing()
   const activeStroke = useRef<number[][] | null>(null)
   // A swipe in progress: where it began, which axis it locked to, and recent
   // pointer samples (for the flick speed at release). `swipe` is what is drawn;
@@ -502,6 +504,10 @@ export default function LayerCanvas(props: {
   // move, resize and rotate it live.
   const handleImageFile = async (picked: File | null) => {
     if (!picked || !props.onUploadImage) return
+    if (viewing) {
+      showReadOnlyNotice()
+      return
+    }
     setUploadingImage(true)
     setActionError(null)
     try {
@@ -809,6 +815,10 @@ export default function LayerCanvas(props: {
 
   const send = () => {
     if (!props.onSend || items.length === 0) return
+    if (viewing) {
+      showReadOnlyNotice()
+      return
+    }
     // Strip the local-only kind/id — the server has no use for them.
     const strokes = strokeItems.map(({ kind: _k, id: _i, ...s }) => s)
     const stamps = stampItems.map(({ kind: _k, id: _i, ...s }) => s)

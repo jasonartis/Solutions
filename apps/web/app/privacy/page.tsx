@@ -71,8 +71,8 @@ export default async function PrivacyPage() {
           details about the request for a short time, to prevent misuse.
         </p>
         <p>
-          If anyone on our staff ever needs to look at your account (for example, to help with a
-          support question), that's tracked too — so there's always a record of who looked, and
+          Platform staff regularly look at accounts the way their owners see them, to check that
+          everything works. That's tracked too — so there's always a record of who looked, and
           when.
         </p>
         <p>

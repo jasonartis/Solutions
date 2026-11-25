@@ -32,8 +32,16 @@ function sourcesUnder(dir: string): string[] {
   return out
 }
 
+// A client component that builds its own client straight from supabase-js (bypassing
+// lib/supabase/client) would act as the superadmin in the browser just the same.
+const USE_CLIENT = /^\s*['"]use client['"]/m
+const SUPABASE_JS_CREATE = /import\s*\{[^}]*\bcreateClient\b[^}]*\}\s*from\s*['"]@supabase\/supabase-js['"]/
+
 export function importsBrowserClient(src: string): boolean {
-  return /@\/lib\/supabase\/client|\/supabase\/client['"]|createBrowserClient/.test(src)
+  return (
+    /@\/lib\/supabase\/client|\/supabase\/client['"]|createBrowserClient/.test(src) ||
+    (USE_CLIENT.test(src) && SUPABASE_JS_CREATE.test(src))
+  )
 }
 
 const files = [join(repoRoot, 'apps/web'), join(repoRoot, 'modules')]
@@ -46,6 +54,16 @@ describe('browser Supabase client allowlist', () => {
     expect(files.length).toBeGreaterThan(100)
     expect(importsBrowserClient("import { createClient } from '@/lib/supabase/client'")).toBe(true)
     expect(importsBrowserClient("import { createClient } from '@/lib/supabase/server'")).toBe(false)
+    // supabase-js createClient: caught in a client component, ignored on the server.
+    const direct = "import { createClient } from '@supabase/supabase-js'\nconst c = createClient(u, k)"
+    expect(importsBrowserClient("'use client'\n" + direct)).toBe(true)
+    expect(importsBrowserClient('"use client";\nimport { type User, createClient } from "@supabase/supabase-js"')).toBe(true)
+    expect(importsBrowserClient(direct)).toBe(false)
+    expect(importsBrowserClient("'use client'\nimport type { User } from '@supabase/supabase-js'")).toBe(false)
+    // control: real server-side supabase-js createClient importers exist, so the
+    // pattern is exercised on real files (and they are not flagged: no 'use client').
+    const serverSide = files.filter((f) => SUPABASE_JS_CREATE.test(readFileSync(join(repoRoot, f), 'utf8')))
+    expect(serverSide.length).toBeGreaterThan(0)
     const hits = files.filter((f) => importsBrowserClient(readFileSync(join(repoRoot, f), 'utf8')))
     // the known importers really are found by the scan
     for (const known of Object.keys(ALLOWED)) expect(hits).toContain(known)

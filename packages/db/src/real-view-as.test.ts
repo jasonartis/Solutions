@@ -246,6 +246,9 @@ describe('what a viewed screen may read (docs/13 Q3)', () => {
     })
   })
 
+  // Holds before AND after migration B (20261126010000), which keeps every name and keeps them
+  // restrictive; B's own shape (view_as_may_read everywhere but sd_notes) is asserted in
+  // view-as-whole-account.test.ts.
   it('every table of a module that is NOT allowed carries a restrictive <table>_no_view_as', async () => {
     const tables = await sql<{ relname: string; pol: boolean | null }[]>`
       select c.relname,

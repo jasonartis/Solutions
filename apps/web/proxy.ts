@@ -16,6 +16,19 @@ import { VIEW_AS_COOKIE, VIEW_AS_HEADER, signRealViewHeader, type RealView } fro
 //     header is deleted first, on every request, cookie or not.
 const STOP_PATH = '/view-as/stop'
 
+// The database gets the DECODED path (what usePathname shows the guard), so the two cannot
+// disagree on percent-encoded paths. Anything undecodable or with a dot segment / backslash /
+// NUL after decoding is sent as a path that is in scope nowhere (the superadmin's own view).
+function decodedPath(raw: string): string {
+  try {
+    const d = decodeURIComponent(raw)
+    if (d.split('/').some((seg) => seg === '..' || seg === '.') || d.includes(String.fromCharCode(92)) || d.includes(String.fromCharCode(0))) return '/invalid'
+    return d
+  } catch {
+    return '/invalid'
+  }
+}
+
 export async function proxy(request: NextRequest) {
   const viewSession = request.cookies.get(VIEW_AS_COOKIE)?.value
   const path = request.nextUrl.pathname
@@ -72,7 +85,7 @@ export async function proxy(request: NextRequest) {
       // bugs). The session row itself remains: it is the switch this check reads.
       const { data } = await supabase.rpc('view_as_real_check', {
         p_session: viewSession,
-        p_path: path,
+        p_path: decodedPath(path),
         p_log: false,
       })
       const row = (data as Record<string, unknown>[] | null)?.[0]
@@ -82,9 +95,9 @@ export async function proxy(request: NextRequest) {
           actor: user.id,
           target: row.target_user_id as string,
           targetName: (row.target_name as string | null) ?? null,
-          orgSlug: row.org_slug as string,
-          orgName: row.org_name as string,
-          module: row.module_key as string,
+          orgSlug: (row.org_slug as string | null) ?? null,
+          orgName: (row.org_name as string | null) ?? null,
+          module: (row.module_key as string | null) ?? null,
           expiresAt: row.expires_at as string,
           inScope: row.in_scope === true,
         }
@@ -96,15 +109,28 @@ export async function proxy(request: NextRequest) {
     } else {
       // Ended, expired, no longer allowed, or not configured: drop the view.
       pendingCookies.push({ name: VIEW_AS_COOKIE, value: '', options: { path: '/', maxAge: 0 } })
+      // ...and take it out of the request the PAGE sees too, or the page would still
+      // find the cookie ("A view is open") while no banner is shown.
+      request.cookies.delete(VIEW_AS_COOKIE)
+      forwarded.set(
+        'cookie',
+        (forwarded.get('cookie') ?? '')
+          .split(/;\s*/)
+          .filter((c) => c && !c.startsWith(`${VIEW_AS_COOKIE}=`))
+          .join('; '),
+      )
     }
   }
 
   return build()
 }
 
-// Image files skip the proxy, EXCEPT under /o/: an org page whose last path
-// segment merely ends in ".png" is still a page, and must get the read-only
-// checks above (app-code review, 2026-11-12).
+// Image files skip the proxy, EXCEPT under every path a view can be in scope for
+// (/o/, /dashboard, /account, /feedback): a page whose last path segment merely
+// ends in ".png" is still a page there, and must get the read-only checks above
+// (app-code review 2026-11-12; whole-account revision 3).
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|(?!o/).*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)'],
+  matcher: [
+    '/((?!_next/static|_next/image|favicon.ico|(?!o/|dashboard|account|feedback).*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+  ],
 }
