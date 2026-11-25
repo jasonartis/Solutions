@@ -69,7 +69,7 @@ Only the ones that plausibly apply to the modules we have or plan. One question 
 |---|---|
 | D1 | **State consumer privacy laws** (CCPA/CPRA, Virginia, Colorado, Texas…): are we a "business" or a "processor", and what access/delete/opt-out route do we owe beyond account deletion (A2)? |
 | D2 | **Biometrics** (Illinois BIPA, Texas, Washington): if photos, video or tagging ever processes face geometry, what consent, retention schedule and private right of action apply? If we never do, how do we say so? |
-| D3 | **Video calls** (speed dating): do we record, transcribe or retain anything? If not, how is that stated? If ever, what do all-party-consent states require? |
+| D3 | **Video calls** (speed dating): do we record, transcribe or retain anything? If not, how is that stated? If ever, what do all-party-consent states require? Is a "this call may be monitored" notice needed for dating events? |
 | D4 | **Dating-specific laws:** state online-dating safety statutes (safety notices, background-check disclosures) and FTC rules on fake profiles and auto-renewal if we ever charge. |
 | D5 | **Age-verification laws** (state social-media and app-store age laws) beyond COPPA (A4), where minors can match or message each other. |
 | D6 | **Subprocessors and DPAs:** do we need a data processing agreement with each vendor we use (database/host, video, email, AI, backup storage)? Do we publish a subprocessor list and give clients notice of changes? Data residency and EU/UK/Canada transfers (SCCs) — can a client require a region? |
@@ -81,10 +81,13 @@ Only the ones that plausibly apply to the modules we have or plan. One question 
 | D12 | **Corporate and employment:** entity form, and whether the founder's other employment could give anyone a claim on the platform (invention-assignment or moonlighting clauses). |
 | D13 | **If charging:** payment-card scope (use a hosted processor?), sales tax on SaaS, refund law. |
 | D14 | **Accessibility:** ADA/WCAG exposure, especially for a university client (Section 508 / VPAT requests). |
+| D16 | **Export controls and sanctions:** low risk; expect one line from the lawyer. |
 | D15 | **Email:** CAN-SPAM, and whether invite emails count as commercial messages. |
 
 ## Maintenance
 
+- The founder's private briefing file lives outside the repo and outside git: copy it somewhere safe, and include it in the
+  offsite snapshot when docs/28 B.8 is built.
 - New question → add a row here, with its source, and leave a one-line pointer where it came up.
 - Answered → strike through, date it, write the answer and who gave it.
 - Keep rows as question stems: put admissions of current practice in the source doc, not in this public list.

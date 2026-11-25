@@ -903,6 +903,14 @@ ode-compile-cache`. **So `--concurrency=1` is not a universal fix and "134 means
   that dies late with a partial trailing sentence rather than erroring early. → When a
   review agent fails on limits, do NOT simply retry it — **narrow the question and cap the
   output**, and prefer two focused agents over one exhaustive one.
+- **A chat transcript is NOT a record: Claude Code deletes chats after ~30 days (founder, 2026-11-25).** The reasoning behind a
+  decision, rejected options, measured numbers and the founder's own words must live in a repo doc (or the founder's private
+  folder for sensitive material) before a chat ends. The founder's loss test for a handoff audit: "only things that losing
+  this chat will lose and will then need to be redone or rediscovered" — iterate until a pass finds none, cap 10 iterations.
+  **Cross-session push trap (2026-11-24):** `.githooks/pre-push` reads `tests-floor.json`; another session's uncommitted
+  edit listing a not-yet-tracked required test blocks EVERY session's push, and that session's test commit then ships in
+  yours. Ask its owner to commit it; never bypass the hook. When your test build overwrites `apps/web/.next`, tell the other
+  sessions the finish time.
 - **Proactively recommend a fresh chat when THIS context grows large.** Per-turn
   cost scales with accumulated context, so a long session gets progressively more
   expensive. When the chat has grown big AND you're at a clean, committed, shipped

@@ -152,9 +152,13 @@ sessions (one figure looked unusually low).
 dislike open-ended bills); bring-your-own-key (weak for non-technical clients); per-org budget with a hard cap (best fit for
 the org-as-customer model). The assistant recommended absorbing with bounds; the founder agreed to the three cap levels (§3).
 
-**Still to check before any plan is final:** the Anthropic account terms on training, retention and zero-data-retention
-(the founder's to read; docs/31 B8) and Vercel's maximum function duration on the plan (decides whether chat streaming
-works) — neither was ever checked.
+**CHECKED in the planning chat (official pages, read 2026-11; re-check before relying): (1) Vercel function limits** — Hobby:
+300 s default and max; Pro: 300 s default, 800 s max (1800 s beta); streamed time counts toward the limit and waiting on an
+AI call is not CPU time (the Vercel page was dated 2026-08-24). So chat turns and drafts fit and **no worker is needed**.
+**(2) Anthropic retention** — retained data is never used for training without permission; ordinary models are not retained
+by default; flagged content can be kept up to 2 years even under zero-data-retention; third-party sources disagreed on 7 vs
+30 days (the official page does not say that for ordinary models). **Still unread: the separate commercial retention
+article** (docs/31 B8) and the account's own terms — the founder's to read before real client data goes through.
 
 ## 11. The access discussion behind §7 (recovered 2026-11-25; assistant analysis, founder decisions marked)
 
@@ -183,3 +187,80 @@ processor, and own-product improvement use may need the client's agreement (docs
 client-agreement clause and a log; behaviour without content (activity events and aggregates such as "12 users renamed over 50
 files in a week"); improvement partners who opt in to "help improve the product"; synthetic data; break-glass for the vault
 with a mandatory reason and a log the user can see.
+
+## 12. Appendix — detail recovered from the planning chat's reviews (2026-11-25; ALL ASSISTANT/REVIEWER CLAIMS, unverified unless marked MEASURED)
+
+The raw chat is deleted after 30 days, so the detail a builder would otherwise rediscover is kept here.
+
+**Today's access, MEASURED (planning chat):** `is_superadmin` appears in policies across 35 migration files (140 mentions);
+CLAUDE.md records a 2026-08-28 measurement that the superadmin read at least one row of all 28 declared module tables.
+Exceptions: speed-dating notes (author-only, `sd_notes_all_own`, `20260709050000_speed_dating.sql` ~line 936) and the
+read-only login tables. Direct pooler/owner scripts bypass RLS. The assistant INFERRED such reads are not logged
+(unconfirmed). Prod held only demo data and the founder's own accounts then. The `/privacy` page frames the staff record
+around support and says nothing about development or AI.
+
+**Gmail precedent (assistant analogy; 2018 sources, re-check):** Google stopped ad-scanning mail in 2017; staff read mail
+only on user consent or for security; a third-party app's staff read ~8,000 emails. Lesson drawn: the backlash came from
+unclear disclosure, not from access existing.
+
+**The "improve the platform" box, scenario:** Dana ticks it, unticks it, re-ticks it later. Unticking only stops access going
+forward ("you can't un-see what you already saw") — say so in plain words beside the box. Opt-in learning is biased toward
+the people who opted in. Prod held only demo data, so nothing to grandfather. Never asked: boxes at first use of each module,
+or once per account?
+
+**Reviewers must be independent (founder's goal: reviewer overlap indicates "truth"):** reviewers sharing one model share
+blind spots. Make them independent by information and role — one sees only the resume, one also sees the job description, one
+is a plain keyword match with no AI, ideally two different models; disagreement becomes a question to the user. Personas:
+skeptical hiring manager, keyword screen, 10-second recruiter; a gap becomes a new interview question. A "share for human
+feedback" option is a later idea.
+
+**Usage ledger (proposed):** every AI call writes one row, counts only, never content: user, org, module, feature, model,
+tokens, cost, time, outcome. Views: top spenders / nearest their cap; cost per completed resume; how often the round cap is
+hit; checker rejection rate; provider error rate; cache-hit rate; spend forecast against the platform cap. Copy the
+`/console/engagement` pattern including its honesty badge (a failed log write shows as a gap, not as zero usage).
+
+**Effort and cost estimate (assistant, unconfirmed):** chat UI with streaming is days; vault tables are easy (Opus-tier);
+tailoring and PDF are moderate; guardrails are "the real work"; a working v1 is a few focused slices. API key in Vercel env
+vars like JaaS. Cost basis: ~1.5k cached system prompt, 15-message interview, ~4.5k output tokens; quoted per-session cost
+~$0.004 (Haiku 5.5), $0.01 (Gemini Flash-Lite), $0.04 (Haiku 4.5); one price looked "unusually low" — re-fetch first.
+
+**Truthfulness verifier, extra detail:** hard-reject on schema, numbers, dates, proper nouns, with an allowlist of derived
+forms ("N years" from the entry's own dates); escalation verbs (led, managed, owned, architected, spearheaded) blocked, caveat
+words flagged; a second-model checker is advisory only and can itself be injected; rejecting another user's entry id must
+give a generic "unknown id", not an oracle; per-line approval degrades into rubber-stamping unless the UI shows the diff.
+Ten fixtures: "assisted" → "Led"; "team of 3 interns" → "Managed a team of 3"; a sentence citing entry A but using B's "5";
+"Jan 2021 to Jun 2022" → "3 years"; "volunteer treasurer" dropped; 12% → 21% with a 12% control; a mock model that obeys an
+injected "AWS Certified Architect"; a forged entry id; a sentence unrelated to its cited entry; a vacuity control (run a
+known-good and a known-bad set, assert lines checked > 0, treat an empty vault or empty output as an error).
+
+**Provider-switch guardrails, extra:** boot refuses mock/free when `VERCEL_ENV=production`; no try/catch fallback to another
+provider; export refuses output whose recorded provider is not the paid private one; a prod-verify canary asserts provider,
+model and retention terms; likely leak path: a developer "just trying" with their own real resume on a free tier; mock
+tests prove plumbing only — keep a small gated real-model suite.
+
+**Other reviewer points:** dating adds special-category data (orientation, religion) and the viewer's "looking for" text
+also goes to the model; "truthful but selectively framed per viewer" is a product line to decide deliberately; a viewer must
+never see entries the owner did not approve; tailoring would reach `sd_`/`mm_` data only through `packages/platform`.
+Retrieval by embeddings needs pgvector (a new extension and migration) and a model-chosen subset is itself an injection
+surface. Server-side PDF (headless Chrome) is heavy on Vercel (a print stylesheet is lighter; unverified); draft PDFs need a
+private bucket with expiring signed URLs. Interview transcripts need a context cap and retention and carry other people's
+names (declare delete-on-day-30). Vault entries are a stored injection vector. Account deletion does not reach provider-held
+data: state provider retention or the `/account` deletion promise becomes false. Gate AI consent per user per purpose,
+server-enforced.
+
+**Vault ownership review, build-level detail:** alternative to a module table: an unprefixed platform table or a `res_vault`
+with `user_id` and no `org_id` (the review leaned `res_vault` first, per extract-don't-speculate). Copy the `user_private`
+revoke pattern (`20260917020000` ~lines 160–164); do NOT copy `user_private_select_own` (it has an `is_superadmin` arm); no
+`for all` policy. `data-browser-coverage` tier 1 fails unless the vault is declared in `data-browser-modules.ts`; give it no
+module prefix (view-as-coverage would demand classification) and classify it as excluded. `account_silhouette`
+(`20261007090000` ~line 547) is a hand-written list and `auth.users` is never deleted, so ON DELETE CASCADE never fires: an
+explicit delete plus a catalog test is needed. `org_modules` gates routing only (zero RLS policies reference it), so a
+person who loses entitlement still passes RLS on their own rows. Revoke from `service_role`; keep zero definer functions on
+the vault, enforced by a `prosrc` scan; the postgres owner, backups and the data-browser `select('*')` builder remain.
+Test shape: owner reads 1 (control); an org admin reads 0; the superadmin reads 0 for select, update and delete; anon reads 0;
+a `pg_policy` scan finds no `is_superadmin`, `is_org_admin` or `is_org_member`; `has_table_privilege('service_role', …)` is
+false. Org-owned was rejected because `is_org_admin` sits in `module_caller_covers_rank` and deleting an org would delete
+someone's career history. Risk: a resume export could expose vault content to the org.
+
+**View-as cross-reference (OPEN):** mode-2 view-as was banned for speed-dating participants "forever" (docs/15, a founder
+decision), so reading notes would need a new dated spec entry; likely settled by the real view-as work — check docs/13 first.

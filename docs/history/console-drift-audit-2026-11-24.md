@@ -32,3 +32,20 @@ person-links to `via`; label overview's "records" as "person-linked only" in the
 prices, vendor rows and vendor limits; treat table view-as as an audit aid, not a mirror, and extend real view-as to more
 modules (whole-account design: docs/13); optionally a test that every `public` table is classified somewhere (data browser,
 view-as, or an explicit "no person data" list).
+
+## Detail recovered from the planning chat (2026-11-25)
+
+- **Why the table view-as is a declared-surface tool on purpose (assistant reasoning, accepted by the founder moving on):** it answers a
+  SECURITY question, "what can this role read?". If it rendered the client's real screens, a screen that hides a column the
+  database still allows would look safe while the leak stays open. "What does their screen look like?" is the REAL view-as (or a
+  later support sign-in). So the drift is a property to manage, not a bug to remove.
+- **The data browser's tiers, exactly:** tier 1 fails `pnpm test` on any column with a foreign key to `auth.users`/`profiles`
+  that no declaration covers (declare it, omit it, or mark it unreadable); tier 2 only REPORTS indirect links (a table that reaches
+  a person only through a child row) and these must be declared by hand as `via` entries; the test also fails if a declaration
+  names a column the database lacks. A real example of a gap: a note linked to a booking, which is linked to a person.
+- **Limits tile:** its database and storage rows are live; only the vendor caps beside them are hardcoded
+  (`VENDOR_LIMITS_CHECKED = '2026-11-12'` in `apps/web/lib/vendor-limits.ts`; the video cap carries its own older date). The
+  vendors page already showed "Last edited <time> UTC" from `vendor_accounts.updated_at`, which is why follow-up 2 left it unchanged.
+- **Follow-up 1+2 verification:** the costs page shows the oldest-to-newest price `checked` dates (2026-11-09 to 2026-11-20 at the
+  time); a browser check found a missing space ("2026-11-20(each", a JSX line break), fixed in `6da263d` and confirmed by reading
+  the source only; the amber hint on the overview was seen in a screenshot but its exact colour was not measured.
