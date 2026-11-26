@@ -1,8 +1,11 @@
 # Handoff — "View as" for org staff (the STAFF version), written 2026-11-26
 
-**Model: Opus 5.5** for the whole chat (migrations, RLS, a new privacy rule). **Fable 5 for ONE beat only:** the
-adversarial security review of the finished design, before any code (a NEW mechanism: trimming a person's real screen
-to the viewer's area). If the session cannot get Fable, run that review on Opus and say so in the review's record.
+**Model: Opus 5.5** for the whole chat (migrations, RLS, a new privacy rule). **Fable is NOT available (founder,
+2026-11-26)**, so the design's adversarial security review (a NEW mechanism: trimming a person's real screen to the
+viewer's area) runs on Opus as **two or three independent reviewers, each with ONE narrow question and a word cap**
+(e.g. "can a viewer reach a row outside their area?", "can a page outside the area leak through a shared component,
+link or count?", "does anything write during a view?"). Record in docs/13 that the review was Opus-only, so a Fable
+re-review can be run later if credits return.
 
 ## Paste this into a fresh chat
 
