@@ -1,7 +1,7 @@
 -- Not a migration. To roll B back, copy this into supabase/migrations/ with a NEW
 -- version later than every applied one.
 --
--- ROLLBACK for supabase/pending/20261126010000_view_as_widen.sql (migration B):
+-- ROLLBACK for supabase/migrations/20261126010000_view_as_widen.sql (migration B):
 -- puts back the 20261116010000 §4b policies ("no view token reads this module
 -- table at all"), same names, and 20261125010000's mm_ensure_answer (NULL to
 -- every view). sd_notes_no_view_as is untouched by both B and this file.
@@ -67,7 +67,7 @@ begin
     -- itself (review 2026-11-24, MEDIUM: it used to return the stored row to
     -- ANY view, v1 included). Under this migration every view token is dark on
     -- mm_ tables, so: nothing, and no write. Migration B
-    -- (supabase/pending/20261126010000_view_as_widen.sql) re-creates this
+    -- (supabase/migrations/20261126010000_view_as_widen.sql) re-creates this
     -- function with the widened branch (view_as_may_read, then the stored row or
     -- the unsaved default).
     return null;

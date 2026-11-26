@@ -67,12 +67,11 @@ section, keep it a SUMMARY with pointers: add the dated story to the journal / t
   (archive file, "Host state").
 
 ### Shipped most recently (newest first; full stories in the linked docs)
-- **2026-11-25 (Opus): WHOLE-ACCOUNT "View as", step 1 — `20261125010000` ON PROD, verified 24/33 → 81/0 (v1 verifier
-  40/0).** The superadmin views ANY person's whole account (dashboard/account/feedback/classroom); private fields show a
-  placeholder. **Step 2 = migration B** (`supabase/pending/20261126010000_view_as_widen.sql`, opens matchmaking/speed
-  dating/messaging; flip `MODULES_WIDENED` in `e2e/real-view-as.spec.ts` in the same commit; own go-ahead). Every
-  `public.in_view_as()`/`view_as_may_read()` must never raise (docs/12). Back-link convention: docs/03 #37; render-time
-  writers view-aware: #38. docs/13 "WHOLE-ACCOUNT VIEW AS — AS BUILT"; handoff `docs/history/handoff-2026-11-25-view-as-whole-account.md`.
+- **2026-11-25/26 (Opus): WHOLE-ACCOUNT "View as" — `20261125010000` + `20261126010000` ON PROD, verified (81/0, state B;
+  v1 verifier 40/0).** The superadmin views ANY person's whole account, every org and module, through the same pages;
+  private fields (speed-dating notes) show `‹private note · N characters›`. Every `public.in_view_as()`/`view_as_may_read()`
+  must never raise (docs/12); a NEW module table gets the B policy shape (docs/03 #38). Back-link convention: docs/03 #37.
+  Follow-ups (cleanup migration, STAFF version): docs/13 "WHOLE-ACCOUNT VIEW AS — AS BUILT".
 - **2026-11-18 (Opus + Sonnet agent): iOS 15 support (`fa8ea7d`, no migration)** — `browserslist` in `apps/web/package.json`
   includes safari/ios 15 (Next 16 otherwise emits syntax Safari 15 cannot parse); a red early-error box shows only when the
   app fails to boot. Keep the browserslist. Founder-verified on his iPhone 7. Plus a Home Screen app (icon + manifest +
@@ -168,7 +167,7 @@ founder decision** — record it where it belongs, flag it, move on (2026-08-29)
 **Owner Console follow-ups (founder: "one by one", a fresh chat each — prompts, local-verify recipe and known small issues:
 [docs/history/handoff-2026-11-12-console-session.md](docs/history/handoff-2026-11-12-console-session.md)):** module-role
 confirmation + refusal messages (Sonnet) → Limits tile (Sonnet) → real bytes per org (Opus, migration) — **all three DONE
-2026-11-12** → REAL view-as (classroom, ON PROD 2026-11-15 — docs/13 "AS BUILT"; next module = widen per its allow check). **Also unscheduled:** charts / other visualizations of platform statistics and threshold-triggered "at N users, do
+2026-11-12** → REAL view-as (classroom 2026-11-15, WHOLE ACCOUNT 2026-11-26 — docs/13; next = the STAFF version, founder-initiated). **Also unscheduled:** charts / other visualizations of platform statistics and threshold-triggered "at N users, do
 this" actions — the founder's wider original ask (see the handoff file); needs a founder conversation first.
 
 **Founder decisions pending / deferred — do NOT start these unprompted:**

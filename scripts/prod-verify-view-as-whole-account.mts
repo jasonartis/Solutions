@@ -1,6 +1,6 @@
 // Prod verification for 20261125010000_view_as_whole_account.sql — migration A
 // of whole-account View as (docs/13 "WHOLE-ACCOUNT VIEW AS", four-way review
-// revisions 1–11) — and, in B mode, for supabase/pending/20261126010000_view_as_widen.sql.
+// revisions 1–11) — and, in B mode, for supabase/migrations/20261126010000_view_as_widen.sql.
 // Copied from prod-verify-real-view-as.mts.
 //
 //   node node_modules/tsx/dist/cli.mjs scripts/prod-verify-view-as-whole-account.mts --local
@@ -90,7 +90,8 @@ const bodies = (file: string) => {
   return out
 }
 const expected = bodies('supabase/migrations/20261125010000_view_as_whole_account.sql')
-const expectedB = bodies('supabase/pending/20261126010000_view_as_widen.sql')
+// B moved from supabase/pending/ into supabase/migrations/ on 2026-11-26.
+const expectedB = bodies('supabase/migrations/20261126010000_view_as_widen.sql')
 
 // name -> [nargs, security definer?, search_path, anon?, authenticated?, service_role?]
 const EMPTY = 'search_path=""'

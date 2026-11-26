@@ -1,10 +1,9 @@
 -- WHOLE-ACCOUNT VIEW AS — migration B: the widening
 -- (docs/13 "WHOLE-ACCOUNT VIEW AS — FOUR-WAY REVIEW …", revisions 1 and 11).
 --
--- KEPT IN supabase/pending/ UNTIL migration A (20261125010000) is on prod AND the
--- app that uses whole-account sessions is deployed (Vercel READY). `migrate:prod`
--- applies every file in supabase/migrations/, so this file moves there only
--- when it is its turn. Its undo is supabase/pending/ROLLBACK-view-as-widen.sql
+-- Kept in supabase/pending/ until migration A (20261125010000) was on prod AND the
+-- app that uses whole-account sessions was deployed (both 2026-11-25); moved into
+-- supabase/migrations/ on 2026-11-26. Its undo is supabase/pending/ROLLBACK-view-as-widen.sql
 -- (re-creates the 20261116010000 §4b policies and A's mm_ensure_answer),
 -- written before this applies.
 --

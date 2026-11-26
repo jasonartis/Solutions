@@ -1146,13 +1146,13 @@ the person's (drift 5); and **it is looking, not doing** — he cannot test a fl
   length, subject and date (12).
 - Lawyer questions B5 / B10 (docs/31) are open while the feature widens.
 
-### WHOLE-ACCOUNT VIEW AS — AS BUILT (Opus + agents, 2026-11-24/25; migration A `20261125010000` ON PROD 2026-11-25, verified 24/33 → 81/0 and v1 38/2 → 40/0; migration B NOT yet)
+### WHOLE-ACCOUNT VIEW AS — AS BUILT (Opus + agents, 2026-11-24/25; migration A `20261125010000` ON PROD 2026-11-25, verified 24/33 → 81/0 and v1 38/2 → 40/0; migration B `20261126010000` ON PROD 2026-11-26, verifier state A → state B, 81/0 both, v1 40/0)
 
 **Files:** migration A `supabase/migrations/20261125010000_view_as_whole_account.sql`; migration B
-`supabase/pending/20261126010000_view_as_widen.sql` (moves into `migrations/` only after A + the app are live);
+`supabase/migrations/20261126010000_view_as_widen.sql` (kept in `supabase/pending/` until A + the app were live; moved 2026-11-26);
 rollback `supabase/pending/ROLLBACK-view-as-widen.sql` (not a migration — copy it in with a NEW version to use it);
 tests `packages/db/src/view-as-whole-account.test.ts`, `browser-client-allowlist.test.ts`, `e2e/real-view-as.spec.ts`
-(`MODULES_WIDENED` flips in B's commit); prod verifier `scripts/prod-verify-view-as-whole-account.mts` (reports which
+(`MODULES_WIDENED = true` since B; each page is rendered by the viewer and then at once by the person, re-taken up to 3 times, because other e2e files change Charlie's data in parallel); prod verifier `scripts/prod-verify-view-as-whole-account.mts` (reports which
 state prod is in, A or B, and fails only on a mixed state). Convention: docs/03 #38.
 
 **Changed while building (each from a review or a test):**
@@ -1181,6 +1181,10 @@ go-ahead → apply → verifier + `prod-verify-real-view-as.mts` (before AND aft
 (the pages read `sd_my_notes`/`mm_my_answers`; pushed first, every dater's note box renders empty and a save would
 overwrite the real note). After Vercel READY: move B into `migrations/`, flip `MODULES_WIDENED`, push, and apply B with
 its own go-ahead.
+
+**Open follow-ups (not started):** a cleanup migration that drops the 3-argument `view_as_real_start` (kept for one
+deploy) and removes the temporary overload exception in `packages/db/src/rank-admission.test.ts`; the STAFF version
+(org staff see a trimmed real screen, replacing table-style view-as — see "For the later STAFF version" above).
 
 **Founder answers, 2026-11-24:** (1) **A** — `view_as_real_sessions` IS the permanent staff-access record (never
 pruned; docs/12 never-do), and `/privacy` now reads "Platform staff regularly look at accounts the way their owners see

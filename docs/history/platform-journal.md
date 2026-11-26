@@ -4,6 +4,15 @@ The running, dated build journal that used to live in `CLAUDE.md`'s "## Current 
 section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every session)
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
+- **2026-11-26 (Opus): WHOLE-ACCOUNT VIEW AS, step 2 — migration B `20261126010000` ON PROD, verified** (backup
+  `2026-11-26T20-56-34`; dry run listed only B; verifier state A 81/0 → state B 81/0 with 45 module-table policies on
+  `view_as_may_read` and `sd_notes` still closed; v1 verifier 40/0). Matchmaking, speed dating and visual messaging now show
+  in a view. The no-drift e2e now renders each page viewer-then-person back to back and re-takes a differing pair up to 3
+  times (other e2e files change Charlie's data in parallel on CI's 2 workers). Local CI-order run: db 631/631, typecheck
+  9/9, build, e2e 106/107 (the one fail = content-reports `/report`, local-only, known). Prod smoke as Charlie 9/9 (his
+  pages render, no banner, a non-superadmin is refused the list and the start route). CI on step 1 was red twice on
+  pending-invite e2e tests (also red on the docs-only `36fa08e` before it), green on re-run — an invite-test flake to watch.
+  Handoff note deleted (all its items done or in docs/13); branch `view-as-wip` deleted.
 - **2026-11-25 (Opus + agents): WHOLE-ACCOUNT VIEW AS, step 1 — migration A `20261125010000` ON PROD, verified** (new
   verifier `scripts/prod-verify-view-as-whole-account.mts` 24/33 → 81/0; v1 `prod-verify-real-view-as.mts` 38/2 → 40/0;
   backup `2026-11-25T09-26-53` first; dry run listed only A). The superadmin picks ANY person in `/console/view-as/real`

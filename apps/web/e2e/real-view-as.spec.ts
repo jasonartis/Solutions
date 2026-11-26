@@ -5,10 +5,11 @@ import { expect, test, type Browser, type Page } from '@playwright/test'
 // The founder's hard requirement: the superadmin sees a person's screen rendered
 // by the SAME components, with no second layout. So this renders the same pages
 // both ways and compares them:
-//   1. The superadmin starts a real view of Charlie and renders his pages (the first
-//      screen after Start is kept under its own key, then each path).
-//   2. Charlie signs in himself and renders the same paths; each <main> must be
-//      IDENTICAL to the viewed one. The banner sits outside <main>.
+//   1. The superadmin starts a real view of Charlie while Charlie is signed in himself
+//      in a second browser.
+//   2. Each page is rendered by the viewer and then at once by Charlie; each <main> must
+//      be IDENTICAL (re-taken up to 3 times, because other e2e files change Charlie's
+//      data in parallel). The banner sits outside <main>.
 // NOTE this does not by itself prove the dashboard's own writers stay quiet during a view:
 // the probe signs Charlie in FIRST, so any first-sign-in side effect has already happened
 // to him. The db tests (packages/db/src/real-view-as.test.ts, view-as-whole-account.test.ts)
@@ -66,10 +67,10 @@ const HOME = '/o/demo-a/m/classroom'
 
 /**
  * Migration A (20261125010000) opens the WHOLE ACCOUNT but leaves every non-classroom module table dark to a view;
- * migration B (20261126010000, kept in supabase/pending/ until A and the app are live) opens them. CI applies only
- * what is in supabase/migrations, so this is false until the commit that moves B there — flip it IN THAT COMMIT.
+ * migration B (20261126010000, kept in supabase/pending/ until A and the app are live) opens them. B moved into
+ * supabase/migrations on 2026-11-26, so this is true; set it back to false only if B is ever rolled back.
  */
-const MODULES_WIDENED = false
+const MODULES_WIDENED = true
 
 /** A person's own screens: <main> of each path, as they see it. */
 async function ownScreens(
@@ -143,7 +144,12 @@ test('real view-as: the superadmin sees exactly what Charlie sees on every modul
   }
   const maskNotes = (p: string) => p === eventHref
 
-  // 1. AS THE VIEWER FIRST: the superadmin starts a view of Charlie and renders each page.
+  // Charlie, signed in as himself in his own browser, alongside the viewer.
+  const charlieCtx = await browser.newContext()
+  const charlie = await charlieCtx.newPage()
+  await signIn(charlie, 'charlie@demo.local')
+
+  // 1. The superadmin starts a view of Charlie.
   const ownerCtx = await browser.newContext()
   const owner = await ownerCtx.newPage()
   await signIn(owner, 'owner@demo.local')
@@ -152,16 +158,36 @@ test('real view-as: the superadmin sees exactly what Charlie sees on every modul
   await expect(banner).toContainText('Viewing Charlie C')
   await expect(banner).toContainText('read-only')
   await expect(banner.locator('a[href*="/o/null"]')).toHaveCount(0)
+  const firstAfterStart = await mainHtml(owner) // the first screen after Start, its own render
 
-  const viewed = new Map<string, string>()
-  viewed.set('first-after-start', await mainHtml(owner)) // the first screen after Start, its own render
-  for (const p of paths) {
-    await owner.goto(p)
-    await expect(banner).toBeVisible()
-    viewed.set(p, await mainHtml(owner, maskNotes(p)))
+  // 2. NO DRIFT: each page rendered by the viewer and then at once by Charlie; each <main> identical (the notes
+  // element masked on the event page only). Other e2e files run in parallel and change Charlie's data (speed-dating
+  // rounds, chats, bookings), so the two renders are taken back-to-back and, if they differ, taken again — up to 3
+  // times. A real drift between the two ways of rendering differs EVERY time, so the retry cannot hide one.
+  async function compare(p: string, what: string, viewerFirst?: string) {
+    let viewedHtml = ''
+    let ownHtml = ''
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      if (viewerFirst !== undefined && attempt === 1) viewedHtml = viewerFirst
+      else {
+        await owner.goto(p)
+        await expect(banner).toBeVisible()
+        viewedHtml = await mainHtml(owner, maskNotes(p))
+      }
+      await charlie.goto(p)
+      ownHtml = await mainHtml(charlie, maskNotes(p))
+      if (viewedHtml === ownHtml) break
+    }
+    expect(ownHtml, `${what} (the person's own screen has content)`).toContain(content[p])
+    expect(viewedHtml, `${what} (the viewed screen has content)`).toContain(content[p])
+    expectSameScreen(viewedHtml, ownHtml, what)
   }
+  await compare('/dashboard', 'first screen after Start', firstAfterStart)
+  for (const p of paths) await compare(p, p)
+  await owner.goto('/dashboard')
   // Not vacuous: the header names Charlie, not the superadmin.
   await expect(owner.locator('header')).toContainText('Charlie C')
+  await charlieCtx.close()
 
   // Read-only: a form submit while viewing shows the one notice and sends nothing.
   await owner.goto('/account')
@@ -196,16 +222,6 @@ test('real view-as: the superadmin sees exactly what Charlie sees on every modul
   await owner.goto('/dashboard')
   await expect(owner.getByTestId('view-as-banner')).toHaveCount(0)
   await ownerCtx.close()
-
-  // 2. THEN AS THE PERSON: NO DRIFT, each <main> identical (notes element masked on the event page only).
-  const charlie = await ownScreens(browser, 'charlie@demo.local', paths, maskNotes)
-  for (const p of paths) {
-    expect(charlie.get(p)!, `${p} (the person's own screen has content)`).toContain(content[p])
-    expect(viewed.get(p)!, `${p} (the viewed screen has content)`).toContain(content[p])
-    expectSameScreen(viewed.get(p)!, charlie.get(p)!, p)
-  }
-  expect(viewed.get('first-after-start')!).toContain(content['/dashboard'])
-  expectSameScreen(viewed.get('first-after-start')!, charlie.get('/dashboard')!, 'first screen after Start')
 })
 
 test('real view-as: a professor’s manage page renders the same both ways', async ({ browser }) => {
