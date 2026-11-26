@@ -1184,7 +1184,7 @@ its own go-ahead.
 
 **Open follow-ups (not started):** a cleanup migration that drops the 3-argument `view_as_real_start` (kept for one
 deploy) and removes the temporary overload exception in `packages/db/src/rank-admission.test.ts`; the STAFF version
-(org staff see a trimmed real screen, replacing table-style view-as — see "For the later STAFF version" above).
+(org staff see a trimmed real screen, replacing table-style view-as — see "For the later STAFF version" above). Handoff + prompt: docs/history/handoff-2026-11-26-view-as-staff.md (founder chose it as next, 2026-11-26).
 
 **Founder answers, 2026-11-24:** (1) **A** — `view_as_real_sessions` IS the permanent staff-access record (never
 pruned; docs/12 never-do), and `/privacy` now reads "Platform staff regularly look at accounts the way their owners see
