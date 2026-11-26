@@ -48,6 +48,12 @@ exception to the org_id rule, an account-deletion entry with a test, and tests t
 The assistant itself flagged this as "in question" once the founder demanded full access (§7). **OPEN: person vs org
 ownership was never confirmed.** The founder only noted speed-dating notes as a comparable author-only precedent.
 
+**FOUNDER (2026-11-23, View as chat): "Have that Vault in mind in the design so that it can be adopted there."** The
+superadmin's "View as" (built 2026-11-26) shows a private field as a placeholder such as `‹private note · 212 characters›`,
+never its words, and the decision is made in the database at the last step. The vault must adopt that mechanism unchanged:
+docs/13 "WHOLE-ACCOUNT VIEW AS" items 3 (private fields: `private_text()`, a definer reader, the table closed to every
+view) and 10 (private FILES), and docs/03 #38.
+
 ## 6. Truthfulness (PROPOSED — the founder did not respond to the specifics)
 
 Each generated line cites exactly one vault entry (ids checked server-side against the caller's own vault); numbers,
