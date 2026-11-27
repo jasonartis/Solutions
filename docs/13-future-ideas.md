@@ -1378,7 +1378,7 @@ four write layers apply to a staff token unchanged; claims-blanking definers fai
 classroom grading/exam pages when viewing a GA; page `<title>` metadata; back navigation / router cache after Stop;
 visual-messaging and synagogue tables in the same org (dark by `view_as_may_read`, to be asserted by test).
 
-### STAFF VIEW AS — AS BUILT (Opus + Opus reviewers, 2026-11-26; migration `20261127010000` LOCAL ONLY — not on prod, not pushed)
+### STAFF VIEW AS — AS BUILT (Opus + Opus reviewers, 2026-11-26; migration `20261127010000` ON PROD 2026-11-26, verified 28/97 → 135/0; v1 40/0 → 40/0; whole-account 81/0 → 81/0)
 
 **Files.** Migration `supabase/migrations/20261127010000_view_as_staff.sql`. App: `proxy.ts`, `lib/view-as-real.ts`
 (`kind`, `areaModules`, `outsideArea` in the signed header), `app/view-as/start` (staff branch) and `stop` (`back`),
@@ -1448,7 +1448,11 @@ have `granted_by` NULL and therefore COUNT for View as — nobody can tell who g
 owner + professor) depends on it. The verifier's section [3] lists every owner/admin holding a manager-tier seat with
 no recorded giver, so he sees exactly who this covers before the prod apply. Locally: the five seed owners.
 
-**Ship order:** `pnpm backup:prod` → dry run lists ONLY `20261127010000` → founder go-ahead → apply → the three
+**Shipped 2026-11-26 (founder: "Apply", "Push"):** backup `2026-11-27T04-00-28`; dry run listed only this file; applied;
+"Remote database is up to date"; the three verifiers above; live site 200 on the old app before the push. Prod owners
+holding a manager-tier seat with no recorded giver (the default above covers them): demo-a owner (classroom professor),
+demo-salon owner (nail-salon manager), plus three demo orgs whose modules have no staff edges.
+**Ship order (as run):** `pnpm backup:prod` → dry run lists ONLY `20261127010000` → founder go-ahead → apply → the three
 verifiers (staff, real, whole-account) before AND after → push the app (after the migration: the old app does not send
 staff starts, but the new app needs the new functions) → Vercel READY → a staff view checked on prod.
 

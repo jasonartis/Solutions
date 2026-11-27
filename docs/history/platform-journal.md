@@ -4,7 +4,8 @@ The running, dated build journal that used to live in `CLAUDE.md`'s "## Current 
 section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every session)
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
-- **2026-11-26 (Opus): STAFF "View as" BUILT locally — migration `20261127010000` NOT on prod.** Founder answers "1A, 2
+- **2026-11-26 (Opus): STAFF "View as" — migration `20261127010000` ON PROD, verified** (staff verifier 28/97 → 135/0;
+  v1 40/0 and whole-account 81/0 before and after; backup `2026-11-27T04-00-28`; dry run listed only it). Founder answers "1A, 2
   yes, 3A/A, 4A, 5 no — go" (docs/13 "STAFF VIEW AS" → FOUNDER ANSWERS). A professor or salon admin/manager opens
   "View as" in the module, picks a person, and sees that person's real screen trimmed to her area; the table-style
   in-module view is retired. Fable was unavailable, so the founder asked for enough Opus reviewers to come close: a
