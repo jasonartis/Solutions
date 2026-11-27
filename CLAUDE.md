@@ -50,7 +50,8 @@ section, keep it a SUMMARY with pointers: add the dated story to the journal / t
 - **A migration must meet an EMPTY database** (CI applies migrations before any seed) — assertion blocks catalog-only.
 - **The shared `.git`:** several Claude sessions work in this one tree. `git commit -- <paths>` (never `-A`, and a plain
   `git add <path>` is not enough — the index may hold another session's files); before pushing, `git log --oneline
-  origin/master..HEAD` and ask the owner of any commit that is not yours; claim migration version numbers with the other
+  origin/master..HEAD` and ask the owner of any commit that is not yours (to push only YOURS when theirs sit under
+  it: reorder in a scratch worktree, recipe in journal 2026-11-26); claim migration version numbers with the other
   sessions first (`ListAgents` → `SendMessage`). Red CI is shared state: one bad migration blocks everyone's deploys.
   **When another session has edits (or a STAGED copy) in a file you also changed** (2026-11-05, worked several times):
   `git commit -- <path>` takes the WHOLE working-tree file, theirs included. Commit only your hunks from a private index:

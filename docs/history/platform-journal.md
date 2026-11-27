@@ -4,6 +4,19 @@ The running, dated build journal that used to live in `CLAUDE.md`'s "## Current 
 section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every session)
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
+- **2026-11-26 (Opus): PUSHING ONLY YOUR COMMITS WHEN ANOTHER SESSION'S UNPUSHED ONES SIT UNDER THEM** (done twice that
+  day, founder: "just push your work"; the other session wanted its commits held until the founder approved them). A
+  plain `git push` sends every commit below yours. Recipe: `git worktree add --detach <scratch> origin/master`; in it,
+  `git cherry-pick <yours…>` (note the SHA = MINE), then `git cherry-pick <theirs…>` IN THEIR ORIGINAL ORDER (read
+  `git log --reverse`); check `git rev-parse NEW^{tree}` equals the old `HEAD^{tree}` (same content); `git update-ref
+  refs/heads/master NEW OLD` (fails safely if master moved meanwhile); `git worktree remove`; `git push origin
+  MINE:refs/heads/master` (still only with the founder's "push"); then message the other session its new SHAs. The
+  working tree and its uncommitted edits are never touched. This git has no `cherry-pick -q`.
+- **2026-11-26 (Opus): back-link "came from" label — accepted LOW risk, not fixed.** `fromLabel` travels in the address
+  and `cleanLabel()` (`apps/web/lib/back-link.ts`) only trims and caps it at 80 characters (rendered escaped, so no
+  markup). The PATH is validated (docs/03 #37), the label is not: a crafted link can show a back link reading anything,
+  pointing at a valid app page. Accepted because only two console pages use `from` today; revisit if `withFrom` spreads
+  to member-facing pages (fix = derive the label from the validated path, as the parent fallback already does).
 - **2026-11-26 (Opus): WHOLE-ACCOUNT VIEW AS, step 2 — migration B `20261126010000` ON PROD, verified** (backup
   `2026-11-26T20-56-34`; dry run listed only B; verifier state A 81/0 → state B 81/0 with 45 module-table policies on
   `view_as_may_read` and `sd_notes` still closed; v1 verifier 40/0). Matchmaking, speed dating and visual messaging now show
