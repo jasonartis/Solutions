@@ -4,6 +4,16 @@ The running, dated build journal that used to live in `CLAUDE.md`'s "## Current 
 section. Moved here 2026-07-27 to keep `CLAUDE.md` (which auto-loads into every session)
 lean. Newest first. Durable *decisions/conventions* live in their own docs (docs/15
 decision log, docs/03 conventions, docs/12 safeguards) — this is the chronological record.
+- **2026-11-26 (Opus): STAFF "View as" BUILT locally — migration `20261127010000` NOT on prod.** Founder answers "1A, 2
+  yes, 3A/A, 4A, 5 no — go" (docs/13 "STAFF VIEW AS" → FOUNDER ANSWERS). A professor or salon admin/manager opens
+  "View as" in the module, picks a person, and sees that person's real screen trimmed to her area; the table-style
+  in-module view is retired. Fable was unavailable, so the founder asked for enough Opus reviewers to come close: a
+  3-reviewer design review, a 5-reviewer migration wave, a 2-reviewer app wave and a final fix-check (11 reviews) —
+  findings and fixes in docs/13 "AS BUILT"; a Fable re-review is queued (docs/30 §4 Step C #7). Biggest catches:
+  "make the owner my student" (R1), files and org-level tables outside the area, and an 8 ms-a-row cost that would have
+  timed out a 1,000-row page (now one id list per query). Default taken for the founder: seats that predate the
+  `granted_by` stamp count. Docs pushed earlier the same day without the other sessions' commits (rebuilt on
+  origin/master by plumbing, local master rebased).
 - **2026-11-26 (Sonnet): PUBLIC MARKETING PAGE built (docs/35).** Founder asked whether it is a module or a new "public pages" concept: neither — a platform route like /privacy; no migration/RLS. Decisions: launch without a photo (the NYU faculty photo was NOT used: hotlinking is an outside request, rights unclear); the installed app opens /login; browsers that have signed in before (`sp_seen` cookie, set only on signed-in requests) go to /login, unsure ones see the page. Source copy is the Customers folder's (HANDOFF.md contract); `pnpm site:sync` copies an allowlist only. CSP with per-response SHA-256 hashes makes "no outside requests" enforced. Verified: 8 unit + 5 browser tests (light/dark, 375px, arrows, tally, /login link, zero outside requests/cookies/CSP violations) on a private dev server (port 3000 was another session's live `next start`). Founder set BUSINESS_NAME, CONTACT_PHONE, LINKEDIN_URL on Vercel (not WhatsApp/email). Vercel makes you re-verify by emailed code to REVEAL stored values; adding/overwriting needs no reveal.
 - **2026-11-26 (Opus): PUSHING ONLY YOUR COMMITS WHEN ANOTHER SESSION'S UNPUSHED ONES SIT UNDER THEM** (done twice that
   day, founder: "just push your work"; the other session wanted its commits held until the founder approved them). A

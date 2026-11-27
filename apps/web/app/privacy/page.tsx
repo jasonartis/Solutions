@@ -76,6 +76,11 @@ export default async function PrivacyPage() {
           when.
         </p>
         <p>
+          People who oversee you in an organization can also see the parts of your screen they
+          oversee, the way you see them, without being able to change anything. Each time is
+          recorded, and that organization&rsquo;s administrators can see the record.
+        </p>
+        <p>
           You can ask us to delete your account and personal info at any time. The one exception
           is that staff-access record — it stays on file permanently, even after your account is
           deleted, so it's no longer tied to your name, but the fact that someone looked, and

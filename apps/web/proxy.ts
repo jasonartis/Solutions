@@ -30,6 +30,19 @@ function decodedPath(raw: string): string {
   }
 }
 
+// STAFF views (docs/13 "STAFF VIEW AS"): a page of ANOTHER module of the viewed org
+// (/o/<org>/m/<module>[/…], module not in the viewer's area) is shown as the placeholder
+// "‹<module> · outside your area›" by the (app) layout, in the same frame. The page itself
+// renders as the viewer (the database said: not in scope), so nothing of the person's shows.
+// The module's own picker (/m/<module>/view-as) is the viewer's page, never a placeholder.
+function outsideAreaModule(path: string, orgSlug: string | null, areaModules: string[]): string | null {
+  if (!orgSlug) return null
+  const m = path.match(/^\/o\/([^/]+)\/m\/([^/]+)(\/.*)?$/)
+  if (!m || m[1] !== orgSlug) return null
+  if (areaModules.includes(m[2]!)) return null
+  return m[2]!
+}
+
 export async function proxy(request: NextRequest) {
   const viewSession = request.cookies.get(VIEW_AS_COOKIE)?.value
   const path = request.nextUrl.pathname
@@ -109,7 +122,13 @@ export async function proxy(request: NextRequest) {
       })
       const row = (data as Record<string, unknown>[] | null)?.[0]
       if (row) {
+        const kind = row.kind === 'staff' ? 'staff' : 'platform'
+        const areaModules = kind === 'staff' && Array.isArray(row.area_modules) ? (row.area_modules as string[]) : []
+        const orgSlug = (row.org_slug as string | null) ?? null
         view = {
+          kind,
+          areaModules,
+          outsideArea: kind === 'staff' && row.in_scope !== true ? outsideAreaModule(decodedPath(path), orgSlug, areaModules) : null,
           session: viewSession,
           actor: user.id,
           target: row.target_user_id as string,

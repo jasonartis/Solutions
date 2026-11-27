@@ -127,6 +127,16 @@ const GENERIC_VOCABULARY = ['director', 'coordinator', 'lead', 'position'] as co
  * not a source of truth. Adding a name here without understanding what its
  * comparison admits defeats the file.
  */
+// Rank readers that can only NARROW a read, never admit one, so their rank tests
+// must not propagate to their callers (the closure below). view_as_staff_area
+// (20261127010000) answers "is this inside a staff viewer's area?"; every
+// caller ANDs it into a rule that is already true without a view
+// (view_as_grant_visible, view_as_may_read_in, ...). Propagating it would mark
+// has_module_role, cls_is_ga, sal_is_worker and every policy above them as
+// rank-gated, which is false: outside a view they behave exactly as before.
+// Its own two comparisons still appear in the map as its own rows.
+const NARROWING_ONLY = new Set(['view_as_staff_area', 'view_as_staff_live'])
+
 const KNOWN_READERS = [
   // 20261007090000: refuses an account deletion that would leave a module with
   // no Director (rank >= 4) — the same threshold as
@@ -141,6 +151,14 @@ const KNOWN_READERS = [
   'sal_can_manage(uuid)',
   'sd_can_organize(uuid)',
   'view_as_guard_session()',
+  // 20261127010000 (staff View as): the area. Same comparisons as
+  // view_as_guard_session (viewer grant rank > person grant rank, plus an
+  // edge) and one REFUSAL (the person holds a seat ranked >= the viewer's).
+  // It admits nothing on its own: it only narrows what a view token reads.
+  'view_as_staff_area(uuid,uuid,uuid)',
+  // 20261127010000: a staff view is refused while the PERSON holds a manager-tier
+  // seat (rank >= 2) in any module of the org. A refusal; it admits nothing.
+  'view_as_staff_live(uuid)',
 ].sort()
 
 // ---------------------------------------------------------------------------
@@ -851,7 +869,7 @@ describe('rank admission: what each rank gate lets through (docs/13, CLAUDE.md N
         let grew = false
         for (const f of all) {
           if (f.name === 'module_position_rank' || readers.some((r) => r.name === f.name)) continue
-          const hits = [...gateOf.keys()].filter((g) => g !== f.name && new RegExp(`\\b"?${g}"?\\s*\\(`, 'i').test(f.src))
+          const hits = [...gateOf.keys()].filter((g) => g !== f.name && !NARROWING_ONLY.has(g) && new RegExp(`\\b"?${g}"?\\s*\\(`, 'i').test(f.src))
           if (hits.length === 0) continue
           // Inherit only the tests this caller actually instantiated, then clear
           // `via` so the next level down inherits them unconditionally.

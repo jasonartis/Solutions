@@ -102,9 +102,9 @@ describe('every page uses PageHeader (docs/03 #37)', () => {
     expect(found.sort()).toEqual([...TOP_PAGES].sort())
   })
 
-  it('the allowlist has no stale entries, and the view-as wrapper target uses PageHeader', () => {
+  it('the allowlist has no stale entries, and the staff View as picker (the view-as wrapper target) uses PageHeader', () => {
     for (const p of Object.keys(ALLOWLIST)) expect(pages).toContain(p)
-    const viewAs = readFileSync(join(repoRoot, 'apps/web/components/view-as/page.tsx'), 'utf8')
+    const viewAs = readFileSync(join(repoRoot, 'apps/web/components/view-as/staff-picker.tsx'), 'utf8')
     expect(viewAs).toContain('<PageHeader')
     expect(viewAs).not.toMatch(/<h1[\s>]/)
   })

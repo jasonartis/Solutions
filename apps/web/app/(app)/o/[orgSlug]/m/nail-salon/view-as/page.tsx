@@ -1,14 +1,13 @@
 // Thin route wrapper (docs/03 composition), the classroom one with a different
-// module key — which is the point: nail-salon's view-as review added a
-// declaration and a migration, no new page and no new read path. The only
-// extra: the back link must read the home page's exact heading, which
-// includes the location name.
-import { ViewAsPage } from '@/components/view-as/page'
+// module key. STAFF "View as" (docs/13 "STAFF VIEW AS", founder 2026-11-26): the
+// person picker for the real screen. The only extra: the back link must read the
+// home page's exact heading, which includes the location name.
+import { StaffViewAsPicker } from '@/components/view-as/staff-picker'
 import { createClient } from '@/lib/supabase/server'
 
 export default async function Page(props: {
   params: Promise<{ orgSlug: string }>
-  searchParams: Promise<{ tab?: string; mode?: string }>
+  searchParams: Promise<{ error?: string; ended?: string }>
 }) {
   const { orgSlug } = await props.params
   const supabase = await createClient()
@@ -17,7 +16,7 @@ export default async function Page(props: {
     ? await supabase.from('sal_locations').select('name').eq('org_id', org.id).order('created_at').limit(1).maybeSingle()
     : { data: null }
   return (
-    <ViewAsPage
+    <StaffViewAsPicker
       moduleKey="nail-salon"
       homeHeading={`Nail Salon${location ? ` — ${location.name}` : ''}`}
       {...props}

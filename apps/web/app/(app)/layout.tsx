@@ -6,6 +6,7 @@ import { AppHeader } from '@/components/app-header'
 import { ViewAsBanner } from '@/components/view-as-banner'
 import { ViewingProvider } from '@/components/view-as-context'
 import { getRealView } from '@/lib/view-as-real'
+import { OutsideArea } from '@/components/view-as-outside-area'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
@@ -41,8 +42,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         displayName={profile?.display_name}
         isSuperadmin={profile?.is_superadmin}
         feedbackUnread={feedbackUnread}
+        // A staff viewer never sees the person's email address in the header
+        // (docs/13 "STAFF VIEW AS", review R6): the name, or "this person".
+        hideEmail={realView?.kind === 'staff' && realView.inScope}
       />
-      <main className="mx-auto max-w-5xl p-4 sm:p-6">{children}</main>
+      <main className="mx-auto max-w-5xl p-4 sm:p-6">
+        {realView?.outsideArea ? <OutsideArea moduleKey={realView.outsideArea} /> : children}
+      </main>
       <SiteFooter />
     </div>
     </ViewingProvider>

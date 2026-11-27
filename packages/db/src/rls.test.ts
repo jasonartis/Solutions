@@ -2550,7 +2550,8 @@ describe('Owner Console view-as (2026-08-06)', () => {
     'apps/web/app/(app)/console/view-as/page.tsx',
     'apps/web/components/view-as/section-table.tsx',
     'apps/web/components/view-as/off-surface.tsx',
-    'apps/web/components/view-as/page.tsx',
+    // (apps/web/components/view-as/page.tsx — the in-module table view — was retired
+    // 2026-11-26 with the staff real screen, docs/13 "STAFF VIEW AS".)
     // Added 2026-08-07 with the lookup log. It is on the console path and it
     // WRITES, which is new for this surface — so the "no definer, no
     // service-role" invariant now has to cover a write path too, not only reads.
@@ -8625,7 +8626,7 @@ describe('the module-role census leak is closed (20261002010000)', () => {
     // UNBLOCKED IT. docs/24 §6 and docs/19's ADJACENT section both say the fix
     // breaks the view-as target picker for "a rank-1 caller with a live mode-1
     // edge", naming speed-dating's host -> participant. MEASURED, that is not
-    // how the picker is reached: apps/web/components/view-as/page.tsx:121 calls
+    // how the picker was reached (the in-module table page, retired 2026-11-26) — it called
     // targetsFor() only when `active.mode2` is true, and viewAsTabsFor() sets a
     // tab's mode2 only from an edge whose mode2 is true. A mode-1-only edge
     // never enumerates anybody — mode 1 renders the CALLER's own rows and needs
@@ -8679,7 +8680,9 @@ describe('the module-role census leak is closed (20261002010000)', () => {
           .filter((r) => r.polcmd === '*')
           .map((r) => r.polname)
           .sort(),
-      ).toEqual(['module_roles_write_org_admin', 'module_roles_write_superadmin'])
+        // module_roles_staff_area (20261127010000) is RESTRICTIVE: it narrows a
+        // staff "View as" to the area and widens nothing (view-as-staff.test.ts).
+      ).toEqual(['module_roles_staff_area', 'module_roles_write_org_admin', 'module_roles_write_superadmin'])
     } finally {
       await sql.end()
     }

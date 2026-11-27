@@ -10,11 +10,14 @@ export function AppHeader({
   displayName,
   isSuperadmin,
   feedbackUnread = 0,
+  hideEmail = false,
 }: {
   user: User | null
   displayName?: string | null
   isSuperadmin?: boolean
   feedbackUnread?: number
+  /** A staff "View as": never show the viewed person's email address. */
+  hideEmail?: boolean
 }) {
   return (
     <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-gray-200 bg-white px-4 py-3 sm:px-6">
@@ -33,7 +36,7 @@ export function AppHeader({
           <>
             <FeedbackLink unread={feedbackUnread} />
             <Link href="/account" className="max-w-[40vw] truncate hover:underline sm:max-w-none">
-              {displayName || user.email}
+              {displayName || (hideEmail ? 'this person' : user.email)}
             </Link>
             <form action="/auth/signout" method="post">
               <button type="submit" className="text-gray-500 hover:text-gray-800 hover:underline">

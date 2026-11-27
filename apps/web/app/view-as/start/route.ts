@@ -30,17 +30,50 @@ export async function POST(request: NextRequest) {
   const form = await request.formData()
   const target = String(form.get('target') ?? '')
 
+  // STAFF "View as" (docs/13 "STAFF VIEW AS"): started from a module's own picker.
+  // The database decides everything (view_as_staff_start: the area rule, no
+  // self-given seats, never a more powerful person); slug and module are used
+  // only to build the redirect, so they are checked against a strict shape.
+  if (form.get('kind') === 'staff') {
+    const org = String(form.get('org') ?? '')
+    const slug = String(form.get('slug') ?? '')
+    const moduleKey = String(form.get('module') ?? '')
+    if (!/^[a-z0-9-]{1,80}$/.test(slug) || !STAFF_MODULES.includes(moduleKey)) {
+      return new NextResponse('Bad request', { status: 400 })
+    }
+    const home = `/o/${slug}/m/${moduleKey}`
+    const staffBack = (msg: string) =>
+      NextResponse.redirect(new URL(`${home}/view-as?error=${encodeURIComponent(msg)}`, request.url), 303)
+    if (!realViewConfigured()) return staffBack('View as is not configured on this server.')
+    const supabase = await createClient()
+    const { data, error } = await supabase.rpc('view_as_staff_start', { p_org: org, p_target: target })
+    // Only the function's own refusals are shown; anything else (a bad id, a network error) is generic.
+    if (error || !data) {
+      const known = ["You can't view this person's screen", 'Choose someone else to view']
+      return staffBack(known.includes(error?.message ?? '') ? error!.message : 'Could not start the view.')
+    }
+    const res = NextResponse.redirect(new URL(home, request.url), 303)
+    res.cookies.set(VIEW_AS_COOKIE, data as string, COOKIE_OPTIONS)
+    return res
+  }
+
   const supabase = await createClient()
   const { data, error } = await supabase.rpc('view_as_real_start', { p_target: target })
   if (error || !data) return back(error?.message ?? 'Could not start the view')
 
   const res = NextResponse.redirect(new URL('/dashboard', request.url), 303)
-  res.cookies.set(VIEW_AS_COOKIE, data as string, {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
-    path: '/',
-    maxAge: 30 * 60,
-  })
+  res.cookies.set(VIEW_AS_COOKIE, data as string, COOKIE_OPTIONS)
   return res
 }
+
+const COOKIE_OPTIONS = {
+  httpOnly: true,
+  sameSite: 'lax' as const,
+  secure: process.env.NODE_ENV === 'production',
+  path: '/',
+  maxAge: 30 * 60,
+}
+
+// The modules that have staff "View as" edges (module_view_as_edge mode 2). The
+// database refuses anything else anyway; this only shapes the redirect.
+const STAFF_MODULES = ['classroom', 'nail-salon']

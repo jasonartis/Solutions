@@ -46,6 +46,20 @@ export type RealView = {
   /** The DATABASE's answer (view_as_real_check): true on the in-scope pages (/dashboard, /account, /feedback, /o/…);
    *  elsewhere (e.g. /console) the superadmin is themselves. */
   inScope: boolean
+  /**
+   * 'platform' = the superadmin's whole-account view; 'staff' = org staff viewing a person,
+   * trimmed to their AREA (docs/13 "STAFF VIEW AS", migration 20261127010000). The database
+   * reports it; nothing here decides what a view may read.
+   */
+  kind: 'platform' | 'staff'
+  /** Staff views only: the modules of `orgSlug` in the viewer's area (in scope: /o/<orgSlug>/m/<one of these>). */
+  areaModules: string[]
+  /**
+   * Staff views only: set when THIS request is a page of another module of the same org
+   * (/o/<orgSlug>/m/<module>, module not in the area). The (app) layout shows
+   * "‹<module> · outside your area›" instead of the page, which renders as the viewer.
+   */
+  outsideArea: string | null
 }
 
 function secret(): string | null {

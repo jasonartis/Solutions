@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation'
 import { getModule } from '@platform/core'
 import { createClient } from '@/lib/supabase/server'
+import { getRealView } from '@/lib/view-as-real'
 
 // The standard module-page gate (extraction pass, docs/04): resolve the org by
 // slug, verify the module is enabled for it, 404 otherwise. RLS already hides
@@ -14,6 +15,11 @@ export async function requireOrgModule(orgSlug: string, moduleKey: string) {
   // MODULES env filter (docs/03 composition decision) doesn't exist here,
   // even if the route file physically does.
   if (!getModule(moduleKey)) notFound()
+
+  // STAFF View as (docs/13 "STAFF VIEW AS"): a module of the viewed org outside the viewer's
+  // area shows the layout's placeholder instead of the page. Stop here so the page (which would
+  // render as the viewer herself) does no work and sends nothing.
+  if ((await getRealView())?.outsideArea) notFound()
 
   const supabase = await createClient()
 

@@ -79,6 +79,18 @@ if (existsSync(NEWER)) {
   }
 }
 
+// 20261127010000 (STAFF View as) re-creates view_as_real_check and view_as_real_end;
+// once it is applied (view_as_staff_start exists in the database) their bodies come from there.
+const staffExpected = new Map<string, string>()
+const STAFF = resolve(root, 'supabase/migrations/20261127010000_view_as_staff.sql')
+if (existsSync(STAFF)) {
+  const t3 = readFileSync(STAFF, 'utf8')
+  const re3 = /create (?:or replace )?function public\.(\w+)\([\s\S]*?\nas \$\$([\s\S]*?)\$\$;/g
+  for (let m = re3.exec(t3); m; m = re3.exec(t3)) {
+    if (m[1] === 'view_as_real_check' || m[1] === 'view_as_real_end') staffExpected.set(m[1], createHash('md5').update(m[2]!).digest('hex'))
+  }
+}
+
 // name -> [security definer?, anon?, authenticated?, service_role?]
 const INTENT: Record<string, [boolean, boolean, boolean, boolean]> = {
   is_view_as_request: [false, true, true, true],
@@ -114,7 +126,9 @@ try {
              coalesce(p.proacl::text, '') ~ '(^|[{,])=X/' as p
       from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname = ${name}
       order by p.pronargs desc limit 1`
-    check(`${name} exists, body matches the migration`, f?.md5 === expected.get(name), `db=${f?.md5 ?? '-'}`)
+    const [staffApplied] = await sql<{ n: number }[]>`select count(*)::int as n from pg_proc where proname = 'view_as_staff_start' and pronamespace = 'public'::regnamespace`
+    const want = staffApplied!.n === 1 && staffExpected.has(name) ? staffExpected.get(name) : expected.get(name)
+    check(`${name} exists, body matches the migration`, f?.md5 === want, `db=${f?.md5 ?? '-'}`)
     check(`  definer = ${secdef}, search_path pinned`, f?.secdef === secdef && JSON.stringify(f?.config) === '["search_path=\\"\\""]', JSON.stringify(f?.config))
     check(`  EXECUTE anon=${anon} authenticated=${auth} service_role=${svc}, never PUBLIC`, !!f && f.a === anon && f.u === auth && f.s === svc && !f.p, f ? `${f.a}/${f.u}/${f.s}/public=${f.p}` : '-')
   }

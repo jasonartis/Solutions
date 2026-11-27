@@ -501,6 +501,15 @@ not buildable without these; several change claims made above.
     governs MODULE view-as (org staff viewing a position); it no longer limits the superadmin's real view. Widening is
     still per module (its own migration + review, docs/13 "REAL VIEW-AS" → "Open, by design"). Module view-as (this
     section) is unchanged.
+13. **STAFF real view (founder 2026-11-23 ask; answers + go 2026-11-26; docs/13 "STAFF VIEW AS").** The real screen
+    REPLACES mode 2 for org staff, and mode 1's tabs are retired (answer 4A). Who: today's mode-2 edges exactly
+    (point 4's rank/cover/edge rule, answer 2), but the viewer's seat must not be one she gave herself (answer 5), and
+    the person may not be an org owner/admin, a superadmin, or hold a manager-tier seat anywhere in the org. What:
+    the person's screen INTERSECTED with the viewer's area (point 10), enforced row by row in the database; point 1's
+    keystone is a measured test (rows in a staff view ⊆ rows the viewer reads herself, every `cls_`/`sal_` table).
+    Point 2 (read-only) in full. Point 6: the session row is the permanent record, readable by the org's
+    owners/admins; the person is not notified (answer 1A). Point 7 stands for staff: no edges into matchmaking or
+    speed-dating end users.
 
 ## 9. Per-module mapping (the vocabulary table)
 

@@ -406,7 +406,9 @@ describe('matchmaking — mm_my_answers and mm_ensure_answer', () => {
       // Control: no view, the stored row.
       expect(ok(await ensure())[0]).toMatchObject({ question_id: f.plain, user_id: ids.p, position: 2, care: 5 })
       expect(ok(await ensure(whole))[0]).toMatchObject(nothing)
-      expect(ok(await ensure(v1))[0]).toMatchObject(nothing)
+      // Since 20261127010000 a dead or org-scoped view sees none of the person's seats
+      // (view_as_grant_visible), so the single check refuses: nothing returned, nothing written.
+      expect((await ensure(v1)).error).toMatch(/Only singles/)
 
       await applyB(tx)
       const stored = ok(await ensure(whole))[0]!
@@ -414,8 +416,8 @@ describe('matchmaking — mm_my_answers and mm_ensure_answer', () => {
       expect(stored.id).not.toBeNull()
       // A v1 session (open again) still gets nothing; the whole-account one is closed by it.
       const v1b = ok(await as(tx, 's', () => tx`select public.view_as_real_start(${ids.p}, ${cls.id}, 'classroom') as id`, { keep: true }))[0]!.id as string
-      expect(ok(await ensure(v1b))[0]).toMatchObject(nothing)
-      expect(ok(await ensure(whole))[0]).toMatchObject(nothing) // ended
+      expect((await ensure(v1b)).error).toMatch(/Only singles/)
+      expect((await ensure(whole)).error).toMatch(/Only singles/) // ended
       expect(ok(await ensure())[0]).toMatchObject({ position: 2 }) // control
       expect((await answersOf(tx))[0]!.n).toBe(1) // nothing written
     })
@@ -619,7 +621,7 @@ describe('migration B — the widening (applied inside the transaction)', () => 
         from pg_policy p join pg_class c on c.oid = p.polrelid order by 1, 2`
       await withoutB(tx)
       const before = await snapshot()
-      expect(before.filter((r) => r.qual.includes('view_as_may_read'))).toHaveLength(0) // A-only to start
+      expect(before.filter((r) => r.qual.includes('view_as_may_read('))).toHaveLength(0) // A-only to start
       await applyB(tx)
       const after = await snapshot()
       expect(after.length).toBe(before.length)

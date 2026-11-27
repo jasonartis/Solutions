@@ -50,6 +50,9 @@ Four conventions worth knowing before reading it:
 | `sal_can_manage(uuid)` | `module_position_rank('nail-salon', g.role) >= 2` | rank >= 2 (nail-salon) | module pinned in the body |
 | `sd_can_organize(uuid)` | `module_position_rank('speed-dating', g.role) >= 2` | rank >= 2 (speed-dating) | module pinned in the body |
 | `view_as_guard_session()` | `module_position_rank(new.module_key, a.role) > target_rank` | rank(a) > rank(b) | rank vs rank, via the local `target_rank` |
+| `view_as_staff_area(uuid,uuid,uuid)` | `module_position_rank(gv.module_key, gv.role) > module_position_rank(gp.module_key, gp.role)` | rank(a) > rank(b) | rank vs rank |
+| `view_as_staff_area(uuid,uuid,uuid)` | `module_position_rank(gx.module_key, gx.role) >= module_position_rank(gv.module_key, gv.role)` | rank(a) > rank(b) | rank vs rank |
+| `view_as_staff_live(uuid)` | `module_position_rank(x.module_key, x.role) >= 2` | rank >= 2 | module supplied by the caller |
 
 ## What each gate guards
 
@@ -162,6 +165,8 @@ are out of scope here entirely.
 | `sd_can_staff_event_of` | rank >= 2 | `sd_can_organize_event` | sd_reports (update) |
 | `sd_can_staff_event_of` | rank >= 2 | `sd_can_organize_event` | sd_rounds (select) |
 | `view_as_guard_session` | rank(a) > rank(b) | direct | _no policy — triggers/functions only_ |
+| `view_as_staff_area` | rank(a) > rank(b) | direct | _no policy — triggers/functions only_ |
+| `view_as_staff_live` | rank >= 2 | direct | _no policy — triggers/functions only_ |
 
 ## Per module: the ladder, and who satisfies each rank test
 
@@ -198,8 +203,9 @@ Ladder: **4** director · **3** coordinator · **2** lead, professor · **1** ga
 | `module_roles_guard_hierarchy` | rank = 3 | coordinator | _no policy names it — reached through triggers/functions_ |
 | `module_roles_guard_last_director` | rank < 4 | coordinator, ga, lead, position, professor, student | _no policy names it — reached through triggers/functions_ |
 | `module_roles_guard_last_director` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `view_as_staff_live` | rank >= 2 | coordinator, director, lead, professor | _no policy names it — reached through triggers/functions_ |
 
-_Relative gates (`module_caller_can_manage_seat`, `view_as_guard_session`) read straight off the ladder above: a position outranks exactly those below it._
+_Relative gates (`module_caller_can_manage_seat`, `view_as_guard_session`, `view_as_staff_area`) read straight off the ladder above: a position outranks exactly those below it._
 
 ### matchmaking
 
@@ -220,8 +226,9 @@ Ladder: **4** director · **3** admin, coordinator · **2** lead · **1** matchm
 | `module_roles_guard_hierarchy` | rank = 3 | admin, coordinator | _no policy names it — reached through triggers/functions_ |
 | `module_roles_guard_last_director` | rank < 4 | admin, coordinator, lead, matchmaker, position, single | _no policy names it — reached through triggers/functions_ |
 | `module_roles_guard_last_director` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `view_as_staff_live` | rank >= 2 | admin, coordinator, director, lead | _no policy names it — reached through triggers/functions_ |
 
-_Relative gates (`module_caller_can_manage_seat`, `view_as_guard_session`) read straight off the ladder above: a position outranks exactly those below it._
+_Relative gates (`module_caller_can_manage_seat`, `view_as_guard_session`, `view_as_staff_area`) read straight off the ladder above: a position outranks exactly those below it._
 
 ### nail-salon
 
@@ -251,8 +258,9 @@ Ladder: **4** director · **3** admin, coordinator · **2** lead, manager · **1
 | `sal_guard_bill` | rank >= 2 | admin, coordinator, director, lead, manager | _no policy names it — reached through triggers/functions_ |
 | `sal_pin_appointment` | rank >= 2 | admin, coordinator, director, lead, manager | _no policy names it — reached through triggers/functions_ |
 | `sal_pin_appointment_stamps` | rank >= 2 | admin, coordinator, director, lead, manager | _no policy names it — reached through triggers/functions_ |
+| `view_as_staff_live` | rank >= 2 | admin, coordinator, director, lead, manager | _no policy names it — reached through triggers/functions_ |
 
-_Relative gates (`module_caller_can_manage_seat`, `view_as_guard_session`) read straight off the ladder above: a position outranks exactly those below it._
+_Relative gates (`module_caller_can_manage_seat`, `view_as_guard_session`, `view_as_staff_area`) read straight off the ladder above: a position outranks exactly those below it._
 
 ### sample
 
@@ -273,8 +281,9 @@ Ladder: **4** director · **3** coordinator · **2** lead · **1** position · *
 | `module_roles_guard_hierarchy` | rank = 3 | coordinator | _no policy names it — reached through triggers/functions_ |
 | `module_roles_guard_last_director` | rank < 4 | coordinator, lead, manager, member, position | _no policy names it — reached through triggers/functions_ |
 | `module_roles_guard_last_director` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `view_as_staff_live` | rank >= 2 | coordinator, director, lead | _no policy names it — reached through triggers/functions_ |
 
-_Relative gates (`module_caller_can_manage_seat`, `view_as_guard_session`) read straight off the ladder above: a position outranks exactly those below it._
+_Relative gates (`module_caller_can_manage_seat`, `view_as_guard_session`, `view_as_staff_area`) read straight off the ladder above: a position outranks exactly those below it._
 
 ### speed-dating
 
@@ -310,8 +319,9 @@ Ladder: **4** director · **3** admin, coordinator · **2** lead, organizer · *
 | `sd_pin_report` | rank >= 2 | admin, coordinator, director, lead, organizer | _no policy names it — reached through triggers/functions_ |
 | `sd_reports_guard` | rank >= 2 | admin, coordinator, director, lead, organizer | _no policy names it — reached through triggers/functions_ |
 | `sd_reveal_matches` | rank >= 2 | admin, coordinator, director, lead, organizer | _no policy names it — reached through triggers/functions_ |
+| `view_as_staff_live` | rank >= 2 | admin, coordinator, director, lead, organizer | _no policy names it — reached through triggers/functions_ |
 
-_Relative gates (`module_caller_can_manage_seat`, `view_as_guard_session`) read straight off the ladder above: a position outranks exactly those below it._
+_Relative gates (`module_caller_can_manage_seat`, `view_as_guard_session`, `view_as_staff_area`) read straight off the ladder above: a position outranks exactly those below it._
 
 ### stub
 
@@ -332,8 +342,9 @@ Ladder: **4** director · **3** coordinator · **2** lead · **1** position · *
 | `module_roles_guard_hierarchy` | rank = 3 | coordinator | _no policy names it — reached through triggers/functions_ |
 | `module_roles_guard_last_director` | rank < 4 | admin, coordinator, lead, position, user | _no policy names it — reached through triggers/functions_ |
 | `module_roles_guard_last_director` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `view_as_staff_live` | rank >= 2 | coordinator, director, lead | _no policy names it — reached through triggers/functions_ |
 
-_Relative gates (`module_caller_can_manage_seat`, `view_as_guard_session`) read straight off the ladder above: a position outranks exactly those below it._
+_Relative gates (`module_caller_can_manage_seat`, `view_as_guard_session`, `view_as_staff_area`) read straight off the ladder above: a position outranks exactly those below it._
 
 ### synagogue-schedules
 
@@ -354,8 +365,9 @@ Ladder: **4** director · **3** coordinator · **2** lead · **1** maker, positi
 | `module_roles_guard_hierarchy` | rank = 3 | coordinator | _no policy names it — reached through triggers/functions_ |
 | `module_roles_guard_last_director` | rank < 4 | coordinator, lead, maker, position, viewer | _no policy names it — reached through triggers/functions_ |
 | `module_roles_guard_last_director` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `view_as_staff_live` | rank >= 2 | coordinator, director, lead | _no policy names it — reached through triggers/functions_ |
 
-_Relative gates (`module_caller_can_manage_seat`, `view_as_guard_session`) read straight off the ladder above: a position outranks exactly those below it._
+_Relative gates (`module_caller_can_manage_seat`, `view_as_guard_session`, `view_as_staff_area`) read straight off the ladder above: a position outranks exactly those below it._
 
 ### visual-messaging
 
@@ -376,6 +388,7 @@ Ladder: **4** director · **3** admin, coordinator · **2** lead · **1** modera
 | `module_roles_guard_hierarchy` | rank = 3 | admin, coordinator | _no policy names it — reached through triggers/functions_ |
 | `module_roles_guard_last_director` | rank < 4 | admin, coordinator, lead, member, moderator, position | _no policy names it — reached through triggers/functions_ |
 | `module_roles_guard_last_director` | rank >= 4 | director | _no policy names it — reached through triggers/functions_ |
+| `view_as_staff_live` | rank >= 2 | admin, coordinator, director, lead | _no policy names it — reached through triggers/functions_ |
 
-_Relative gates (`module_caller_can_manage_seat`, `view_as_guard_session`) read straight off the ladder above: a position outranks exactly those below it._
+_Relative gates (`module_caller_can_manage_seat`, `view_as_guard_session`, `view_as_staff_area`) read straight off the ladder above: a position outranks exactly those below it._
 

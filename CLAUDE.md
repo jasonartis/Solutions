@@ -68,6 +68,11 @@ section, keep it a SUMMARY with pointers: add the dated story to the journal / t
   (archive file, "Host state").
 
 ### Shipped most recently (newest first; full stories in the linked docs)
+- **2026-11-26 (Opus): STAFF "View as" BUILT, NOT ON PROD** — org staff (classroom professor; salon admin/manager)
+  see a person's real screen trimmed to their area; replaced the table-style in-module view. Migration `20261127010000`
+  (local; db 34 staff tests, verifier 135/0), Opus-only review in two waves (7 reviewers; Fable re-review queued in
+  docs/30 §4 Step C #7). New never-raise functions in docs/12; a new `cls_`/`sal_` table needs `_staff_area` (docs/03
+  #38). Open founder default: pre-existing seats with no recorded giver count (docs/13 AS BUILT).
 - **2026-11-26 (Sonnet): PUBLIC MARKETING PAGE at signed-out `/` — no migration** ([docs/35](docs/35-public-marketing-page.md)). A platform route (not a module): copy is a COPY of the private Customers folder's `template.html` + fonts (`pnpm site:sync`; never edit wording here); signed-out never-signed-in `/` rewrites to `/site`, a browser with the `sp_seen` marker goes to `/login`; CSP-enforced no outside requests; contact values from env `BUSINESS_NAME`/`CONTACT_PHONE`/`CONTACT_WHATSAPP`/`CONTACT_EMAIL`/`LINKEDIN_URL`; no photo yet; installed app opens `/login`.
 - **2026-11-25/26 (Opus): WHOLE-ACCOUNT "View as" — `20261125010000` + `20261126010000` ON PROD, verified (81/0, state B;
   v1 verifier 40/0).** The superadmin views ANY person's whole account, every org and module, through the same pages;
@@ -169,7 +174,7 @@ founder decision** — record it where it belongs, flag it, move on (2026-08-29)
 **Owner Console follow-ups (founder: "one by one", a fresh chat each — prompts, local-verify recipe and known small issues:
 [docs/history/handoff-2026-11-12-console-session.md](docs/history/handoff-2026-11-12-console-session.md)):** module-role
 confirmation + refusal messages (Sonnet) → Limits tile (Sonnet) → real bytes per org (Opus, migration) — **all three DONE
-2026-11-12** → REAL view-as (classroom 2026-11-15, WHOLE ACCOUNT 2026-11-26 — docs/13; next = the STAFF version, founder-initiated). **Also unscheduled:** charts / other visualizations of platform statistics and threshold-triggered "at N users, do
+2026-11-12** → REAL view-as (classroom 2026-11-15, WHOLE ACCOUNT 2026-11-26 — docs/13; STAFF version BUILT 2026-11-26, migration `20261127010000` LOCAL ONLY, awaiting backup + founder go-ahead for `migrate:prod` — docs/13 "STAFF VIEW AS — AS BUILT" has the ship order). **Also unscheduled:** charts / other visualizations of platform statistics and threshold-triggered "at N users, do
 this" actions — the founder's wider original ask (see the handoff file); needs a founder conversation first.
 
 **Founder decisions pending / deferred — do NOT start these unprompted:**

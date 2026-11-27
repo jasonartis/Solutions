@@ -56,10 +56,22 @@ const EMAIL_READERS: Record<string, string> = {
   view_as_real_check:
     "Superadmin only (the proxy's per-request check). Reads auth.users for the viewed person's " +
     'deleted_at/banned_until (a whole-account view dies with the account); no address.',
-  view_as_may_read:
-    "Every role (it sits in module-table policies after migration B), but only evaluated under a view " +
-    "token. Reads auth.users for the VIEWED person's deleted_at/banned_until (a still-valid token stops " +
-    'reading once the account is banned or gone); returns a boolean, never an address.',
+  // Staff View as (20261127010000): view_as_may_read's auth.users read moved into
+  // view_as_platform_ok; the staff functions read the same two columns.
+  view_as_platform_live:
+    "Internal (no API EXECUTE; view_as_platform_ok caches its answer per request). True only under a live " +
+    "superadmin view token. Reads auth.users for the VIEWED person's deleted_at/banned_until (a " +
+    'still-valid token stops reading once the account is banned or gone); returns a boolean, never an address.',
+  module_roles_stamp_granted_by:
+    "Trigger (no API EXECUTE). Reads auth.users only to ask whether a seat's old grantor still exists, so the " +
+    "FK's ON DELETE SET NULL can clear granted_by when that account is deleted; no address.",
+  view_as_staff_live:
+    'Internal (no API EXECUTE). Is a staff view live? Reads auth.users for the viewer\'s and the ' +
+    "person's deleted_at/banned_until; returns a boolean, never an address.",
+  view_as_staff_targets:
+    "The staff picker: the people the CALLER may view in one module of one org. Reads auth.users only " +
+    'for deleted_at/banned_until (a deleted or banned account is not listed); returns user id, display ' +
+    'name and module roles — never an address.',
   org_member_profiles:
     'The admin-scoped member roster. Gated on is_org_admin(check_org_id) — an org admin sees the ' +
     'addresses of the people they administer, which is unchanged from before the slice.',

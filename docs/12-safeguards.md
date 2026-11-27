@@ -97,6 +97,12 @@ rot; pipelines don't.
   pgrst.db_pre_request` FIRST, then drop. Related: the real-view token is HS256 on the legacy JWT secret
   (`SUPABASE_JWT_SECRET` on Vercel, server-only); if the project ever moves to asymmetric signing keys, every viewed page
   errors (fail-closed, no fallback to the superadmin's reach) until the signing is moved too. docs/13 "REAL VIEW-AS".
+  **STAFF View as (2026-11-26, `20261127010000`): the same never-raise rule covers `view_as_now()`,
+  `view_as_platform_ok()`, `view_as_may_read_in`, `view_as_grant_visible`, `view_as_org_ok`, `view_as_profile_ok`,
+  `view_as_area_ids`, `view_as_storage_may_read`** — they sit in policies on `orgs`, `org_members`, `profiles`,
+  `module_roles`, `storage.objects` and every `cls_`/`sal_` table, so a raise takes down ordinary pages too. Run
+  `scripts/prod-verify-view-as-staff.mts` after any change to them. `view_as_now()` caches in the transaction-local
+  setting `sp.view_as_now`; never read or write that name anywhere else.
   **The same applies to `public.in_view_as()` and `public.view_as_may_read(uuid, text)`** (whole-account View as,
   `20261125010000`): after migration B (`20261126010000_view_as_widen`) they sit in the restrictive `<table>_no_view_as`
   policy of EVERY module table, so a dropped or raising one darkens (or errors) every module read for everyone, not

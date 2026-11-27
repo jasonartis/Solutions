@@ -92,6 +92,15 @@ const bodies = (file: string) => {
 const expected = bodies('supabase/migrations/20261125010000_view_as_whole_account.sql')
 // B moved from supabase/pending/ into supabase/migrations/ on 2026-11-26.
 const expectedB = bodies('supabase/migrations/20261126010000_view_as_widen.sql')
+// 20261127010000 (STAFF View as) re-creates view_as_may_read and view_as_real_check; once it is
+// applied (its function exists) their bodies come from there.
+const staffBodies = (() => {
+  const text = readFileSync(resolve(root, 'supabase/migrations/20261127010000_view_as_staff.sql'), 'utf8')
+  const out = new Map<string, string>()
+  const re = /create (?:or replace )?function public\.(\w+)\([\s\S]*?\nas \$\$([\s\S]*?)\$\$;/g
+  for (let m = re.exec(text); m; m = re.exec(text)) out.set(m[1]!, createHash('md5').update(m[2]!).digest('hex'))
+  return out
+})()
 
 // name -> [nargs, security definer?, search_path, anon?, authenticated?, service_role?]
 const EMPTY = 'search_path=""'
@@ -149,7 +158,9 @@ try {
              has_function_privilege('service_role', p.oid, 'execute') as s,
              coalesce(p.proacl::text, '') ~ '(^|[{,])=X/' as p
       from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname = ${name} and p.pronargs = ${nargs}`
-    const want = name === 'mm_ensure_answer' && state === 'B' ? expectedB.get(name) : expected.get(name)
+    const [staffApplied] = await sql<{ n: number }[]>`select count(*)::int as n from pg_proc where proname = 'view_as_staff_start' and pronamespace = 'public'::regnamespace`
+    const want = staffApplied!.n === 1 && staffBodies.has(name) ? staffBodies.get(name)
+      : name === 'mm_ensure_answer' && state === 'B' ? expectedB.get(name) : expected.get(name)
     check(`${name}/${nargs} exists, body matches ${want === expected.get(name) ? 'migration A' : 'migration B'}`, f?.md5 === want, `db=${f?.md5 ?? '-'}`)
     check(`  definer = ${secdef}, ${path}`, f?.secdef === secdef && JSON.stringify(f?.config) === JSON.stringify([path]), JSON.stringify(f?.config))
     check(`  EXECUTE anon=${anon} authenticated=${auth} service_role=${svc}, never PUBLIC`, !!f && f.a === anon && f.u === auth && f.s === svc && !f.p, f ? `${f.a}/${f.u}/${f.s}/public=${f.p}` : '-')
@@ -326,7 +337,11 @@ try {
         check(`  mm_ensure_answer under a whole-account view: ${B ? 'an answer (B)' : 'NULL (A)'}, no error`,
           eWhole.err === '' && (B ? typeof rows(eWhole)[0]?.p === 'number' : rows(eWhole)[0]?.p === null), eWhole.err || JSON.stringify(rows(eWhole)))
         const eV1 = await ens(mV1)
-        check('  mm_ensure_answer under a v1 view: NULL', eV1.err === '' && rows(eV1)[0]?.p === null, eV1.err || JSON.stringify(rows(eV1)))
+        // Since 20261127010000 a v1 (org-scoped) view sees none of the person's seats, so the single
+        // check refuses instead of returning NULL. Either way nothing is returned and nothing written.
+        const staffOn = (await tx<{ n: number }[]>`select count(*)::int as n from pg_proc where proname = 'view_as_staff_start' and pronamespace = 'public'::regnamespace`)[0]!.n === 1
+        check(`  mm_ensure_answer under a v1 view: ${staffOn ? 'refused (Only singles…)' : 'NULL'}`,
+          staffOn ? /Only singles/.test(eV1.err) : eV1.err === '' && rows(eV1)[0]?.p === null, eV1.err || JSON.stringify(rows(eV1)))
         const eOwn = await ens()
         check('  CONTROL: mm_ensure_answer without a view returns an answer', eOwn.err === '' && typeof rows(eOwn)[0]?.p === 'number', eOwn.err)
       } else {

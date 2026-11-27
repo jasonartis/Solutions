@@ -1525,6 +1525,13 @@ mechanism is proven in the managed environment, but it carries rules that are no
       must not run while `useIsViewing()` is true (`DeviceReporter`).
     - **A new module table** gets `<table>_no_view_as` using `(select not public.in_view_as()) or
       public.view_as_may_read(org_id, '<module>')` (migration `20261126010000`'s shape), or the db test fails.
+    - **STAFF View as (2026-11-26, `20261127010000`, docs/13 "STAFF VIEW AS").** A new `cls_`/`sal_` table ALSO gets
+      `<table>_staff_area` (`… or class_id|location_id = any(coalesce((select public.view_as_area_ids('<kind>')),
+      '{}'))`) or `view-as-staff-wave2.test.ts` fails. A definer a classroom/salon page calls while rendering that
+      returns another person's or scope's data must check `view_as_may_read_in(org, module, node)`. **Turning on a
+      mode-2 edge in ANOTHER module** (`module_view_as_edge`) opens a staff view there: that module first needs its
+      own `_staff_area` policies, a `view_as_area_ids` kind, its file buckets in `view_as_storage_may_read`, and the
+      keystone subset test — never just the edge.
 
 ## Hard rules
 

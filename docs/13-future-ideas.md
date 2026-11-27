@@ -1204,7 +1204,7 @@ be set again by hand (e.g. rotated): Supabase dashboard → Project Settings →
 copy (never paste it into a chat) → Vercel → Settings → Environment Variables → `SUPABASE_JWT_SECRET`, Production only,
 not a `NEXT_PUBLIC_` name → Save → Redeploy. Rotating the JWT secret also invalidates every user's session.
 
-### STAFF VIEW AS — THE DESIGN (Opus, 2026-11-26; NOT BUILT — awaiting the founder's four answers and his "go")
+### STAFF VIEW AS — THE DESIGN (Opus, 2026-11-26; BUILT the same day — see "STAFF VIEW AS — AS BUILT" below, which wins where they differ)
 
 Handoff: [docs/history/handoff-2026-11-26-view-as-staff.md](history/handoff-2026-11-26-view-as-staff.md). Founder ask
 (2026-11-23): staff who have "View as" today, like Alice, get the real screen instead of the tables, "trimmed to what
@@ -1377,3 +1377,78 @@ four write layers apply to a staff token unchanged; claims-blanking definers fai
 **Not checked by any reviewer (do at build):** salon worker-only rows vs what a manager reads (earnings, time-off); the
 classroom grading/exam pages when viewing a GA; page `<title>` metadata; back navigation / router cache after Stop;
 visual-messaging and synagogue tables in the same org (dark by `view_as_may_read`, to be asserted by test).
+
+### STAFF VIEW AS — AS BUILT (Opus + Opus reviewers, 2026-11-26; migration `20261127010000` LOCAL ONLY — not on prod, not pushed)
+
+**Files.** Migration `supabase/migrations/20261127010000_view_as_staff.sql`. App: `proxy.ts`, `lib/view-as-real.ts`
+(`kind`, `areaModules`, `outsideArea` in the signed header), `app/view-as/start` (staff branch) and `stop` (`back`),
+`components/view-as-guard.tsx`, `view-as-banner.tsx`, `view-as-outside-area.tsx`, `view-as/staff-picker.tsx` (the two
+module `view-as` pages now render it), `app/(app)/layout.tsx` (placeholder, `hideEmail`), `app/(app)/not-found.tsx`,
+`lib/module-gate.ts`, `app/privacy/page.tsx` (founder answer 1A line). Retired: `components/view-as/page.tsx` and
+`actions.ts` (the table-style in-module view; its five e2e tests left `platform.spec.ts`). Tests:
+`packages/db/src/view-as-staff.test.ts` (18) + `view-as-staff-wave2.test.ts` (16), `apps/web/e2e/staff-view-as.spec.ts`
+(3). Verifier `scripts/prod-verify-view-as-staff.mts` (135/0 locally); `prod-verify-real-view-as.mts` and
+`prod-verify-view-as-whole-account.mts` now take `view_as_real_check`/`_end`/`view_as_may_read` bodies from this
+migration once `view_as_staff_start` exists.
+
+**How it works (final shape, after two review waves).**
+- *Who:* `view_as_staff_live(session)`, re-read on every request: kind `staff`, org set, not ended/expired; viewer and
+  person ACTIVE members; the person is not an org owner/admin, not a superadmin, not deleted/departed/banned, and holds
+  NO manager-tier seat (rank ≥ 2) in ANY module of the org; the viewer is live and not departed; the area is not empty.
+- *Area:* `view_as_staff_area(org, viewer, person)` = mode-2 edge pairs (viewer seat outranks + covers + edge), the
+  viewer seat NOT given by herself (`granted_by` distinct from her; NULL counts), the module ENABLED for the org, the
+  person holding nothing in that module ranked ≥ that viewer seat.
+- *Once per request:* `view_as_now()` works out {platform?, staff org, area} once and caches it in a transaction-local
+  setting keyed by a hash of the claims + transaction start; every rule reads that. Row policies on every `cls_`/`sal_`
+  table are `<table>_staff_area`: `(select not in_view_as()) or (select view_as_platform_ok()) or class_id|location_id|id
+  = any(coalesce((select view_as_area_ids('<kind>')), '{}'))` — the id list is an initplan, computed once per query.
+  Measured: 2,000 rows in well under 4 s (the first draft cost ~8 ms a row and hit the 8 s statement timeout near 1,000).
+- *Org-level rows* (`orgs`, `org_members`, `org_modules`, `module_scope_nodes`): the session's org only; `profiles`:
+  active members of that org only; `module_roles`: the person's in-area seats only; `feedback_*`: dark; files
+  (`storage.objects` SELECT): readable only when the row that names them (material, exam paper, submission) is in the
+  area, every other bucket dark. Materials are in the area by their course node OR a publication to an area class.
+- *Role booleans* (`cls_can_manage`, `cls_is_ga`, `sal_*`, `has_module_role`, `module_has_manager_grant`) count only
+  in-area seats during a staff view; `cls_comments_for_my_submission` and `cls_survey_results` check the area.
+- *Scope (proxy/check):* `/o/<org>/m/<area module>/…` except `/m/<module>/view-as…` (the picker stays the viewer's).
+  Another module of that org → layout placeholder `‹<Module> · outside your area›` (and `requireOrgModule` stops the
+  page). A trimmed main row inside an area module → the `(app)` not-found shows `‹not shown: outside your area, or not
+  on their screen›` (deliberately vague: the name is the trimmed row, and a plain 404 for the person looks the same).
+- *`granted_by`* is stamped by a trigger for every signed-in insert or seat-changing update (the app never set it); the
+  pending-invite applier (claims blanked) keeps the inviter; deleting the grantor clears it.
+- *The 3-argument `view_as_real_start` is NOT dropped* (five db test files build v1-session controls with it). A v1
+  (org-scoped platform) session is now dark to everything (`view_as_platform_ok` requires a whole-account session); the
+  app never makes one. Cleanup = its own small migration later, rewriting those controls.
+
+**Review record (Opus only; Fable re-review queued: docs/30 §4 Step C item 7).** Wave 1 on the migration — five narrow
+reviewers (rows outside the area; who may start; regressions outside views; never-raise/hook; test vacuity). Found and
+FIXED: files readable outside the area (HIGH, two reviewers); org-level tables untrimmed (HIGH); per-row cost → timeout
+(HIGH); keystone test vacuous on the important tables (HIGH, test); cross-module powers half of S1 missing (MEDIUM);
+`granted_by` FK SET NULL broken by the trigger (LOW); picker roles leaked out-of-area seats (LOW); viewer departed /
+module disabled not checked (LOW); node lookups answered across orgs (LOW); booleans' small per-row cost (LOW). Wave 2
+on the app — two reviewers (proxy/token/routes; frame/page leaks): no BLOCKER/HIGH/MEDIUM; FIXED reflected `?error=` /
+`?ended=` text, raw database errors, empty-area banner link, the over-claiming not-found wording, the contradictory
+banner on out-of-area pages, and the out-of-area page still rendering behind the placeholder. **Recorded, not fixed
+(LOW):** signed file links are 1-hour and outlive Stop (files the viewer could open herself); Stop has no Origin check
+(pre-existing; a hostile page can only END a view); image-extension paths outside the (app) prefixes skip the proxy
+(pre-existing; such a request would run as the viewer, never the person); Safari may restore a viewed page from its
+back-forward cache after Stop (a stale copy of what she saw).
+
+**Final review (one fresh Opus reviewer, 2026-11-26):** every HIGH/MEDIUM above re-probed and CLOSED; the per-request
+cache cannot be reached through the API (no exposed function calls `set_config` with caller input; a raw-SQL forge
+works, so a future such function is a never-do, docs/12). Its "ordinary reads 2× slower" was measured under load;
+re-measured idle: 3,000 `cls_announcements` rows as a student, 3.2–3.5 s without the staff policy vs 3.2–4.0 s with it
+(~10%). The base cost is the existing classroom row rules (~1 ms a row), not this migration — worth its own look.
+**Local runs:** db suite 666/666 (CI order); e2e 104/107 then the 2 sign-in timeouts re-run green in isolation (they
+failed while a reviewer was load-testing the same database; the third was the known visual-messaging flake); all three
+verifiers green (staff 135/0, whole-account 81/0, v1 37/1 — its "a member who may post an image" control needs chat
+data a fresh seed does not have).
+
+**Founder decision taken as a DEFAULT (flagged 2026-11-26, his to overturn):** seats created before this migration
+have `granted_by` NULL and therefore COUNT for View as — nobody can tell who gave them, and his own example (Alice,
+owner + professor) depends on it. The verifier's section [3] lists every owner/admin holding a manager-tier seat with
+no recorded giver, so he sees exactly who this covers before the prod apply. Locally: the five seed owners.
+
+**Ship order:** `pnpm backup:prod` → dry run lists ONLY `20261127010000` → founder go-ahead → apply → the three
+verifiers (staff, real, whole-account) before AND after → push the app (after the migration: the old app does not send
+staff starts, but the new app needs the new functions) → Vercel READY → a staff view checked on prod.
+
