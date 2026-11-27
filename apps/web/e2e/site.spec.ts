@@ -55,6 +55,15 @@ test.describe('public marketing page', () => {
     await expect(page).toHaveURL(/\/login$/)
   })
 
+  test('footer links to Privacy & Terms and Report content (a legal entry point)', async ({ page }) => {
+    await page.goto('/')
+    const legal = page.getByRole('navigation', { name: 'Legal' })
+    await expect(legal.getByRole('link', { name: 'Privacy & Terms' })).toHaveAttribute('href', '/privacy')
+    await legal.getByRole('link', { name: 'Report content' }).click()
+    await expect(page).toHaveURL(/\/report$/)
+    await expect(page.getByRole('heading', { name: 'Report content' })).toBeVisible()
+  })
+
   test('light and dark mode both render (background differs)', async ({ page }) => {
     await page.emulateMedia({ colorScheme: 'light' })
     await page.goto('/')

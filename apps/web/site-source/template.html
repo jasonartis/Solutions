@@ -148,6 +148,8 @@ section.block{padding-block:clamp(48px,7vw,84px);border-top:1px solid var(--line
 .contact .addr{font:500 1rem var(--mono);background:color-mix(in srgb,var(--bg) 12%,transparent);padding:.7em 1em;border-radius:8px;user-select:all}
 footer{padding-block:24px;font-size:.85rem;color:var(--muted)}
 footer .inner{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+footer .legal a{color:var(--muted);text-decoration:none}
+footer .legal a:hover{color:var(--ink);text-decoration:underline}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
@@ -312,7 +314,8 @@ footer .inner{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap
   </div>
 </section>
 
-<footer class="band"><div class="inner"><span>{{BUSINESS_NAME}} · New York</span></div></footer>
+<footer class="band"><div class="inner"><span>{{BUSINESS_NAME}} · New York</span>
+  <nav class="legal" aria-label="Legal"><a href="/privacy">Privacy &amp; Terms</a> · <a href="/report">Report content</a></nav></div></footer>
 
 <script>
 const PHONE = {{PHONE_JSON}};
