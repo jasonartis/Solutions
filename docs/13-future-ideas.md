@@ -1203,3 +1203,162 @@ Claude, decision (2) above). It works once a production deploy built after 2026-
 be set again by hand (e.g. rotated): Supabase dashboard → Project Settings → API / "JWT Keys" → "Legacy JWT secret" →
 copy (never paste it into a chat) → Vercel → Settings → Environment Variables → `SUPABASE_JWT_SECRET`, Production only,
 not a `NEXT_PUBLIC_` name → Save → Redeploy. Rotating the JWT secret also invalidates every user's session.
+
+### STAFF VIEW AS — THE DESIGN (Opus, 2026-11-26; NOT BUILT — awaiting the founder's four answers and his "go")
+
+Handoff: [docs/history/handoff-2026-11-26-view-as-staff.md](history/handoff-2026-11-26-view-as-staff.md). Founder ask
+(2026-11-23): staff who have "View as" today, like Alice, get the real screen instead of the tables, "trimmed to what
+they govern". Already decided by him: "For the later STAFF version" above (outside-area placeholder, private-field
+placeholder, rows decided per table, the decision made in the database, pages never branch).
+
+**Review tier: Opus only.** Fable is not available (founder, 2026-11-26), so the adversarial review of this design and
+of the migration runs as narrow, independent Opus reviewers. **A Fable re-review is owed if credits return** (a novel
+mechanism: trimming a person's real screen to a viewer's area).
+
+**In one paragraph.** Alice (a classroom professor in Demo A) opens "View as" on Charlie from inside Demo A. Until Stop
+or 30 minutes, every page under `/o/demo-a/…` renders as Charlie, through the same routes, components, token and
+read-only machinery as the superadmin's view (none of the four write layers changes). The difference is entirely in the
+database: every row a page asks for must pass a second test, **"is this inside Alice's area?"**, and rows that fail are
+not returned. Nothing outside Demo A is ever in scope.
+
+**Who may view whom (reused, not new).** Exactly today's mode-2 rule (`view_as_guard_session`; founder rule 2026-08-02
+"module position enables view-as, org position does not"): one grant of the viewer's, in the same org and module, that
+strictly outranks one of the person's grants, covers its scope, and is a declared edge in `module_view_as_edge()`. Today
+that is **classroom professor → GA and professor → student; nail-salon admin → worker and manager → worker.** Nothing in
+matchmaking, speed dating, visual messaging or synagogue (every mode-2 edge there is off; §8.1 point 7 still governs
+staff). Never oneself, never a superadmin, never a deleted/departed/banned account; both active members of the org.
+
+**The viewer's AREA (computed live, never stored).** The set of (module, scope) pairs where that rule holds between the
+viewer and the person right now. Alice (global professor) viewing Charlie (student in Statistics 101): area = Demo A ·
+classroom · Statistics 101. A professor scoped to Statistics 101 viewing a student who also takes Professor Smith's Math
+101: area = Statistics 101 only. Recomputed on every request from current grants, so removing Alice's seat or Charlie
+leaving the class shrinks or ends the view at once, even under an already-minted 5-minute token (the same per-call
+recheck `view_as_may_read` already does for the superadmin).
+
+**One org per view (technical decision, not a founder question).** Staff authority is per org and tenancy isolation is
+existential, so a staff session carries `org_id` and its scope is `/o/<that org>/…` only. `/dashboard`, `/account`,
+`/feedback` and every other org render as the viewer herself (the guard reloads on crossing, as today), so a staff view
+can never reveal that Charlie belongs to another org. Dana (student in Demo A AND worker in Demo Salon) = two separate
+views, each started inside its org.
+
+**Database (one migration; the 3-argument-start cleanup folded in):**
+1. `view_as_real_sessions` gains `kind` (`platform` | `staff`, check constraint; existing rows `platform`). A staff row
+   always has `org_id` and never `module_key`. `view_as_staff_start(p_org, p_target)`: a definer applying the rule above
+   (no superadmin arm, no `is_org_admin` arm); ends the viewer's other open session.
+2. `view_as_real_check` gains the staff branch: the caller must be the session's actor (not required to be superadmin);
+   in scope = `/o/<slug>` and below; it returns the area's module list so the frame can label out-of-area pages.
+3. **`view_as_may_read(org, module)` stays the one shared rule** (its unused arguments were left for exactly this).
+   Platform session: unchanged. Staff session: true only if `org` = the session's org AND an area pair has that module.
+   So every module the person uses outside the area is dark, with no new policies.
+4. **Row-level area, only in the modules that have mode-2 edges (classroom, nail-salon).** Their tables' policies move
+   to a 3-argument form `view_as_may_read_in(org_id, '<module>', <row's scope node>)`, the node taken from the row
+   (classroom: the class's `scope_node_id` via `class_id`; nail-salon: the location's via `location_id`; a table with
+   no scope column = the module root, inside the area only for a GLOBAL viewer grant). The per-table list is written at
+   build time from the catalog; a db test fails for any `cls_`/`sal_` table without it.
+5. **The keystone (§8.1 point 1) as a measured test, not a claim:** for every seeded edge pair and every module table,
+   the rows returned in the staff view ⊆ the rows the viewer reads with her own session. A table that fails gets the
+   viewer's own predicate added to its policy (using the viewer's id from the session, not `auth.uid()`) or goes on the
+   private list. The table view's surfaces already record where this is known to matter (classroom: survey answers,
+   peer-review authorship, retention-hidden rows — question 3).
+6. **Platform tables inside the org** (org home, header, members list: `orgs`, `org_members`, `org_modules`,
+   `module_roles`, pending invites, plus whatever the build's survey of the `(app)` shell finds) get a restrictive
+   `view_as_platform_may_read(org_id)`: platform session → true; staff session → `org_id` = the session's org. This is
+   what stops the header's org switcher listing Charlie's other orgs.
+7. Private fields: `private_text()` and the private list behave exactly as for the superadmin.
+8. Cleanup: drop the 3-argument `view_as_real_start`; remove the overload exception in `rank-admission.test.ts`.
+9. Every new function: revoke then grant; `in_view_as()` / `view_as_may_read*()` never raise (docs/12); no exception
+   block in the pre-request hook.
+
+**App:**
+- A "View as" button beside each viewable person in the module's own people lists (the existing in-module "View as"
+  page becomes the picker); start/stop through the same route handlers, with `kind` in the signed header.
+- **Out-of-area pages, in the same frame (no page branches):** `/o/<org>/m/<module>` for a module outside the area → the
+  frame renders `‹Nail salon · outside your area›` (the module name only; the viewer is a member of this org, so the
+  name leaks nothing). A page inside an area module whose main row is trimmed (Charlie's Math 101 class page) hits the
+  page's own not-found, and the `(app)` not-found renders `‹outside your area›` while a staff view is open. **It cannot
+  say "Math 101"** (a deviation from the founder's example): the name IS the trimmed row, and showing it would need a
+  second, wider read path.
+- Banner: "You are viewing **Charlie**'s screen in **Demo A** — only the parts you oversee (Classroom) — read-only ·
+  ends 14:32 · Stop" (the "partial" label §8.1 point 10 requires).
+- The superadmin's whole-account view is unchanged (a test renders it before and after the migration).
+
+**What Alice sees differently from Charlie (complete, pending the answers below):** nothing outside Demo A is reachable;
+modules and classes outside her area are missing from lists and show `‹outside your area›` if opened directly; private
+notes are placeholders; buttons do nothing (the read-only notice); plus whatever question 3 decides.
+
+**Tests:** db — the keystone subset test (5); every `cls_`/`sal_` table carries the area policy; start refuses every
+non-edge pair (GA→student, manager→cashier, an org owner with no module seat, cross-org, cross-scope); the area shrinks
+mid-session when a grant is removed; a staff session never satisfies the platform branch. e2e — no-drift as Alice on
+Charlie (classroom home, a homework, grades) and as a salon manager on Dana, viewer first; an out-of-area module and an
+out-of-area class show the placeholder. A new `scripts/prod-verify-view-as-staff.mts`, run before and after.
+
+**Open for the founder (asked 2026-11-26 as scenarios; answers recorded here when given):**
+1. Is the person told, and who can see that a view happened?
+2. Who may view whom: today's edges as they are, or wider/narrower?
+3. Classroom rows the person sees that the table view deliberately hid (survey answers), and counts vs removal.
+4. Retiring the table-style in-module "View as" (including its "as if I held that position" tabs).
+5. (Added by the review, finding R1.) An org owner can give herself a professor seat (owners are exempt from the seat
+   hierarchy guard) and then view any student. Does a self-given seat count for "View as"?
+
+### STAFF VIEW AS — THREE-WAY REVIEW OF THE DESIGN (Opus only, 2026-11-26) AND THE REVISIONS IT FORCES
+
+Three independent read-only Opus reviewers, one narrow question each: (a) can a viewer be shown a ROW outside her area,
+(b) can anything outside the area reach the screen through the frame/app code, (c) can a non-superadmin get a view she
+should not have. **Opus only; a Fable re-review is owed.** Everything below AMENDS the design above; where they
+conflict, this section wins.
+
+**Findings and their dispositions (all accepted; none built yet):**
+
+| # | Sev | Finding | Revision |
+|---|---|---|---|
+| R1 | **BLOCKER** | A professor (rank 2) may give ANYONE in the org a student seat in her scope, no acceptance needed (`module_caller_can_manage_seat`, `20260720010000:404-411`). Alice gives Olivia (org owner) a Statistics 101 student seat, then views Olivia: the edge holds, and the page runs with ALL of Olivia's powers (owner arms, members list, invite emails); the scope trim does not remove powers. | S1 + S2 |
+| R2 | HIGH | The reused mode-2 guard checks the VIEWER's membership (`20260731010000:177`), not the person's, and never refuses a superadmin person (a superadmin token would switch on every `is_superadmin()` arm). | S1 |
+| R3 | HIGH | Sessions are told apart by which columns are null (`20261125010000:152-155, 736-742`). A staff row's `org_id` is `on delete set null`: delete the org and it looks exactly like a whole-account superadmin session. | S3 |
+| R4 | HIGH | Platform rows gated by org only leak other modules: `module_roles` (org home "myRole", `lib/platform.ts`; the help page's per-module guides, `help/page.tsx:25-29` → "Matchmaking › single"). Alice, a plain member, cannot read Charlie's other seats with her own login. | S4 |
+| R5 | HIGH | Definer functions skip table policies: the export page's `myHats` (`mm_is_single`, `sal_is_worker`, `module_can_manage`), org-wide booleans `cls_is_ga`/`cls_can_manage` (a scoped professor learns Charlie is a GA in Math 101), `org_member_profiles` (every member's email, if Charlie is an org admin), `org_my_pending_invites`, `cls_comments_for_my_submission`, `cls_survey_results`. | S4 + S5 |
+| R6 | MEDIUM | The `(app)` layout reads Charlie's `feedback_tickets` for the unread badge on every page (`layout.tsx:22-29`, `app-header.tsx:34`); the table has no `org_id`. The header shows `user.email` when there is no display name (`app-header.tsx:36`). | S6 |
+| R7 | MEDIUM | Course-level rows (`cls_courses`, `cls_materials`, which has `course_id` only) mapped to "the module root" would show Math 101's course and materials to a global viewer. The area's scope is the PERSON's grant scope, not the viewer's. | S7 |
+| R8 | MEDIUM | The browser client is the VIEWER's full session, and staff (unlike the superadmin) hold real write rights in the module. | S8 |
+| R9 | LOW | The `ViewAsGuard`/banner read "org set, module null" as a whole-account view → reload loop; no `not-found.tsx` exists under `app/`; a class lookup written as a plain subquery inside a `cls_` policy recurses ("infinite recursion detected in policy"); storage is per org, not per class; path matching must be `= prefix or starts_with(prefix || '/')`. | build notes |
+
+**Revisions:**
+- **S1 — who may be viewed, tightened (technical; closes R1/R2).** On top of the mode-2 edge: the person is an ACTIVE,
+  accepted member of the org; not a superadmin; not an org owner/admin; holds NO seat in ANY module of that org whose
+  rank is ≥ the viewer's rank in that module (so no "make them my student" path to a more powerful person). Checked at
+  start AND on every request (`view_as_real_check`) AND in every `view_as_may_read*` call, so a seat given or a role
+  raised mid-view ends it at once.
+- **S2 — the viewer's own reach is part of every rule, by construction (closes R1's residue; was "only if a table
+  fails the test").** Staff-view reads = the person's RLS ∩ area ∩ what the viewer reads herself. Per table, the
+  viewer half is the table's own staff predicate written with the viewer's id from the session (not `auth.uid()`). The
+  keystone subset test (design item 5) stays as the check, now over module tables, platform tables AND the definer
+  functions in S5.
+- **S3 — `kind` decides, never null columns (closes R3).** Every branch tests `kind`; a platform branch also requires a
+  superadmin actor; a staff session whose `org_id` is null is dead.
+- **S4 — scope = the module pages in the area only (replaces "everything under `/o/<org>`"; closes most of R4/R5).**
+  In scope: `/o/<slug>/m/<module>` and below, for each module in the area. The org home, members, settings, export,
+  help and every other org-level page render as the viewer herself (the guard reloads on crossing, as v1 did for one
+  module). A module outside the area opened directly → `‹<module> · outside your area›`. `module_roles` and other
+  platform rows read inside an area page are trimmed to the area's modules.
+- **S5 — definers called by area pages become area-aware.** Every definer a classroom or nail-salon page calls is listed
+  at build time (from the code, not memory); each one returning another person's or scope's data applies
+  `view_as_may_read_in` or the viewer's own predicate. A db test calls each with an out-of-area id under a staff token.
+- **S6 — the frame (closes R6).** `feedback_tickets` is dark to a staff session (restrictive policy: no staff view), so
+  the badge reads 0; the header shows the display name or "this person", never `user.email`, during a staff view.
+- **S7 — course-level rows (closes R7).** The area scope is the person's grant scope; course-level rows use the course's
+  own `scope_node_id`, which a class node does not cover. So Alice viewing Charlie sees his class's own course only if
+  the class's course node is covered; otherwise course rows are trimmed (to be measured; if Charlie's own class page then
+  loses its course name, the course row is admitted when an area class belongs to it).
+- **S8 — browser-side code (closes R8).** The browser-client allowlist test is checked to cover classroom and
+  nail-salon UI (no browser reads or writes there today); while any view is open, browser-side writers stay unmounted,
+  as for the superadmin.
+- **Build notes (R9):** the guard and banner learn `kind`; add `app/(app)/not-found.tsx`; class/location lookups live
+  inside the definer `view_as_may_read_in`, never as a subquery in the policy; storage per class is a known
+  limitation (pages only sign paths from area-filtered rows), recorded, not fixed.
+
+**Held as designed (all three reviewers):** the browser cannot forge the view header (stripped and HMAC-signed,
+`proxy.ts`); the session is matched to the viewer's own `auth.uid()`; the person's token never reaches the browser; the
+four write layers apply to a staff token unchanged; claims-blanking definers fail closed under the sticky flag.
+
+**Not checked by any reviewer (do at build):** salon worker-only rows vs what a manager reads (earnings, time-off); the
+classroom grading/exam pages when viewing a GA; page `<title>` metadata; back navigation / router cache after Stop;
+visual-messaging and synagogue tables in the same org (dark by `view_as_may_read`, to be asserted by test).
