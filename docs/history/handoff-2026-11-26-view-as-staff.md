@@ -1,5 +1,10 @@
 # Handoff — "View as" for org staff (the STAFF version), written 2026-11-26
 
+> **DONE 2026-11-26.** Built, reviewed (Opus only; Fable re-review queued in docs/30 §4 Step C #7) and migration
+> `20261127010000` ON PROD, verified. Everything this note asked for — answers, decisions, review record, what is still
+> open (the 3-argument start cleanup, LOW items, signed-link lifetime) — now lives in docs/13 "STAFF VIEW AS" (DESIGN,
+> THREE-WAY REVIEW, FOUNDER ANSWERS, AS BUILT). Kept as the record of the ask.
+
 **Model: Opus 5.5** for the whole chat (migrations, RLS, a new privacy rule). **Fable is NOT available (founder,
 2026-11-26)**, so the design's adversarial security review (a NEW mechanism: trimming a person's real screen to the
 viewer's area) runs on Opus as **two or three independent reviewers, each with ONE narrow question and a word cap**
