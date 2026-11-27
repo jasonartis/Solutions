@@ -68,6 +68,7 @@ section, keep it a SUMMARY with pointers: add the dated story to the journal / t
   (archive file, "Host state").
 
 ### Shipped most recently (newest first; full stories in the linked docs)
+- **2026-11-26 (Sonnet): PUBLIC MARKETING PAGE at signed-out `/` — no migration** ([docs/35](docs/35-public-marketing-page.md)). A platform route (not a module): copy is a COPY of the private Customers folder's `template.html` + fonts (`pnpm site:sync`; never edit wording here); signed-out never-signed-in `/` rewrites to `/site`, a browser with the `sp_seen` marker goes to `/login`; CSP-enforced no outside requests; contact values from env `BUSINESS_NAME`/`CONTACT_PHONE`/`CONTACT_WHATSAPP`/`CONTACT_EMAIL`/`LINKEDIN_URL`; no photo yet; installed app opens `/login`.
 - **2026-11-25/26 (Opus): WHOLE-ACCOUNT "View as" — `20261125010000` + `20261126010000` ON PROD, verified (81/0, state B;
   v1 verifier 40/0).** The superadmin views ANY person's whole account, every org and module, through the same pages;
   private fields (speed-dating notes) show `‹private note · N characters›`. Every `public.in_view_as()`/`view_as_may_read()`

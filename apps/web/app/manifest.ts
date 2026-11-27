@@ -8,7 +8,9 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: 'Solutions Platform',
     short_name: 'Solutions',
-    start_url: '/',
+    // /login, not /: signed-out visitors to / see the public marketing page (docs/35);
+    // the installed app is for people who already have an account.
+    start_url: '/login',
     display: 'standalone',
     background_color: '#ffffff',
     theme_color: '#ffffff',

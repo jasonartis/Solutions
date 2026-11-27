@@ -15,6 +15,7 @@ import { VIEW_AS_COOKIE, VIEW_AS_HEADER, signRealViewHeader, type RealView } fro
 //   * forwards a SIGNED header describing the view. Any incoming copy of that
 //     header is deleted first, on every request, cookie or not.
 const STOP_PATH = '/view-as/stop'
+const SEEN_COOKIE = 'sp_seen'
 
 // The database gets the DECODED path (what usePathname shows the guard), so the two cannot
 // disagree on percent-encoded paths. Anything undecodable or with a dot segment / backslash /
@@ -77,6 +78,24 @@ export async function proxy(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
+  // PUBLIC MARKETING PAGE (docs/35). The page itself sets no cookies. This marker is set only
+  // for someone who is actually signed in (so it never reaches a marketing-page visitor), and
+  // says only "this browser has had an account session" — no identity, no value but "1".
+  // Signed-out GET / with the marker → the app's normal redirect to /login; without it (never
+  // signed in, or unsure — new browser, cleared cookies) → the marketing page, URL unchanged.
+  if (user && request.cookies.get(SEEN_COOKIE)?.value !== '1') {
+    pendingCookies.push({
+      name: SEEN_COOKIE,
+      value: '1',
+      options: { path: '/', maxAge: 60 * 60 * 24 * 365 * 2, sameSite: 'lax', httpOnly: true, secure: process.env.NODE_ENV === 'production' },
+    })
+  }
+  if (!user && path === '/' && (request.method === 'GET' || request.method === 'HEAD') && request.cookies.get(SEEN_COOKIE)?.value !== '1') {
+    const res = NextResponse.rewrite(new URL('/site', request.url), { request: { headers: forwarded } })
+    for (const c of pendingCookies) res.cookies.set(c.name, c.value, c.options)
+    return res
+  }
+
   if (viewSession && !isStop) {
     let view: RealView | null = null
     if (user) {
@@ -131,6 +150,6 @@ export async function proxy(request: NextRequest) {
 // (app-code review 2026-11-12; whole-account revision 3).
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|(?!o/|dashboard|account|feedback).*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|site-fonts/|(?!o/|dashboard|account|feedback).*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }

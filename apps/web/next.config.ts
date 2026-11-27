@@ -6,6 +6,9 @@ const nextConfig: NextConfig = {
   // — a real Playwright actionability hazard in dev mode, never present in
   // production (this key is a no-op on `next build`/`next start`).
   devIndicators: false,
+  // The marketing page's template is read from disk at request time (app/site/route.ts);
+  // make sure the deployed function bundle includes it.
+  outputFileTracingIncludes: { "/site": ["./site-source/**"] },
   experimental: {
     // Next's default caps a Server Action's request body at 1 MB, which refused
     // every picture over that (visual messaging uploads). The browser shrinks

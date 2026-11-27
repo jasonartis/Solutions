@@ -1,0 +1,418 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>{{BUSINESS_NAME}}</title>
+<style>{{FONTS_CSS}}</style>
+<style>
+/* Layout: one long page read like a findings report: symptoms → method → problems → examples → questions → contact. */
+:root{
+  --bg:#f3f5f4; --surface:#ffffff; --ink:#152029; --muted:#55626c; --line:#d8dfdb;
+  --accent:#2b6a4e; --label:#8f8f8f; --accent-ink:#ffffff; --accent-soft:#e1eee7; --flag:#b26b12;
+  --display:"Bricolage Grotesque","Segoe UI",system-ui,sans-serif;
+  --body:"Public Sans","Segoe UI",system-ui,sans-serif;
+  --mono:"JetBrains Mono",Consolas,ui-monospace,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#111719; --surface:#182024; --ink:#e6ecee; --muted:#9aa8b0; --line:#2a3439;
+  --accent:#6fc39a; --label:#c1c1c1; --accent-ink:#0d1a13; --accent-soft:#1b2f25; --flag:#e3a656; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#111719; --surface:#182024; --ink:#e6ecee; --muted:#9aa8b0; --line:#2a3439;
+  --accent:#6fc39a; --label:#c1c1c1; --accent-ink:#0d1a13; --accent-soft:#1b2f25; --flag:#e3a656; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:17px/1.6 var(--body)}
+.band{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.inner{max-width:1040px;margin:0 auto}
+h1,h2,h3{font-family:var(--display);line-height:1.12;text-wrap:balance;margin:0}
+h1{font-size:clamp(2.2rem,5.6vw,4rem);font-weight:700;letter-spacing:-.02em}
+h2{font-size:clamp(1.6rem,3.4vw,2.3rem);font-weight:700;letter-spacing:-.01em}
+h3{font-size:1.2rem;font-weight:700}
+p{margin:0}
+.label{font:500 .74rem/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--accent)}
+a{color:var(--accent)}
+:focus-visible{outline:3px solid var(--accent);outline-offset:3px;border-radius:4px}
+
+header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:color-mix(in srgb,var(--bg) 92%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+.top .inner{display:flex;align-items:center;justify-content:space-between;gap:16px;padding-block:12px}
+.wordmark{font:700 1.05rem var(--display);color:var(--ink);text-decoration:none}
+.top nav{display:flex;gap:18px;flex-wrap:wrap;font-size:.9rem;flex:1;justify-content:center}
+.top nav a{color:var(--muted);text-decoration:none}
+.top nav a:hover{color:var(--ink)}
+.top .actions{display:flex;align-items:center;gap:16px;font-size:.9rem;white-space:nowrap}
+.top .signin{color:var(--ink);font-weight:600;text-decoration:none}
+.top .signin:hover{color:var(--accent)}
+.top .signin{display:inline-flex;align-items:center}
+.signin-icon{display:none;width:28px;height:28px}
+@media (max-width:640px){.signin-text{display:none}.signin-icon{display:block}}
+@media (max-width:640px){.top nav a:not(.cta-link){display:none}}
+
+.btn{display:inline-block;background:var(--accent);color:var(--accent-ink);padding:.8em 1.3em;border-radius:8px;font-weight:600;text-decoration:none;border:0;font:600 1rem var(--body);cursor:pointer}
+.btn:hover{filter:brightness(1.08)}
+
+.hero{padding-block:clamp(48px,9vw,104px) clamp(40px,7vw,80px)}
+.hero .inner{display:grid;gap:26px}
+.hero p.sub{font-size:clamp(1.05rem,1.8vw,1.25rem);color:var(--muted);max-width:62ch}
+.hero .actions{display:flex;gap:18px;align-items:center;flex-wrap:wrap}
+.hero .actions span{color:var(--muted);font-size:.95rem}
+
+section.block{padding-block:clamp(48px,7vw,84px);border-top:1px solid var(--line)}
+.head{display:grid;gap:10px;margin-bottom:32px;max-width:680px}
+.head p{color:var(--muted)}
+
+/* symptom checklist */
+.check{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:12px}
+.check label{display:flex;gap:14px;align-items:flex-start;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px 18px;cursor:pointer;transition:border-color .15s,background .15s}
+.check input{appearance:none;flex:none;width:22px;height:22px;margin-top:2px;border:2px solid var(--line);border-radius:5px;display:grid;place-items:center;background:var(--bg);cursor:pointer}
+.check input:checked{background:var(--accent);border-color:var(--accent)}
+.check input:checked::after{content:"";width:6px;height:11px;border:solid var(--accent-ink);border-width:0 2.5px 2.5px 0;transform:rotate(45deg) translate(-1px,-1px)}
+.check label:has(input:checked){border-color:var(--accent);background:var(--accent-soft)}
+.tally{margin-top:20px;min-height:1.6em;font-weight:600;color:var(--accent)}
+
+/* steps: a real sequence */
+.steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:0;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--surface)}
+.step{padding:22px;display:grid;gap:8px;align-content:start;border-right:1px solid var(--line)}
+.step:last-child{border-right:0}
+.step .n{font:500 .8rem var(--mono);color:var(--accent)}
+.step .tag{font-size:.82rem;color:var(--muted)}
+.step p{font-size:.96rem}
+@media (max-width:900px){.step{border-right:0;border-bottom:1px solid var(--line)}.step:last-child{border-bottom:0}}
+.note{margin-top:16px;color:var(--muted)}
+
+/* problems */
+.problems{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:28px 40px}
+.problem{display:grid;gap:6px;padding-top:14px;border-top:2px solid var(--ink)}
+.problem p{color:var(--muted);font-size:.97rem}
+.problem .out{color:var(--ink);font-weight:500}
+
+/* examples */
+.examples{display:grid;grid-template-columns:repeat(var(--show,3),minmax(0,1fr));gap:16px}
+.ex{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:22px;display:grid;gap:12px;align-content:start}
+.ex dl{margin:0;display:grid;gap:1.15rem}
+.ex dt{font:700 .74rem var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--label)}
+.ex-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:14px;align-items:center}
+.ex-arrow{width:44px;height:44px;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--ink);font-size:1.2rem;cursor:pointer}
+.ex-arrow:hover{border-color:var(--accent);color:var(--accent)}
+@media (max-width:760px){.ex-row{gap:8px}.ex-arrow{width:36px;height:36px;font-size:1rem}}
+.ex dd{margin:2px 0 0;font-size:.96rem}
+.flag{font:500 .72rem var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--flag)}
+
+/* why */
+.why{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:24px}
+.why div{display:grid;gap:6px}
+.why p{color:var(--muted);font-size:.96rem}
+
+/* faq */
+.faq{display:grid;gap:0;max-width:780px;border-top:1px solid var(--line)}
+.faq details{border-bottom:1px solid var(--line);padding-block:4px}
+.faq summary{cursor:pointer;list-style:none;padding:16px 36px 16px 0;font:600 1.08rem var(--display);position:relative}
+.faq summary::-webkit-details-marker{display:none}
+.faq summary::after{content:"+";position:absolute;right:6px;top:12px;font:400 1.5rem var(--body);color:var(--accent)}
+.faq details[open] summary::after{content:"–"}
+.faq details p{padding:0 0 18px;color:var(--muted);max-width:66ch}
+
+/* about */
+.about{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);grid-template-areas:"head bio" "photo quote";gap:32px 40px;align-items:start}
+/* The name line alone sets the vertical centre; the ABOUT label sits just above it */
+.about-head{grid-area:head;display:flex;justify-content:center;align-items:center;align-self:stretch;padding-top:1.4rem}
+.about-head > div{position:relative}
+.about-head .label{position:absolute;bottom:100%;left:0;margin-bottom:10px;white-space:nowrap}
+.about-head h2{margin:0;text-align:center;text-wrap:balance}
+/* Wide: the photo takes the quote box's height (row height = quote), keeps its 4:5 shape, centred in its cell */
+.about-photo{grid-area:photo;position:relative;align-self:stretch;min-height:120px}
+.about-photo .photo{position:absolute;top:0;bottom:0;left:50%;transform:translateX(-50%);height:100%;width:auto;max-width:none;margin:0}
+.about-bio{grid-area:bio;color:var(--muted);text-align:left}
+.about-bio p{margin:0}
+.about blockquote{grid-area:quote;align-self:center;margin:0;padding:22px 24px;background:var(--accent-soft);border-radius:12px;font-size:1.05rem;text-align:left}
+@media (max-width:760px){.about{grid-template-columns:1fr;grid-template-areas:"head" "photo" "bio" "quote";gap:24px}
+  .about-photo{position:static;min-height:0;display:flex;justify-content:center}
+  .about-photo .photo{position:static;transform:none;width:var(--pw);height:auto;max-width:100%}}
+
+/* contact */
+.contact{background:var(--ink);color:var(--bg)}
+.contact .label{color:var(--accent-soft)}
+.contact .inner{display:grid;gap:20px;padding-block:clamp(56px,8vw,96px)}
+.contact h2{font-size:clamp(1.8rem,4vw,2.8rem);max-width:22ch}
+.contact p{max-width:60ch;opacity:.85}
+.contact .how{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+/* Photo: tune values with website/photo-tuner.html, then set them here */
+.photo{--pw:210px; --pa:4/5; --pr:37px; --pz:1; --px:78%; --py:0%; --pm:22px; --pmi:auto;
+  display:block;width:var(--pw);max-width:100%;aspect-ratio:var(--pa);border-radius:var(--pr);overflow:hidden;
+  margin-top:var(--pm);margin-inline:var(--pmi);border:3px solid var(--surface)}
+.photo img{display:block;width:100%;height:100%;object-fit:cover;object-position:var(--px) var(--py);
+  transform:scale(var(--pz));transform-origin:var(--px) var(--py)}
+.li{display:inline-flex;align-items:center;gap:8px;color:var(--bg);text-decoration:none;font-weight:600;padding:.6em .9em;border-radius:8px;background:color-mix(in srgb,var(--bg) 12%,transparent)}
+.li svg{width:22px;height:22px;fill:currentColor}
+.contact .addr a{color:inherit;text-decoration:none}
+.contact .addr{font:500 1rem var(--mono);background:color-mix(in srgb,var(--bg) 12%,transparent);padding:.7em 1em;border-radius:8px;user-select:all}
+footer{padding-block:24px;font-size:.85rem;color:var(--muted)}
+footer .inner{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<header class="top band">
+  <div class="inner">
+    <a class="wordmark" href="#top">{{BUSINESS_NAME}}</a>
+    <nav aria-label="Sections">
+      <a href="#how">How it works</a>
+      <a href="#problems">Problems I solve</a>
+      <a href="#examples">Examples</a>
+      <a href="#faq">Questions</a>
+      <a href="#about">About</a>
+      <a class="cta-link" href="#contact">Talk to me</a>
+    </nav>
+    <div class="actions">
+{{SIGNIN_LINK}}
+    </div>
+  </div>
+</header>
+
+<section class="hero band" id="top">
+  <div class="inner">
+    <span class="label">For business owners</span>
+    <h1>Something in your business costs more than it should. Let's find it.</h1>
+    <p class="sub">I help business owners identify problems and missed opportunities that are costing them money, then develop customized software solutions to address them. You don't need to know what technology you need. I investigate the business, figure out what would help, and handle everything technical afterward.</p>
+    <div class="actions">
+      <a class="btn" href="#contact">Book a 30-minute conversation</a>
+      <span>Free, no preparation needed.</span>
+    </div>
+  </div>
+</section>
+
+<section class="block band" id="familiar">
+  <div class="inner">
+    <div class="head">
+      <span class="label">Sound familiar?</span>
+      <h2>Tick the ones that happen in your business.</h2>
+    </div>
+    <div class="check" id="check">
+      <label for="s1"><input type="checkbox" id="s1"><span>Month-end takes days, and you still don't trust the numbers.</span></label>
+      <label for="s2"><input type="checkbox" id="s2"><span>Follow-ups and invoices depend on someone remembering.</span></label>
+      <label for="s3"><input type="checkbox" id="s3"><span>The same information gets typed into three different systems.</span></label>
+      <label for="s4"><input type="checkbox" id="s4"><span>Only one person knows how the weekly report gets made.</span></label>
+      <label for="s5"><input type="checkbox" id="s5"><span>You bought software that doesn't fit, so everyone works around it.</span></label>
+      <label for="s6"><input type="checkbox" id="s6"><span>You built a tool yourself, and now you're the only one who can fix it.</span></label>
+    </div>
+    <p class="tally" id="tally" aria-live="polite"></p>
+  </div>
+</section>
+
+<section class="block band" id="how">
+  <div class="inner">
+    <div class="head">
+      <span class="label">How it works</span>
+      <h2>You don't need to commit to a whole project up front.</h2>
+      <p>Every stage gives you something useful, and you decide whether to go on.</p>
+    </div>
+    <div class="steps">
+      <div class="step"><span class="n">1 · Talk</span><span class="tag">Free, about 30 minutes</span>
+        <p>We talk about what's costing you time or money and whether it's worth looking into. If it isn't, or if something off the shelf would do, I'll say so. Either way, you'll leave with a clearer picture of where your time or money is going.</p></div>
+      <div class="step"><span class="n">2 · Diagnose and see it</span><span class="tag">Paid, fixed scope and price</span>
+        <p>I look at how the work actually gets done: the systems, spreadsheets and people involved. You get my findings: what's costing you, what I'd recommend, and what it would take to build it. You see what the solution would look like before anything is built. If you go ahead with the build, the fee is credited toward it.</p></div>
+      <div class="step"><span class="n">3 · Build</span><span class="tag">Fixed price, agreed in writing</span>
+        <p>I build the software, and you can follow each feature's progress as it gets done. The price and payment schedule are agreed in writing before work starts.</p></div>
+      <div class="step"><span class="n">4 · Run</span><span class="tag">Monthly service</span>
+        <p>I keep the software I built for you running: hosting, backups, fixes and support, plus a set number of improvement hours each month. New features are quoted separately, so there are no surprises.</p></div>
+    </div>
+    <p class="note">Every step is its own decision. Your data is yours, and you can get a full export whenever you like.</p>
+  </div>
+</section>
+
+<section class="block band" id="problems">
+  <div class="inner">
+    <div class="head">
+      <span class="label">Problems I solve</span>
+      <h2>Problems small businesses run into again and again.</h2>
+    </div>
+    <div class="problems">
+      <div class="problem"><h3>Typing the same information in two or three places</h3>
+        <p>If staff re-type orders, hours or customer details from one place to another, I bring that work into one system where it's entered once and the repetitive steps run themselves.</p><p class="out">Hours saved, and fewer errors.</p></div>
+      <div class="problem"><h3>Not knowing how the business is doing until it's too late</h3>
+        <p>I build consolidated reports and interactive dashboards from the data you already have.</p><p class="out">Visibility into your numbers. Faster, better-informed decisions.</p></div>
+      <div class="problem"><h3>Important knowledge living in one person's head</h3>
+        <p>Move what one person knows into shared records your staff use every day.</p><p class="out">Knowledge stays with your company and is accessible when someone is out or leaves.</p></div>
+      <div class="problem"><h3>Follow-ups and tasks lost in emails and texts</h3>
+        <p>Attach assignments, reminders and tracking to the order, job or customer they belong to.</p><p class="out">Fewer missed follow-ups and delays.</p></div>
+      <div class="problem"><h3>Software that doesn't fit how you work</h3>
+        <p>An application designed around your process instead of the other way round.</p><p class="out">Less time on workarounds.</p></div>
+      <div class="problem"><h3>Staff who avoid the software you paid for</h3>
+        <p>Useful features driven by how your company works.</p><p class="out">New tools that actually get used.</p></div>
+      <div class="problem"><h3>Is running the IT department becoming a part-time job?</h3>
+        <p>I build and manage the software: hosting, backups, updates and fixes.</p><p class="out">You run a business, not a software company.</p></div>
+      <div class="problem"><h3>Prices, schedules and quotes worked out by hand</h3>
+        <p>If someone works out schedules, prices, commissions or quotes from rules kept in their head or a spreadsheet, I turn those rules into automatic calculations.</p><p class="out">Consistent answers in seconds.</p></div>
+      <div class="problem"><h3>Customers who have to call or email for everything</h3>
+        <p>Give them their own space through their own login to enter their details, set preferences and check where things stand, while you and your staff see everything.</p><p class="out">Customers who have the freedom to serve themselves.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="block band" id="examples">
+  <div class="inner">
+    <div class="head">
+      <span class="label">Examples</span>
+      <h2>What this kind of work looks like.</h2>
+      <p>Typical situations I work on.</p>
+    </div>
+    <div class="ex-row">
+      <button type="button" class="ex-arrow" id="ex-prev" aria-label="Previous example">&larr;</button>
+      <div class="examples" id="examples-grid"></div>
+      <button type="button" class="ex-arrow" id="ex-next" aria-label="Next example">&rarr;</button>
+    </div>
+  </div>
+</section>
+
+<section class="block band" id="why">
+  <div class="inner">
+    <div class="head"><span class="label">Why work with me</span><h2>One accountable person, problem first.</h2></div>
+    <div class="why">
+      <div><h3>Problem first</h3><p>If an off-the-shelf product is the right answer, I'll tell you.</p></div>
+      <div><h3>Built around how you work</h3><p>Your terms, your process, your people. Customers, staff and you each see what they need.</p></div>
+      <div><h3>One accountable person</h3><p>Someone who learns your business and stays responsible for it working.</p></div>
+      <div><h3>Your data stays yours</h3><p>You can take it with you at any time.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="block band" id="faq">
+  <div class="inner">
+    <div class="head"><span class="label">Questions</span><h2>What people usually ask.</h2></div>
+    <div class="faq">
+      <details><summary>Do I need to know what software I need?</summary><p>No. Figuring that out is my job, and sometimes the answer is that you don't need custom software at all.</p></details>
+      <details><summary>Why not just use an off-the-shelf product?</summary><p>Sometimes you should, and I'll tell you if so. But most businesses end up stitching several products together with spreadsheets and workarounds. Software built around how you actually work and how your data flows removes that.</p></details>
+      <details><summary>Can't I build this myself with AI?</summary><p>AI can produce something that looks right, but it often gets the details wrong: how data moves between systems, who can see what, and what breaks when the business changes. Getting those details right, protecting your information and keeping it working is the work. I take responsibility for all of it.</p></details>
+      <details><summary>What if I want to stop?</summary><p>You can stop after any stage. If you leave the managed service, you get a full export of your data. The exact terms are in your written agreement.</p></details>
+      <details><summary>What if something happens to you?</summary><p>Your agreement covers it. If I ever stop providing the service, you get at least 90 days' notice and a full export of your data. The exact terms are in your written agreement.</p></details>
+      <details><summary>How much does it cost?</summary><p>It depends on what we find. The first conversation is free, and each later stage has a fixed, written price before you commit to it.</p></details>
+    </div>
+  </div>
+</section>
+
+<section class="block band" id="about">
+  <div class="inner about">
+    <div class="about-head"><div><span class="label">About</span><h2>Jason Yarmish, PhD</h2></div></div>
+    <div class="about-bio"><p>I hold a PhD in mathematics and an MS in financial engineering, and I've spent about ten years building analytics, automation and interactive tools that help businesses make decisions from their own data, including in ticket pricing and energy. I also teach graduate courses in programming, data visualization and data science.</p></div>
+    <div class="about-photo">{{PHOTO}}</div>
+    <blockquote>For years I built analytics and automation tools inside organizations that run on teams of analysts. Smaller businesses have the same problems: scattered information, reports built by hand, decisions made on stale numbers, and little visibility into their own data. They rarely have anyone whose job is to find the cause and build a system that shows them what's actually happening. That's the job I want to do for them.</blockquote>
+  </div>
+</section>
+
+<section class="contact band" id="contact">
+  <div class="inner">
+    <span class="label">Start here</span>
+    <h2>What's one part of your business that costs you more time or money than you think it should?</h2>
+    <p>Tell me in a sentence or two, and we'll set up a free 30-minute conversation. No preparation needed.</p>
+    <p>Have an idea for software you'd like to build, for your business or for your customers? I'd like to hear that too.</p>
+    <div class="how">
+{{CONTACT_BLOCK}}
+    </div>
+  </div>
+</section>
+
+<footer class="band"><div class="inner"><span>{{BUSINESS_NAME}} · New York</span></div></footer>
+
+<script>
+const PHONE = {{PHONE_JSON}};
+// Messages by number ticked (1-6); one of five is picked at random each time. PHONE comes from CONTACT_PHONE in .env.
+const CALL = PHONE ? " " + PHONE : "";
+const TALLY = [
+  ["That one alone is worth a conversation.",
+   "Even one of these is worth a conversation.",
+   "One is enough to start with.",
+   "That one is costing you more than you think.",
+   "Start there. It's worth a conversation."],
+  ["That's worth a conversation.",
+   "Two of these? That's worth a conversation.",
+   "Two already. Let's talk about them.",
+   "Two is enough to start looking.",
+   "That's two places time and money are slipping away."],
+  ["That's definitely worth a conversation.",
+   "Three already. That's definitely worth talking about.",
+   "Three of these add up quickly.",
+   "That's three places the business is working harder than it needs to.",
+   "Three is a good reason to call."],
+  ["That's a lot of time and money leaking out of the business.",
+   "Four of these is a pattern, not bad luck.",
+   "Four. Let's find out what they're costing you.",
+   "That's most of the list. Time to talk.",
+   "Four of these, and you're still doing it all by hand?"],
+  ["Why haven't you called yet?" + CALL,
+   "Let's talk." + CALL,
+   "Five of six. Pick up the phone." + CALL,
+   "You're running the business around these problems. Let's fix them." + CALL,
+   "Almost the full list. Call me." + CALL],
+  ["All six. Why haven't you called yet?" + CALL,
+   "The full set. Let's talk today." + CALL,
+   "Every one of them. Call me." + CALL,
+   "All six. You deserve a business that's easier to run." + CALL,
+   "That's the whole list. Let's get started." + CALL]
+];
+const box = document.getElementById('check'), tally = document.getElementById('tally');
+box.addEventListener('change', () => {
+  const n = box.querySelectorAll('input:checked').length;
+  if (!n) { tally.textContent = ''; return; }
+  const opts = TALLY[Math.min(n, TALLY.length) - 1];
+  tally.textContent = opts[Math.floor(Math.random() * opts.length)];
+});
+
+// Example pool: SHOW of these appear, chosen at random on each visit.
+const wide = window.matchMedia('(min-width: 761px)');
+let SHOW = wide.matches ? 3 : 1;
+const EXAMPLES = [
+  ["\u201cWe can't answer a simple question about a customer\u201d",
+   "A wholesale distributor keeps orders in its accounting system, pricing agreements in spreadsheets and customer history in salespeople's email.",
+   "One customer view with agreed prices, orders, invoices and notes, plus a flag when an invoice doesn't match the agreement.",
+   "Customer questions answered in minutes, and pricing errors caught before invoices go out."],
+  ["\u201cFollow-ups fall through the cracks\u201d",
+   "A commercial-cleaning firm sends quotes by email, and each salesperson tracks follow-ups their own way. When someone leaves, their prospects go with them.",
+   "Every quote has an owner, a next step and a date. Reminders go out, and the owner sees which quotes are going cold.",
+   "Fewer quotes left without a follow-up, and a sales history that stays when people leave."],
+  ["\u201cMonth-end takes a week\u201d",
+   "A small brand sells online, wholesale and at pop-ups. Each channel exports differently, and the bookkeeper merges them by hand.",
+   "Sales from every channel in one place, so you see what's making money by product and by channel without waiting for month-end.",
+   "A faster close, and reorder decisions made within the month instead of after it."],
+  ["\u201cWe get paid weeks after the job is done\u201d",
+   "An installation company finishes jobs in the field, and the paperwork comes back to the office in batches.",
+   "Marking a job complete on a phone creates the invoice the same day, and the owner sees money owed and expected each week.",
+   "Invoices out sooner, fewer forgotten ones, and earlier warning of cash gaps."],
+  ["\u201cOnly one person knows how it works\u201d",
+   "A property manager's maintenance requests live in one coordinator's spreadsheet and phone.",
+   "Shared request records with statuses, where vendors and owners each see what's relevant to them.",
+   "Work continues when someone is out, with fewer status calls and faster repairs."],
+  ["\u201cThe owner became the IT department\u201d",
+   "An owner tried to build their own booking tool with AI. It half-worked for a while. Now each change breaks something, everyone shares one login, nobody checked who can see customer data, and there are no backups.",
+   "The same workflow, rebuilt with individual logins, daily backups and someone accountable for fixes.",
+   "The owner gets their time back to spend on things that matter for growing their business."],
+  ["\u201cOur client profiles live on paper\u201d",
+   "A matchmaking and coaching service keeps client profiles on paper forms and spreadsheets, and matches people from memory.",
+   "Clients log in to build their own profiles and preferences. The system suggests matches, and the coach reviews them and tracks progress.",
+   "More time coaching, less paperwork, and clients who can update their own details."],
+  ["\u201cWe match candidates to jobs in spreadsheets\u201d",
+   "A recruiting agency collects resumes, job descriptions and both sides' preferences by email, then matches them in spreadsheets.",
+   "Employers post jobs and candidates upload resumes and preferences in their own logins. The system suggests the strongest matches and automates follow-ups.",
+   "Faster placements, and recruiters spending their time on people instead of spreadsheets."]
+];
+const grid = document.getElementById('examples-grid');
+const order = EXAMPLES.map(e => [Math.random(), e]).sort((a, b) => a[0] - b[0]).map(x => x[1]);
+const esc = t => t.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let start = 0;
+function showExamples() {
+  const view = [];
+  for (let i = 0; i < Math.min(SHOW, order.length); i++) view.push(order[(start + i) % order.length]);
+  grid.style.setProperty('--show', view.length);
+  grid.innerHTML = view.map(([title, situation, change, goal]) => `
+      <article class="ex"><span class="flag">Example</span><h3>${esc(title)}</h3>
+        <dl><div><dt>Situation</dt><dd>${esc(situation)}</dd></div>
+        <div><dt>What would change</dt><dd>${esc(change)}</dd></div>
+        <div><dt>Goal</dt><dd>${esc(goal)}</dd></div></dl></article>`).join('');
+}
+document.getElementById('ex-prev').onclick = () => { start = (start - 1 + order.length) % order.length; showExamples(); };
+document.getElementById('ex-next').onclick = () => { start = (start + 1) % order.length; showExamples(); };
+wide.addEventListener('change', e => { SHOW = e.matches ? 3 : 1; showExamples(); });
+showExamples();
+</script>
+</body>
+</html>

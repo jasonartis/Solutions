@@ -98,6 +98,7 @@ Extracted/expected shared services in `packages/platform`. Rule: modules never f
 | External API connector + cache | Keyed fetch-and-cache (myzmanim, Google APIs), rate-limit aware | Module 3 |
 | Export/render pipeline | HTML template → PDF/JPG via Playwright in worker; named render presets | Module 3 |
 | Public pages | Unauthenticated org-scoped pages (`/s/<org-slug>/...`) | Module 3 |
+| Public marketing page | Signed-out `/` — copy lives in the private Customers folder, synced in (docs/35) | Platform |
 | Job queue + cron | pg-boss: on-demand jobs, schedules, retries | Module 1 |
 | Realtime | Supabase Realtime (DB-change subscriptions) for UI freshness; dedicated Socket.IO only for M6 orchestration | Modules 1, 6 |
 | Email | Provider-abstracted send (templates, per-org sender name); Mailpit locally | Module 2 |
