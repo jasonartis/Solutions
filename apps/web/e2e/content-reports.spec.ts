@@ -17,7 +17,9 @@ async function signIn(page: Page, email: string) {
 test('a signed-out visitor reports content and the superadmin closes it', async ({ page }) => {
   const where = `e2e report ${Date.now()}`
 
-  await page.goto('/')
+  // /login, not /: signed-out / is the public marketing page now (docs/35); the footer with the
+  // Report content link is on every app page, and /login is the signed-out one.
+  await page.goto('/login')
   await page.getByRole('link', { name: 'Report content' }).click()
   await expect(page.getByRole('heading', { name: 'Report content' })).toBeVisible()
 
