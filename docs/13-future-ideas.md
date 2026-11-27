@@ -1443,10 +1443,26 @@ failed while a reviewer was load-testing the same database; the third was the kn
 verifiers green (staff 135/0, whole-account 81/0, v1 37/1 — its "a member who may post an image" control needs chat
 data a fresh seed does not have).
 
-**Founder decision taken as a DEFAULT (flagged 2026-11-26, his to overturn):** seats created before this migration
-have `granted_by` NULL and therefore COUNT for View as — nobody can tell who gave them, and his own example (Alice,
-owner + professor) depends on it. The verifier's section [3] lists every owner/admin holding a manager-tier seat with
-no recorded giver, so he sees exactly who this covers before the prod apply. Locally: the five seed owners.
+**FOUNDER DECISION 2026-11-26 — "Keep A": seats that predate the `granted_by` stamp COUNT for View as.** (Taken first
+as a default, then put to him as a scenario and confirmed; his words: "Keep A, note this all down for the future".)
+- *The problem.* Answer 5 says a seat you gave yourself does not enable View as. Before `20261127010000` the platform
+  never recorded who gave a seat (the app never set `granted_by`), so every older seat has it NULL; from this
+  migration on, a trigger stamps it.
+- *The scenario he was asked.* Alice owns Demo A and holds its professor seat; was it given to her, or did she give it
+  to herself last month? The database cannot say.
+  **A (chosen):** NULL = "given by someone else". Alice can view her students now. Weakness: an owner who quietly gave
+  herself a seat BEFORE 2026-11-26 slips past answer 5.
+  **B (rejected for now):** NULL = "gave it to herself". She cannot use View as until another owner/admin re-grants the
+  seat (then recorded properly). Weakness: every existing owner/admin who is also a professor/manager needs one
+  re-grant.
+- *Who A covers on prod (verifier [3], 2026-11-26):* demo orgs only — demo-a owner (classroom professor) and demo-salon
+  owner (nail-salon manager); demo-dating, demo-match and demo-visual owners/admins hold seats in modules with no staff
+  edges, so View as is not reachable there anyway. No real client.
+- *When to reopen:* before a real client's owner/admin holds a professor or manager seat created before 2026-11-26, or
+  if the founder ever wants answer 5 strict for old seats. Switching to B is one small migration: in
+  `view_as_staff_area` change `gv.granted_by is distinct from p_actor` to also require `gv.granted_by is not null`
+  (or backfill a giver where evidence exists), then re-grant the affected seats. Re-run
+  `scripts/prod-verify-view-as-staff.mts` (its section [3] lists exactly who is affected).
 
 **Shipped 2026-11-26 (founder: "Apply", "Push"):** backup `2026-11-27T04-00-28`; dry run listed only this file; applied;
 "Remote database is up to date"; the three verifiers above; live site 200 on the old app before the push. Prod owners

@@ -72,7 +72,7 @@ section, keep it a SUMMARY with pointers: add the dated story to the journal / t
   see a person's real screen trimmed to their area; replaced the table-style in-module view. Migration `20261127010000`
   (db 34 staff tests), Opus-only review in two waves (7 reviewers; Fable re-review queued in
   docs/30 §4 Step C #7). New never-raise functions in docs/12; a new `cls_`/`sal_` table needs `_staff_area` (docs/03
-  #38). Open founder default: pre-existing seats with no recorded giver count (docs/13 AS BUILT).
+  #38). Founder DECIDED 2026-11-26 ("Keep A"): pre-existing seats with no recorded giver count — scenario, who it covers and how to switch: docs/13 AS BUILT.
 - **2026-11-26 (Sonnet): PUBLIC MARKETING PAGE at signed-out `/` — no migration** ([docs/35](docs/35-public-marketing-page.md)). A platform route (not a module): copy is a COPY of the private Customers folder's `template.html` + fonts (`pnpm site:sync`; never edit wording here); signed-out never-signed-in `/` rewrites to `/site`, a browser with the `sp_seen` marker goes to `/login`; CSP-enforced no outside requests; contact values from env `BUSINESS_NAME`/`CONTACT_PHONE`/`CONTACT_WHATSAPP`/`CONTACT_EMAIL`/`LINKEDIN_URL`; no photo yet; installed app opens `/login`.
 - **2026-11-25/26 (Opus): WHOLE-ACCOUNT "View as" — `20261125010000` + `20261126010000` ON PROD, verified (81/0, state B;
   v1 verifier 40/0).** The superadmin views ANY person's whole account, every org and module, through the same pages;
