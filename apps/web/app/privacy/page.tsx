@@ -13,7 +13,7 @@ import { getProfile } from '@/lib/platform'
 import { AppHeader } from '@/components/app-header'
 import { PLATFORM_COMPANY_NAME, PLATFORM_CONTACT_EMAIL } from '@/lib/platform-identity'
 
-const LAST_UPDATED = 'November 10, 2026'
+const LAST_UPDATED = 'November 26, 2026'
 
 export default async function PrivacyPage() {
   // Public page, but signed-in people reach it from the footer too: give them
@@ -42,6 +42,10 @@ export default async function PrivacyPage() {
       <p className="mb-8 text-sm text-gray-500">Last updated: {LAST_UPDATED}</p>
 
       <div className="space-y-4 text-sm leading-relaxed text-gray-700">
+        <p>
+          Our public home page has no forms, analytics or cookies, and does not ask you for any
+          personal information.
+        </p>
         <p>
           We keep track of what happens on the platform — like when you sign in and what you do
           within your organization — to keep things running smoothly and to help keep your
