@@ -93,6 +93,12 @@ limit killed 5 of 11 on 2026-11-12):**
 5. The laptop-theft scenario: with `.env.deploy` + the SSD, what exactly is compromised and what the
    recovery runbook (docs/28/29) does and does not cover.
 6. Every table `authenticated` may INSERT into: which have no per-user bound (the amplification class).
+7. **STAFF "View as" (added 2026-11-26; reviewed on Opus only because Fable was unavailable).** Re-review the design,
+   the migration and the app code for: can a staff viewer (classroom professor, salon admin/manager) see any row,
+   definer result, frame element or page outside her area, or more than she reads herself; can a non-superadmin start a
+   view she should not have (self-granted seats, more-powerful targets); does a staff token reach any write. Inputs:
+   docs/13 "STAFF VIEW AS" (DESIGN, THREE-WAY REVIEW, founder answers, and the AS BUILT section once written) and the
+   migration it names. Three forks, one question each.
 
 **Step D — Sonnet:** fold the verdicts into this doc's §6 "Protections to add", ranked by (attack
 likelihood × data sensitivity ÷ cost), and a `docs/12` never-do addendum.

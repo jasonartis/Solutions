@@ -1300,6 +1300,21 @@ out-of-area class show the placeholder. A new `scripts/prod-verify-view-as-staff
 5. (Added by the review, finding R1.) An org owner can give herself a professor seat (owners are exempt from the seat
    hierarchy guard) and then view any student. Does a self-given seat count for "View as"?
 
+**FOUNDER ANSWERS, 2026-11-26 ("1A, 2 yes, 3A/A, 4A, 5 no — go"):**
+1. **A** — the person is not told. The `view_as_real_sessions` row is the permanent record (never pruned), readable by
+   that org's owners/admins and the superadmin. `/privacy` gains a line that a person's teachers/managers can see their
+   screen the way they see it.
+2. **Yes** — today's mode-2 edges exactly (classroom professor → GA/student; nail-salon admin/manager → worker), plus
+   the review's S1 tightening. No speed-dating/matchmaking/visual-messaging/synagogue edges.
+3. **A / A** — survey answers SHOW (the professor reads them in her own screens already); rows outside the area are
+   REMOVED outright, no placeholder counts (the banner says "only the parts you oversee").
+4. **A** — the real screen replaces the table-style in-module "View as" now: that page becomes the person picker; the
+   mode-1 "as if I held that position" tabs are retired. The superadmin's "Readable table data" stays.
+5. **No** — a seat the viewer gave HERSELF does not enable View as. Only a seat someone else granted counts (the seat's
+   `granted_by` ≠ the viewer — to be confirmed against the `module_roles` columns at build).
+**And "go"** — build, with enough independent Opus adversarial reviewers over the migration and the code to come close
+to a Fable review (founder, same message); the Fable re-review is queued in docs/30 §4 Step C item 7.
+
 ### STAFF VIEW AS — THREE-WAY REVIEW OF THE DESIGN (Opus only, 2026-11-26) AND THE REVISIONS IT FORCES
 
 Three independent read-only Opus reviewers, one narrow question each: (a) can a viewer be shown a ROW outside her area,
