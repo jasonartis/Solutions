@@ -58,7 +58,7 @@ the private-field placeholders, ON PROD the same day).
 
 ## Process (CLAUDE.md standing rules)
 
-Design into docs/13 → Fable adversarial review of the design → founder go → migration draft → two adversarial reviews
+Design into docs/13 → adversarial review of the design (2–3 narrow Opus reviewers, see top) → founder go → migration draft → two adversarial reviews
 → db tests + verifier (`scripts/prod-verify-*.mts`, run before AND after) → e2e no-drift test as Alice →
 `backup:prod` → dry run → founder go-ahead for the apply → push with his "push". Claim the migration version with other
 sessions first. Every new function: revoke then grant; never let `in_view_as()` / `view_as_may_read()` raise (docs/12).
